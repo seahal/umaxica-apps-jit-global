@@ -28,7 +28,7 @@ stateDiagram-v2
     CONTACT_PENDING --> CONTACT_VERIFIED: verify_contact
     CONTACT_PENDING --> EXPIRED: expire
     CONTACT_PENDING --> CANCELLED: cancel
-    CONTACT_PENDING --> HALTED: halt / entry POST supersedes previous flow
+    CONTACT_PENDING --> HALTED: halt
     CREDENTIAL_PENDING --> CONTACT_VERIFIED: verify_contact
     CREDENTIAL_PENDING --> EXPIRED: expire
     CREDENTIAL_PENDING --> CANCELLED: cancel

@@ -11,7 +11,7 @@ class SecurityJwtOidcIdTokenCodec
       JitSecurityJwtKeyring.encode(payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
     end
 
-    def decode(id_token:, client_id:, resource_type:, jwt_issuer_id:, issuer:)
+    def decode(id_token:, client_id:, resource_type:, jwt_issuer_id:, issuer:, allow_expired: false)
       header = JitSecurityJwtKeyring.parse_header(id_token)
       raise JWT::DecodeError, "invalid header" unless header["alg"] == JWT_ALGORITHM
       raise JWT::DecodeError, "invalid typ" unless header["typ"] == TOKEN_TYPE
@@ -26,7 +26,12 @@ class SecurityJwtOidcIdTokenCodec
         id_token,
         public_key,
         true,
-        decode_options(client_id: client_id, resource_type: resource_type, issuer: issuer),
+        decode_options(
+          client_id: client_id,
+          resource_type: resource_type,
+          issuer: issuer,
+          allow_expired: allow_expired,
+        ),
       )
       raise JWT::DecodeError, "invalid payload typ" unless payload["typ"] == TOKEN_TYPE
       raise JWT::DecodeError, "invalid act" unless payload["act"] == resource_type
@@ -76,13 +81,13 @@ class SecurityJwtOidcIdTokenCodec
       end
     end
 
-    def decode_options(client_id:, resource_type:, issuer:)
+    def decode_options(client_id:, resource_type:, issuer:, allow_expired:)
       {
         algorithms: [JWT_ALGORITHM],
         required_claims: %w(iss aud exp iat nbf sub nonce jti typ act),
         leeway: AuthenticationJwtConfiguration.leeway_seconds,
         verify_iat: { leeway: AuthenticationJwtConfiguration.leeway_seconds },
-        verify_expiration: true,
+        verify_expiration: !allow_expired,
         verify_not_before: true,
         verify_iss: true,
         iss: issuer.presence || OidcIssuer.for_resource_type(resource_type),

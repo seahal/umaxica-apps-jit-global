@@ -30,7 +30,7 @@ them.
 
 - Base is the only physical OpenID Provider and Authorization Server. It serves
   `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/oauth/authorize`, `/oauth/token`,
-  `/oauth/userinfo`, `/oauth/revoke`, `/oauth/refresh-deliveries/query`, and `/oidc/logout` on each
+  `/oauth/userinfo`, `/oauth/revoke`, and `/oidc/logout` on each
   of its app, com, and org hosts.
 - Auth is not an issuer and not an RP. It runs the credential ceremonies (sign-in, sign-up, passkey,
   social federation) and hands the result back to Base through an opaque, short-lived handoff. Auth
@@ -58,8 +58,8 @@ Each RP host exposes the same route contract:
   does not choose sign-in or sign-up; Auth owns that choice.
 - `GET /oidc/callback` is the exact registered `redirect_uri`.
 - `/sign/out/completion?ri=jp|us` is the registered post-logout return URI.
-- `POST /oidc/backchannel-logout` receives back-channel logout for a separated RP cell, and
-  `POST /sign/out/purge` purges the matching RP cookies after OP logout (release R5 work).
+- `POST /oidc/closures` receives back-channel logout for a separated RP cell, and
+  `POST /sign/out/purge` purges only the matching RP cookies after OP logout.
 
 `sign-rp` and `base-rails-rp` are deprecated shared registrations. `side-rails-rp`, `app-ios-rp`,
 `app-android-rp`, and the `palm-api` audience are retired. Do not add new registrations from those

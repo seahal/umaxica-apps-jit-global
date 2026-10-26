@@ -9,6 +9,8 @@ module Visa
 
         before_action :skip_metadata_session!
 
+        public
+
         def show
           render json: ::OidcDiscoveryDocument.for_resource_type("client")
         end

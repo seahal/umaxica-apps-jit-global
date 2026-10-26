@@ -64,17 +64,16 @@ class Visa::Org::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   # The result branch resolves a stored transaction. An unknown one must not echo the
   # model or primary key that was looked up.
   test "a region identifier on the request is ignored rather than treated as unpermitted" do
-    assert_no_difference -> { OperatorOidcAuthorizationTransaction.pending.count } do
-      get visa_org_oauth_authorization_url(host: @host, **authorize_params),
+    parameters = authorize_params
+    assert_difference -> { OperatorOidcAuthorizationTransaction.pending.count }, +1 do
+      get visa_org_oauth_authorization_url(host: @host, **parameters),
           params: { ri: "jp" }, headers: host_headers(@host)
     end
-    assert_response :success
-    form = response.parsed_body.at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    assert_difference -> { OperatorOidcAuthorizationTransaction.pending.count }, +1 do
-      post form["action"], params: fields, headers: host_headers(@host)
-    end
+
     assert_response :see_other
+    transaction = OperatorOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+
+    assert_equal parameters.fetch(:client_id), transaction.client_id
   end
 
   test "an unknown result code is refused with a fixed description" do

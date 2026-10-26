@@ -1,5 +1,7 @@
 stateDiagram-v2
     %% CURRENT implementation; sources and guards in transition inventory.
+%% Interactive create/apply/approve/first-release writes consume matching operation-scope Step-Up
+%% evidence in their state transaction. Expiry and reconciliation have no request proof to consume.
     state "draft" as draft
     state "pending_approval" as pending_approval
     state "active; ended_at null" as active

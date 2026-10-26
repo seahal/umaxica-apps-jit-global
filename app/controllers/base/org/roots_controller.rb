@@ -40,9 +40,9 @@ module Base
 
       private
 
-      # Home/Dashboard resolve regional context without redirecting a direct request.
+      # JSON keeps its existing in-request context; browser pages use the shared redirect.
       def set_region
-        return super unless (request.get? || request.head?) && %w(index show).include?(action_name)
+        return super unless request.format.json? && %w(index show).include?(action_name)
 
         params[:ri] = normalized_param_ri.presence || get_region
       end

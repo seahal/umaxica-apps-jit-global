@@ -7,6 +7,7 @@ require_relative "../../../../support/oidc_rp_logout_hint_helper"
 
 class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   include OidcRpLogoutHintHelper
+
   fixtures :clients, :client_token_kinds
 
   setup do
@@ -65,6 +66,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
+
     assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")
     assert_not_predicate @rp_session.reload, :active?
   end
@@ -96,6 +98,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     redirect_uri = query.fetch("post_logout_redirect_uri")
+
     assert_equal RequestContextContract.default_region,
                  Rack::Utils.parse_nested_query(URI.parse(redirect_uri).query).fetch("ri")
     assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")

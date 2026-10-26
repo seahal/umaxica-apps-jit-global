@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../../../../support/oidc_auth_admission_test_helper"
 
 class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispatch::IntegrationTest
   # Rate-limit counters are a NullStore by default in test so unrelated tests
@@ -10,6 +11,7 @@ class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   rate_limit_counters!
 
   include ActiveJob::TestHelper
+  include OidcAuthAdmissionTestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
@@ -25,67 +27,9 @@ class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     browser = self
-    base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     auth_host = @host
-    browser.host!(base_host)
-    browser.https!
-    browser.get("/sign", params: { ri: "jp" })
-    csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    browser.post(
-      "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-      },
-    )
-    issuer = JitSecurityJwtRegistry.surface("BASE_COM")
-    2.times do |index|
-      target = URI.parse(browser.response.location)
-      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless target.host == base_host
-        rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
-      end
-
-      assert_includes [base_host, auth_host], target.host
-      browser.host!(target.host)
-      browser.get(target.request_uri, params: { ri: "jp" })
-      next if index == 1
-
-      form = browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      browser.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{target.host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-    end
-    # Redeem through Auth POST, Base confirmation POST, then Auth POST.
-    # No admission, browser marker or signed flow locator is installed directly.
-    3.times do |index|
-      form = browser.response.parsed_body.at_css("form")
-
-      assert_not_nil form, "admission step #{index}, HTTP #{browser.response.status}"
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      browser.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-      break if index == 2
-
-      target = URI.parse(browser.response.location)
-
-      assert_includes [base_host, auth_host], target.host
-      browser.host!(target.host)
-      browser.get(target.request_uri, params: { ri: "jp" })
-    end
-
-    assert_equal 303, browser.response.status
-    switch_browser_to_sign_up!(browser, surface: "com")
+    bootstrap_auth_sign_in_admission!(surface: "com")
+    switch_browser_to_sign_up!(integration_session, surface: "com", base_browser: @base_browser)
     browser.get("/sign/up/email/new", params: { ri: "jp" })
 
     assert_equal 200, browser.response.status
@@ -236,18 +180,30 @@ class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_equal email.id, flow.pending_contact_id
                 assert Visitor.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
-                patch auth_com_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding),
-                      params: {
-                        requirement: "birthdate",
-                        checkpoint_version: flow.checkpoint_version,
-                        birthdate: "2024-06-26",
-                      },
-                      headers: @headers
+                principal_id = flow.principal_id
+                birthdate_writes = []
+                record_write =
+                  lambda do |*, payload|
+                    birthdate_writes << payload[:sql] if payload[:sql].match?(/\AUPDATE "visitors" SET .*"birthdate"/)
+                  end
+                ActiveSupport::Notifications.subscribed(record_write, "sql.active_record") do
+                  patch auth_com_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding),
+                        params: {
+                          requirement: "birthdate",
+                          checkpoint_version: flow.checkpoint_version,
+                          birthdate: "2024-06-26",
+                        },
+                        headers: @headers
+                end
 
                 assert_response :success
                 assert_includes response.body, I18n.t("sign.com.registration.checkpoint.age_restricted")
                 assert_equal VisitorSignUpFlowStatus::HALTED, flow.reload.status_id
                 assert_not flow.requirement_cleared?(:birthdate)
+                # D-178: the underage birthdate is never written, and the refusal removes the artifacts.
+                assert_empty birthdate_writes
+                assert_predicate flow, :cleanup_completed?
+                assert_not Visitor.where(id: principal_id).where.not(birthdate: nil).exists?
               end
             end
           end

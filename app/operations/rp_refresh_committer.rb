@@ -1,45 +1,41 @@
 # typed: false
 # frozen_string_literal: true
 
-# RP Refresh over HTTPS with exact delivery recovery (R5-WU08, one.md section 7.4).
+# RP Refresh over HTTPS under the D-25 standard contract (RFC 6749 section 6, no grace, no receipt).
 #
-# 1. Reserve: under the local session row lock, refuse a revoked/expired session, then record one
-#    short attempt (expected installed generation, HMAC of the presented credential, five-second
-#    expiry). Commit and release every lock before any network call.
-# 2. Dispatch the Refresh to the OP token endpoint with a fresh endpoint-bound assertion and the
-#    attempt reference.
-# 3. Preserve an uncertain attempt across requests and ask only its read-only delivery query.
-#    The predecessor is never resent to the rotation endpoint, even after local installation.
-# 4. Verify the returned Access JWT against the OP public JWKS and this session's sid/subject.
-# 5. Install under the session and OP-binding locks again: refuse if the session or binding was
-#    revoked meanwhile or another attempt already advanced the installed generation.
+# 1. Check the local session and its OP binding under their row locks, record the installed
+#    generation, then commit and release every lock before any network call.
+# 2. Dispatch the Refresh once to the OP token endpoint with a fresh endpoint-bound assertion. A lost
+#    response is never replayed or resent: the presented credential may already be rotated, so the
+#    browser recovers through a new Authorization Code flow (prompt=none first, D-80/D-110).
+# 3. Verify the returned Access JWT against the OP public JWKS and this session's sid/subject.
+# 4. Install under the session and OP-binding locks again: refuse if the session or binding was
+#    revoked meanwhile or another request already advanced the installed generation.
 #
-# Transport/dependency failures keep the browser credentials; only a definitive refusal clears them.
+# A transport failure before dispatch keeps the browser credentials; a definitive refusal or an
+# indeterminate commit clears them.
 class RpRefreshCommitter
   Result =
     Data.define(:outcome, :token_response) do
       def installed? = outcome == :installed
     end
 
-  # installed    - this attempt's tokens are now the session's single installed generation.
-  # refused      - the OP definitively refused the credential (clear cookies, new Code Flow).
+  # installed    - this request's tokens are now the session's single installed generation.
+  # refused      - the OP definitively refused the credential, or its commit is indeterminate and
+  #                the credential may be rotated (clear cookies, new Code Flow).
   # dependency   - the OP could not be reached or answered invalidly; keep cookies, retry later.
-  # superseded   - a sibling is in flight or a newer generation won; keep the current cookies.
+  # superseded   - a newer generation was installed meanwhile; keep the current cookies.
   # revoked      - the local session or its OP binding is revoked or expired.
   OUTCOMES = %i(installed refused dependency superseded revoked).freeze
-  ATTEMPT_TTL = OidcRefreshDeliveryReceipt::TTL
   DISPATCH_BUDGET = 4.0
-  HMAC_PURPOSE = "rp_refresh_attempt_input"
 
-  def initialize(cell:, local_session_id:, refresh_token:, issuer:, jwks_client:, token_url:,
-                 query_url:)
+  def initialize(cell:, local_session_id:, refresh_token:, issuer:, jwks_client:, token_url:)
     @cell = cell
     @local_session_id = local_session_id
     @refresh_token = refresh_token
     @issuer = issuer
     @jwks_client = jwks_client
     @token_url = token_url
-    @query_url = query_url
   end
 
   class << self
@@ -52,98 +48,56 @@ class RpRefreshCommitter
 
   def call
     record_class.connected_to(role: :writing) do
-      attempt, fresh_attempt = reserve_attempt
-      next result(:revoked) unless attempt
+      expected_generation = reserve_generation
+      next result(:revoked) unless expected_generation
 
       @dispatch_deadline = monotonic_now + DISPATCH_BUDGET
-      response = fresh_attempt ? dispatch(attempt) : resume_attempt(attempt)
+      response = dispatch
       next result(response) if response.is_a?(Symbol)
 
-      install(attempt, response)
+      install(expected_generation, response)
     end
   end
 
   private
 
-  attr_reader :cell, :local_session_id, :refresh_token, :issuer, :jwks_client, :token_url, :query_url
+  attr_reader :cell, :local_session_id, :refresh_token, :issuer, :jwks_client, :token_url
 
-  def reserve_attempt
+  def reserve_generation
     with_locked_session do |session, anchor|
       next unless live?(session, anchor)
 
-      prior = model(:RefreshAttempt).where(session: session, input_hmac: input_hmac).order(id: :desc).first
-      next [prior, false] if prior
-
-      now = database_now
-      attempt = model(:RefreshAttempt).create!(
-        session:, input_hmac: input_hmac, expected_installed_generation: session.installed_generation,
-        dispatched_at: now, expires_at: now + ATTEMPT_TTL,
-      )
-      [attempt, true]
+      session.installed_generation
     end
   end
 
   # Returns the token response Hash, or an outcome Symbol when no tokens are available.
-  def dispatch(attempt)
-    return :refused if attempt.expires_at <= database_now
-
+  def dispatch
     outcome = OidcOpTokenClient.refresh(
-      client_id: cell.client_id, token_url:, refresh_token:, attempt_ref: attempt.public_id,
-      deadline: delivery_deadline(attempt),
+      client_id: cell.client_id, token_url:, refresh_token:, deadline: @dispatch_deadline,
     )
     return outcome.token_response if outcome.success?
-    return :refused if outcome.outcome == :refused
+    # An indeterminate commit may have rotated the credential at the OP; resending it would present
+    # a consumed token and revoke the family (D-25), so the browser starts a new Code Flow instead.
+    return :refused if %i(refused indeterminate).include?(outcome.outcome)
 
-    mark_uncertain(attempt)
-    return :dependency unless outcome.outcome == :indeterminate
-
-    recover_delivery(attempt)
+    :dependency
   end
 
-  def resume_attempt(attempt)
-    return :refused if attempt.expires_at <= database_now
-    return :superseded unless attempt.uncertain_at || attempt.installed_at
-
-    recover_delivery(attempt)
-  end
-
-  def recover_delivery(attempt)
-    return :refused if attempt.expires_at <= database_now
-
-    recovered = OidcOpTokenClient.query_delivery(
-      client_id: cell.client_id, query_url:, refresh_token:, attempt_ref: attempt.public_id,
-      deadline: delivery_deadline(attempt),
-    )
-    return recovered.token_response if recovered.success?
-
-    # A refused query means no receipt for this attempt (window closed or nothing committed); the
-    # predecessor may already be rotated, so the browser must start a new Code Flow.
-    (recovered.outcome == :refused) ? :refused : :dependency
-  end
-
-  def install(attempt, token_response)
-    return defer_installation(attempt) if monotonic_now >= @dispatch_deadline
-
+  def install(expected_generation, token_response)
     payload = verified_access_payload(token_response)
-    return defer_installation(attempt) unless payload
+    return result(:refused) unless payload
 
     with_locked_session do |session, anchor|
       next result(:revoked) unless live?(session, anchor)
-      next result(:refused) if attempt.expires_at <= database_now
-      next defer_installation(attempt) if monotonic_now >= @dispatch_deadline
       next result(:refused) unless payload_matches?(session, anchor, payload)
-      if attempt.installed_at && session.installed_generation == attempt.expected_installed_generation + 1 &&
-          session.current_access_jti_digest == Digest::SHA256.hexdigest(payload.fetch("jti"))
-        next Result.new(outcome: :installed, token_response:)
-      end
-      next result(:superseded) unless session.installed_generation == attempt.expected_installed_generation
+      next result(:superseded) unless session.installed_generation == expected_generation
 
       session.update!(
         installed_generation: session.installed_generation + 1,
         current_access_jti_digest: Digest::SHA256.hexdigest(payload.fetch("jti")),
         current_access_expires_at: Time.zone.at(payload.fetch("exp")),
       )
-      model(:RefreshAttempt).where(id: attempt.id).update_all(installed_at: database_now) # rubocop:disable Rails/SkipsModelValidations
       Result.new(outcome: :installed, token_response:)
     end
   end
@@ -154,15 +108,6 @@ class RpRefreshCommitter
       audience: cell.client_id, jwks_client:,
     ).call
     verification.success? ? verification.payload : nil
-  end
-
-  def mark_uncertain(attempt)
-    model(:RefreshAttempt).where(id: attempt.id).update_all(uncertain_at: database_now) # rubocop:disable Rails/SkipsModelValidations
-  end
-
-  def defer_installation(attempt)
-    mark_uncertain(attempt)
-    result(:dependency)
   end
 
   def with_locked_session
@@ -191,21 +136,12 @@ class RpRefreshCommitter
       identity.client_id == anchor.client_id && identity.subject == payload.fetch("sub")
   end
 
-  def input_hmac
-    key = Rails.application.key_generator.generate_key(HMAC_PURPOSE, 32)
-    OpenSSL::HMAC.digest("SHA256", key, refresh_token.to_s)
-  end
-
   def database_now
     record_class.database_now
   end
 
   def monotonic_now
     Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  end
-
-  def delivery_deadline(attempt)
-    [@dispatch_deadline, monotonic_now + (attempt.expires_at - database_now)].min
   end
 
   def record_class

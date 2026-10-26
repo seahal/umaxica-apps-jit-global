@@ -68,11 +68,12 @@ module BaseStepUpIntent
     end
 
     requirement = requested_step_up_requirement(actor: actor, token: token, scope: scope)
-    ensure_base_admission_browser_nonce!
+    previous_browser_nonce = base_admission_browser_nonce
+    browser_nonce = base_admission_browser_nonce_for_request!
 
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token, requirement: requirement, return_to: return_to,
-      base_browser_nonce: base_admission_browser_nonce, base_token: token, restart_of: params[:restart_of],
+      base_browser_nonce: browser_nonce, base_token: token, restart_of: params[:restart_of],
     )
     if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
       return redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
@@ -91,6 +92,11 @@ module BaseStepUpIntent
   rescue BaseAuthAdmissionCoordinator::Denied => e
     log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_admission_issue")
     if e.code == "transaction_conflict"
+      # A new initiation rotates the marker, but the conflict form must still prove the
+      # already-pending admission's original browser. Restore that marker before rendering it;
+      # the explicit restart/cancel POST may rotate it again after the old binding is retired.
+      session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = previous_browser_nonce if
+        previous_browser_nonce.present?
       render_step_up_conflict!(
         actor: actor, token: token, requirement: requirement, return_to: return_to,
         transaction_ref: e.context.fetch("transaction_ref"),
@@ -122,10 +128,11 @@ module BaseStepUpIntent
       require_session_binding: true, ttl: VerificationBase::STEP_UP_TTL, actor_ref: actor.public_id,
       resource_ref: nil, tenant_ref: nil,
     )
-    ensure_base_admission_browser_nonce!
+    previous_browser_nonce = base_admission_browser_nonce
+    browser_nonce = base_admission_browser_nonce_for_request!
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token, requirement: requirement, return_to: return_to,
-      base_browser_nonce: base_admission_browser_nonce, base_token: token, restart_of: params[:restart_of],
+      base_browser_nonce: browser_nonce, base_token: token, restart_of: params[:restart_of],
     )
     if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
       redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
@@ -140,6 +147,8 @@ module BaseStepUpIntent
   rescue BaseAuthAdmissionCoordinator::Denied => e
     log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_bootstrap_issue")
     if e.code == "transaction_conflict"
+      session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = previous_browser_nonce if
+        previous_browser_nonce.present?
       render_step_up_conflict!(
         actor: actor, token: token, requirement: requirement, return_to: return_to,
         transaction_ref: e.context.fetch("transaction_ref"),

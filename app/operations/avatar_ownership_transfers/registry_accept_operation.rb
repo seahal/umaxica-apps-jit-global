@@ -38,17 +38,24 @@ module AvatarOwnershipTransfers
       },
     }.freeze
 
-    def initialize(actor:, surface:, subject_public_id:, reservation_public_id:)
+    def initialize(actor:, surface:, subject_public_id:, reservation_public_id:, step_up_token: nil,
+                   step_up_requirement: nil)
       super()
       @actor = actor
       @surface = surface.to_s
       @subject_public_id = subject_public_id.to_s
       @reservation_public_id = reservation_public_id.to_s
+      @step_up_token = step_up_token
+      @step_up_requirement = step_up_requirement
     end
 
     public
 
     def call
+      validate_step_up_context!(
+        actor: actor, surface: surface, scope: "avatar_transfer_accept",
+        token: step_up_token, requirement: step_up_requirement,
+      )
       observed = find_reservation!
       definition = detail_definition(observed)
       detail = definition.fetch(:detail_class).find_by!(transfer_reservation_id: observed.id)
@@ -80,7 +87,7 @@ module AvatarOwnershipTransfers
 
     private
 
-    attr_reader :actor, :surface, :subject_public_id, :reservation_public_id
+    attr_reader :actor, :surface, :subject_public_id, :reservation_public_id, :step_up_token, :step_up_requirement
 
     def authorized_initiator_public_id
       public_id = actor.respond_to?(:public_id) ? actor.public_id.to_s : ""
@@ -235,6 +242,7 @@ module AvatarOwnershipTransfers
 
         locked_detail.update!(accept_actor_public_id: authorized_initiator_public_id, accepted_at: transfer_at)
         locked.update!(state: "accepted", completed_at: transfer_at)
+        consume_step_up!(step_up_token, step_up_requirement)
         [locked, false]
       end
     end

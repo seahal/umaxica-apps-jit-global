@@ -176,6 +176,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5043)
                 end
               fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -469,7 +472,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         )
         statuses << duplicate.response.status
       end
-      expected = (outcome == :completion) ? [303, 303] : [400, 400]
+      expected = (outcome == :completion) ? [303, 400] : [400, 400]
 
       assert_equal expected, statuses.sort
       assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
@@ -484,7 +487,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         assert_equal actor.public_id, receipts.first.client_ref
         assert credential.reload.consumed_at
         assert_predicate root, :currently_usable?
-        assert_equal 2, [base, duplicate].count { |browser| browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] }
+        assert_equal 1, [base, duplicate].count { |browser| browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] }
       else
         assert_equal 400, duplicate.response.status
         assert_nil flow.reload.token_id

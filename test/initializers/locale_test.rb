@@ -5,6 +5,7 @@
 # rubocop:disable I18n/RailsI18n/DecorateStringFormattingUsingInterpolation
 
 require "test_helper"
+require "yaml"
 # require "helpers/global_test_support"
 
 class LocaleInitializerTest < ActiveSupport::TestCase
@@ -19,6 +20,52 @@ class LocaleInitializerTest < ActiveSupport::TestCase
     assert_equal :ja, I18n.default_locale
     assert_equal [:en], I18n.fallbacks[:en]
     assert_equal [:ja], I18n.fallbacks[:ja]
+  end
+
+  test "english and japanese locale bundles have identical leaf keys" do
+    locale_trees = {
+      en: YAML.load_file(Rails.root.join("config/locales/en.yml"), aliases: true).fetch("en"),
+      ja: YAML.load_file(Rails.root.join("config/locales/ja.yml"), aliases: true).fetch("ja"),
+    }
+    leaf_keys =
+      lambda do |value, prefix|
+        if value.is_a?(Hash)
+          value.flat_map { |key, child| leaf_keys.call(child, prefix + [key.to_s]) }
+        else
+          [prefix.join(".")]
+        end
+      end
+    keys_by_locale = locale_trees.transform_values { |tree| leaf_keys.call(tree, []).to_set }
+    differences = {
+      en_only: (keys_by_locale.fetch(:en) - keys_by_locale.fetch(:ja)).to_a.sort,
+      ja_only: (keys_by_locale.fetch(:ja) - keys_by_locale.fetch(:en)).to_a.sort,
+    }
+
+    assert_equal({ en_only: [], ja_only: [] }, differences)
+  end
+
+  test "does not resolve a missing translation from the other language" do
+    reload_locale_initializer
+    I18n.backend.store_translations(:en, locale_fallback_probe: { english_only: "English probe" })
+    I18n.backend.store_translations(:ja, locale_fallback_probe: { japanese_only: "日本語の確認" })
+    english_only_key = %w(locale_fallback_probe english_only).join(".")
+    japanese_only_key = %w(locale_fallback_probe japanese_only).join(".")
+
+    I18n.with_locale(:en) do
+      assert_equal "English probe", I18n.t(english_only_key)
+      assert_raises(I18n::MissingTranslationData) do
+        I18n.with_locale(:ja) { I18n.t(english_only_key) }
+      end
+    end
+
+    I18n.with_locale(:ja) do
+      assert_equal "日本語の確認", I18n.t(japanese_only_key)
+      assert_raises(I18n::MissingTranslationData) do
+        I18n.with_locale(:en) { I18n.t(japanese_only_key) }
+      end
+    end
+  ensure
+    I18n.backend.reload!
   end
 
   test "provides english labels for app settings links" do
@@ -310,10 +357,8 @@ class LocaleInitializerTest < ActiveSupport::TestCase
 
   def supported_locale_paths
     %w(
-      config/locales/jp/en.yml
-      config/locales/jp/ja.yml
-      config/locales/us/en.yml
-      config/locales/us/ja.yml
+      config/locales/en.yml
+      config/locales/ja.yml
     ).map { |path| Rails.root.join(path).to_s }.sort
   end
 end

@@ -151,14 +151,16 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       end
   end
 
-  test "GET protected endpoint redirects to setup when configured methods are zero" do
+  # D-132: an Operator always holds two Passkeys here, so zero configured methods is unreachable and
+  # the missing Step-Up goes to verification, not setup.
+  test "GET protected endpoint redirects an operator with passkeys to verification" do
     get base_org_identity_withdrawal_url(ri: "jp", host: @base_host), headers: @base_headers
 
     assert_response :redirect
     target = URI.parse(response.location)
 
     assert_equal @base_host, target.host
-    assert_equal "/verification/setup", target.path
+    assert_equal "/verification", target.path
     assert_predicate Rack::Utils.parse_query(target.query)["pt"], :present?
   end
 

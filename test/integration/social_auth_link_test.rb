@@ -865,11 +865,15 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to auth_app_settings_path(ri: "jp")
     assert_equal @user_one.id, ClientGoogleIdentity.find_by!(uid: new_uid).user_id
+    link_token = ClientToken.find_by!(public_id: grant_session.user_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+
+    assert_nil link_token.reload.last_step_up_at
     assert_not_includes response.body.to_s, "social-completion-form"
     assert_no_difference("ClientGoogleIdentity.count") do
       post(form["action"], params: fields, headers: local_headers)
     end
-    assert_response :unauthorized
+    # The first successful link spent this token's operation-scoped Step-Up evidence.
+    assert_response :forbidden
     assert_not_nil candidate.reload.consumed_at
   ensure
     ActionController::Base.allow_forgery_protection = previous_forgery if defined?(previous_forgery)

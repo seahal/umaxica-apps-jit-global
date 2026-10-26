@@ -29,8 +29,7 @@ module Edit
 
         layout "edit/org/application"
 
-        before_action :authenticate_oidc_rp_session!, only: :create,
-                                                      unless: -> { params[:logout_challenge].present? }
+        before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -39,8 +38,6 @@ module Edit
         public
 
         def show
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           complete_oidc_rp_logout!
         end
 
@@ -53,8 +50,6 @@ module Edit
         end
 
         def create
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           launch_oidc_rp_logout!(
             client_id: "edit-org-ww",
             issuer_resource_type: "operator",

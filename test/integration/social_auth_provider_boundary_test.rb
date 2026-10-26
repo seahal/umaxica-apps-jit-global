@@ -63,7 +63,7 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow0_index|
             flow0_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -218,7 +218,7 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow1_index|
             flow1_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -378,7 +378,7 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow2_index|
             flow2_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -538,7 +538,7 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow3_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow3_index|
             flow3_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.

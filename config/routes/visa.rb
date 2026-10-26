@@ -16,6 +16,9 @@ scope(module: :visa, as: :visa) do
 
     constraints(host: [origin&.host, ENV[public_env], local_host].compact) do
       scope(module: surface_namespace, as: surface_namespace) do
+        # Public root exception: adr/rails-routing-resourceful-policy.md, Visa public roots.
+        root "roots#index"
+
         resource(
           :ceremony_binding_confirmation,
           only: :show,
@@ -51,16 +54,15 @@ scope(module: :visa, as: :visa) do
         namespace(:oauth) do
           resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
           resource(:token, only: :create, controller: :tokens)
-          resource(
-            :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
-                                     controller: :refresh_delivery_queries,
-          )
           resource(:userinfo, only: %i(show create), controller: :userinfos)
           resource(:revocation, only: :create, path: "revoke", controller: :revocations)
         end
 
         namespace(:oidc) do
           resource(:logout, only: %i(show create), controller: :logouts)
+          scope(module: :logouts, path: :logout, as: :logout) do
+            resource :confirmation, only: :create
+          end
           resource(:result, only: :show, controller: :results)
           resource(:cancellation, only: :show, controller: :cancellations)
           if surface_namespace != :org
@@ -79,6 +81,15 @@ scope(module: :visa, as: :visa) do
           end
         end
 
+        namespace :edge do
+          namespace :v0 do
+            namespace :token do
+              resource :status, only: :show, path: "check", controller: :checks, as: :check
+              resource :dbsc, only: :create
+              resource :refresh, only: :create
+            end
+          end
+        end
       end
     end
   end

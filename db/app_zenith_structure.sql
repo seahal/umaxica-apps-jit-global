@@ -90,7 +90,7 @@ CREATE FUNCTION public.check_user_identity_totp_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_client_emails_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF current_user = 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF current_user = 'umaxica_app_email_hmac_definer_8cacbbcb7884' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_app_email_hmac_definer_8cacbbcb7884')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -109,7 +109,7 @@ CREATE FUNCTION public.enforce_client_external_identity_binding_facts() RETURNS 
 CREATE FUNCTION public.enforce_client_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae' AND NEW.channel = 'email') OR (current_user = 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_app_email_hmac_definer_8cacbbcb7884' AND NEW.channel = 'email') OR (current_user = 'umaxica_app_telephone_hmac_definer_8cacbbcb7884' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -119,7 +119,7 @@ CREATE FUNCTION public.enforce_client_rotation_audit() RETURNS trigger
 CREATE FUNCTION public.enforce_client_telephones_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF current_user = 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF current_user = 'umaxica_app_telephone_hmac_definer_8cacbbcb7884' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_app_telephone_hmac_definer_8cacbbcb7884')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -147,7 +147,7 @@ CREATE FUNCTION public.enforcement_protect_clients_delete() RETURNS trigger
 CREATE FUNCTION public.rotate_client_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.client_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_email_hmac_definer_8cacbbcb7884' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.client_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -157,7 +157,7 @@ CREATE FUNCTION public.rotate_client_emails_hmac(p_record_id bigint, p_new_diges
 CREATE FUNCTION public.rotate_client_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.client_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_telephone_hmac_definer_8cacbbcb7884' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.client_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -2972,6 +2972,35 @@ ALTER SEQUENCE public.client_secret_issuances_id_seq OWNED BY public.client_secr
 
 
 --
+-- Name: client_security_modes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_security_modes (
+    id bigint NOT NULL,
+    CONSTRAINT chk_client_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
+);
+
+
+--
+-- Name: client_security_modes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_security_modes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_security_modes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_security_modes_id_seq OWNED BY public.client_security_modes.id;
+
+
+--
 -- Name: client_social_audit_outboxes; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3397,16 +3426,6 @@ ALTER SEQUENCE public.client_withdrawal_flows_id_seq OWNED BY public.client_with
 
 
 --
--- Name: client_security_modes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.client_security_modes (
-    id bigint NOT NULL,
-    CONSTRAINT chk_client_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
-);
-
-
---
 -- Name: clients; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3424,7 +3443,6 @@ CREATE TABLE public.clients (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT users_purged_at_not_null NOT NULL,
     visibility_id bigint DEFAULT 2 CONSTRAINT users_visibility_id_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT users_discarded_at_not_null NOT NULL,
-    security_mode_id bigint NOT NULL,
     mfa_status_id bigint DEFAULT 5 CONSTRAINT users_multi_factor_status_id_not_null NOT NULL,
     terminated_at timestamp(6) with time zone,
     birthdate text,
@@ -3439,6 +3457,7 @@ CREATE TABLE public.clients (
     authentication_epoch bigint DEFAULT 0 NOT NULL,
     recovery_available_at timestamp(6) with time zone,
     early_termination_available_at timestamp(6) with time zone,
+    security_mode_id bigint NOT NULL,
     CONSTRAINT chk_clients_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_clients_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
     CONSTRAINT chk_clients_authentication_epoch_nonnegative CHECK ((authentication_epoch >= 0)),
@@ -5077,6 +5096,13 @@ ALTER TABLE ONLY public.client_secret_issuances ALTER COLUMN id SET DEFAULT next
 
 
 --
+-- Name: client_security_modes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_security_modes ALTER COLUMN id SET DEFAULT nextval('public.client_security_modes_id_seq'::regclass);
+
+
+--
 -- Name: client_social_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5382,14 +5408,6 @@ ALTER TABLE ONLY public.user_client_suspensions ALTER COLUMN id SET DEFAULT next
 --
 
 ALTER TABLE ONLY public.user_clients ALTER COLUMN id SET DEFAULT nextval('public.user_clients_id_seq'::regclass);
-
-
---
--- Name: client_security_modes client_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_security_modes
-    ADD CONSTRAINT client_security_modes_pkey PRIMARY KEY (id);
 
 
 --
@@ -6065,6 +6083,14 @@ ALTER TABLE ONLY public.client_secret_issuances
 
 
 --
+-- Name: client_security_modes client_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_security_modes
+    ADD CONSTRAINT client_security_modes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_social_audit_outboxes client_social_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6422,13 +6448,6 @@ ALTER TABLE ONLY public.user_client_suspensions
 
 ALTER TABLE ONLY public.user_clients
     ADD CONSTRAINT user_clients_pkey PRIMARY KEY (id);
-
-
---
--- Name: index_clients_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_clients_on_security_mode_id ON public.clients USING btree (security_mode_id);
 
 
 --
@@ -7895,6 +7914,13 @@ CREATE INDEX index_clients_on_recovery_available_at ON public.clients USING btre
 
 
 --
+-- Name: index_clients_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_clients_on_security_mode_id ON public.clients USING btree (security_mode_id);
+
+
+--
 -- Name: index_clients_on_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8308,14 +8334,6 @@ CREATE TRIGGER enforcement_protect_clients_delete BEFORE DELETE ON public.client
 
 
 --
--- Name: clients fk_rails_fcb70bada4; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.clients
-    ADD CONSTRAINT fk_rails_fcb70bada4 FOREIGN KEY (security_mode_id) REFERENCES public.client_security_modes(id);
-
-
---
 -- Name: client_accounts fk_client_accounts_on_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8392,7 +8410,7 @@ ALTER TABLE ONLY public.core_app_client_bridges
 --
 
 ALTER TABLE ONLY public.enterprise_units
-    ADD CONSTRAINT fk_enterprise_units_parent_same_enterprise FOREIGN KEY (parent_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_enterprise_units_parent_same_enterprise FOREIGN KEY (parent_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -8400,7 +8418,7 @@ ALTER TABLE ONLY public.enterprise_units
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_persona_memberships_unit_same_enterprise FOREIGN KEY (enterprise_unit_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_persona_memberships_unit_same_enterprise FOREIGN KEY (enterprise_unit_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -8440,7 +8458,7 @@ ALTER TABLE ONLY public.client_banners
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_0d7f5f74b1 FOREIGN KEY (revoke_reason_id) REFERENCES public.persona_membership_revoke_reasons(id);
+    ADD CONSTRAINT fk_rails_0d7f5f74b1 FOREIGN KEY (revoke_reason_id) REFERENCES public.persona_membership_revoke_reasons(id) NOT VALID;
 
 
 --
@@ -8496,7 +8514,7 @@ ALTER TABLE ONLY public.client_emails
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_182816542a FOREIGN KEY (membership_state_id) REFERENCES public.persona_membership_states(id);
+    ADD CONSTRAINT fk_rails_182816542a FOREIGN KEY (membership_state_id) REFERENCES public.persona_membership_states(id) NOT VALID;
 
 
 --
@@ -8576,7 +8594,7 @@ ALTER TABLE ONLY public.members
 --
 
 ALTER TABLE ONLY public.client_identities
-    ADD CONSTRAINT fk_rails_3045b2b3f6 FOREIGN KEY (status_id) REFERENCES public.client_identity_states(id);
+    ADD CONSTRAINT fk_rails_3045b2b3f6 FOREIGN KEY (status_id) REFERENCES public.client_identity_states(id) NOT VALID;
 
 
 --
@@ -8624,7 +8642,7 @@ ALTER TABLE ONLY public.enterprise_view_grants
 --
 
 ALTER TABLE ONLY public.client_preferences
-    ADD CONSTRAINT fk_rails_39373ef225 FOREIGN KEY (user_id) REFERENCES public.clients(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_39373ef225 FOREIGN KEY (user_id) REFERENCES public.clients(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -8640,7 +8658,7 @@ ALTER TABLE ONLY public.client_preference_currencies
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flows
-    ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id);
+    ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id) NOT VALID;
 
 
 --
@@ -8712,7 +8730,7 @@ ALTER TABLE ONLY public.enterprise_delegation_grants
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_4f3c994599 FOREIGN KEY (membership_kind_id) REFERENCES public.persona_membership_kinds(id);
+    ADD CONSTRAINT fk_rails_4f3c994599 FOREIGN KEY (membership_kind_id) REFERENCES public.persona_membership_kinds(id) NOT VALID;
 
 
 --
@@ -8720,7 +8738,7 @@ ALTER TABLE ONLY public.persona_memberships
 --
 
 ALTER TABLE ONLY public.client_profiles
-    ADD CONSTRAINT fk_rails_510843a98e FOREIGN KEY (client_status_id) REFERENCES public.client_profile_statuses(id);
+    ADD CONSTRAINT fk_rails_510843a98e FOREIGN KEY (client_status_id) REFERENCES public.client_profile_statuses(id) NOT VALID;
 
 
 --
@@ -8744,7 +8762,7 @@ ALTER TABLE ONLY public.persona_memberships
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_529c28deb1 FOREIGN KEY (granted_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_529c28deb1 FOREIGN KEY (granted_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -8896,7 +8914,7 @@ ALTER TABLE ONLY public.client_member_revocations
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -8976,7 +8994,7 @@ ALTER TABLE ONLY public.client_preference_page_sizes
 --
 
 ALTER TABLE ONLY public.personas
-    ADD CONSTRAINT fk_rails_8dc042a1c9 FOREIGN KEY (client_identity_id) REFERENCES public.client_identities(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_8dc042a1c9 FOREIGN KEY (client_identity_id) REFERENCES public.client_identities(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -9048,7 +9066,7 @@ ALTER TABLE ONLY public.app_enforcement_identifier_effects
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_9511d96f8c FOREIGN KEY (to_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_9511d96f8c FOREIGN KEY (to_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -9192,7 +9210,7 @@ ALTER TABLE ONLY public.persona_assignments
 --
 
 ALTER TABLE ONLY public.client_profiles
-    ADD CONSTRAINT fk_rails_c49c0906dc FOREIGN KEY (status_id) REFERENCES public.client_profile_statuses(id);
+    ADD CONSTRAINT fk_rails_c49c0906dc FOREIGN KEY (status_id) REFERENCES public.client_profile_statuses(id) NOT VALID;
 
 
 --
@@ -9224,7 +9242,7 @@ ALTER TABLE ONLY public.clients
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_cdfe640663 FOREIGN KEY (revoked_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_cdfe640663 FOREIGN KEY (revoked_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -9304,7 +9322,7 @@ ALTER TABLE ONLY public.user_clients
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_e031c03097 FOREIGN KEY (approved_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_e031c03097 FOREIGN KEY (approved_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -9320,7 +9338,7 @@ ALTER TABLE ONLY public.app_enforcement_principal_links
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flows
-    ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id);
+    ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id) NOT VALID;
 
 
 --
@@ -9400,7 +9418,7 @@ ALTER TABLE ONLY public.client_member_suspensions
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -9457,6 +9475,14 @@ ALTER TABLE ONLY public.client_email_histories
 
 ALTER TABLE ONLY public.client_persona_lifecycles
     ADD CONSTRAINT fk_rails_fc7a83d40a FOREIGN KEY (client_persona_id) REFERENCES public.personas(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: clients fk_rails_fcb70bada4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clients
+    ADD CONSTRAINT fk_rails_fcb70bada4 FOREIGN KEY (security_mode_id) REFERENCES public.client_security_modes(id);
 
 
 --

@@ -17,25 +17,23 @@ module Auth
         return render_invalid_admission_request! if request.head?
 
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
-        return render_invalid_admission_request! unless
-          AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
-        return if enforce_sign_entry_sentry_for_binding!(binding)
+        if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
+          return if enforce_sign_entry_sentry_for_binding!(binding)
+        elsif AuthAdmissionBinding::PARENT_PURPOSES.fetch(:step_up_ceremony_transaction).include?(binding.purpose)
+          intent = BaseAuthAdmissionCoordinator::HANDOFF_PURPOSE.key(binding.purpose)
+          raise ArgumentError if intent.blank?
+
+          BaseAuthAdmissionCoordinator.validate_admission_continuation!(
+            binding:, surface: "org", expected_intent: intent,
+          )
+        else
+          return render_invalid_admission_request!
+        end
 
         attach_and_redirect!(binding, OperatorAuthCeremonySession)
       rescue BaseAuthAdmissionCoordinator::Denied, AuthAdmissionBinding::InvalidTransition,
              ActiveRecord::RecordNotFound, ArgumentError
         render_invalid_admission_request!
-      end
-
-      def create
-        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
-        return if enforce_sign_entry_sentry_for_binding!(binding)
-
-        attach_and_redirect!(binding, OperatorAuthCeremonySession)
-      rescue BaseAuthAdmissionCoordinator::Denied, AuthAdmissionBinding::InvalidTransition,
-             ActiveRecord::RecordNotFound, ArgumentError
-        render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request,
-               content_type: "text/plain"
       end
 
       private

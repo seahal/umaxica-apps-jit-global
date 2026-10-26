@@ -157,8 +157,9 @@ module CoreBrowserApiBoundary
       refresh_token: refresh_plain,
     )
     unless result.success?
-      # A dependency or indeterminate outcome is not an expired credential; keep the cookies.
-      render_problem((result.outcome == :refused) ? :token_expired : :service_unavailable)
+      # D-25: a refusal, or an indeterminate commit that may have rotated the credential, is final for
+      # this browserless request (401); a dependency failure is not an expired credential.
+      render_problem(%i(refused indeterminate).include?(result.outcome) ? :token_expired : :service_unavailable)
       return
     end
 
@@ -187,7 +188,7 @@ module CoreBrowserApiBoundary
     head :no_content
   end
 
-  # R5-WU17 cell process: Refresh is reserved/installed under the local session (RpRefreshCommitter).
+  # R5-WU17 cell process: Refresh is checked/installed under the local session (RpRefreshCommitter).
   def refresh_core_cell_token!(refresh_plain)
     cell = rp_cell
     result =
@@ -196,7 +197,6 @@ module CoreBrowserApiBoundary
           cell:, local_session_id: cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE].to_s,
           refresh_token: refresh_plain, issuer: rp_cell_issuer,
           jwks_client: rp_cell_jwks_client, token_url: OidcIssuer.token_endpoint(core_resource_type),
-          query_url: OidcIssuer.refresh_delivery_query_endpoint(core_resource_type),
         )
       end
     case result.outcome

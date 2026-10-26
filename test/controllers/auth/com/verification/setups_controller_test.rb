@@ -30,7 +30,7 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
             phishing_resistant_required: false, user_verification_required: false,
             full_reauthentication_required: false, actor_ref: actor.public_id,
             resource_ref: nil, tenant_ref: nil,
-            allowed_methods: [:passkey], audience: "step_up:com", session_binding: token.public_id,
+            allowed_methods: %i(passkey email_otp), audience: "step_up:com", session_binding: token.public_id,
             token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
           ),
           return_to: "/identity/telephones",
@@ -67,14 +67,13 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
         )
         admission_issuance
       end
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    get new_auth_com_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"))
+    get(new_auth_com_verification_setup_path(ri: "jp", entry_ref: issuance.reference))
 
     assert_response :see_other
+    assert_equal new_auth_com_verification_setup_path(ri: "jp"), URI.parse(response.location).request_uri
 
-    get new_auth_com_verification_setup_path(ri: "jp")
+    get(new_auth_com_verification_setup_path(ri: "jp"))
 
     assert_response :success
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
@@ -86,6 +85,22 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
     assert_equal "post", props.fetch("cancel").fetch("method")
     assert_equal "pending", issuance.transaction.reload.status
     assert_nil token.reload.last_step_up_at
+
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    post(
+      auth_com_verification_registration_passkey_options_path(ri: "jp"),
+      params: { "cf-turnstile-response" => "test-only" }, as: :json,
+    )
+
+    assert_response :ok
+    options = response.parsed_body.fetch("options")
+
+    assert_equal %w(umaxica.com umaxica.com), [options.dig("user", "name"), options.dig("user", "displayName")]
+    assert_equal "required", options.dig("authenticatorSelection", "residentKey")
+  ensure
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
   end
 
   test "the setup page is refused without an admitted bootstrap and never redirects to sign-in" do

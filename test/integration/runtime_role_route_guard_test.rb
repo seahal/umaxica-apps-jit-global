@@ -8,7 +8,7 @@ class RuntimeRoleRouteGuardTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   test "a role process refuses another role's page before any callback" do
-    with_runtime_role("rp-base-app-ww") do
+    with_runtime_role("op-base-app") do
       get base_app_identity_birthdate_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
     end
 
@@ -26,7 +26,7 @@ class RuntimeRoleRouteGuardTest < ActionDispatch::IntegrationTest
   end
 
   test "the owning role reaches its own page" do
-    with_runtime_role("op-base-app") do
+    with_runtime_role("rp-base-app-ww") do
       get base_app_identity_birthdate_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
     end
 

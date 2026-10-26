@@ -27,7 +27,10 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
     root, session = create_rp_session
     token = access_token_for(root, session)
 
-    RpSessionRevoker.call(scope: :rp_session, record: session)
+    RpSessionRevoker.call(
+      scope: :rp_session, record: session, cause: "token_revocation",
+      authority_evidence_ref: "test",
+    )
 
     assert_predicate authenticate(token), :success?
   end
@@ -36,7 +39,10 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
     root, session = create_rp_session
     token = access_token_for(root, session)
 
-    RpSessionRevoker.call(scope: :browser_session, record: root)
+    RpSessionRevoker.call(
+      scope: :browser_session, record: root, cause: "browser_logout",
+      authority_evidence_ref: "test",
+    )
 
     result = authenticate(token)
 
@@ -69,12 +75,15 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
     session = OpAppGrant.create!(
       authentication_epoch: 0,
       client_token: root,
-      oidc_client_id: "core-app-rp",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
 
-    RpSessionRevoker.call(scope: :rp_session, record: session)
+    RpSessionRevoker.call(
+      scope: :rp_session, record: session, cause: "token_revocation",
+      authority_evidence_ref: "test",
+    )
 
     assert_predicate session.reload, :revoked?
     assert_not session.active?

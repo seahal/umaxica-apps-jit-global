@@ -95,9 +95,10 @@ module Auth
             unless result
               log_signup_email_errors
               strip_user_owner_errors!
+              reason = @sign_up_contact_held ? "contact_held" : "unexpected_error"
               log_sign_signup_event(
                 "sign.signup.email.create.rejected",
-                sign_signup_request_flags.merge(step: "email_otp", reason: "unexpected_error").compact,
+                sign_signup_request_flags.merge(step: "email_otp", reason:).compact,
               )
               render_sign_up_email_new(status: :unprocessable_content)
               return
@@ -118,7 +119,12 @@ module Auth
           def create_and_send_verified_email!
             return false if @user_email.errors.details.except(:user, :user_id).any?
 
-            supersede_active_sign_up_flow!
+            if sign_up_entry_held_by_earlier_attempt?
+              @sign_up_contact_held = true
+              @user_email.errors.add(:base, t("sign.app.registration.email.create.contact_held"))
+              return false
+            end
+
             super
           end
 
@@ -126,7 +132,13 @@ module Auth
             has_errors = @user_email.errors.details.except(:user, :user_id).any?
             return { status: false } if has_errors
 
-            cleanup_pending_signup!
+            # D-135/D-177: no user-initiated reset; only the background cleanup releases a held contact.
+            if SignUpContactHoldQuery.call(contact: @user_email)
+              @sign_up_contact_held = true
+              @user_email.errors.add(:base, t("sign.app.registration.email.create.contact_held"))
+              return { status: false }
+            end
+
             @pending_user = EmailSignUpCandidateCreator.call(email: @user_email)
             { status: :ok, otp_number: nil }
           end
@@ -349,13 +361,6 @@ module Auth
             return unless cycle&.pending_contact_type == "email"
 
             ClientEmail.find_by(id: cycle.pending_contact_id)
-          end
-
-          def cleanup_pending_signup!
-            cycle = current_sign_up_flow_ticket
-            return unless cycle&.principal_id
-
-            Client.find_by(id: cycle.principal_id, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)&.destroy!
           end
 
           # Derives a per-address rate-limit bucket. Uses the same SHA-256

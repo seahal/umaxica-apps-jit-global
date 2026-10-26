@@ -34,21 +34,15 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
         "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
       },
     )
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    JitSecurityJwtRegistry.surface("BASE_APP")
     2.times do |index|
       target = URI.parse(browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless target.host == base_host
-        rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
+        target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       end
 
-      assert_includes [base_host, auth_host], target.host
+      assert_includes [base_host, visa_host_for_test_base_host(base_host), auth_host], target.host
       browser.host!(target.host)
       browser.get(target.request_uri, params: { ri: "jp" })
       next if index == 1
@@ -77,7 +71,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
       target = URI.parse(browser.response.location)
 
-      assert_includes [base_host, auth_host], target.host
+      assert_includes [base_host, visa_host_for_test_base_host(base_host), auth_host], target.host
       browser.host!(target.host)
       browser.get(target.request_uri, params: { ri: "jp" })
     end

@@ -1563,7 +1563,7 @@ CREATE TRIGGER org_preferences_public_id_immutability BEFORE UPDATE OF public_id
 --
 
 ALTER TABLE ONLY public.org_preference_languages
-    ADD CONSTRAINT fk_org_preference_languages_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_language_options(id);
+    ADD CONSTRAINT fk_org_preference_languages_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_language_options(id) NOT VALID;
 
 
 --
@@ -1571,7 +1571,7 @@ ALTER TABLE ONLY public.org_preference_languages
 --
 
 ALTER TABLE ONLY public.org_preference_regions
-    ADD CONSTRAINT fk_org_preference_regions_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_region_options(id);
+    ADD CONSTRAINT fk_org_preference_regions_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_region_options(id) NOT VALID;
 
 
 --
@@ -1579,7 +1579,7 @@ ALTER TABLE ONLY public.org_preference_regions
 --
 
 ALTER TABLE ONLY public.org_preference_themes
-    ADD CONSTRAINT fk_org_preference_themes_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_theme_options(id);
+    ADD CONSTRAINT fk_org_preference_themes_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_theme_options(id) NOT VALID;
 
 
 --
@@ -1587,7 +1587,7 @@ ALTER TABLE ONLY public.org_preference_themes
 --
 
 ALTER TABLE ONLY public.org_preference_timezones
-    ADD CONSTRAINT fk_org_preference_timezones_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_timezone_options(id);
+    ADD CONSTRAINT fk_org_preference_timezones_on_option_id FOREIGN KEY (option_id) REFERENCES public.org_preference_timezone_options(id) NOT VALID;
 
 
 --
@@ -1595,7 +1595,7 @@ ALTER TABLE ONLY public.org_preference_timezones
 --
 
 ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_org_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.org_preference_binding_methods(id);
+    ADD CONSTRAINT fk_org_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.org_preference_binding_methods(id) NOT VALID;
 
 
 --
@@ -1603,7 +1603,7 @@ ALTER TABLE ONLY public.org_preferences
 --
 
 ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_org_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.org_preference_dbsc_statuses(id);
+    ADD CONSTRAINT fk_org_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.org_preference_dbsc_statuses(id) NOT VALID;
 
 
 --
@@ -1611,7 +1611,7 @@ ALTER TABLE ONLY public.org_preferences
 --
 
 ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_org_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.org_preference_statuses(id);
+    ADD CONSTRAINT fk_org_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.org_preference_statuses(id) NOT VALID;
 
 
 --
@@ -1619,7 +1619,7 @@ ALTER TABLE ONLY public.org_preferences
 --
 
 ALTER TABLE ONLY public.org_preference_languages
-    ADD CONSTRAINT fk_rails_1a77b3c035 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+    ADD CONSTRAINT fk_rails_1a77b3c035 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id) NOT VALID;
 
 
 --
@@ -1635,7 +1635,7 @@ ALTER TABLE ONLY public.org_preference_time_formats
 --
 
 ALTER TABLE ONLY public.org_preference_regions
-    ADD CONSTRAINT fk_rails_42f3316029 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+    ADD CONSTRAINT fk_rails_42f3316029 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id) NOT VALID;
 
 
 --
@@ -1691,7 +1691,7 @@ ALTER TABLE ONLY public.org_preference_adult_content_gates
 --
 
 ALTER TABLE ONLY public.org_preference_cookies
-    ADD CONSTRAINT fk_rails_73a85808d0 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+    ADD CONSTRAINT fk_rails_73a85808d0 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id) NOT VALID;
 
 
 --
@@ -1699,7 +1699,7 @@ ALTER TABLE ONLY public.org_preference_cookies
 --
 
 ALTER TABLE ONLY public.org_preference_timezones
-    ADD CONSTRAINT fk_rails_97d21cd824 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+    ADD CONSTRAINT fk_rails_97d21cd824 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id) NOT VALID;
 
 
 --
@@ -1707,7 +1707,7 @@ ALTER TABLE ONLY public.org_preference_timezones
 --
 
 ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_rails_981b4c7c84 FOREIGN KEY (replaced_by_id) REFERENCES public.org_preferences(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_981b4c7c84 FOREIGN KEY (replaced_by_id) REFERENCES public.org_preferences(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -1771,7 +1771,7 @@ ALTER TABLE ONLY public.org_preference_page_sizes
 --
 
 ALTER TABLE ONLY public.org_preference_themes
-    ADD CONSTRAINT fk_rails_eee86b08b3 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+    ADD CONSTRAINT fk_rails_eee86b08b3 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id) NOT VALID;
 
 
 --

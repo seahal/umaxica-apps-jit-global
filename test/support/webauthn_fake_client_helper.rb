@@ -49,13 +49,15 @@ module WebauthnFakeClientHelper
 
   # Returns the raw params hash a browser would POST for an authentication.
   # sign_count defaults to a value above any freshly registered credential.
-  def fake_assertion(client, challenge:, rp_id: nil, user_verified: true, user_present: true, sign_count: 1)
+  def fake_assertion(client, challenge:, rp_id: nil, user_verified: true, user_present: true, sign_count: 1,
+                     user_handle: nil)
     client.get(
       challenge: challenge,
       rp_id: rp_id,
       user_present: user_present,
       user_verified: user_verified,
       sign_count: sign_count,
+      user_handle: user_handle,
     )
   end
 end

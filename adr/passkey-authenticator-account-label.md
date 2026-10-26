@@ -2,9 +2,9 @@
 
 ## Status
 
-**Accepted (2026-10-23).** Decision only; not implemented. Recorded during the 2026-10 authentication
-cycle (owner decision on the lost-authenticator threat). Implementation and verification belong to
-that cycle's Passkey work unit.
+**Accepted (2026-10-23).** Decision record for the lost-authenticator threat. The current Rails
+registration path uses the fixed surface label; the remaining lifecycle and production verification
+evidence belongs to the Passkey work unit.
 
 ## Context
 
@@ -84,4 +84,4 @@ and the identifier-first ADR forbid.
 - [Credential response nondisclosure](credential-response-nondisclosure.md)
 - [WebAuthn user handle](webauthn-user-handle.md)
 - [Passkey lifecycle and limit](passkey-current-state-limit-and-chronicle-outbox.md)
-- `docs/security/passkeys.md` (current-behavior overview; to be written with the implementation)
+- `docs/security/passkeys.md` (current-behavior overview)

@@ -1133,6 +1133,14 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, secret_credential.name
 
+    token = VisitorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    patch base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
+          params: { visitor_secret_credential: { name: secret_credential.name, enabled: "1" } },
+          headers: headers
+
+    assert_response :redirect
+    assert_predicate token.reload.last_step_up_at, :present?
+
     patch base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
           params: { visitor_secret_credential: { name: "Renamed credential", enabled: "1" } },
           headers: headers
@@ -1140,6 +1148,22 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     assert_redirected_to base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host)
     assert_equal "Renamed credential", secret_credential.reload.name
     assert_predicate secret_credential, :active?
+    assert_nil token.reload.last_step_up_at
+
+    patch base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
+          params: { visitor_secret_credential: { name: "Refused second rename", enabled: "1" } },
+          headers: headers
+
+    assert_includes [401, 302, 303], response.status
+    assert_equal "Renamed credential", secret_credential.reload.name
+
+    mark_token_step_up_satisfied_for_test(fx6_token, scope: "settings_secret_credential")
+    patch base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
+          params: { visitor_secret_credential: { name: "Renamed with new Step-Up", enabled: "1" } },
+          headers: headers
+
+    assert_redirected_to base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host)
+    assert_equal "Renamed with new Step-Up", secret_credential.reload.name
   end
 
   private

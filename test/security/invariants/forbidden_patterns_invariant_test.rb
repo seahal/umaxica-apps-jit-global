@@ -220,45 +220,33 @@ module Security
           target: "registration_auth_url",
           reason: "Auth receives an explicit Base-issued passkey registration admission.",
         },
-        "app/controllers/concerns/oidc_rp_logout_authority.rb" => {
-          target: "browser_rp_logout_origin_url",
-          reason: "The validated logout transaction returns to its registered RP receiver.",
-        },
         "app/controllers/concerns/sign_out_notice.rb" => {
           target: "uri.to_s",
           reason: "The fixed authority cleanup handoff carries only the durable logout challenge.",
-        },
-        "app/controllers/concerns/sign_up_social_birthdate_support.rb" => {
-          target: "base_app_social_authentication_completion_url",
-          reason: "Base confirms a server-stored social signup result through its local CSRF form.",
-        },
-        "app/controllers/concerns/social_auth.rb" => {
-          target: "base_app_social_authentication_completion_url",
-          reason: "Base confirms a server-stored social login result through its local CSRF form.",
         },
         "app/controllers/base/app/identity/totps_controller.rb" => {
           target: "new_auth_app_settings_totp_url",
           reason: "Auth receives an explicit Base-issued TOTP registration admission.",
         },
         "app/controllers/auth/app/ceremony_bindings_controller.rb" => {
-          target: "base_app_ceremony_binding_confirmation_url",
-          reason: "The configured Base receiver verifies its browser nonce and admission confirmation.",
+          target: "ceremony_binding_confirmation_url",
+          reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
         },
         "app/controllers/auth/app/verification/cancellations_controller.rb" => {
           target: "base_app_verification_cancellation_url",
           reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
         },
         "app/controllers/auth/com/ceremony_bindings_controller.rb" => {
-          target: "base_com_ceremony_binding_confirmation_url",
-          reason: "The configured Base receiver verifies its browser nonce and admission confirmation.",
+          target: "ceremony_binding_confirmation_url",
+          reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
         },
         "app/controllers/auth/com/verification/cancellations_controller.rb" => {
           target: "base_com_verification_cancellation_url",
           reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
         },
         "app/controllers/auth/org/ceremony_bindings_controller.rb" => {
-          target: "base_org_ceremony_binding_confirmation_url",
-          reason: "The configured Base receiver verifies its browser nonce and admission confirmation.",
+          target: "ceremony_binding_confirmation_url",
+          reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
         },
         "app/controllers/auth/org/verification/cancellations_controller.rb" => {
           target: "base_org_verification_cancellation_url",
@@ -293,17 +281,17 @@ module Security
           reason: "Current auth org controller records assurance metadata from the decoded token boundary.",
         },
         {
-          path: "app/controllers/base/app/oauth/authorizations_controller.rb",
+          path: "app/controllers/visa/app/oauth/authorizations_controller.rb",
           line: /Actor\.authn\.access_claims/,
           reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
         },
         {
-          path: "app/controllers/base/com/oauth/authorizations_controller.rb",
+          path: "app/controllers/visa/com/oauth/authorizations_controller.rb",
           line: /Actor\.authn\.access_claims/,
           reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
         },
         {
-          path: "app/controllers/base/org/oauth/authorizations_controller.rb",
+          path: "app/controllers/visa/org/oauth/authorizations_controller.rb",
           line: /Actor\.authn\.access_claims/,
           reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
         },
@@ -398,6 +386,24 @@ module Security
           end
 
         assert_empty offenders, "Forbidden security patterns found:\n#{offenders.join("\n")}"
+      end
+
+      test "RP controllers and concerns do not use the Auth pt helper name" do
+        rp_paths = Rails.root.glob("app/controllers/{base,core,edit,palm,tech,warp}/**/*.rb") +
+          %w(app/controllers/concerns/browser_rp_authentication.rb
+             app/controllers/concerns/oidc_sso_initiator.rb
+             test/controllers/concerns/oidc/callback_test.rb).map { |path| Rails.root.join(path) }
+        offenders =
+          rp_paths.filter_map do |path|
+            next unless File.file?(path)
+
+            content = File.binread(path).encode("UTF-8", invalid: :replace, undef: :replace)
+            next unless content.match?(/\bsign_in_url_with_pt\b/)
+
+            path.relative_path_from(Rails.root).to_s
+          end
+
+        assert_empty offenders, "RP code must use sign_in_url_with_target: #{offenders.join(", ")}"
       end
 
       test "authentication audit and security code uses structured logger error calls" do

@@ -71,6 +71,7 @@ class CredentialSecurityTransition
         resource: actor,
         token: token,
         reason: "credential_#{reason}",
+        cause: "credential_change",
       )
       revoked_sessions += 1
     end

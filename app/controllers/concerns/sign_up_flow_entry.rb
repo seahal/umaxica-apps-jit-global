@@ -11,10 +11,17 @@ module SignUpFlowEntry
   private
 
   def current_sign_up_flow_ticket
-    sign_up_flow_locator.current(
+    state = SignUpSessionState.for(session, surface: sign_up_surface)
+    locator = sign_up_flow_locator
+    flow = locator.current(
       admission_binding: auth_sign_up_admission_binding!, ceremony_session: admitted_auth_ceremony_session,
-      public_id: SignUpSessionState.for(session, surface: sign_up_surface).sequence_id,
+      public_id: state.sequence_id,
     )
+    if locator.released_public_id.present? && state.sequence_id == locator.released_public_id
+      state.cycle_payload = nil
+      state.sequence_id = nil
+    end
+    flow
   end
 
   # Query parameters that bind a generated step URL to the flow this request is serving, so the
@@ -27,21 +34,14 @@ module SignUpFlowEntry
     { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: flow, surface: sign_up_surface) }
   end
 
-  # Submitting the entry form starts a new flow instance. A flow this browser still holds is never
-  # reused or silently overwritten: it is ended as HALTED (a system decision; the user expressed no
-  # cancellation) and its locator is dropped, so the new flow gets its own row, public id, and
-  # nonce, and nothing rendered for the earlier flow can act on the new one. This runs before the
-  # new contact is created so the earlier flow's artifact cleanup cannot remove the new artifacts.
-  def supersede_active_sign_up_flow!
-    flow = current_sign_up_flow_ticket
-    return unless flow
-
-    SignUpPhaseViolationEnforcer.call(
-      flow: flow, surface: sign_up_surface, reason_code: "superseded_by_restart", request_id: request.request_id,
+  # Sign-up entry is fail-closed: while this browser's Admission Binding still owns an attempt that
+  # is not terminal and cleaned up, a new entry submit is refused and creates nothing. Controllers
+  # never terminate or clean up the earlier attempt themselves; only the background expiry and
+  # cleanup jobs release it.
+  def sign_up_entry_held_by_earlier_attempt?
+    sign_up_flow_locator.unreleased_attempt?(
+      admission_binding: auth_sign_up_admission_binding!, ceremony_session: admitted_auth_ceremony_session,
     )
-    state = SignUpSessionState.for(session, surface: sign_up_surface)
-    state.cycle_payload = nil
-    state.sequence_id = nil
   end
 
   # The fixed refusal for a request that contradicts the authoritative flow instance or phase. The

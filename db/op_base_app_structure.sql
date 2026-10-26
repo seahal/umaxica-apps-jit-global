@@ -99,7 +99,7 @@ CREATE TABLE public.acme_logout_transactions (
     captured_root_generation integer,
     origin_intent_digest bytea,
     CONSTRAINT acme_logout_transactions_binding_version CHECK ((binding_version = ANY (ARRAY[0, 1]))),
-    CONSTRAINT acme_logout_transactions_browser_rp_binding_shape CHECK (((binding_version = 0) OR (((realm)::text = ANY (ARRAY[('app'::character varying)::text, ('com'::character varying)::text, ('org'::character varying)::text])) AND (NULLIF(btrim((parent_session_ref)::text), ''::text) IS NOT NULL) AND (NULLIF(btrim((captured_root_ref)::text), ''::text) IS NOT NULL) AND (NULLIF(btrim((root_refresh_family_ref)::text), ''::text) IS NOT NULL) AND (captured_root_generation >= 0) AND (origin_intent_digest IS NOT NULL) AND (octet_length(origin_intent_digest) = 32)))),
+    CONSTRAINT acme_logout_transactions_browser_rp_binding_shape CHECK (((binding_version = 0) OR (((realm)::text = ANY ((ARRAY['app'::character varying, 'com'::character varying, 'org'::character varying])::text[])) AND (NULLIF(btrim((parent_session_ref)::text), ''::text) IS NOT NULL) AND (NULLIF(btrim((captured_root_ref)::text), ''::text) IS NOT NULL) AND (NULLIF(btrim((root_refresh_family_ref)::text), ''::text) IS NOT NULL) AND (captured_root_generation >= 0) AND (origin_intent_digest IS NOT NULL) AND (octet_length(origin_intent_digest) = 32)))),
     CONSTRAINT chk_acme_logout_transactions_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
@@ -162,10 +162,10 @@ CREATE TABLE public.client_auth_admission_bindings (
     CONSTRAINT client_admission_bindings_auth_proof_pair CHECK ((((auth_ceremony_session_id IS NULL) AND (confirmation_ref IS NULL)) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_confirmation_requires_auth CHECK (((base_confirmed_at IS NULL) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_one_parent CHECK ((num_nonnulls(authorization_transaction_id, step_up_ceremony_transaction_id) = 1)),
-    CONSTRAINT client_admission_bindings_parent_purpose CHECK ((((authorization_transaction_id IS NULL) OR ((purpose)::text = ANY (ARRAY[('authentication_handoff'::character varying)::text, ('invitation_handoff'::character varying)::text]))) AND ((step_up_ceremony_transaction_id IS NULL) OR ((purpose)::text = ANY (ARRAY[('step_up_handoff'::character varying)::text, ('reauthentication_handoff'::character varying)::text, ('bootstrap_handoff'::character varying)::text, ('credential_registration_handoff'::character varying)::text, ('credential_change_handoff'::character varying)::text]))))),
+    CONSTRAINT client_admission_bindings_parent_purpose CHECK ((((authorization_transaction_id IS NULL) OR ((purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying])::text[]))) AND ((step_up_ceremony_transaction_id IS NULL) OR ((purpose)::text = ANY ((ARRAY['step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[]))))),
     CONSTRAINT client_admission_bindings_redemption_pair CHECK ((((redeemed_at IS NULL) AND (admitted_auth_ceremony_session_id IS NULL)) OR ((redeemed_at IS NOT NULL) AND (admitted_auth_ceremony_session_id IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_redemption_requires_confirmation CHECK (((redeemed_at IS NULL) OR (base_confirmed_at IS NOT NULL))),
-    CONSTRAINT client_admission_bindings_step_up_token CHECK ((((purpose)::text <> ALL (ARRAY[('step_up_handoff'::character varying)::text, ('reauthentication_handoff'::character varying)::text, ('bootstrap_handoff'::character varying)::text, ('credential_registration_handoff'::character varying)::text, ('credential_change_handoff'::character varying)::text])) OR (base_token_id IS NOT NULL))),
+    CONSTRAINT client_admission_bindings_step_up_token CHECK ((((purpose)::text <> ALL ((ARRAY['step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])) OR (base_token_id IS NOT NULL))),
     CONSTRAINT client_admission_bindings_terminal_exclusive CHECK ((NOT ((redeemed_at IS NOT NULL) AND (retired_at IS NOT NULL))))
 );
 
@@ -211,10 +211,10 @@ CREATE TABLE public.client_auth_ceremony_sessions (
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
     email_otp_context jsonb,
-    CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY (ARRAY[('authentication_handoff'::character varying)::text, ('invitation_handoff'::character varying)::text, ('step_up_handoff'::character varying)::text, ('reauthentication_handoff'::character varying)::text, ('bootstrap_handoff'::character varying)::text, ('credential_registration_handoff'::character varying)::text, ('credential_change_handoff'::character varying)::text])))),
+    CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
     CONSTRAINT client_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
+    CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT client_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
     CONSTRAINT client_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, step_up_ceremony_transaction_ref) <= 1)),
     CONSTRAINT client_auth_email_otp_context_shape CHECK (((email_otp_context IS NULL) OR (((jsonb_typeof(email_otp_context) = 'object'::text) AND (email_otp_context ?& ARRAY['version'::text, 'generation'::text, 'surface'::text, 'purpose'::text, 'sid_digest'::text, 'parent_kind'::text, 'parent_ref'::text, 'mode'::text, 'contact_ref'::text, 'owner_ref'::text, 'destination_digest'::text, 'binding_fact'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) AND ((email_otp_context -> 'version'::text) = '1'::jsonb) AND ((email_otp_context ->> 'generation'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND ((email_otp_context ->> 'mode'::text) = ANY (ARRAY['real'::text, 'fake'::text])) AND ((email_otp_context ->> 'code_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND (jsonb_typeof((email_otp_context -> 'issued_at'::text)) = 'string'::text) AND (jsonb_typeof((email_otp_context -> 'expires_at'::text)) = 'string'::text) AND ((((email_otp_context -> 'verified_at'::text) = 'null'::jsonb) AND ((email_otp_context -> 'result_expires_at'::text) = 'null'::jsonb)) OR ((jsonb_typeof((email_otp_context -> 'verified_at'::text)) = 'string'::text) AND (jsonb_typeof((email_otp_context -> 'result_expires_at'::text)) = 'string'::text)))) IS TRUE)))
@@ -362,7 +362,7 @@ CREATE TABLE public.client_email_ceremony_transactions (
     otp_result_expires_at timestamp(6) with time zone,
     bootstrap_ceremony_transaction_ref character varying,
     CONSTRAINT client_email_ceremony_transactions_otp_material CHECK (((otp_verifier IS NULL) OR ((purpose IS NOT NULL) AND (otp_generation IS NOT NULL) AND (otp_expires_at IS NOT NULL)))),
-    CONSTRAINT client_email_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY (ARRAY[('sign_up'::character varying)::text, ('sign_in'::character varying)::text, ('recovery'::character varying)::text, ('withdrawal'::character varying)::text, ('credential_registration'::character varying)::text])))),
+    CONSTRAINT client_email_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY ((ARRAY['sign_up'::character varying, 'sign_in'::character varying, 'recovery'::character varying, 'withdrawal'::character varying, 'credential_registration'::character varying])::text[])))),
     CONSTRAINT client_email_otp_bootstrap_purpose CHECK (((bootstrap_ceremony_transaction_ref IS NULL) OR (((operation)::text = 'registration'::text) AND (purpose IS NOT NULL) AND ((purpose)::text = 'credential_registration'::text)))),
     CONSTRAINT client_email_otp_proof_shape CHECK (((otp_generation IS NULL) OR (((purpose IS NOT NULL) AND ((actor_ref)::text <> ''::text) AND ((session_ref)::text <> ''::text) AND (email_candidate_ref IS NOT NULL) AND ((email_candidate_ref)::text <> ''::text) AND ((normalized_email_digest IS NULL) OR ((normalized_email_digest)::text ~ '^[0-9a-f]{64}$'::text)) AND (otp_expires_at IS NOT NULL) AND isfinite(otp_expires_at) AND isfinite(expires_at) AND (((otp_consumed_at IS NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NOT NULL) AND ((otp_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_consumed_at IS NOT NULL) AND isfinite(otp_consumed_at) AND (otp_consumed_at < otp_expires_at) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NOT NULL) AND (otp_result_expires_at IS NOT NULL)) OR ((otp_cancelled_at IS NOT NULL) AND isfinite(otp_cancelled_at) AND (otp_consumed_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)))) IS TRUE))),
     CONSTRAINT client_email_otp_receipt_bounds CHECK ((((otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_receipt_verifier IS NOT NULL) AND ((otp_receipt_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_consumed_at IS NOT NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_result_expires_at IS NOT NULL) AND isfinite(otp_result_expires_at) AND (otp_result_expires_at > otp_consumed_at) AND (otp_result_expires_at <= (otp_consumed_at + '00:01:00'::interval)) AND (otp_result_expires_at <= expires_at))))
@@ -834,8 +834,8 @@ CREATE TABLE public.client_sign_in_flows (
     CONSTRAINT chk_app_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT chk_client_sign_in_flows_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_client_sign_in_flows_state_completed_at CHECK (((state_id = 100) = (completed_at IS NOT NULL))),
-    CONSTRAINT client_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY (ARRAY[('normal'::character varying)::text, ('standby'::character varying)::text])))),
-    CONSTRAINT client_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT client_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'standby'::character varying])::text[])))),
+    CONSTRAINT client_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT client_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT client_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
     CONSTRAINT client_sign_in_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
@@ -861,112 +861,6 @@ CREATE SEQUENCE public.client_sign_in_flows_id_seq
 --
 
 ALTER SEQUENCE public.client_sign_in_flows_id_seq OWNED BY public.client_sign_in_flows.id;
-
-
---
--- Name: client_sign_out_flow_kinds; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.client_sign_out_flow_kinds (
-    id bigint CONSTRAINT client_sign_out_cycle_kinds_id_not_null NOT NULL
-);
-
-
---
--- Name: client_sign_out_flow_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.client_sign_out_flow_kinds_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: client_sign_out_flow_kinds_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.client_sign_out_flow_kinds_id_seq OWNED BY public.client_sign_out_flow_kinds.id;
-
-
---
--- Name: client_sign_out_flow_statuses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.client_sign_out_flow_statuses (
-    id bigint CONSTRAINT client_sign_out_cycle_statuses_id_not_null NOT NULL
-);
-
-
---
--- Name: client_sign_out_flow_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.client_sign_out_flow_statuses_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: client_sign_out_flow_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.client_sign_out_flow_statuses_id_seq OWNED BY public.client_sign_out_flow_statuses.id;
-
-
---
--- Name: client_sign_out_flows; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.client_sign_out_flows (
-    id bigint CONSTRAINT client_sign_out_cycles_id_not_null NOT NULL,
-    public_id character varying(21) CONSTRAINT client_sign_out_cycles_public_id_not_null NOT NULL,
-    principal_id bigint,
-    token_id bigint,
-    status_id bigint DEFAULT 10 CONSTRAINT client_sign_out_cycles_status_id_not_null NOT NULL,
-    kind_id bigint DEFAULT 0 CONSTRAINT client_sign_out_cycles_kind_id_not_null NOT NULL,
-    refresh_token_family_id character varying,
-    requested_at timestamp(6) with time zone CONSTRAINT client_sign_out_cycles_requested_at_not_null NOT NULL,
-    access_discarded_at timestamp(6) with time zone,
-    logically_revoked_at timestamp(6) with time zone,
-    access_expires_at timestamp(6) with time zone CONSTRAINT client_sign_out_cycles_access_expires_at_not_null NOT NULL,
-    refresh_expires_at timestamp(6) with time zone CONSTRAINT client_sign_out_cycles_refresh_expires_at_not_null NOT NULL,
-    completed_at timestamp(6) with time zone,
-    failed_at timestamp(6) with time zone,
-    return_to text,
-    nonce_digest character varying,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_sign_out_cycles_discarded_at_not_null NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_sign_out_cycles_purged_at_not_null NOT NULL,
-    created_at timestamp(6) with time zone CONSTRAINT client_sign_out_cycles_created_at_not_null NOT NULL,
-    updated_at timestamp(6) with time zone CONSTRAINT client_sign_out_cycles_updated_at_not_null NOT NULL,
-    CONSTRAINT chk_client_sign_out_cycles_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT chk_client_sign_out_cycles_token_expiry_order CHECK ((access_expires_at <= refresh_expires_at)),
-    CONSTRAINT chk_client_sign_out_flows_pid CHECK ((char_length((public_id)::text) = 21))
-);
-
-
---
--- Name: client_sign_out_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.client_sign_out_flows_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: client_sign_out_flows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.client_sign_out_flows_id_seq OWNED BY public.client_sign_out_flows.id;
 
 
 --
@@ -1066,10 +960,11 @@ CREATE TABLE public.client_sign_up_flows (
     base_finalized_at timestamp(6) with time zone,
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
+    auth_admission_binding_id bigint NOT NULL,
     CONSTRAINT chk_app_sign_up_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_app_sign_up_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT chk_client_sign_up_flows_pid CHECK ((char_length((public_id)::text) = 21)),
-    CONSTRAINT client_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT client_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT client_sign_up_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT client_sign_up_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
     CONSTRAINT client_sign_up_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
@@ -1191,11 +1086,11 @@ CREATE TABLE public.client_step_up_ceremony_transactions (
     cancellation_handoff_ciphertext text,
     CONSTRAINT client_step_up_cancellation_handoff_pair CHECK ((((cancellation_handoff_ref IS NULL) AND (cancellation_handoff_ciphertext IS NULL)) OR ((cancellation_handoff_ref IS NOT NULL) AND (cancellation_handoff_ciphertext IS NOT NULL)))),
     CONSTRAINT client_step_up_cancellation_handoff_valid CHECK (((cancellation_handoff_digest IS NULL) OR ((cancellation_handoff_digest)::text ~ '^[0-9a-f]{64}$'::text))),
-    CONSTRAINT client_step_up_purpose_valid CHECK (((purpose)::text = ANY (ARRAY[('step_up'::character varying)::text, ('reauthentication'::character varying)::text, ('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text, ('credential_change'::character varying)::text]))),
+    CONSTRAINT client_step_up_purpose_valid CHECK (((purpose)::text = ANY ((ARRAY['step_up'::character varying, 'reauthentication'::character varying, 'bootstrap'::character varying, 'credential_registration'::character varying, 'credential_change'::character varying])::text[]))),
     CONSTRAINT client_step_up_result_valid CHECK (((result_generation >= 0) AND (((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((result_digest IS NOT NULL) AND ((result_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (verified_at IS NOT NULL))))),
-    CONSTRAINT client_step_up_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('verified'::character varying)::text, ('consumed'::character varying)::text, ('canceled'::character varying)::text, ('expired'::character varying)::text, ('revoked'::character varying)::text]))),
+    CONSTRAINT client_step_up_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'verified'::character varying, 'consumed'::character varying, 'canceled'::character varying, 'expired'::character varying, 'revoked'::character varying])::text[]))),
     CONSTRAINT client_step_up_terminal_valid CHECK ((((canceled_at IS NULL) OR ((status)::text = 'canceled'::text)) AND ((revoked_at IS NULL) OR ((status)::text = 'revoked'::text)) AND (((status)::text <> 'revoked'::text) OR (revoked_at IS NOT NULL)) AND (((status)::text <> 'verified'::text) OR ((verified_at IS NOT NULL) AND (method IS NOT NULL) AND (aal IS NOT NULL))))),
-    CONSTRAINT client_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY (ARRAY[('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY (ARRAY[('passkey'::character varying)::text, ('totp'::character varying)::text]))) OR (((purpose)::text <> ALL (ARRAY[('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
+    CONSTRAINT client_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY ((ARRAY['passkey'::character varying, 'totp'::character varying])::text[]))) OR (((purpose)::text <> ALL ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
 );
 
 
@@ -1251,7 +1146,7 @@ CREATE TABLE public.client_step_up_sessions (
     email_delivery_state character varying,
     CONSTRAINT chk_client_step_up_sessions_attempt_count CHECK ((attempt_count >= 0)),
     CONSTRAINT client_step_up_challenge_bound CHECK (((passkey_challenge IS NULL) OR ((step_up_ceremony_transaction_ref IS NOT NULL) AND (passkey_challenge_ref IS NOT NULL) AND (passkey_rp_id IS NOT NULL) AND (passkey_origin IS NOT NULL) AND (passkey_challenge_expires_at IS NOT NULL) AND (passkey_challenge_expires_at <= discard_at)))),
-    CONSTRAINT client_step_up_email_generation_valid CHECK ((((email_code_generation = 0) AND (email_credential_ref IS NULL) AND (email_code_digest IS NULL) AND (email_code_issued_at IS NULL) AND (email_code_expires_at IS NULL) AND (email_code_consumed_at IS NULL) AND (email_delivery_state IS NULL)) OR ((email_code_generation > 0) AND (email_credential_ref IS NOT NULL) AND (length((email_credential_ref)::text) > 0) AND (email_code_digest IS NOT NULL) AND ((email_code_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (email_code_issued_at IS NOT NULL) AND (email_code_expires_at IS NOT NULL) AND (email_code_expires_at > email_code_issued_at) AND (email_code_expires_at <= (email_code_issued_at + '00:10:00'::interval)) AND (email_delivery_state IS NOT NULL) AND ((email_delivery_state)::text = ANY (ARRAY[('pending'::character varying)::text, ('delivered'::character varying)::text, ('failed'::character varying)::text])) AND ((email_code_consumed_at IS NULL) OR (((email_delivery_state)::text = 'delivered'::text) AND (email_code_consumed_at >= email_code_issued_at) AND (email_code_consumed_at < email_code_expires_at))))))
+    CONSTRAINT client_step_up_email_generation_valid CHECK ((((email_code_generation = 0) AND (email_credential_ref IS NULL) AND (email_code_digest IS NULL) AND (email_code_issued_at IS NULL) AND (email_code_expires_at IS NULL) AND (email_code_consumed_at IS NULL) AND (email_delivery_state IS NULL)) OR ((email_code_generation > 0) AND (email_credential_ref IS NOT NULL) AND (length((email_credential_ref)::text) > 0) AND (email_code_digest IS NOT NULL) AND ((email_code_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (email_code_issued_at IS NOT NULL) AND (email_code_expires_at IS NOT NULL) AND (email_code_expires_at > email_code_issued_at) AND (email_code_expires_at <= (email_code_issued_at + '00:10:00'::interval)) AND (email_delivery_state IS NOT NULL) AND ((email_delivery_state)::text = ANY ((ARRAY['pending'::character varying, 'delivered'::character varying, 'failed'::character varying])::text[])) AND ((email_code_consumed_at IS NULL) OR (((email_delivery_state)::text = 'delivered'::text) AND (email_code_consumed_at >= email_code_issued_at) AND (email_code_consumed_at < email_code_expires_at))))))
 );
 
 
@@ -1304,7 +1199,7 @@ CREATE TABLE public.client_telephone_ceremony_transactions (
     otp_receipt_verifier character varying,
     otp_result_expires_at timestamp(6) with time zone,
     CONSTRAINT client_telephone_ceremony_transactions_otp_material CHECK (((otp_verifier IS NULL) OR ((purpose IS NOT NULL) AND (otp_generation IS NOT NULL) AND (otp_expires_at IS NOT NULL)))),
-    CONSTRAINT client_telephone_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY (ARRAY[('sign_up'::character varying)::text, ('sign_in'::character varying)::text, ('recovery'::character varying)::text, ('withdrawal'::character varying)::text, ('credential_registration'::character varying)::text])))),
+    CONSTRAINT client_telephone_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY ((ARRAY['sign_up'::character varying, 'sign_in'::character varying, 'recovery'::character varying, 'withdrawal'::character varying, 'credential_registration'::character varying])::text[])))),
     CONSTRAINT client_telephone_otp_proof_shape CHECK (((otp_generation IS NULL) OR (((purpose IS NOT NULL) AND ((actor_ref)::text <> ''::text) AND ((session_ref)::text <> ''::text) AND (telephone_candidate_ref IS NOT NULL) AND ((telephone_candidate_ref)::text <> ''::text) AND ((normalized_number_digest IS NULL) OR ((normalized_number_digest)::text ~ '^[0-9a-f]{64}$'::text)) AND (otp_expires_at IS NOT NULL) AND isfinite(otp_expires_at) AND isfinite(expires_at) AND (((otp_consumed_at IS NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NOT NULL) AND ((otp_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_consumed_at IS NOT NULL) AND isfinite(otp_consumed_at) AND (otp_consumed_at < otp_expires_at) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NOT NULL) AND (otp_result_expires_at IS NOT NULL)) OR ((otp_cancelled_at IS NOT NULL) AND isfinite(otp_cancelled_at) AND (otp_consumed_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)))) IS TRUE))),
     CONSTRAINT client_telephone_otp_receipt_bounds CHECK ((((otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_receipt_verifier IS NOT NULL) AND ((otp_receipt_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_consumed_at IS NOT NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_result_expires_at IS NOT NULL) AND isfinite(otp_result_expires_at) AND (otp_result_expires_at > otp_consumed_at) AND (otp_result_expires_at <= (otp_consumed_at + '00:01:00'::interval)) AND (otp_result_expires_at <= expires_at))))
 );
@@ -1496,7 +1391,7 @@ CREATE TABLE public.client_tokens (
     last_step_up_tenant_ref character varying,
     authentication_epoch bigint NOT NULL,
     CONSTRAINT chk_client_tokens_authentication_epoch CHECK ((authentication_epoch >= 0)),
-    CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text])))),
+    CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying])::text[])))),
     CONSTRAINT chk_client_tokens_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_user_tokens_kind_id_positive CHECK ((user_token_kind_id >= 0)),
     CONSTRAINT chk_user_tokens_status_id_positive CHECK ((user_token_status_id >= 0))
@@ -1777,126 +1672,6 @@ ALTER SEQUENCE public.identity_totp_ceremony_candidates_id_seq OWNED BY public.i
 
 
 --
--- Name: logout_flow_participants; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.logout_flow_participants (
-    id bigint NOT NULL,
-    logout_flow_id bigint NOT NULL,
-    issuer character varying(255) NOT NULL,
-    realm character varying(3) NOT NULL,
-    client_id character varying(64) NOT NULL,
-    sid character varying(255) NOT NULL,
-    endpoint_identity character varying(255) NOT NULL,
-    delivery_attempts integer DEFAULT 0 NOT NULL,
-    next_attempt_at timestamp(6) with time zone,
-    lease_expires_at timestamp(6) with time zone,
-    dispatched_at timestamp(6) with time zone,
-    acknowledged_at timestamp(6) with time zone,
-    purge_response_at timestamp(6) with time zone,
-    completed_at timestamp(6) with time zone,
-    last_error_code character varying(64),
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_op_app_logout_participants_shape CHECK ((((realm)::text = 'app'::text) AND (delivery_attempts >= 0)))
-);
-
-
---
--- Name: logout_flow_participants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.logout_flow_participants_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: logout_flow_participants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.logout_flow_participants_id_seq OWNED BY public.logout_flow_participants.id;
-
-
---
--- Name: logout_flows; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.logout_flows (
-    id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    realm character varying(3) NOT NULL,
-    target_root_ref character varying(255) NOT NULL,
-    idempotency_digest bytea NOT NULL,
-    browser_binding_digest bytea NOT NULL,
-    expires_at timestamp(6) with time zone NOT NULL,
-    op_revoked_at timestamp(6) with time zone,
-    audit_ref character varying(128) NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_op_app_logout_flows_realm CHECK (((realm)::text = 'app'::text))
-);
-
-
---
--- Name: logout_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.logout_flows_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: logout_flows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.logout_flows_id_seq OWNED BY public.logout_flows.id;
-
-
---
--- Name: logout_receipts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.logout_receipts (
-    id bigint NOT NULL,
-    logout_flow_id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    nonce_digest bytea NOT NULL,
-    browser_binding_digest bytea NOT NULL,
-    expires_at timestamp(6) with time zone NOT NULL,
-    consumed_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
-);
-
-
---
--- Name: logout_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.logout_receipts_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: logout_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.logout_receipts_id_seq OWNED BY public.logout_receipts.id;
-
-
---
 -- Name: logout_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1939,6 +1714,336 @@ ALTER SEQUENCE public.logout_transactions_id_seq OWNED BY public.logout_transact
 
 
 --
+-- Name: op_app_authority_stop_browser_logouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_browser_logouts (
+    id bigint CONSTRAINT op_authority_stop_browser_logouts_id_not_null NOT NULL,
+    stop_id bigint CONSTRAINT op_authority_stop_browser_logouts_stop_id_not_null NOT NULL,
+    browser_binding_digest bytea CONSTRAINT op_authority_stop_browser_logou_browser_binding_digest_not_null NOT NULL,
+    receipt_nonce_digest bytea CONSTRAINT op_authority_stop_browser_logouts_receipt_nonce_digest_not_null NOT NULL,
+    receipt_expires_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_receipt_expires_at_not_null NOT NULL,
+    receipt_consumed boolean DEFAULT false CONSTRAINT op_authority_stop_browser_logouts_receipt_consumed_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_updated_at_not_null NOT NULL
+);
+
+
+--
+-- Name: op_app_authority_stop_browser_logouts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_browser_logouts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_browser_logouts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_browser_logouts_id_seq OWNED BY public.op_app_authority_stop_browser_logouts.id;
+
+
+--
+-- Name: op_app_authority_stop_causes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_causes (
+    id bigint CONSTRAINT op_authority_stop_causes_id_not_null NOT NULL
+);
+
+
+--
+-- Name: op_app_authority_stop_causes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_causes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_causes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_causes_id_seq OWNED BY public.op_app_authority_stop_causes.id;
+
+
+--
+-- Name: op_app_authority_stop_epoch_cutoffs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_epoch_cutoffs (
+    id bigint CONSTRAINT op_authority_stop_epoch_cutoffs_id_not_null NOT NULL,
+    stop_id bigint CONSTRAINT op_authority_stop_epoch_cutoffs_stop_id_not_null NOT NULL,
+    cutoff_epoch bigint CONSTRAINT op_authority_stop_epoch_cutoffs_cutoff_epoch_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_epoch_cutoffs_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_epoch_cutoffs_updated_at_not_null NOT NULL,
+    CONSTRAINT chk_op_app_stop_cutoffs_epoch CHECK ((cutoff_epoch >= 1))
+);
+
+
+--
+-- Name: op_app_authority_stop_epoch_cutoffs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_epoch_cutoffs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_epoch_cutoffs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_epoch_cutoffs_id_seq OWNED BY public.op_app_authority_stop_epoch_cutoffs.id;
+
+
+--
+-- Name: op_app_authority_stop_grant_targets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_grant_targets (
+    id bigint CONSTRAINT op_authority_stop_grant_targets_id_not_null NOT NULL,
+    stop_id bigint CONSTRAINT op_authority_stop_grant_targets_stop_id_not_null NOT NULL,
+    grant_id bigint CONSTRAINT op_authority_stop_grant_targets_grant_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_grant_targets_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_grant_targets_updated_at_not_null NOT NULL
+);
+
+
+--
+-- Name: op_app_authority_stop_grant_targets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_grant_targets_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_grant_targets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_grant_targets_id_seq OWNED BY public.op_app_authority_stop_grant_targets.id;
+
+
+--
+-- Name: op_app_authority_stop_participant_statuses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_participant_statuses (
+    id bigint CONSTRAINT op_authority_stop_participant_statuses_id_not_null NOT NULL
+);
+
+
+--
+-- Name: op_app_authority_stop_participant_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_participant_statuses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_participant_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_participant_statuses_id_seq OWNED BY public.op_app_authority_stop_participant_statuses.id;
+
+
+--
+-- Name: op_app_authority_stop_participants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_participants (
+    id bigint CONSTRAINT op_authority_stop_participants_id_not_null NOT NULL,
+    stop_id bigint CONSTRAINT op_authority_stop_participants_stop_id_not_null NOT NULL,
+    grant_id bigint CONSTRAINT op_authority_stop_participants_grant_id_not_null NOT NULL,
+    status_id bigint CONSTRAINT op_authority_stop_participants_status_id_not_null NOT NULL,
+    issuer character varying(255) CONSTRAINT op_authority_stop_participants_issuer_not_null NOT NULL,
+    client_id character varying(64) CONSTRAINT op_authority_stop_participants_client_id_not_null NOT NULL,
+    sid character varying(255) CONSTRAINT op_authority_stop_participants_sid_not_null NOT NULL,
+    endpoint_identity character varying(255) CONSTRAINT op_authority_stop_participants_endpoint_identity_not_null NOT NULL,
+    delivery_attempts integer DEFAULT 0 CONSTRAINT op_authority_stop_participants_delivery_attempts_not_null NOT NULL,
+    next_attempt_at timestamp(6) with time zone CONSTRAINT op_authority_stop_participants_next_attempt_at_not_null NOT NULL,
+    deadline_at timestamp(6) with time zone CONSTRAINT op_authority_stop_participants_deadline_at_not_null NOT NULL,
+    lease_expires_at timestamp(6) with time zone CONSTRAINT op_authority_stop_participants_lease_expires_at_not_null NOT NULL,
+    last_outcome character varying(64) CONSTRAINT op_authority_stop_participants_last_outcome_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_participants_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_participants_updated_at_not_null NOT NULL,
+    CONSTRAINT chk_op_app_stop_participants_shape CHECK (((delivery_attempts >= 0) AND (deadline_at >= created_at)))
+);
+
+
+--
+-- Name: op_app_authority_stop_participants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_participants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_participants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_participants_id_seq OWNED BY public.op_app_authority_stop_participants.id;
+
+
+--
+-- Name: op_app_authority_stop_root_targets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_root_targets (
+    id bigint CONSTRAINT op_authority_stop_root_targets_id_not_null NOT NULL,
+    stop_id bigint CONSTRAINT op_authority_stop_root_targets_stop_id_not_null NOT NULL,
+    root_id bigint CONSTRAINT op_authority_stop_root_targets_root_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_root_targets_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_root_targets_updated_at_not_null NOT NULL
+);
+
+
+--
+-- Name: op_app_authority_stop_root_targets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_root_targets_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_root_targets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_root_targets_id_seq OWNED BY public.op_app_authority_stop_root_targets.id;
+
+
+--
+-- Name: op_app_authority_stop_scopes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stop_scopes (
+    id bigint CONSTRAINT op_authority_stop_scopes_id_not_null NOT NULL
+);
+
+
+--
+-- Name: op_app_authority_stop_scopes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stop_scopes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stop_scopes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stop_scopes_id_seq OWNED BY public.op_app_authority_stop_scopes.id;
+
+
+--
+-- Name: op_app_authority_stops; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_authority_stops (
+    id bigint CONSTRAINT op_authority_stops_id_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT op_authority_stops_public_id_not_null NOT NULL,
+    realm character varying(3) CONSTRAINT op_authority_stops_realm_not_null NOT NULL,
+    cause_id bigint CONSTRAINT op_authority_stops_cause_id_not_null NOT NULL,
+    scope_id bigint CONSTRAINT op_authority_stops_scope_id_not_null NOT NULL,
+    principal_public_id character varying(255) CONSTRAINT op_authority_stops_principal_public_id_not_null NOT NULL,
+    authority_evidence_ref character varying(128) CONSTRAINT op_authority_stops_authority_evidence_ref_not_null NOT NULL,
+    idempotency_digest bytea CONSTRAINT op_authority_stops_idempotency_digest_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone CONSTRAINT op_authority_stops_occurred_at_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT op_authority_stops_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stops_updated_at_not_null NOT NULL,
+    CONSTRAINT chk_op_app_authority_stops_realm CHECK (((realm)::text = 'app'::text))
+);
+
+
+--
+-- Name: op_app_authority_stops_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_authority_stops_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_authority_stops_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_authority_stops_id_seq OWNED BY public.op_app_authority_stops.id;
+
+
+--
+-- Name: op_app_grant_logout_hints; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_grant_logout_hints (
+    id bigint NOT NULL,
+    grant_id bigint NOT NULL,
+    id_token text NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: op_app_grant_logout_hints_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_grant_logout_hints_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_grant_logout_hints_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_grant_logout_hints_id_seq OWNED BY public.op_app_grant_logout_hints.id;
+
+
+--
 -- Name: op_app_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1968,13 +2073,9 @@ CREATE TABLE public.op_app_grants (
     oidc_access_token_max_expires_at timestamp(6) with time zone,
     device_session_id bigint NOT NULL,
     refresh_generation bigint DEFAULT 0 NOT NULL,
-    refresh_delivery_ciphertext text,
-    refresh_delivery_predecessor_digest character varying,
-    refresh_delivery_expires_at timestamp(6) with time zone,
     authentication_epoch bigint NOT NULL,
     CONSTRAINT chk_op_app_grants_authentication_epoch CHECK ((authentication_epoch >= 0)),
-    CONSTRAINT chk_op_app_grants_pid CHECK ((char_length((public_id)::text) = 21)),
-    CONSTRAINT chk_op_app_grants_refresh_delivery_all_or_none CHECK ((((refresh_delivery_ciphertext IS NULL) AND (refresh_delivery_predecessor_digest IS NULL) AND (refresh_delivery_expires_at IS NULL)) OR ((refresh_delivery_ciphertext IS NOT NULL) AND (refresh_delivery_predecessor_digest IS NOT NULL) AND (refresh_delivery_expires_at IS NOT NULL))))
+    CONSTRAINT chk_op_app_grants_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -2070,50 +2171,6 @@ CREATE SEQUENCE public.op_inbound_event_receipts_id_seq
 --
 
 ALTER SEQUENCE public.op_inbound_event_receipts_id_seq OWNED BY public.op_inbound_event_receipts.id;
-
-
---
--- Name: op_outbox_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.op_outbox_events (
-    id bigint NOT NULL,
-    event_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    logout_flow_participant_id bigint,
-    event_type character varying(64) NOT NULL,
-    target_realm character varying(3) NOT NULL,
-    target_client_id character varying(64) NOT NULL,
-    target_endpoint_identity character varying(255) NOT NULL,
-    stable_event_ref character varying(128) NOT NULL,
-    delivery_attempts integer DEFAULT 0 NOT NULL,
-    next_attempt_at timestamp(6) with time zone NOT NULL,
-    lease_expires_at timestamp(6) with time zone,
-    dispatched_at timestamp(6) with time zone,
-    completed_at timestamp(6) with time zone,
-    last_error_code character varying(64),
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_op_app_outbox_events_shape CHECK ((((target_realm)::text = 'app'::text) AND (delivery_attempts >= 0)))
-);
-
-
---
--- Name: op_outbox_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.op_outbox_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: op_outbox_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.op_outbox_events_id_seq OWNED BY public.op_outbox_events.id;
 
 
 --
@@ -2373,27 +2430,6 @@ ALTER TABLE ONLY public.client_sign_in_flows ALTER COLUMN id SET DEFAULT nextval
 
 
 --
--- Name: client_sign_out_flow_kinds id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flow_kinds ALTER COLUMN id SET DEFAULT nextval('public.client_sign_out_flow_kinds_id_seq'::regclass);
-
-
---
--- Name: client_sign_out_flow_statuses id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flow_statuses ALTER COLUMN id SET DEFAULT nextval('public.client_sign_out_flow_statuses_id_seq'::regclass);
-
-
---
--- Name: client_sign_out_flows id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flows ALTER COLUMN id SET DEFAULT nextval('public.client_sign_out_flows_id_seq'::regclass);
-
-
---
 -- Name: client_sign_up_flow_cleanup_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2520,31 +2556,80 @@ ALTER TABLE ONLY public.identity_totp_ceremony_candidates ALTER COLUMN id SET DE
 
 
 --
--- Name: logout_flow_participants id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_flow_participants ALTER COLUMN id SET DEFAULT nextval('public.logout_flow_participants_id_seq'::regclass);
-
-
---
--- Name: logout_flows id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_flows ALTER COLUMN id SET DEFAULT nextval('public.logout_flows_id_seq'::regclass);
-
-
---
--- Name: logout_receipts id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_receipts ALTER COLUMN id SET DEFAULT nextval('public.logout_receipts_id_seq'::regclass);
-
-
---
 -- Name: logout_transactions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.logout_transactions ALTER COLUMN id SET DEFAULT nextval('public.logout_transactions_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_browser_logouts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_browser_logouts ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_browser_logouts_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_causes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_causes ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_causes_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_epoch_cutoffs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_epoch_cutoffs ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_epoch_cutoffs_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_grant_targets id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_grant_targets ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_grant_targets_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_participant_statuses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participant_statuses ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_participant_statuses_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_participants id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participants ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_participants_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_root_targets id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_root_targets ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_root_targets_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stop_scopes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_scopes ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_scopes_id_seq'::regclass);
+
+
+--
+-- Name: op_app_authority_stops id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stops ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stops_id_seq'::regclass);
+
+
+--
+-- Name: op_app_grant_logout_hints id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_grant_logout_hints ALTER COLUMN id SET DEFAULT nextval('public.op_app_grant_logout_hints_id_seq'::regclass);
 
 
 --
@@ -2566,13 +2651,6 @@ ALTER TABLE ONLY public.op_consumed_jtis ALTER COLUMN id SET DEFAULT nextval('pu
 --
 
 ALTER TABLE ONLY public.op_inbound_event_receipts ALTER COLUMN id SET DEFAULT nextval('public.op_inbound_event_receipts_id_seq'::regclass);
-
-
---
--- Name: op_outbox_events id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_outbox_events ALTER COLUMN id SET DEFAULT nextval('public.op_outbox_events_id_seq'::regclass);
 
 
 --
@@ -2757,30 +2835,6 @@ ALTER TABLE ONLY public.client_sign_in_flows
 
 
 --
--- Name: client_sign_out_flow_kinds client_sign_out_flow_kinds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flow_kinds
-    ADD CONSTRAINT client_sign_out_flow_kinds_pkey PRIMARY KEY (id);
-
-
---
--- Name: client_sign_out_flow_statuses client_sign_out_flow_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flow_statuses
-    ADD CONSTRAINT client_sign_out_flow_statuses_pkey PRIMARY KEY (id);
-
-
---
--- Name: client_sign_out_flows client_sign_out_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flows
-    ADD CONSTRAINT client_sign_out_flows_pkey PRIMARY KEY (id);
-
-
---
 -- Name: client_sign_up_flow_cleanup_statuses client_sign_up_flow_cleanup_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2925,35 +2979,91 @@ ALTER TABLE ONLY public.identity_totp_ceremony_candidates
 
 
 --
--- Name: logout_flow_participants logout_flow_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_flow_participants
-    ADD CONSTRAINT logout_flow_participants_pkey PRIMARY KEY (id);
-
-
---
--- Name: logout_flows logout_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_flows
-    ADD CONSTRAINT logout_flows_pkey PRIMARY KEY (id);
-
-
---
--- Name: logout_receipts logout_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_receipts
-    ADD CONSTRAINT logout_receipts_pkey PRIMARY KEY (id);
-
-
---
 -- Name: logout_transactions logout_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.logout_transactions
     ADD CONSTRAINT logout_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_browser_logouts op_app_authority_stop_browser_logouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_browser_logouts
+    ADD CONSTRAINT op_app_authority_stop_browser_logouts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_causes op_app_authority_stop_causes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_causes
+    ADD CONSTRAINT op_app_authority_stop_causes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_epoch_cutoffs op_app_authority_stop_epoch_cutoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_epoch_cutoffs
+    ADD CONSTRAINT op_app_authority_stop_epoch_cutoffs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_grant_targets op_app_authority_stop_grant_targets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_grant_targets
+    ADD CONSTRAINT op_app_authority_stop_grant_targets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_participant_statuses op_app_authority_stop_participant_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participant_statuses
+    ADD CONSTRAINT op_app_authority_stop_participant_statuses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_participants op_app_authority_stop_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participants
+    ADD CONSTRAINT op_app_authority_stop_participants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_root_targets op_app_authority_stop_root_targets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_root_targets
+    ADD CONSTRAINT op_app_authority_stop_root_targets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stop_scopes op_app_authority_stop_scopes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_scopes
+    ADD CONSTRAINT op_app_authority_stop_scopes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_authority_stops op_app_authority_stops_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stops
+    ADD CONSTRAINT op_app_authority_stops_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: op_app_grant_logout_hints op_app_grant_logout_hints_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_grant_logout_hints
+    ADD CONSTRAINT op_app_grant_logout_hints_pkey PRIMARY KEY (id);
 
 
 --
@@ -2978,14 +3088,6 @@ ALTER TABLE ONLY public.op_consumed_jtis
 
 ALTER TABLE ONLY public.op_inbound_event_receipts
     ADD CONSTRAINT op_inbound_event_receipts_pkey PRIMARY KEY (id);
-
-
---
--- Name: op_outbox_events op_outbox_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_outbox_events
-    ADD CONSTRAINT op_outbox_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -3081,6 +3183,13 @@ CREATE UNIQUE INDEX idx_client_resolution_waiting_actor ON public.client_session
 --
 
 CREATE INDEX idx_client_session_limit_resolution_on_oidc_tx ON public.client_session_limit_resolution_transactions USING btree (oidc_authorization_transaction_id);
+
+
+--
+-- Name: idx_client_signup_one_in_progress_per_admission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_signup_one_in_progress_per_admission ON public.client_sign_up_flows USING btree (auth_admission_binding_id) WHERE (status_id = ANY (ARRAY[(10)::bigint, (20)::bigint, (30)::bigint, (35)::bigint, (36)::bigint, (38)::bigint, (40)::bigint, (60)::bigint]));
 
 
 --
@@ -3273,6 +3382,13 @@ CREATE UNIQUE INDEX idx_on_secret_sign_in_flow_id_5c5b1ba175 ON public.client_oi
 
 
 --
+-- Name: idx_on_status_id_next_attempt_at_78775ebdc9; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_status_id_next_attempt_at_78775ebdc9 ON public.op_app_authority_stop_participants USING btree (status_id, next_attempt_at);
+
+
+--
 -- Name: idx_on_step_up_ceremony_transaction_ref_1dac192657; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3305,6 +3421,27 @@ CREATE UNIQUE INDEX idx_on_step_up_ceremony_transaction_ref_7bec716b5b ON public
 --
 
 CREATE INDEX idx_on_step_up_ceremony_transaction_ref_d63907f9e6 ON public.client_passkey_ceremony_transactions USING btree (step_up_ceremony_transaction_ref);
+
+
+--
+-- Name: idx_on_stop_id_grant_id_2b3b703bbe; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_stop_id_grant_id_2b3b703bbe ON public.op_app_authority_stop_participants USING btree (stop_id, grant_id);
+
+
+--
+-- Name: idx_on_stop_id_grant_id_ca8fee31d2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_stop_id_grant_id_ca8fee31d2 ON public.op_app_authority_stop_grant_targets USING btree (stop_id, grant_id);
+
+
+--
+-- Name: idx_on_stop_id_root_id_1e61df03be; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_stop_id_root_id_1e61df03be ON public.op_app_authority_stop_root_targets USING btree (stop_id, root_id);
 
 
 --
@@ -3347,55 +3484,6 @@ CREATE UNIQUE INDEX idx_op_app_consumed_jtis_scope ON public.op_consumed_jtis US
 --
 
 CREATE UNIQUE INDEX idx_op_app_inbound_event_receipts_identity ON public.op_inbound_event_receipts USING btree (event_id, issuer, realm, client_id);
-
-
---
--- Name: idx_op_app_logout_flows_idempotency; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_op_app_logout_flows_idempotency ON public.logout_flows USING btree (realm, idempotency_digest);
-
-
---
--- Name: idx_op_app_logout_flows_public_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_op_app_logout_flows_public_id ON public.logout_flows USING btree (public_id);
-
-
---
--- Name: idx_op_app_logout_participants_identity; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_op_app_logout_participants_identity ON public.logout_flow_participants USING btree (logout_flow_id, issuer, realm, client_id, sid);
-
-
---
--- Name: idx_op_app_logout_receipts_nonce; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_op_app_logout_receipts_nonce ON public.logout_receipts USING btree (logout_flow_id, nonce_digest);
-
-
---
--- Name: idx_op_app_logout_receipts_public_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_op_app_logout_receipts_public_id ON public.logout_receipts USING btree (public_id);
-
-
---
--- Name: idx_op_app_outbox_events_event_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_op_app_outbox_events_event_id ON public.op_outbox_events USING btree (event_id);
-
-
---
--- Name: idx_op_app_outbox_events_next_attempt; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_op_app_outbox_events_next_attempt ON public.op_outbox_events USING btree (next_attempt_at);
 
 
 --
@@ -3760,76 +3848,6 @@ CREATE INDEX index_client_sign_in_flows_on_token_id ON public.client_sign_in_flo
 --
 
 CREATE UNIQUE INDEX index_client_sign_in_flows_on_token_id_unique ON public.client_sign_in_flows USING btree (token_id) WHERE (token_id IS NOT NULL);
-
-
---
--- Name: index_client_sign_out_flows_on_access_expires_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_access_expires_at ON public.client_sign_out_flows USING btree (access_expires_at);
-
-
---
--- Name: index_client_sign_out_flows_on_discard_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_discard_at ON public.client_sign_out_flows USING btree (discard_at);
-
-
---
--- Name: index_client_sign_out_flows_on_kind_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_kind_id ON public.client_sign_out_flows USING btree (kind_id);
-
-
---
--- Name: index_client_sign_out_flows_on_principal_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_principal_id ON public.client_sign_out_flows USING btree (principal_id);
-
-
---
--- Name: index_client_sign_out_flows_on_public_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_client_sign_out_flows_on_public_id ON public.client_sign_out_flows USING btree (public_id);
-
-
---
--- Name: index_client_sign_out_flows_on_purge_eligible_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_purge_eligible_at ON public.client_sign_out_flows USING btree (purge_eligible_at);
-
-
---
--- Name: index_client_sign_out_flows_on_refresh_expires_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_refresh_expires_at ON public.client_sign_out_flows USING btree (refresh_expires_at);
-
-
---
--- Name: index_client_sign_out_flows_on_refresh_token_family_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_refresh_token_family_id ON public.client_sign_out_flows USING btree (refresh_token_family_id);
-
-
---
--- Name: index_client_sign_out_flows_on_status_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_status_id ON public.client_sign_out_flows USING btree (status_id);
-
-
---
--- Name: index_client_sign_out_flows_on_token_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_client_sign_out_flows_on_token_id ON public.client_sign_out_flows USING btree (token_id);
 
 
 --
@@ -4295,6 +4313,90 @@ CREATE UNIQUE INDEX index_logout_transactions_on_token_digest ON public.logout_t
 
 
 --
+-- Name: index_op_app_authority_stop_browser_logouts_on_stop_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_op_app_authority_stop_browser_logouts_on_stop_id ON public.op_app_authority_stop_browser_logouts USING btree (stop_id);
+
+
+--
+-- Name: index_op_app_authority_stop_epoch_cutoffs_on_stop_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_op_app_authority_stop_epoch_cutoffs_on_stop_id ON public.op_app_authority_stop_epoch_cutoffs USING btree (stop_id);
+
+
+--
+-- Name: index_op_app_authority_stop_grant_targets_on_grant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stop_grant_targets_on_grant_id ON public.op_app_authority_stop_grant_targets USING btree (grant_id);
+
+
+--
+-- Name: index_op_app_authority_stop_participants_on_grant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stop_participants_on_grant_id ON public.op_app_authority_stop_participants USING btree (grant_id);
+
+
+--
+-- Name: index_op_app_authority_stop_participants_on_stop_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stop_participants_on_stop_id ON public.op_app_authority_stop_participants USING btree (stop_id);
+
+
+--
+-- Name: index_op_app_authority_stop_root_targets_on_root_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stop_root_targets_on_root_id ON public.op_app_authority_stop_root_targets USING btree (root_id);
+
+
+--
+-- Name: index_op_app_authority_stops_on_cause_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stops_on_cause_id ON public.op_app_authority_stops USING btree (cause_id);
+
+
+--
+-- Name: index_op_app_authority_stops_on_principal_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stops_on_principal_public_id ON public.op_app_authority_stops USING btree (principal_public_id);
+
+
+--
+-- Name: index_op_app_authority_stops_on_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_op_app_authority_stops_on_public_id ON public.op_app_authority_stops USING btree (public_id);
+
+
+--
+-- Name: index_op_app_authority_stops_on_realm_and_idempotency_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_op_app_authority_stops_on_realm_and_idempotency_digest ON public.op_app_authority_stops USING btree (realm, idempotency_digest);
+
+
+--
+-- Name: index_op_app_authority_stops_on_scope_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_app_authority_stops_on_scope_id ON public.op_app_authority_stops USING btree (scope_id);
+
+
+--
+-- Name: index_op_app_grant_logout_hints_on_grant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_op_app_grant_logout_hints_on_grant_id ON public.op_app_grant_logout_hints USING btree (grant_id);
+
+
+--
 -- Name: index_op_app_grants_on_client_token_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4327,13 +4429,6 @@ CREATE UNIQUE INDEX index_op_app_grants_on_refresh_token_digest ON public.op_app
 --
 
 CREATE INDEX index_op_app_grants_on_revoked_at ON public.op_app_grants USING btree (revoked_at);
-
-
---
--- Name: index_op_outbox_events_on_logout_flow_participant_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_op_outbox_events_on_logout_flow_participant_id ON public.op_outbox_events USING btree (logout_flow_participant_id);
 
 
 --
@@ -4401,6 +4496,94 @@ ALTER TABLE ONLY public.client_email_ceremony_transactions
 
 
 --
+-- Name: op_app_authority_stops fk_app_stop_restrict_01; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stops
+    ADD CONSTRAINT fk_app_stop_restrict_01 FOREIGN KEY (cause_id) REFERENCES public.op_app_authority_stop_causes(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stops fk_app_stop_restrict_02; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stops
+    ADD CONSTRAINT fk_app_stop_restrict_02 FOREIGN KEY (scope_id) REFERENCES public.op_app_authority_stop_scopes(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_root_targets fk_app_stop_restrict_03; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_root_targets
+    ADD CONSTRAINT fk_app_stop_restrict_03 FOREIGN KEY (stop_id) REFERENCES public.op_app_authority_stops(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_root_targets fk_app_stop_restrict_04; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_root_targets
+    ADD CONSTRAINT fk_app_stop_restrict_04 FOREIGN KEY (root_id) REFERENCES public.client_tokens(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_grant_targets fk_app_stop_restrict_05; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_grant_targets
+    ADD CONSTRAINT fk_app_stop_restrict_05 FOREIGN KEY (stop_id) REFERENCES public.op_app_authority_stops(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_grant_targets fk_app_stop_restrict_06; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_grant_targets
+    ADD CONSTRAINT fk_app_stop_restrict_06 FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_epoch_cutoffs fk_app_stop_restrict_07; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_epoch_cutoffs
+    ADD CONSTRAINT fk_app_stop_restrict_07 FOREIGN KEY (stop_id) REFERENCES public.op_app_authority_stops(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_participants fk_app_stop_restrict_08; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participants
+    ADD CONSTRAINT fk_app_stop_restrict_08 FOREIGN KEY (stop_id) REFERENCES public.op_app_authority_stops(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_participants fk_app_stop_restrict_09; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participants
+    ADD CONSTRAINT fk_app_stop_restrict_09 FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_participants fk_app_stop_restrict_10; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_participants
+    ADD CONSTRAINT fk_app_stop_restrict_10 FOREIGN KEY (status_id) REFERENCES public.op_app_authority_stop_participant_statuses(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_authority_stop_browser_logouts fk_app_stop_restrict_11; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_authority_stop_browser_logouts
+    ADD CONSTRAINT fk_app_stop_restrict_11 FOREIGN KEY (stop_id) REFERENCES public.op_app_authority_stops(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_auth_admission_bindings fk_client_auth_admission_bindings_admitted_session; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4461,15 +4644,7 @@ ALTER TABLE ONLY public.client_oidc_authorization_transactions
 --
 
 ALTER TABLE ONLY public.client_verifications
-    ADD CONSTRAINT fk_rails_18a774c144 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
-
-
---
--- Name: logout_flow_participants fk_rails_1b37d291d0; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_flow_participants
-    ADD CONSTRAINT fk_rails_1b37d291d0 FOREIGN KEY (logout_flow_id) REFERENCES public.logout_flows(id);
+    ADD CONSTRAINT fk_rails_18a774c144 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4517,15 +4692,7 @@ ALTER TABLE ONLY public.identity_passkey_ceremony_candidates
 --
 
 ALTER TABLE ONLY public.client_auth_admission_bindings
-    ADD CONSTRAINT fk_rails_39848a51b7 FOREIGN KEY (auth_ceremony_session_id) REFERENCES public.client_auth_ceremony_sessions(id) ON DELETE RESTRICT;
-
-
---
--- Name: client_sign_out_flows fk_rails_39d731f429; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flows
-    ADD CONSTRAINT fk_rails_39d731f429 FOREIGN KEY (kind_id) REFERENCES public.client_sign_out_flow_kinds(id);
+    ADD CONSTRAINT fk_rails_39848a51b7 FOREIGN KEY (auth_ceremony_session_id) REFERENCES public.client_auth_ceremony_sessions(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4537,19 +4704,11 @@ ALTER TABLE ONLY public.client_session_limit_resolution_transactions
 
 
 --
--- Name: client_sign_out_flows fk_rails_4bbbc632e2; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flows
-    ADD CONSTRAINT fk_rails_4bbbc632e2 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
-
-
---
 -- Name: client_sign_up_flows fk_rails_533362926d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_sign_up_flows
-    ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4565,7 +4724,7 @@ ALTER TABLE ONLY public.identity_totp_ceremony_candidates
 --
 
 ALTER TABLE ONLY public.client_step_up_sessions
-    ADD CONSTRAINT fk_rails_64ec203fd3 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_64ec203fd3 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4585,22 +4744,6 @@ ALTER TABLE ONLY public.client_sign_up_flows
 
 
 --
--- Name: logout_receipts fk_rails_854223f724; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logout_receipts
-    ADD CONSTRAINT fk_rails_854223f724 FOREIGN KEY (logout_flow_id) REFERENCES public.logout_flows(id);
-
-
---
--- Name: op_outbox_events fk_rails_8d56cd14a9; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_outbox_events
-    ADD CONSTRAINT fk_rails_8d56cd14a9 FOREIGN KEY (logout_flow_participant_id) REFERENCES public.logout_flow_participants(id);
-
-
---
 -- Name: client_step_up_sessions fk_rails_96e42d5326; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4609,11 +4752,19 @@ ALTER TABLE ONLY public.client_step_up_sessions
 
 
 --
+-- Name: client_sign_up_flows fk_rails_9b095e8b9b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sign_up_flows
+    ADD CONSTRAINT fk_rails_9b095e8b9b FOREIGN KEY (auth_admission_binding_id) REFERENCES public.client_auth_admission_bindings(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_sign_up_flows fk_rails_9b0b63a0c6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_sign_up_flows
-    ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id);
+    ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id) NOT VALID;
 
 
 --
@@ -4641,19 +4792,11 @@ ALTER TABLE ONLY public.client_passkey_ceremony_transactions
 
 
 --
--- Name: client_sign_out_flows fk_rails_bbc7001388; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_sign_out_flows
-    ADD CONSTRAINT fk_rails_bbc7001388 FOREIGN KEY (status_id) REFERENCES public.client_sign_out_flow_statuses(id);
-
-
---
 -- Name: client_sign_in_flows fk_rails_bd772deef1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_sign_in_flows
-    ADD CONSTRAINT fk_rails_bd772deef1 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_bd772deef1 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4661,7 +4804,7 @@ ALTER TABLE ONLY public.client_sign_in_flows
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4670,6 +4813,14 @@ ALTER TABLE ONLY public.client_tokens
 
 ALTER TABLE ONLY public.client_auth_admission_bindings
     ADD CONSTRAINT fk_rails_cb75eed72c FOREIGN KEY (base_token_id) REFERENCES public.client_tokens(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: op_app_grant_logout_hints fk_rails_cdfc332d97; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_grant_logout_hints
+    ADD CONSTRAINT fk_rails_cdfc332d97 FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id) ON DELETE CASCADE;
 
 
 --
@@ -4693,7 +4844,7 @@ ALTER TABLE ONLY public.client_auth_admission_bindings
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_rails_f69bf5b8f0 FOREIGN KEY (user_token_kind_id) REFERENCES public.client_token_kinds(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_f69bf5b8f0 FOREIGN KEY (user_token_kind_id) REFERENCES public.client_token_kinds(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4701,7 +4852,7 @@ ALTER TABLE ONLY public.client_tokens
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_user_tokens_on_user_token_binding_method_id FOREIGN KEY (user_token_binding_method_id) REFERENCES public.client_token_binding_methods(id);
+    ADD CONSTRAINT fk_user_tokens_on_user_token_binding_method_id FOREIGN KEY (user_token_binding_method_id) REFERENCES public.client_token_binding_methods(id) NOT VALID;
 
 
 --
@@ -4709,95 +4860,26 @@ ALTER TABLE ONLY public.client_tokens
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id);
+    ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id) NOT VALID;
 
 
 --
 -- PostgreSQL database dump complete
 --
-
---
--- PostgreSQL database dump
---
-
-
--- Dumped from database version 18.6 (Debian 18.6-1.pgdg12+2)
--- Dumped by pg_dump version 18.6 (Debian 18.6-1.pgdg13+2)
-
-
-
-
---
--- Name: op_app_grant_logout_hints; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.op_app_grant_logout_hints (
-    id bigint NOT NULL,
-    grant_id bigint NOT NULL,
-    id_token text NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
-);
-
-
---
--- Name: op_app_grant_logout_hints_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.op_app_grant_logout_hints_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: op_app_grant_logout_hints_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.op_app_grant_logout_hints_id_seq OWNED BY public.op_app_grant_logout_hints.id;
-
-
---
--- Name: op_app_grant_logout_hints id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_app_grant_logout_hints ALTER COLUMN id SET DEFAULT nextval('public.op_app_grant_logout_hints_id_seq'::regclass);
-
-
---
--- Name: op_app_grant_logout_hints op_app_grant_logout_hints_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_app_grant_logout_hints
-    ADD CONSTRAINT op_app_grant_logout_hints_pkey PRIMARY KEY (id);
-
-
---
--- Name: index_op_app_grant_logout_hints_on_grant_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_op_app_grant_logout_hints_on_grant_id ON public.op_app_grant_logout_hints USING btree (grant_id);
-
-
---
--- Name: op_app_grant_logout_hints fk_rails_cdfc332d97; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_app_grant_logout_hints
-    ADD CONSTRAINT fk_rails_cdfc332d97 FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id) ON DELETE CASCADE;
-
-
---
--- PostgreSQL database dump complete
---
-
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261025120400'),
+('20261025120301'),
+('20261025120300'),
+('20261025120200'),
+('20261025120100'),
+('20261025120000'),
+('20261025100100'),
 ('20261024143000'),
+('20261023194738'),
+('20261023194737'),
 ('20261023191141'),
 ('20261023190906'),
 ('20261023130003'),
@@ -4965,3 +5047,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260508135006'),
 ('20260507010001'),
 ('20260501000000');
+

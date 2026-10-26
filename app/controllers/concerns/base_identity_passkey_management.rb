@@ -44,7 +44,7 @@ module BaseIdentityPasskeyManagement
   def create
     authorize!(passkey_class, to: :create?)
     apply_base_browser_continuation_headers!
-    nonce = ensure_base_admission_browser_nonce!
+    nonce = base_admission_browser_nonce_for_request!
     token = current_session_token
     actor = identity_actor
     requirement = StepUpRequirement.new(

@@ -35,21 +35,18 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     @ticket = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: @issuance.transaction.transaction_id)
     https!
     host! @host
-    get auth_app_verification_path(ri: "jp", entry_ref: @issuance.reference)
-    @csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_ceremony_bindings_path(ri: "jp"), params: {
-      entry_ref: @issuance.reference, authenticity_token: @csrf,
-    }
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: @issuance.reference)
-    binding.confirm_base!(
+    admit_auth_ceremony_entry!(
+      auth_app_verification_path,
+      reference: @issuance.reference,
+      params: { ri: "jp" },
       base_token: @token,
       browser_digest: AuthAdmissionBinding.browser_digest(
         surface: "app", entry_ref: @issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       ),
     )
-    post auth_app_verification_path(ri: "jp"), params: {
-      entry_ref: @issuance.reference, authenticity_token: @csrf,
-    }
+    # This controller test covers step-up evidence handling. Rails test mode disables forgery
+    # protection; CSRF rejection is covered at the shared boundary tests.
+    @csrf = "test-csrf-token"
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
   end

@@ -18,9 +18,15 @@ module Base
               return
             end
 
-            secret.discard_now!(purge_after: 1.day)
-            secret.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(:deleted)
-            secret.save!
+            VisitorSecretCredential.transaction do
+              CredentialSecurityTransition.call(
+                actor: current_visitor, current_session: current_session_token,
+                reason: :secret_credential_changed, affected_surface: "com", request: request,
+              )
+              secret.discard_now!(purge_after: 1.day)
+              secret.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(:deleted)
+              secret.save!
+            end
           end
           redirect_to(base_com_identity_secrets_path(ri: params[:ri]), status: :see_other)
         end

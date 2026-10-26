@@ -66,6 +66,7 @@ class AuthenticationLogoutAllSessions
       token_class: token&.class,
       session_public_id: token.respond_to?(:public_id) ? token.public_id : nil,
       reason: reason,
+      cause: "revoke_others",
       cascade_device_session_tokens: false,
     )
   end

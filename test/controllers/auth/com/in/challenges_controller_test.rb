@@ -2,10 +2,12 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../support/oidc_auth_admission_test_helper"
 # require "helpers/global_test_support"
 
 class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
   include AuthEmailMfaHelper
+  include OidcAuthAdmissionTestHelper
 
   setup do
     @test_started_at = VisitorSignInFlow.database_now
@@ -23,21 +25,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     @email_record.finalize_binding!
     @email = @email_record.address
     @visitor.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-    admission = OidcTestEntry.issue!(
-      surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-    )
-    get auth_com_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
-
-    assert_response :see_other
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_com_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
-
-    assert_response :see_other
+    bootstrap_auth_sign_in_admission!(surface: "com")
     @primary_sign_in_binding = nil
   end
 

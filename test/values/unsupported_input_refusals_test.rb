@@ -77,26 +77,16 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
     assert_match(/signup required result cannot contain an account/, error.message)
   end
 
-  # Linking or signing up from a social callback is only ever done from a
-  # principal something already verified; anything else is refused at construction.
-  test "linking and signing up both require an already-verified principal" do
-    [ExternalAuthenticationLinkUseCase, ExternalAuthenticationSignupUseCase].each do |use_case|
-      error =
-        assert_raises(ArgumentError) do
-          if use_case == ExternalAuthenticationLinkUseCase
-            use_case.new(
-              principal: "not-verified", credential_candidate: nil, user: nil,
-              ceremony_started_at: Time.current,
-            )
-          else
-            use_case.new(
-              principal: "not-verified", credential_candidate: nil, birthdate: nil,
-              ceremony_started_at: Time.current,
-            )
-          end
-        end
+  # Linking from a social callback is only ever done from a principal something already verified;
+  # anything else is refused at construction. Sign-up finalizes in Auth (SocialAuthSignupFinalizer).
+  test "linking requires an already-verified principal" do
+    error =
+      assert_raises(ArgumentError) do
+        ExternalAuthenticationLinkUseCase.new(
+          principal: "not-verified", credential_candidate: nil, user: nil, ceremony_started_at: Time.current,
+        )
+      end
 
-      assert_match(/verified principal is required/, error.message)
-    end
+    assert_match(/verified principal is required/, error.message)
   end
 end

@@ -44,7 +44,7 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
       [:core_actor_tld], [:core_resource_class], [:core_token_class], [:core_resource_type],
     ],
     McpEndpoint => [[:mcp_surface_identity]],
-    OidcSsoInitiator => [[:oidc_client_id], [:oidc_sign_host], [:oidc_base_authority_host]],
+    OidcSsoInitiator => [[:oidc_client_id], [:oidc_sign_host], [:oidc_visa_authority_host]],
     PasskeyRegistrationFlow => [
       [:recovery_passcode_top_up_actor], [:recovery_passcode_top_up_credential_class],
       [:recovery_passcode_reveal_redirect_url, "token"],

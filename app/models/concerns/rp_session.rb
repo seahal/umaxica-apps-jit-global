@@ -113,9 +113,6 @@ module RpSession
         refresh_token_expires_at: expires_at,
         refresh_token_rotated_at: nil,
         previous_refresh_token_digest: nil,
-        refresh_delivery_ciphertext: nil,
-        refresh_delivery_predecessor_digest: nil,
-        refresh_delivery_expires_at: nil,
         last_used_at: decision_time,
       )
       raw_refresh_token
@@ -142,38 +139,10 @@ module RpSession
         refresh_token_expires_at: expires_at,
         refresh_token_rotated_at: decision_time,
         refresh_generation: refresh_generation + 1,
-        refresh_delivery_ciphertext: nil,
-        refresh_delivery_predecessor_digest: nil,
-        refresh_delivery_expires_at: nil,
         last_used_at: decision_time,
       )
       raw_refresh_token
     end
-  end
-
-  def store_refresh_delivery_receipt!(ciphertext:, predecessor_digest:, expires_at:)
-    raise ArgumentError, "refresh delivery ciphertext is required" if ciphertext.blank?
-    raise ArgumentError, "refresh delivery predecessor digest is required" if predecessor_digest.blank?
-    raise ArgumentError, "refresh delivery expiry is required" unless expires_at.respond_to?(:to_time)
-
-    update!(
-      refresh_delivery_ciphertext: ciphertext,
-      refresh_delivery_predecessor_digest: predecessor_digest,
-      refresh_delivery_expires_at: expires_at,
-    )
-  end
-
-  def refresh_delivery_receipt_present?
-    refresh_delivery_ciphertext.present? || refresh_delivery_predecessor_digest.present? ||
-      refresh_delivery_expires_at.present?
-  end
-
-  def clear_refresh_delivery_receipt!
-    update!(
-      refresh_delivery_ciphertext: nil,
-      refresh_delivery_predecessor_digest: nil,
-      refresh_delivery_expires_at: nil,
-    )
   end
 
   def authenticate_refresh_token(verifier)
@@ -199,17 +168,16 @@ module RpSession
     secure_compare?(previous_refresh_token_digest, candidate)
   end
 
-  def revoke!(status: "failed", now: nil)
-    with_parent_and_self_lock do
-      decision_time = now || self.class.database_now
-      assign_attributes(
-        revoked_at: decision_time,
-        last_logout_status: status,
-        last_logout_attempted_at: decision_time,
-        logged_out_at: decision_time,
-      )
-      save!(touch: false)
-    end
+  # Only OpAuthorityStopCommitter calls this (BX-1 static guard): it holds the Device Session ->
+  # root -> grant locks already, in the order every issuance path takes them.
+  def revoke_under_stop_lock!(status:, now:)
+    assign_attributes(
+      revoked_at: now,
+      last_logout_status: status,
+      last_logout_attempted_at: now,
+      logged_out_at: now,
+    )
+    save!(touch: false)
   end
 
   private

@@ -1,12 +1,13 @@
 # i18n-tasks configuration for the current locale layout.
 #
-# Japanese is the base locale in config/initializers/locale.rb, and English
-# strings fall back to Japanese until dedicated translations exist.
+# Japanese is the base locale in config/initializers/locale.rb. Both locale
+# bundles use the same leaf keys; missing translations are never served from
+# the other language.
 base_locale: ja
 
 data:
-  # Read all locale files under config/locales/ while preserving the existing
-  # region/locale split (for example config/locales/jp/en.yml).
+  # Read the one bundle per language under config/locales/ (for example
+  # config/locales/ja.yml).
   read:
     - config/locales/**/*.yml
   # Keep existing files stable when normalizing or writing keys.

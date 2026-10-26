@@ -9,6 +9,8 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
 
   setup do
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    @org_sign_up_feature = FeatureFlags::REGISTRY.fetch(:sign_up_available_org).name
+    @previous_org_sign_up_availability = Flipper.enabled?(@org_sign_up_feature)
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @invitation = OrganizationInvitation.create!(
@@ -20,6 +22,7 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
   end
 
   teardown do
+    @previous_org_sign_up_availability ? Flipper.enable(@org_sign_up_feature) : Flipper.disable(@org_sign_up_feature)
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
@@ -34,6 +37,19 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
                  inertia_props.fetch("invitation_code_label")
     # The visible Turnstile widget draws itself and writes the token into the form.
     assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
+  end
+
+  test "A29-9: ORG invitation acceptance is refused while Sign Up is blocked" do
+    Flipper.disable(@org_sign_up_feature)
+    registration_counts = [Operator.count, Bureau.count, AgentMembership.count]
+
+    get new_auth_org_sign_up_invitation_url(invitation_code: @invitation.code, ri: "jp")
+
+    assert_response :service_unavailable
+    assert_nil response.headers["Location"]
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_equal registration_counts, [Operator.count, Bureau.count, AgentMembership.count]
+    assert_not_predicate @invitation.reload, :consumed?
   end
 
   test "create preserves route and renders migration refusal without registration" do

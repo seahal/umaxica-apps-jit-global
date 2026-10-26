@@ -33,28 +33,8 @@ module Auth::App::Up
       issuance = OidcTestEntry.issue!(
         surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
-      binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-      get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-      assert_response :success
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
-      post(
-        "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
-                              headers: admission_headers,
-      )
-
-      assert_response :see_other
-      # Public confirmation isolates this leaf's setup; separate HTTP tests exercise the Base receiver.
-      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-      assert_response :success
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post(
-        auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
-                                         headers: admission_headers,
-      )
+      ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+      admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference)
 
       assert_response :see_other
     end
@@ -435,7 +415,7 @@ module Auth::App::Up
       assert_response :success
     end
 
-    test "a pending sign-up telephone candidate lock cannot mutate an independent signup candidate" do
+    test "a locked pending sign-up telephone candidate refuses a new sign-up unchanged (D-135)" do
       visitor = Client.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
@@ -449,30 +429,17 @@ module Auth::App::Up
       original_facts = existing.reload.attributes
       owner_facts = visitor.reload.attributes
 
-      assert_difference("ClientTelephone.count", 1) do
-        assert_difference("Client.count", 1) do
-          post auth_app_sign_up_telephone_url(ri: "jp"),
-               params: { client_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
-                         "cf-turnstile-response": "test", },
-               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-        end
+      assert_no_difference(%w(ClientTelephone.count Client.count)) do
+        post auth_app_sign_up_telephone_url(ri: "jp"),
+             params: { client_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
+                       "cf-turnstile-response": "test", },
+             headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
       end
 
-      assert_response :redirect
-      target = URI.parse(response.location)
-      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-      candidate = ClientTelephone.find(flow.pending_contact_id)
-
-      assert_not_equal existing.id, candidate.id
-      assert_not_equal existing.user_id, candidate.user_id
-      assert_equal existing.number_digest, candidate.number_digest
-      assert_nil candidate.binding_finalized_at
-      assert_not_predicate candidate, :locked?
+      assert_response :unprocessable_content
+      assert_includes response.body, I18n.t("sign.app.registration.telephone.create.contact_held")
       assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
       assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
-      get target.request_uri
-
-      assert_response :success
     end
 
     test "create is refused when the creator reports the number rate limited under its own lock" do
@@ -504,56 +471,6 @@ module Auth::App::Up
       end
 
       assert_response :unprocessable_content
-    end
-
-    test "create shows identical user-facing response for existing and new telephones" do
-      user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
-      existing_telephone = ClientTelephone.create!(
-        user: user,
-        number: "+819012345678",
-        user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-        binding_finalized_at: ClientTelephone.database_now,
-        confirm_policy: "1",
-        confirm_using_mfa: "1",
-      )
-
-      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
-        user_telephone: {
-          raw_number: existing_telephone.number,
-          confirm_policy: "1",
-          confirm_using_mfa: "1",
-        },
-        "cf-turnstile-response": "test",
-      }
-
-      existing_location = response.location
-
-      assert_response :redirect
-      existing_target = URI.parse(existing_location)
-      existing_facts = existing_telephone.reload.attributes
-
-      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
-        user_telephone: {
-          raw_number: "+819012300000",
-          confirm_policy: "1",
-          confirm_using_mfa: "1",
-        },
-        "cf-turnstile-response": "test",
-      }
-
-      assert_response :redirect
-      assert_match(%r{/up/check/telephone/otp}, response.location)
-      assert_match(%r{/up/check/telephone/otp}, existing_location)
-      new_target = URI.parse(response.location)
-
-      assert_equal [existing_target.scheme, existing_target.host, existing_target.path],
-                   [new_target.scheme, new_target.host, new_target.path]
-      assert_equal Rack::Utils.parse_query(existing_target.query).keys.sort,
-                   Rack::Utils.parse_query(new_target.query).keys.sort
-      assert_equal "jp", Rack::Utils.parse_query(new_target.query).fetch("ri")
-      assert_withheld("parity does not alter an effective binding") {
-        existing_facts == existing_telephone.reload.attributes
-      }
     end
 
     test "rejects invalid telephone format" do
@@ -852,8 +769,8 @@ module Auth::App::Up
                    SignFlowBindingCodec.decode(Rack::Utils.parse_query(begin_url.query).fetch("fb"))
     end
 
-    test "another admitted browser can register beside an abandoned OTP-verified telephone " \
-         "without changing its proof" do
+    test "another admitted browser is refused beside an abandoned OTP-verified telephone " \
+         "without changing its proof (D-135)" do
       number = "+1234567892"
       post auth_app_sign_up_telephone_url(ri: "jp"), params: {
         client_telephone: { raw_number: number, confirm_policy: "1", confirm_using_mfa: "1" },
@@ -896,50 +813,23 @@ module Auth::App::Up
       issuance = OidcTestEntry.issue!(
         surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
-      binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-      browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-      assert_equal 200, browser.response.status
-      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+      admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference, browser: browser)
       headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" }
-      browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
-      )
-
-      assert_equal 303, browser.response.status
-      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      browser.post(
-        auth_app_sign_up_path(ri: "jp"),
-        params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
-      )
 
       assert_equal 303, browser.response.status
       travel TelephoneOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-        assert_difference("ClientTelephone.count", 1) do
-          assert_difference("Client.count", 1) do
-            browser.post(
-              auth_app_sign_up_telephone_url(ri: "jp"),
-              params: { client_telephone: { raw_number: number, confirm_policy: "1", confirm_using_mfa: "1" },
-                        "cf-turnstile-response": "test", }, headers: headers,
-            )
-          end
+        assert_no_difference(%w(ClientTelephone.count Client.count)) do
+          browser.post(
+            auth_app_sign_up_telephone_url(ri: "jp"),
+            params: { client_telephone: { raw_number: number, confirm_policy: "1", confirm_using_mfa: "1" },
+                      "cf-turnstile-response": "test", }, headers: headers,
+          )
         end
       end
 
-      assert_equal 302, browser.response.status
-      new_target = URI.parse(browser.response.location)
-      new_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(new_target.query).fetch("fb"))
-      new_flow = ClientSignUpFlow.find_by!(public_id: new_binding.flow_public_id)
-      new_telephone = ClientTelephone.find(new_flow.pending_contact_id)
-
-      assert_not_equal flow.id, new_flow.id
-      assert_not_equal telephone.id, new_telephone.id
-      assert_not_equal contact_owner_for_test(telephone).id, contact_owner_for_test(new_telephone).id
-      assert_equal telephone.number_digest, new_telephone.number_digest
-      assert_nil new_telephone.binding_finalized_at
+      assert_equal 422, browser.response.status
+      assert_includes browser.response.body, I18n.t("sign.app.registration.telephone.create.contact_held")
       assert_withheld("original verified OTP evidence remains unchanged") {
         original_facts == telephone.reload.attributes
       }
@@ -1031,176 +921,37 @@ module Auth::App::Up
       assert_nil cycle.completed_requirements["otp"]
     end
 
-    test "a new telephone registration after the old window preserves the original candidate and owner" do
-      destination = "+819012300005"
+    test "a second entry submit while this browser's earlier attempt is unfinished is refused and changes nothing" do
+      headers = { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
       post auth_app_sign_up_telephone_url(ri: "jp"),
-           params: { client_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+           params: { client_telephone: { raw_number: "+819012300004", confirm_policy: "1", confirm_using_mfa: "1" },
                      "cf-turnstile-response": "test", },
-           headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
+           headers: headers
 
       assert_response :redirect
-      first_target = URI.parse(response.location)
-      first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-      first_candidate = ClientTelephone.find(first_flow.pending_contact_id)
-      first_facts = first_candidate.reload.attributes.slice(
-        "user_id", "number_digest", "binding_finalized_at", "binding_released_at",
-      )
-      first_owner_id = first_candidate.user_id
-      transaction_ref =
-        ClientTelephoneCeremonyTransaction.find_by!(
-          telephone_candidate_ref: first_candidate.public_id,
-        ).transaction_id
-      queued =
-        enqueued_jobs.reverse.find do |job|
-          next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+      original_locator = session[:app_sign_up_flow_locator].dup
+      first_flow = ClientSignUpFlow.find_by!(public_id: original_locator.fetch("public_id"))
+      first_flow_facts = first_flow.attributes
+      first_candidate_facts = ClientTelephone.find(first_flow.pending_contact_id).attributes
 
-          payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
-          payload.fetch(:otp_binding)[3] == transaction_ref
-        end
-      first_code =
-        OutboundSensitivePayload.decrypt_sms_delivery(
-          queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
-        ).fetch(:otp_code)
-
-      travel TelephoneOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-        assert_difference("ClientTelephone.count", 1) do
-          assert_difference("Client.count", 1) do
-            post auth_app_sign_up_telephone_url(ri: "jp"),
-                 params: { client_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
-                           "cf-turnstile-response": "test", },
-                 headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-          end
-        end
-      end
-
-      assert_response :redirect
-      current = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-      replacement = ClientTelephone.find(current.pending_contact_id)
-
-      assert_not_equal first_candidate.id, replacement.id
-      assert_not_equal first_candidate.user_id, replacement.user_id
-      assert_equal first_candidate.number_digest, replacement.number_digest
-      first_candidate.reload
-      first_owner = Client.find(first_owner_id)
-      first_flow.reload
-
-      assert_equal first_facts,
-                   first_candidate.attributes.slice(
-                     "user_id", "number_digest", "binding_finalized_at",
-                     "binding_released_at",
-                   )
-      assert_predicate first_flow, :sign_up_halted?
-      assert_predicate first_flow, :cleanup_completed?
-      assert_not_nil first_flow.cleanup_completed_at
-      assert_equal first_flow.cleanup_completed_at + SignUpArtifactCleanup::PHYSICAL_PURGE_DELAY,
-                   first_owner.purge_eligible_at
-      assert_equal [first_owner.created_at, first_flow.cleanup_completed_at].max, first_owner.discard_at
-      assert_nil replacement.binding_finalized_at
-      response_target = URI.parse(response.location)
-
-      assert_equal current.public_id,
-                   SignFlowBindingCodec.decode(Rack::Utils.parse_query(response_target.query).fetch("fb")).flow_public_id
-      replacement_facts = replacement.reload.attributes
-      current_facts = current.reload.attributes
-      assert_no_difference("ClientToken.count") do
-        patch first_target.request_uri,
-              params: { client_telephone: { pass_code: first_code }, "cf-turnstile-response": "test" }
-      end
-
-      assert_response :conflict
-      assert_withheld("terminal proof cannot alter the new candidate") {
-        replacement_facts == replacement.reload.attributes
-      }
-      assert_withheld("terminal proof cannot alter the new flow") { current_facts == current.reload.attributes }
-    end
-
-    test "a replacement flow owns a new telephone candidate without deleting the earlier candidate" do
-      destination = "+819012300004"
-      post auth_app_sign_up_telephone_url(ri: "jp"),
-           params: { client_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
-                     "cf-turnstile-response": "test", },
-           headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-
-      assert_response :redirect
-      first_target = URI.parse(response.location)
-      first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-      first_candidate = ClientTelephone.find(first_flow.pending_contact_id)
-      first_facts = first_candidate.reload.attributes.slice(
-        "user_id", "number_digest", "binding_finalized_at", "binding_released_at",
-      )
-      first_owner_id = first_candidate.user_id
-      transaction_ref =
-        ClientTelephoneCeremonyTransaction.find_by!(
-          telephone_candidate_ref: first_candidate.public_id,
-        ).transaction_id
-      queued =
-        enqueued_jobs.reverse.find do |job|
-          next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
-
-          payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
-          payload.fetch(:otp_binding)[3] == transaction_ref
-        end
-      first_code =
-        OutboundSensitivePayload.decrypt_sms_delivery(
-          queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
-        ).fetch(:otp_code)
-
-      assert_difference("ClientTelephone.count", 1) do
-        assert_difference("Client.count", 1) do
+      ["+819012300004", "+819012300005"].each do |destination|
+        assert_no_difference(
+          ["Client.count", "ClientTelephone.count", "ClientSignUpFlow.count",
+           "enqueued_jobs.size",],
+        ) do
           post auth_app_sign_up_telephone_url(ri: "jp"),
                params: { client_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
                          "cf-turnstile-response": "test", },
-               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
+               headers: headers
         end
+
+        assert_response :unprocessable_content
+        assert_includes response.body, I18n.t("sign.app.registration.telephone.create.contact_held", locale: :ja)
       end
 
-      assert_response :redirect
-      second_target = URI.parse(response.location)
-      second_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-      second_candidate = ClientTelephone.find(second_flow.pending_contact_id)
-
-      assert_not_equal first_flow.id, second_flow.id
-      assert_not_equal first_candidate.id, second_candidate.id
-      assert_not_equal first_candidate.user_id, second_candidate.user_id
-      assert_equal first_candidate.number_digest, second_candidate.number_digest
-      assert_nil first_candidate.binding_finalized_at
-      assert_nil second_candidate.binding_finalized_at
-      assert_equal second_flow.public_id,
-                   SignFlowBindingCodec.decode(Rack::Utils.parse_query(second_target.query).fetch("fb")).flow_public_id
-      first_candidate.reload
-      first_owner = Client.find(first_owner_id)
-      first_flow.reload
-
-      assert_equal first_facts,
-                   first_candidate.attributes.slice(
-                     "user_id", "number_digest", "binding_finalized_at",
-                     "binding_released_at",
-                   )
-      assert_predicate first_flow, :sign_up_halted?
-      assert_predicate first_flow, :cleanup_completed?
-      assert_not_nil first_flow.cleanup_completed_at
-      assert_equal first_flow.cleanup_completed_at + SignUpArtifactCleanup::PHYSICAL_PURGE_DELAY,
-                   first_owner.purge_eligible_at
-      assert_equal [first_owner.created_at, first_flow.cleanup_completed_at].max, first_owner.discard_at
-      assert_predicate first_flow.reload, :sign_up_halted?
-      second_facts = second_flow.reload.attributes
-      second_candidate_facts = second_candidate.reload.attributes
-      assert_no_difference("ClientToken.count") do
-        patch first_target.request_uri,
-              params: { client_telephone: { pass_code: first_code }, "cf-turnstile-response": "test" }
-      end
-
-      assert_response :conflict
-      get first_target.request_uri
-
-      assert_response :conflict
-      assert_withheld("protected record facts remain unchanged") { second_facts == second_flow.reload.attributes }
-      assert_withheld("protected record facts remain unchanged") {
-        second_candidate_facts == second_candidate.reload.attributes
-      }
-      get second_target.request_uri
-
-      assert_response :success
+      assert_equal original_locator, session[:app_sign_up_flow_locator]
+      assert_equal first_flow_facts, first_flow.reload.attributes
+      assert_equal first_candidate_facts, ClientTelephone.find(first_flow.pending_contact_id).attributes
     end
 
     test "fresh sessions cannot distinguish pending and registered telephone sign-up" do
@@ -1217,39 +968,39 @@ module Auth::App::Up
       existing_facts = existing.reload.attributes
       existing_owner_facts = visitor.reload.attributes
       responses = []
+      refusals = []
       candidates = []
       browsers = []
       targets = []
 
       [existing.number, "+819012300007"].each do |destination|
-        2.times do
+        2.times do |attempt|
           browser = open_session
           browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
           browser.https!
           issuance = OidcTestEntry.issue!(
             surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
           )
-          binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-          browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-          assert_equal 200, browser.response.status
-          csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+          admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference, browser: browser)
           headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" }
-          browser.post(
-            "/ceremony_bindings",
-            params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
-          )
 
           assert_equal 303, browser.response.status
-          binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-          browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-          csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-          browser.post(
-            auth_app_sign_up_path(ri: "jp"),
-            params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
-          )
+          if attempt == 1
+            # D-135: the first browser's unfinished registration now holds the destination,
+            # registered or not, so the second browser is refused the same way for both.
+            assert_no_difference("ClientTelephone.count") do
+              browser.post(
+                auth_app_sign_up_telephone_url(ri: "jp"),
+                params: { client_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                          "cf-turnstile-response": "test", }, headers: headers,
+              )
+            end
 
-          assert_equal 303, browser.response.status
+            refusals << browser.response.status
+            next
+          end
+
           assert_difference("ClientTelephone.count", 1) do
             browser.post(
               auth_app_sign_up_telephone_url(ri: "jp"),
@@ -1276,8 +1027,9 @@ module Auth::App::Up
       end
 
       assert_equal 1, responses.uniq.length
-      assert_equal 4, candidates.map(&:id).uniq.length
-      assert_equal 4, candidates.map(&:user_id).uniq.length
+      assert_equal [422, 422], refusals
+      assert_equal 2, candidates.map(&:id).uniq.length
+      assert_equal 2, candidates.map(&:user_id).uniq.length
       assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
       assert_withheld("protected record facts remain unchanged") { existing_owner_facts == visitor.reload.attributes }
       own_candidate_facts = candidates.last.reload.attributes

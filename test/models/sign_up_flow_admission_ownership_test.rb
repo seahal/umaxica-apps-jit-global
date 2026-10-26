@@ -44,6 +44,173 @@ class SignUpFlowAdmissionOwnershipTest < ActiveSupport::TestCase
   end
 
   %i(app com).each do |surface|
+    test "#{surface} completed registration keeps its retention and principal when its Flow is collected" do
+      own = @contexts.fetch(surface).first
+      flow_class = own.fetch(:flow_class)
+      principal =
+        if surface == :app
+          Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, security_mode_id: ClientSecurityMode::NORMAL)
+        else
+          Visitor.create!(status_id: VisitorStatus::ACTIVE, security_mode_id: VisitorSecurityMode::NORMAL)
+        end
+      principal_before = principal.attributes
+      now = flow_class.database_now
+      flow = flow_class.create!(
+        auth_admission_binding: own.fetch(:binding), principal_id: principal.id,
+        step: "completed", status_id: flow_class.status_id_for("COMPLETED"), completed_at: now,
+        entry_method: "email", issued_at: now, expires_at: now + 15.minutes,
+        nonce_digest: flow_class.digest_nonce("owner-browser"),
+      )
+      later = now + 3.hours
+
+      assert_predicate flow, :cleanup_idle?
+      assert_not AuthAdmissionBindingPurger.purge_for_parent!(
+        parent: own.fetch(:parent), now: later, retention_period: 1.second,
+      )
+      assert flow_class.exists?(flow.id), "default infinite retention is not shortened"
+      flow.discard_now!(purge_after: 2.hours)
+
+      assert AuthAdmissionBindingPurger.purge_for_parent!(
+        parent: own.fetch(:parent), now: later, retention_period: 1.second,
+      )
+      assert_not flow_class.exists?(flow.id)
+      assert_not own.fetch(:binding).class.exists?(own.fetch(:binding).id)
+      assert_equal principal_before, principal.reload.attributes
+    end
+
+    test "#{surface} creation refuses missing Admission and a parent at or beyond its deadline" do
+      own = @contexts.fetch(surface).first
+      binding = own.fetch(:binding)
+      flow_class = own.fetch(:flow_class)
+      now = flow_class.database_now
+      attributes = {
+        step: "start",
+        entry_method: "email",
+        issued_at: now,
+        expires_at: now + 15.minutes,
+        nonce_digest: flow_class.digest_nonce("owner-browser"),
+      }
+      missing = flow_class.new(attributes)
+
+      assert_not missing.valid?
+      assert missing.errors.of_kind?(:auth_admission_binding, :blank)
+      [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
+        binding.class.stub(:database_now, own.fetch(:parent).reload.expires_at + offset) do
+          candidate = flow_class.new(attributes.merge(auth_admission_binding: binding))
+
+          assert_equal offset.negative?, candidate.valid?, "parent expiry offset #{offset}"
+          assert_equal !offset.negative?, candidate.errors.key?(:auth_admission_binding)
+        end
+      end
+      own.fetch(:parent).prepare_cancellation_handoff!(
+        reference: SecureRandom.uuid, ciphertext: "retained-cancellation-proof",
+      )
+      own.fetch(:parent).cancel!(cancellation_handoff_digest: SecureRandom.hex(32))
+      cancelled = flow_class.new(attributes.merge(auth_admission_binding: binding))
+
+      assert_not cancelled.valid?
+      assert cancelled.errors.key?(:auth_admission_binding)
+      assert_equal 0, flow_class.where(auth_admission_binding_id: binding.id).count
+    end
+
+    test "#{surface} refuses absent admission proof and malformed continuity before selecting a Flow" do
+      own = @contexts.fetch(surface).first
+      binding = own.fetch(:binding)
+      ceremony = own.fetch(:ceremony)
+      flow_class = own.fetch(:flow_class)
+      now = flow_class.database_now
+      flow = flow_class.create!(
+        auth_admission_binding: binding, step: "start", entry_method: "email",
+        issued_at: now, expires_at: now + 15.minutes, nonce_digest: flow_class.digest_nonce("owner-browser"),
+      )
+      session = {}
+      locator = SignUpCycleLocator.new(session, surface: surface)
+      before = flow.attributes
+      assert_raises(SignUpCycleLocator::OwnershipMismatch) do
+        locator.current(admission_binding: nil, ceremony_session: ceremony)
+      end
+      assert_raises(SignUpCycleLocator::OwnershipMismatch) do
+        locator.current(admission_binding: binding, ceremony_session: nil)
+      end
+      ["", [], {}, { "public_id" => flow.public_id },
+       { "public_id" => flow.public_id, "nonce" => "" },].each do |payload|
+        session[SignUpCycleLocator::SESSION_KEYS.fetch(surface)] = payload
+        assert_raises(SignUpCycleLocator::OwnershipMismatch) do
+          locator.current(admission_binding: binding, ceremony_session: ceremony)
+        end
+        assert_equal before, flow.reload.attributes
+      end
+      foreign_class = (surface == :app) ? VisitorSignUpFlow : ClientSignUpFlow
+      assert_raises(ArgumentError) { SignUpCycleLocator.new({}, surface: surface, cycle_class: foreign_class) }
+    end
+
+    test "#{surface} binding purge waits for terminal Flow retention and deletes children first" do
+      own = @contexts.fetch(surface).first
+      flow_class = own.fetch(:flow_class)
+      now = flow_class.database_now
+      flow = flow_class.create!(
+        auth_admission_binding: own.fetch(:binding), step: "start", entry_method: "email",
+        issued_at: now, expires_at: now + 15.minutes, nonce_digest: flow_class.digest_nonce("owner-browser"),
+      )
+      parent = own.fetch(:parent)
+      binding = own.fetch(:binding)
+      retention = 1.second
+      later = now + 3.hours
+
+      assert_not AuthAdmissionBindingPurger.purge_for_parent!(parent: parent, now: later, retention_period: retention)
+      assert flow_class.exists?(flow.id)
+      assert binding.class.exists?(binding.id)
+
+      SignUpTermination.call(cycle: flow, event: :cancel)
+
+      assert_predicate flow.reload, :cleanup_completed?
+      flow.discard_now!(purge_after: 2.hours)
+      boundary = flow.reload.purge_eligible_at
+      replacement = flow_class.create!(
+        auth_admission_binding: binding, step: "start", entry_method: "email",
+        issued_at: now, expires_at: now + 15.minutes, nonce_digest: flow_class.digest_nonce("replacement-browser"),
+      )
+
+      assert_not AuthAdmissionBindingPurger.purge_for_parent!(parent: parent, now: later, retention_period: retention)
+      assert flow_class.exists?(flow.id), "one live child retains terminal history as well"
+      assert flow_class.exists?(replacement.id)
+      SignUpTermination.call(cycle: replacement, event: :cancel)
+
+      assert_not AuthAdmissionBindingPurger.purge_for_parent!(
+        parent: parent, now: boundary - Rational(1, 1_000_000), retention_period: retention,
+      )
+      assert flow_class.exists?(flow.id)
+      assert binding.class.exists?(binding.id)
+      assert AuthAdmissionBindingPurger.purge_for_parent!(parent: parent, now: boundary, retention_period: retention)
+      assert_not flow_class.exists?(flow.id)
+      assert_not flow_class.exists?(replacement.id)
+      assert_not binding.class.exists?(binding.id)
+      assert parent.class.exists?(parent.id)
+      assert AuthAdmissionBindingPurger.purge_for_parent!(
+        parent: parent, now: boundary + Rational(1, 1_000_000), retention_period: retention,
+      )
+    end
+
+    test "#{surface} terminal Flow with unfinished cleanup retains its Binding" do
+      own = @contexts.fetch(surface).first
+      flow_class = own.fetch(:flow_class)
+      now = flow_class.database_now
+      flow = flow_class.create!(
+        auth_admission_binding: own.fetch(:binding), step: "start", entry_method: "email",
+        issued_at: now, expires_at: now + 15.minutes, nonce_digest: flow_class.digest_nonce("owner-browser"),
+      )
+      # The state axis alone does not prove that artifact cleanup finished.
+      flow.cancel_sign_up!
+      flow.discard_now!(purge_after: 1.minute)
+      before = flow.reload.attributes
+
+      assert_not AuthAdmissionBindingPurger.purge_for_parent!(
+        parent: own.fetch(:parent), now: now + 3.hours, retention_period: 1.second,
+      )
+      assert_equal before, flow.reload.attributes
+      assert own.fetch(:binding).class.exists?(own.fetch(:binding).id)
+    end
+
     test "#{surface} allows one in-progress Flow per Binding and preserves terminal history" do
       own, other = @contexts.fetch(surface)
       flow_class = own.fetch(:flow_class)

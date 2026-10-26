@@ -11,7 +11,7 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        step_up only: :destroy, scope: "settings_totp"
+        step_up only: %i(update destroy), scope: "settings_totp"
 
         public
 
@@ -50,7 +50,7 @@ module Base
           issuance = BaseStepUpAdmissionIssuer.call!(
             actor: current_client, token: token, requirement: requirement,
             return_to: base_app_identity_totps_path,
-            base_browser_nonce: ensure_base_admission_browser_nonce!, base_token: token,
+            base_browser_nonce: base_admission_browser_nonce_for_request!, base_token: token,
             restart_of: params[:restart_of],
           )
           if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
@@ -73,8 +73,16 @@ module Base
         def update
           find_totp
           authorize!(@totp)
-          @totp.update!(totp_params)
+          IdentityTotpNameCommitter.call!(
+            actor: current_client, token: current_session_token, credential: @totp,
+            title: totp_params[:title],
+          )
           redirect_to(base_app_identity_totp_path(@totp.public_id, ri: params[:ri]), status: :see_other)
+        rescue IdentityTotpNameCommitter::InvalidTitle => e
+          render inertia: "base/app/identity/totps/show", props: show_page_props(error: e.message),
+                 status: :unprocessable_content
+        rescue IdentityTotpNameCommitter::Denied
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         rescue ActiveRecord::RecordInvalid, ActionController::ParameterMissing
           render inertia: "base/app/identity/totps/show", props: show_page_props,
                  status: :unprocessable_content

@@ -1,5 +1,28 @@
 # Current transition inventory
 
+## OP Back-Channel Logout participant (2026-10-25)
+
+Axis: the durable per-grant delivery participant created by an OP authority stop. Diagram:
+[OP authority-stop participant](./idp-op-authority-stop-participant.mmd). The three OP realms use
+the same reference IDs and named transition writers.
+
+| From | To | Public writer / guard and effect |
+|---|---|---|
+| absent | pending | `OpAuthorityStopCommitter` creates one participant in the same OP transaction as grant revocation |
+| pending | pending | `claim_delivery!` increments attempts and claims a bounded lease; `record_delivery_result!` schedules bounded retry for transient outcomes; a lease can be renewed before send |
+| pending | acknowledged | `record_delivery_result!` accepts HTTP 200 after the RP committed its receipt, tombstone and local session revocation |
+| pending | refused | `record_delivery_result!` records permanent endpoint/request failures, including stable 3xx and 413 classifications |
+| pending | expired | `expire_delivery_if_due!` or the Solid Queue sweep records expiry at or after BX-10 deadline; a late acknowledgment cannot replace it |
+| acknowledged / refused / expired | same | Terminal participant states are absorbing; retention may remove the row only after every target root is purge-eligible |
+
+HTTP executes after the claim transaction closes and without an OP row lock. Solid Queue enqueue is
+after commit; the recurring sweep recovers a missing enqueue, a crashed worker or an expired lease.
+Public transition and independent-worker coverage lives in
+`test/jobs/op_outbox_dispatch_job_test.rb` and
+`test/concurrency/op_authority_stop_concurrency_test.rb`; receiver ordering and tombstone coverage
+lives in `test/operations/rp_cell_session_revoker_test.rb` and
+`test/integration/rp_backchannel_logout_receiver_test.rb`.
+
 ## DBSC HTTP admission (2026-10-22)
 
 The client, visitor and operator DBSC axes, including their preference axes, retain their existing
@@ -19,7 +42,7 @@ Axis: derived relation between a root's issuance epoch and its canonical actor's
 | From    | To      | Public writer / guard and effect                                                                                                                                            |
 | ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | no root | current | root establishment stamps current actor epoch under actor-first locks                                                                                                       |
-| current | current | Code/Refresh/reissue/receipt checks current active actor before OP commit; `BaseSelfRpCredentialIssuer.call!` also locks actor then device/root/grant before claim mutation |
+| current | current | Code/Refresh/reissue checks current active actor before OP commit; `BaseSelfRpCredentialIssuer.call!` also locks actor then device/root/grant before claim mutation |
 | current | cut off | `IdentityAuthenticationStopRecorder.call` increments actor epoch and inserts the Zenith event in the locked actor transaction                                               |
 | cut off | cut off | stale root cannot mint or redeliver; `OpIdentityEventInvalidator.call` applies durable OP invalidation separately and idempotently                                          |
 
@@ -49,27 +72,11 @@ releasing the first commit, exercises both absent-sid orders and concurrent dupl
 checks the absorbing tombstone, receipt count and revoked local sessions. Execution results belong
 in evidence, rather than this inventory. No secret-isolation or activation proof is implied.
 
-## Separated RP local Refresh attempt (2026-10-18)
+## Separated RP local Refresh attempt (removed 2026-10-25)
 
-Axis: derived timestamp facts in each fixed cell's `rp_refresh_attempts`, owned by
-`RpRefreshCommitter`. Diagram: [local Refresh attempt](./idp-rp-local-refresh-attempt.mmd). This
-adds no persisted state values and changes no OP rotation/replay authority.
-
-| From                 | To        | Public writer / guard and effect                                                                                                                           |
-| -------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| no attempt           | reserved  | `RpRefreshCommitter.call`; live cell session and binding; binding-before-session locks; reserve input HMAC, expected generation and original deadline      |
-| reserved             | reserved  | same-input sibling sees existing pending attempt; no second dispatch or deadline extension                                                                 |
-| reserved             | uncertain | possible committed delivery failure records `uncertain_at`; preserve the attempt reference                                                                 |
-| reserved / uncertain | installed | verified exact subject/sid/issuer/client/realm/integer epoch; live session, binding and principal; generation CAS and install metadata in one local commit |
-| uncertain            | uncertain | exact receipt query unavailable; no predecessor rotation or new attempt                                                                                    |
-| installed            | installed | original receipt inside its window and unchanged installed generation/JTI; return existing result without another generation increment                     |
-| reserved / uncertain | expired   | fresh writer clock reaches the original deadline; subsequent calls cannot redispatch or query                                                              |
-
-Logout's binding tombstone prevents dispatch and late installation regardless of the attempt's
-timestamp facts. A definite credential refusal leaves the attempt uninstalled and does not permit
-another rotation of that input. Public coverage is in `rp_refresh_committer_test.rb` and
-`rp_refresh_logout_concurrency_test.rb`; file presence alone is not execution evidence. Role
-isolation and actual activation remain separate, open acceptance prerequisites.
+WU-10 (D-25) dropped `rp_refresh_attempts` and `idp-rp-local-refresh-attempt.mmd`. No local Refresh
+state axis remains; `RpRefreshCommitter` installs through an `installed_generation`
+compare-and-set only (`rp_refresh_committer_test.rb`, `rp_refresh_logout_concurrency_test.rb`).
 
 The six per-record Email/Telephone OTP sections in the historical inventory below retain the
 pre-ceremony Source-HOTP transition rows for traceability. They are not current runtime authority:
@@ -82,7 +89,7 @@ historical rows to infer a writer, a shared stateful policy or a current databas
 
 `FlowBase` validates terminal absorption before TTL and requested source state. An overdue
 non-terminal row with `expires_at` becomes `EXPIRED` even when the requested edge is illegal. The
-sign-out graph retains its existing deadline fields; this change introduces no new sign-out TTL.
+Sign-out authority is recorded by OP authority-stop records; it has no flow-state graph or flow TTL.
 
 `with_cycle_lock` retains the row lock while a savepoint owns the operation's same-database writes.
 An expiry refusal unwinds that savepoint, reloads the row, and writes only the named `EXPIRED`
@@ -110,7 +117,7 @@ terminal absorption, and the adjacent representable microsecond TTL values.
 
 | Caller                                                                                                                                                                      | Refusal disposition                                                                                                                                                                          |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FlowSignIn`, `FlowSignUp`, `FlowSignOut`, `SignUpFlowTicket#complete_sign_up!`                                                                                             | Return the canonical named writer outcome unchanged.                                                                                                                                         |
+| `FlowSignIn`, `FlowSignUp`, `SignUpFlowTicket#complete_sign_up!`                                                                                             | Return the canonical named writer outcome unchanged.                                                                                                                                         |
 | `SignInGuardrailParticipant#advance_if_clear!`, `SignInCheckpointParticipant#advance_if_clear!`, `SignInSelectorParticipant#auto_commit_single!`                            | Own `with_cycle_lock`; return expiry without evaluating further participants or selection writes.                                                                                            |
 | `AuthenticationBase#commit_login_session!`, `#advance_sign_in_flow_to_issuance!`, `#complete_sign_in_flow_issuance!`                                                        | One locked flow instance encloses token/device/refresh/receipt writes. Expiry unwinds those writes; `log_in` returns `invalid_request` before browser success effects.                       |
 | `AuthenticationSequenceGate` guardrail/checkpoint/selector redirects, `#advance_pending_sign_in_flow_after_primary!`, pending-session resume                                | Check participant refusal before issuing locators, gates or session continuation. AuthenticationBase preserves the returned failure.                                                         |
@@ -551,14 +558,23 @@ database primary key, OAuth/OIDC state, PKCE, CSRF token, or return-target token
 actor check, expiry handling, concrete provider transaction, and existing `commit_login_session!` /
 `lock_sign_in_flow_for_issuance!` boundary remain authoritative. The inventory is evidence for this
 implementation slice; provider-owned social/Entra ceremonies and untouched lifecycle axes retain
+APP telephone Passkey saving takes the Flow lock before the principal and revalidates state,
+expiry and the request gate after any wait. Terminal, lapsed and expired work is refused without a
+credential or allocation and without writing the Flow (D-177); an expired live Flow reaches EXPIRED
+and cleanup only through `SignUpExpiryJob`. A concurrent save that finds an already pending Passkey returns the existing
+success without another write. A rendered refusal stops the shared registration helper rather
+than falling through to a success response. Real HTTP concurrency and microsecond deadline cases
+are in `test/concurrency/sign_up_passkey_termination_http_test.rb`.
+
 their concrete authority until their own slice is completed.
 
 ## idp-client-sign-up
 
-APP and COM contact-entry replacement reaches the existing HALTED/cleanup operation only after
-Turnstile, identifier and explicit consent validation. Rejected submissions preserve the current
-flow, browser locator and pending artifacts without issuing OTP delivery. The lifecycle edges and
-terminal absorption remain unchanged; accepted replacements allocate a distinct flow after halt.
+APP and COM contact entry is fail-closed (D-177): a second entry submit while the browser's attempt
+is not terminal-and-cleaned is refused and writes nothing; no entry path halts or cleans an earlier
+Flow. The former `superseded_by_restart` HALTED writer is removed. The birthdate checkpoint halts an
+attempt below the minimum age through `SignUpTermination` (HALTED with same-request cleanup) without
+writing the birthdate (D-178). The lifecycle edges and terminal absorption remain unchanged.
 
 Email finalization locks the Source owner before its candidate and commits the binding fact, app
 principal promotion and Source audit intent together. Credential after-commit MFA refresh reloads
@@ -583,9 +599,9 @@ remains unfinished.
 The independent Email and Telephone signup issuers/verifiers lock the signup parent before issuing
 or consuming its ceremony-owned proof. They check terminal state, expiry and logical discard against
 the owning Ticket DB clock and recheck authority after Source locks and budget admission. An overdue
-admitted parent invokes `SignUpTermination` after the proof-operation locks are released, preserving
-the existing EXPIRED/retention/cleanup boundary without changing failure counters. This adds no
-signup state or transition and does not claim distributed atomicity.
+parent is refused without a write (D-177); the issuers, verification committers and delivery guards
+no longer invoke `SignUpTermination`, and only `SignUpExpiryJob` moves it to EXPIRED with cleanup.
+This adds no signup state or transition and does not claim distributed atomicity.
 
 Implementation: `SignUpStateMachine + SignFlow / FlowSignUp`. Storage: `client_sign_up_flows` /
 `status_id`.
@@ -818,126 +834,6 @@ includes SignUpSuspensionGuard and has no operator flow transition calls, so HTT
 is UNCONFIRMED. Operator onboarding invitation acceptance is a separate machine. No normalization to
 target vocabulary is made.
 
-## idp-client-sign-out
-
-Implementation: `FlowSignOut / AuthenticationLogoutCurrentSession`. Storage: `client_sign_out_flows`
-/ `status_id`.
-
-Sources: `app/models/client_sign_out_flow.rb`, `app/models/client_sign_out_flow_status.rb`,
-`app/models/concerns/flow_sign_out.rb`, `app/models/concerns/sign_out_flow.rb`,
-`app/controllers/concerns/authentication_logout_current_session.rb`,
-`app/controllers/concerns/sign_out_cancellation.rb`.
-
-Tests read: `test/models/sign_out_flow_test.rb`,
-`test/controllers/base/app/sign_outs_controller_test.rb`.
-
-| Transition ID            | Mutation kind         | From              | Event / Trigger         | To                | Guard                                         | Side effect                  | Source file                          | Confidence |
-| ------------------------ | --------------------- | ----------------- | ----------------------- | ----------------- | --------------------------------------------- | ---------------------------- | ------------------------------------ | ---------- |
-| idp-client-sign-out:T001 | DOCUMENTED_TRANSITION | NOTHING           | request_sign_out!       | REQUESTED         | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T002 | DOCUMENTED_TRANSITION | REQUESTED         | mark_access_discarded!  | ACCESS_DISCARDED  | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T003 | DOCUMENTED_TRANSITION | ACCESS_DISCARDED  | mark_logically_revoked! | LOGICALLY_REVOKED | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T004 | DOCUMENTED_TRANSITION | LOGICALLY_REVOKED | await_sign_out_expiry!  | AWAITING_EXPIRY   | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T005 | DOCUMENTED_TRANSITION | AWAITING_EXPIRY   | complete_sign_out!      | COMPLETED         | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T006 | DOCUMENTED_TRANSITION | REQUESTED         | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T007 | DOCUMENTED_TRANSITION | ACCESS_DISCARDED  | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T008 | DOCUMENTED_TRANSITION | LOGICALLY_REVOKED | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-client-sign-out:T009 | DOCUMENTED_TRANSITION | AWAITING_EXPIRY   | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-
-Default is REQUESTED=10; NOTHING=0 is a supported model-only predecessor. COMPLETED=100 and
-FAILED=900 are stored terminals. There is no state or step string column and no flow expires_at.
-access_expires_at/refresh_expires_at describe token timing and their order; AWAITING_EXPIRY is not
-EXPIRED. `AuthenticationLogoutCurrentSession` advances through awaiting expiry and immediately calls
-complete_sign_out! in the same request, without waiting for refresh TTL. Token/cookie revocation is
-the durable boundary. Failure recovery reloads and fails an incomplete cycle.
-
-`SignOutFlow.transition_to!` checks the model map and performs update! without a row lock, unlike
-the FlowSignOut named APIs; stale direct use is a possible concurrency boundary, not a demonstrated
-failure. Replay uses a recent COMPLETED row to suppress duplicate logout. UI cancellation in
-SignOutCancellation deletes pending request/session/notice context before a durable flow is
-committed; it is not a CANCELLED table state. Auth and RP return boundaries exist in controllers,
-but no external_result event exists in this model. Tests read verify progression, reverse rejection,
-defaults, integer transitions, retention and completion timestamps.
-
-## idp-visitor-sign-out
-
-Implementation: `FlowSignOut / AuthenticationLogoutCurrentSession`. Storage:
-`visitor_sign_out_flows` / `status_id`.
-
-Sources: `app/models/visitor_sign_out_flow.rb`, `app/models/visitor_sign_out_flow_status.rb`,
-`app/models/concerns/flow_sign_out.rb`, `app/models/concerns/sign_out_flow.rb`,
-`app/controllers/concerns/authentication_logout_current_session.rb`,
-`app/controllers/concerns/sign_out_cancellation.rb`.
-
-Tests read: `test/models/sign_out_flow_test.rb`,
-`test/controllers/base/com/sign_outs_controller_test.rb`.
-
-| Transition ID             | Mutation kind         | From              | Event / Trigger         | To                | Guard                                         | Side effect                  | Source file                          | Confidence |
-| ------------------------- | --------------------- | ----------------- | ----------------------- | ----------------- | --------------------------------------------- | ---------------------------- | ------------------------------------ | ---------- |
-| idp-visitor-sign-out:T001 | DOCUMENTED_TRANSITION | NOTHING           | request_sign_out!       | REQUESTED         | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T002 | DOCUMENTED_TRANSITION | REQUESTED         | mark_access_discarded!  | ACCESS_DISCARDED  | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T003 | DOCUMENTED_TRANSITION | ACCESS_DISCARDED  | mark_logically_revoked! | LOGICALLY_REVOKED | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T004 | DOCUMENTED_TRANSITION | LOGICALLY_REVOKED | await_sign_out_expiry!  | AWAITING_EXPIRY   | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T005 | DOCUMENTED_TRANSITION | AWAITING_EXPIRY   | complete_sign_out!      | COMPLETED         | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T006 | DOCUMENTED_TRANSITION | REQUESTED         | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T007 | DOCUMENTED_TRANSITION | ACCESS_DISCARDED  | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T008 | DOCUMENTED_TRANSITION | LOGICALLY_REVOKED | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-visitor-sign-out:T009 | DOCUMENTED_TRANSITION | AWAITING_EXPIRY   | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-
-Default is REQUESTED=10; NOTHING=0 is a supported model-only predecessor. COMPLETED=100 and
-FAILED=900 are stored terminals. There is no state or step string column and no flow expires_at.
-access_expires_at/refresh_expires_at describe token timing and their order; AWAITING_EXPIRY is not
-EXPIRED. `AuthenticationLogoutCurrentSession` advances through awaiting expiry and immediately calls
-complete_sign_out! in the same request, without waiting for refresh TTL. Token/cookie revocation is
-the durable boundary. Failure recovery reloads and fails an incomplete cycle.
-
-`SignOutFlow.transition_to!` checks the model map and performs update! without a row lock, unlike
-the FlowSignOut named APIs; stale direct use is a possible concurrency boundary, not a demonstrated
-failure. Replay uses a recent COMPLETED row to suppress duplicate logout. UI cancellation in
-SignOutCancellation deletes pending request/session/notice context before a durable flow is
-committed; it is not a CANCELLED table state. Auth and RP return boundaries exist in controllers,
-but no external_result event exists in this model. Tests read verify progression, reverse rejection,
-defaults, integer transitions, retention and completion timestamps.
-
-## idp-operator-sign-out
-
-Implementation: `FlowSignOut / AuthenticationLogoutCurrentSession`. Storage:
-`operator_sign_out_flows` / `status_id`.
-
-Sources: `app/models/operator_sign_out_flow.rb`, `app/models/operator_sign_out_flow_status.rb`,
-`app/models/concerns/flow_sign_out.rb`, `app/models/concerns/sign_out_flow.rb`,
-`app/controllers/concerns/authentication_logout_current_session.rb`,
-`app/controllers/concerns/sign_out_cancellation.rb`.
-
-Tests read: `test/models/sign_out_flow_test.rb`,
-`test/controllers/base/org/sign_outs_controller_test.rb`.
-
-| Transition ID              | Mutation kind         | From              | Event / Trigger         | To                | Guard                                         | Side effect                  | Source file                          | Confidence |
-| -------------------------- | --------------------- | ----------------- | ----------------------- | ----------------- | --------------------------------------------- | ---------------------------- | ------------------------------------ | ---------- |
-| idp-operator-sign-out:T001 | DOCUMENTED_TRANSITION | NOTHING           | request_sign_out!       | REQUESTED         | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T002 | DOCUMENTED_TRANSITION | REQUESTED         | mark_access_discarded!  | ACCESS_DISCARDED  | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T003 | DOCUMENTED_TRANSITION | ACCESS_DISCARDED  | mark_logically_revoked! | LOGICALLY_REVOKED | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T004 | DOCUMENTED_TRANSITION | LOGICALLY_REVOKED | await_sign_out_expiry!  | AWAITING_EXPIRY   | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T005 | DOCUMENTED_TRANSITION | AWAITING_EXPIRY   | complete_sign_out!      | COMPLETED         | Allowed source; accessible; FlowBase row lock | phase timestamp when defined | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T006 | DOCUMENTED_TRANSITION | REQUESTED         | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T007 | DOCUMENTED_TRANSITION | ACCESS_DISCARDED  | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T008 | DOCUMENTED_TRANSITION | LOGICALLY_REVOKED | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-| idp-operator-sign-out:T009 | DOCUMENTED_TRANSITION | AWAITING_EXPIRY   | fail_sign_out!          | FAILED            | Allowed source; accessible; row lock          | failed_at                    | app/models/concerns/flow_sign_out.rb | CONFIRMED  |
-
-Default is REQUESTED=10; NOTHING=0 is a supported model-only predecessor. COMPLETED=100 and
-FAILED=900 are stored terminals. There is no state or step string column and no flow expires_at.
-access_expires_at/refresh_expires_at describe token timing and their order; AWAITING_EXPIRY is not
-EXPIRED. `AuthenticationLogoutCurrentSession` advances through awaiting expiry and immediately calls
-complete_sign_out! in the same request, without waiting for refresh TTL. Token/cookie revocation is
-the durable boundary. Failure recovery reloads and fails an incomplete cycle.
-
-`SignOutFlow.transition_to!` checks the model map and performs update! without a row lock, unlike
-the FlowSignOut named APIs; stale direct use is a possible concurrency boundary, not a demonstrated
-failure. Replay uses a recent COMPLETED row to suppress duplicate logout. UI cancellation in
-SignOutCancellation deletes pending request/session/notice context before a durable flow is
-committed; it is not a CANCELLED table state. Auth and RP return boundaries exist in controllers,
-but no external_result event exists in this model. Tests read verify progression, reverse rejection,
-defaults, integer transitions, retention and completion timestamps.
-
 ## idp-client-sign-up-cleanup
 
 Implementation: `SignUpTermination / SignUpArtifactCleanup`. Storage: `client_sign_up_flows` /
@@ -1156,6 +1052,12 @@ same resolver. Re-verification retains its separate purpose check.
 
 WU-24c/d store one immutable `curfew_at` at OP database issuance time + 30 minutes; Switch copies
 the original deadline and refuses inconsistent history. `entry_intent` is NOT NULL and immutable:
+APP/COM Binding collection also locks every owned sign-up Flow in ID order and retains the whole
+set if any child is in progress, not physically purgeable, or awaiting artifact cleanup. A completed
+registration does not require artifact cleanup, but still obeys its own physical-retention boundary;
+the default infinite retention is not shortened here. Eligible Flow rows are deleted before their
+restrictive Binding. The collector does not delete principals or Auth-session rows.
+
 authorization purposes use `sign_in`/`sign_up`, and re-verification purposes use `not_applicable`,
 with the same rule enforced in each realm database. These are issuance facts, not new lifecycle
 transitions. Curfew consumption is still WU-06; the existing acceptance/parent expiry checks remain.
@@ -1528,6 +1430,13 @@ is predicate-only and background purge retires rows after retention. No canceled
 persisted expiry edge. Social supports provider-specific signed Auth-to-Base link/login/signup
 results; provider outcome does not create a social transaction state. TOTP is enrollment rather than
 primary login; new step-up enrollment final committer directly writes child consumed along with
+Signup commit and committed-receipt lookup require the signed session reference to identify a
+redeemed sign-up Admission whose `id` matches the Flow's immutable `auth_admission_binding_id`.
+The committer reads this ownership on the OP writer before principal creation or fresh result and
+candidate consumption. The Base receiver also scopes completion-reference access to that Binding.
+A valid signature or independent browser proof does not authorize another Binding's Flow, and a
+rejected receipt leaves registered identities intact.
+
 candidate and parent transaction under ticket locks. Results are unique and repeated consumption
 rejects. Credential creation may occur in a separate principal DB; failures and replay tests
 describe compensation/retained proof, not a guaranteed distributed transaction.
@@ -2375,10 +2284,13 @@ Implementation: `SecretCredential / SignSecretVerify`. Storage: `visitor_secret_
 
 Sources: `app/models/concerns/secret_credential.rb`,
 `app/models/visitor_secret_credential_status.rb`, `app/models/visitor_secret_credential.rb`,
-`app/services/sign_secret_verify.rb`, `app/services/visitor_secret_credentials_create.rb`.
+`app/services/sign_secret_verify.rb`, `app/services/visitor_secret_credentials_create.rb`,
+`app/controllers/base/com/identity/removals_controller.rb`.
 
 Tests read: `test/models/concerns/secret_credential_test.rb`,
-`test/models/visitor_secret_credential_test.rb`.
+`test/models/visitor_secret_credential_test.rb`,
+`test/controllers/base/identity_credential_management_test.rb`,
+`test/integration/sign/com/credential_removal_constraints_test.rb`.
 
 | Transition ID                      | Mutation kind         | From    | Event / Trigger                           | To      | Guard                                                                                                 | Side effect                                        | Source file                                           | Confidence |
 | ---------------------------------- | --------------------- | ------- | ----------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- | ---------- |
@@ -2386,12 +2298,13 @@ Tests read: `test/models/concerns/secret_credential_test.rb`,
 | idp-visitor-secret-credential:T002 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify accepted single-use      | USED    | Matching new-axis credential; not expired/locked/revoked/consumed                                     | consumed_at/use_count; status USED                 | app/services/sign_secret_verify.rb                    | CONFIRMED  |
 | idp-visitor-secret-credential:T003 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify mismatch at failure cap  | REVOKED | Mismatch; max_failures finite and reached; normally row lock (blank input failure occurs before lock) | Increment failure_count; locked_at; revoked status | app/services/sign_secret_verify.rb                    | CONFIRMED  |
 | idp-visitor-secret-credential:T004 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify accepted reusable secret | ACTIVE  | Current active unexpired unlocked matching credential; usage policy permits                           | Increment use_count / last_used_at                 | app/services/sign_secret_verify.rb                    | CONFIRMED  |
-| idp-visitor-secret-credential:T005 | OUT_OF_BAND           | ACTIVE  | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
-| idp-visitor-secret-credential:T006 | OUT_OF_BAND           | EXPIRED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
-| idp-visitor-secret-credential:T007 | OUT_OF_BAND           | REVOKED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
-| idp-visitor-secret-credential:T008 | OUT_OF_BAND           | USED    | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
-| idp-visitor-secret-credential:T009 | OUT_OF_BAND           | DELETED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
-| idp-visitor-secret-credential:T010 | OUT_OF_BAND           | NOTHING | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T005 | DOCUMENTED_TRANSITION | ACTIVE  | Base COM secret removal                   | DELETED | Owner and credential locks; Step-Up; final-secret guard; mutation and D-167 transition share transaction | Discard and write DELETED status                    | app/controllers/base/com/identity/removals_controller.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T006 | OUT_OF_BAND           | ACTIVE  | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T007 | OUT_OF_BAND           | EXPIRED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T008 | OUT_OF_BAND           | REVOKED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T009 | OUT_OF_BAND           | USED    | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T010 | OUT_OF_BAND           | DELETED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T011 | OUT_OF_BAND           | NOTHING | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
 
 Current realm ids differ: operator EXPIRED=3/REVOKED=4/USED=5, visitor EXPIRED=2/REVOKED=3/USED=4.
 `SecretCredential` has no transition graph/locks; expire_if_needed! ignores both infinity sentinels.
@@ -3601,6 +3514,12 @@ Tests read: `test/operations/identity_totp_enrollment_final_committer_test.rb`.
 Shared AppTicket candidate, no state FK. Store consume is single-use and TTL guarded; delete is
 actually a direct consumed_at write and can replace terminal timestamps. Fetch validates payload;
 social consumed payload reconstruction can fail after burn, a hidden terminal. Candidate binding
+The Base signup committer now verifies the Flow's required Admission owner before fresh candidate
+consumption. Signed candidate/session agreement remains necessary but does not authorize a Flow
+whose `auth_admission_binding_id` identifies another Admission. See
+`test/services/identity/social_signup_admission_ownership_test.rb` for fresh and committed ownership
+refusals through the public committer and Base HTTP receiver.
+
 must be rechecked by final committer, not supplied by consume(ref) itself. TOTP supports both
 preverified store path and new step-up-bound unverified enrollment. Expired candidate may be marked
 consumed by delete; terminal arrows describe proof usability rather than immutable row state.
@@ -4480,15 +4399,14 @@ Implementation: `AcmeLogoutTransactionable / AcmeLogoutTransactionCoordinator`. 
 `acme_logout_transactions` / `status / expected_step / completed_steps`.
 
 Sources: `app/models/concerns/acme_logout_transactionable.rb`,
-`app/models/acme_logout_transaction.rb`, `app/services/acme_logout_transaction_coordinator.rb`,
-`app/controllers/concerns/sign_oidc_logout.rb`.
+`app/models/acme_logout_transaction.rb`, and `app/services/acme_logout_transaction_coordinator.rb`.
 
 Tests read: `test/models/acme_logout_transaction_test.rb`,
-`test/models/acme_logout_race_branch_coverage_test.rb`,
-`test/services/acme_logout_transaction_coordinator_test.rb`,
-`test/integration/oidc_rp_authority_first_logout_test.rb`,
-`test/integration/oidc_rp_completion_matrix_test.rb`, and
-`test/controllers/tech/org/sign/out/completions_controller_test.rb`.
+`test/models/acme_logout_race_branch_coverage_test.rb`, and
+`test/services/acme_logout_transaction_coordinator_test.rb`. D-33 RP-Initiated Logout is a separate
+OIDC path; current focused coverage is in `test/services/oidc/end_session_request_test.rb`,
+`test/controllers/base/app/oidc/logouts_controller_test.rb`, and
+`test/integration/oidc_rp_logout_registered_rp_matrix_test.rb`.
 
 | Transition ID               | Mutation kind         | From        | Event / Trigger              | To          | Guard                                                                                      | Side effect                                                            | Source file                                          | Confidence |
 | --------------------------- | --------------------- | ----------- | ---------------------------- | ----------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------- | ---------- |
@@ -4502,18 +4420,14 @@ Tests read: `test/models/acme_logout_transaction_test.rb`,
 | idp-shared-acme-logout:T008 | DOCUMENTED_TRANSITION | initiated   | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
 | idp-shared-acme-logout:T009 | DOCUMENTED_TRANSITION | in_progress | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
 | idp-shared-acme-logout:T010 | DOCUMENTED_TRANSITION | expired     | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T011 | DOCUMENTED_TRANSITION | initiated   | Browser RP authority revoke  | in_progress | Binding v1; current authority session matches captured parent; writer lock; live TTL       | Revoke captured parent and child RP sessions; append authority_revoked | app/controllers/concerns/oidc_rp_logout_authority.rb | CONFIRMED  |
-| idp-shared-acme-logout:T012 | DOCUMENTED_TRANSITION | in_progress | Authority cleanup issued     | in_progress | Expected step authority_cleanup_issued; same durable challenge and live TTL                | Clear authority cookies; append authority_cleanup_issued               | app/controllers/concerns/oidc_rp_logout_authority.rb | CONFIRMED  |
-| idp-shared-acme-logout:T013 | DOCUMENTED_TRANSITION | in_progress | Origin cleanup issued        | in_progress | Origin proof, client, sid and parent binding; protected origin continuation                | Clear origin cookies/session; append origin_cleanup_issued             | app/controllers/concerns/oidc_rp_logout_launcher.rb  | CONFIRMED  |
-| idp-shared-acme-logout:T014 | DOCUMENTED_TRANSITION | in_progress | Origin RP session revoked    | in_progress | Captured origin RP session still bound to the parent; writer lock; no successor revocation | Revoke captured origin RP session; append origin_rp_session_revoked    | app/controllers/concerns/oidc_rp_logout_launcher.rb  | CONFIRMED  |
 
 Legacy ordered step sequences: sign origin_cleared->acme_cleared; acme/base
 origin_cleared->sign_cleared; core/side/palm origin_cleared->acme_cleared->sign_cleared; then
-finalize. Browser RP origins are base/core/warp/edit/palm/tech and use
-authority_revoked->authority_cleanup_issued->origin_cleanup_issued->origin_rp_session_revoked; then
-finalize. Steps are exact runtime events, not target external_result. Status EXPIRED declared but no
-writer; clock expiry refuses calls without writing. Edges from declared expired require a future
-expires_at (public API tests/model-permitted only); no invented clock transition to stored expired.
+finalize. D-33 RP-Initiated Logout uses the OIDC end-session request, Visa confirmation, OP authority
+stop and one-use RP callback; it does not write or advance this transaction. Steps are exact runtime
+events, not target external_result. Status EXPIRED declared but no writer; clock expiry refuses calls
+without writing. Edges from declared expired require a future expires_at (public API tests/model-
+permitted only); no invented clock transition to stored expired.
 finalize! lacks failed guard and can finalize failed row when expected step ready/live; failed is
 therefore not absorbing. fail! not serialized. Duplicate completed step is no-op; locked
 advance/finalize recheck. TTL10m. SQL status, expected_step and completed_steps duplicate progress
@@ -4556,6 +4470,11 @@ Tests read: `test/operations/enforcement_case_apply_failure_test.rb`,
 `test/models/enforcement_case_apply_ordering_test.rb`, `test/jobs/enforcement_expiry_job_test.rb`,
 `test/jobs/enforcement_reconciliation_job_test.rb`.
 
+Interactive API create, apply, approve and first operator release consume the matching
+operation-scope Step-Up proof in the state transaction after the state write. The pending-approval
+create path consumes after its state and audit writes. Expiry, reconciliation and repeated end
+operations have no new interactive proof to consume. These effects do not add state transitions.
+
 | Transition ID                    | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
 | -------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
 | idp-client-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
@@ -4594,6 +4513,10 @@ Sources: `app/models/concerns/enforcement_appeal.rb`, `app/models/app_enforcemen
 
 Tests read: `test/models/enforcement_appeal_test.rb`,
 `test/jobs/enforcement_reconciliation_job_test.rb`.
+
+Interactive appeal resolution consumes its matching operation-scope Step-Up proof in the appeal
+state transaction after the resolution write. An approved appeal subsequently invokes Case ending
+without consuming a second proof. These effects do not add appeal-state transitions.
 
 | Transition ID                      | Mutation kind         | From         | Event / Trigger   | To       | Guard                                                                                       | Side effect                                                   | Source file                               | Confidence |
 | ---------------------------------- | --------------------- | ------------ | ----------------- | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- | ---------- |
@@ -4778,7 +4701,7 @@ Tests read: `test/services/valkey/auth_state/sign_out_notice_store_test.rb`.
 | idp-shared-sign-out-notice:T001 | DOCUMENTED_TRANSITION | issued | consume / read(delete:true) | absent | Atomic GET+DEL Lua; payload checked after deletion | Burn before expiry/corrupt-payload refusal | app/services/valkey/auth_state/sign_out_notice_store.rb | CONFIRMED  |
 | idp-shared-sign-out-notice:T002 | DOCUMENTED_TRANSITION | issued | Redis wall-clock TTL        | absent | Default5m                                          | Automatic key eviction                     | app/services/valkey/auth_state/sign_out_notice_store.rb | CONFIRMED  |
 
-Notice is transport, not durable SignOutFlow progress. Payload state is opaque caller data, no
+Notice is transport, not durable authority-stop progress. Payload state is opaque caller data, no
 lifecycle enum. Read without delete does not consume; consume atomically deletes first, then
 parses/checks logical expiry, so failure may burn. No tombstone: replay is missing. DefaultTTL5m;
 external browser response carries raw id while storage uses digest. No FK or SQL table.
@@ -5042,7 +4965,6 @@ state carrier or pre-rebuild Secret shape.
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | client/visitor/operator sign-in           | One `state_id` reference and named transitions; issuance completes the flow                                                                                  | `EXPIRED`, `CANCELLED`, `HALTED` and `COMPLETED` are absorbing; parent never enters `SESSION_LIMIT_PENDING`                                                                                                                                                                         | `idp-client-sign-in.mmd`, `idp-visitor-sign-in.mmd`, `idp-operator-sign-in.mmd`                                                                     | Phase 2–7 transition tests   |
 | client/visitor/operator sign-up           | Contact/checkpoint completion enters ordinary sign-in admission                                                                                              | Failed, expired and cancelled flows retain terminal facts and clean only owned artifacts                                                                                                                                                                                            | `idp-client-sign-up.mmd`, `idp-visitor-sign-up.mmd`, `idp-operator-sign-up.mmd`                                                                     | Phase 2–7 and Phase 19 tests |
-| client/visitor/operator sign-out          | Authority-first logout mutation progress                                                                                                                     | A terminal logout fact cannot be rewritten or treated as access-token retirement                                                                                                                                                                                                    | `idp-client-sign-out.mmd`, `idp-visitor-sign-out.mmd`, `idp-operator-sign-out.mmd`                                                                  | Phase 14 and Phase 24 tests  |
 | session-limit resolution ×3               | Durable child with `PENDING`, `SESSION_SELECTED`, `RESOLVED`, `EXPIRED`, `CANCELLED`                                                                         | Owner, parent flow, browser, realm and optional OIDC transaction are rechecked under lock                                                                                                                                                                                           | realm `idp-*-session-limit-resolution.mmd`                                                                                                          | Phase 4 and Phase 17 tests   |
 | admission binding ×3                      | D-82 binding references are server-issued and browser-bound; distinct pending parents may share an active Auth sid, including previously admitted continuity | GET checks nonce ownership without mutation; attachment grants no new purpose; invalid attachment creates no session or cookie; transitions use the Ticket DB clock; result acceptance rechecks the retained original Base nonce/root after admission expiry; no Auth login session | realm `idp-*-auth-admission-binding.mmd`                                                                                                            | Phase 16 tests               |
 | step-up ceremony                          | Explicit requirement through method choice, admission, Auth, result and Base mutation                                                                        | Stale, future, revoked, mixed, cancelled or conflicting evidence cannot grant freshness                                                                                                                                                                                             | realm `idp-*-step-up-ceremony.mmd`                                                                                                                  | Phase 15–18 tests            |

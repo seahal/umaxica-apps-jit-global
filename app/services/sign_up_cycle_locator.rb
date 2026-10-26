@@ -21,7 +21,13 @@ class SignUpCycleLocator
     @session = session
     @surface = normalize_surface(surface)
     @cycle_class = cycle_class || CYCLE_CLASSES.fetch(@surface)
+    return if @cycle_class == CYCLE_CLASSES.fetch(@surface)
+
+    raise ArgumentError, "sign-up cycle class does not match its surface"
+
   end
+
+  public
 
   def current(admission_binding:, ceremony_session:, public_id: nil)
     binding_class = BINDING_CLASSES.fetch(surface)
@@ -33,6 +39,15 @@ class SignUpCycleLocator
       # A hint naming this Binding's own ended attempt is not a mismatch: the attempt is over and
       # its terminal state decides the response.
       return nil if payload && !cycle && ended_own_attempt?(owned, payload)
+
+      # A hint left by an earlier admission's attempt is dropped only once that attempt is over and
+      # its background cleanup has completed; an attempt still held keeps the request refused.
+      if payload && released_foreign_attempt?(owned, payload)
+        @released_public_id = payload["public_id"]
+        clear!
+        payload = nil
+      end
+      public_id = nil if public_id.present? && public_id == released_public_id
       if payload && (!cycle || payload["public_id"] != cycle.public_id ||
           !cycle.nonce_matches?(payload["nonce"]))
         raise OwnershipMismatch, "sign-up admission ownership mismatch"
@@ -42,6 +57,18 @@ class SignUpCycleLocator
       end
 
       cycle
+    end
+  end
+
+  # Fail-closed sign-up entry: whether this Binding still owns an attempt that is not over and
+  # cleaned up. A nonterminal attempt (including one past its deadline that the expiry job has not
+  # reached yet) or a terminal attempt whose artifact cleanup has not completed (pending, failed, or
+  # past its retry cap) keeps the entry refused. Only the background cleanup releases it.
+  def unreleased_attempt?(admission_binding:, ceremony_session:)
+    binding_class = BINDING_CLASSES.fetch(surface)
+    binding_class.connection_owner.connected_to(role: :writing) do
+      binding = admitted_owner!(binding_class, admission_binding, ceremony_session)
+      cycle_class.current.where(auth_admission_binding_id: binding.id).any? { |cycle| unreleased?(cycle) }
     end
   end
 
@@ -61,6 +88,10 @@ class SignUpCycleLocator
     session.delete(session_key)
   end
 
+  # The public id of an earlier admission's released attempt whose hint `current` dropped, so the
+  # caller can drop its own copy of that hint.
+  attr_reader :released_public_id
+
   private
 
   attr_reader :session, :surface, :cycle_class
@@ -78,13 +109,17 @@ class SignUpCycleLocator
     unless binding&.redeemed? && !binding.retired? && binding.purpose == "authentication_handoff" &&
         binding.entry_intent == "sign_up" && binding.admitted_auth_ceremony_session_id == ceremony&.id &&
         ceremony&.active? && ceremony.admitted? && ceremony.admission_purpose == binding.purpose &&
-        parent && parent.surface == surface.to_s && parent.status == "pending" &&
-        parent.expires_at > binding_class.database_now &&
-        ceremony.authorization_transaction_ref == parent.transaction_id
+        matching_authorization_parent?(parent, ceremony, binding_class)
       raise OwnershipMismatch, "sign-up admission ownership mismatch"
     end
 
     binding
+  end
+
+  def matching_authorization_parent?(parent, ceremony, binding_class)
+    parent && parent.surface == surface.to_s && parent.status == "pending" &&
+      parent.expires_at > binding_class.database_now &&
+      ceremony.authorization_transaction_ref == parent.transaction_id
   end
 
   def current_payload
@@ -99,6 +134,20 @@ class SignUpCycleLocator
     owned.any? do |candidate|
       terminal?(candidate) && candidate.public_id == payload["public_id"] && candidate.nonce_matches?(payload["nonce"])
     end
+  end
+
+  def released_foreign_attempt?(owned, payload)
+    return false if owned.any? { |candidate| candidate.public_id == payload["public_id"] }
+
+    earlier = cycle_class.find_by(public_id: payload["public_id"])
+    earlier.present? && earlier.nonce_matches?(payload["nonce"]) && terminal?(earlier) && !unreleased?(earlier)
+  end
+
+  def unreleased?(cycle)
+    return true unless terminal?(cycle)
+    return false if cycle.status_id == cycle.status_id_for("COMPLETED")
+
+    !cycle.cleanup_completed?
   end
 
   def terminal?(cycle)

@@ -41,7 +41,11 @@ module Security
       test "every declared feature name is registered" do
         declared =
           OutboundChannelSuspension::CHANNEL_FEATURE_NAMES.values +
-          SignUpSuspension::SURFACE_FEATURE_NAMES.values +
+          %i(
+            sign_in_available_app sign_up_available_app
+            sign_in_available_com sign_up_available_com
+            sign_in_available_org sign_up_available_org
+          ) +
           ExternalAuthentication::FlipperProviderAvailabilityAdapter::PROVIDER_FEATURE_NAMES.values +
           [TurnstileDegradation::FEATURE_NAME, RetentionPurgeJob::FEATURE_NAME]
 

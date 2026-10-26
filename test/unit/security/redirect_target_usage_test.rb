@@ -24,11 +24,9 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
     app/controllers/concerns/base_ceremony_binding_confirmation.rb
     app/controllers/concerns/base_identity_passkey_management.rb
     app/controllers/concerns/common_redirect.rb
-    app/controllers/concerns/oidc_rp_logout_authority.rb
     app/controllers/concerns/oidc_rp_logout_launcher.rb
     app/controllers/concerns/oidc_sso_initiator.rb
     app/controllers/concerns/sign_out_notice.rb
-    app/controllers/concerns/sign_up_social_birthdate_support.rb
   ).freeze
 
   RAW_PT_ALLOWLIST_PATTERNS = [

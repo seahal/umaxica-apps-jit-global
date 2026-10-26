@@ -1,0 +1,23 @@
+# Rows inserted by db/op_base_app_migrate/20261025120000_create_op_authority_stops_op_base_app.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: OpAppAuthorityStopCause
+
+browser_logout:
+  id: 1
+rp_initiated_logout:
+  id: 2
+token_revocation:
+  id: 3
+refresh_reuse:
+  id: 4
+revoke_others:
+  id: 5
+credential_change:
+  id: 6
+identity_stop:
+  id: 7
+administrative:
+  id: 8
+risk:
+  id: 9

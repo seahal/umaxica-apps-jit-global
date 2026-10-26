@@ -60,8 +60,6 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
     assert_equal new_auth_app_verification_setup_path(ri: "jp"), URI.parse(response.location).request_uri
@@ -149,8 +147,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
 
     assert_response :bad_request
     assert_equal 0, ClientAuthCeremonySession.where(
@@ -208,14 +205,34 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
         )
         admission_issuance
       end
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
 
-    get new_auth_app_verification_registration_passkey_path(ri: "jp")
+    get(new_auth_app_verification_registration_passkey_path(ri: "jp", entry_ref: issuance.reference))
+
+    assert_response :see_other
+    assert_equal new_auth_app_verification_registration_passkey_path(ri: "jp"), URI.parse(response.location).request_uri
+
+    get(new_auth_app_verification_registration_passkey_path(ri: "jp"))
 
     assert_response :success
     assert_not_includes response.body, "jump.umaxica.net"
     assert_not_includes response.body, "/sign"
     assert_equal "pending", issuance.transaction.reload.status
+
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    post(
+      auth_app_verification_registration_passkey_options_path(ri: "jp"),
+      params: { "cf-turnstile-response" => "test-only" }, as: :json,
+    )
+
+    assert_response :ok
+    options = response.parsed_body.fetch("options")
+
+    assert_equal %w(umaxica.app umaxica.app), [options.dig("user", "name"), options.dig("user", "displayName")]
+    assert_equal "required", options.dig("authenticatorSelection", "residentKey")
+  ensure
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
   end
 end

@@ -67,6 +67,26 @@ boundary.
 
 ## Verification
 
+### Controller lifecycle refinement (2026-10-25)
+
+Each realm has its own `Visa::{App,Com,Org}::AuthorizationBaseController`, derived from the
+matching AuthorityController. Authorization, result, cancellation and (APP/COM only) switch
+endpoints inherit this Rails abstract protocol base rather than another concrete endpoint. Actor lookup,
+credential finalization and Root issuance remain realm-local. The base denies access by default;
+each concrete endpoint declares its open protocol action. Authorization exposes GET/POST, while
+continuation controllers expose only their navigation GET action.
+Inherited lifecycle helpers are internal methods of the abstract base, not endpoint actions.
+
+The existing protocol exemption from region canonicalization moves to these three bases. Its
+effective endpoint set stays the same. Rate limiting remains on the inherited protocol pipeline;
+each concrete endpoint explicitly registers request-size validation. The passive public roots
+remain on their realm's BareController and do not initialize preferences or issue cookies.
+Their Auth-style public landing links target the matching Base RP sign entry and display
+preferences. Global region canonicalization now applies on the roots themselves: they explicitly
+include `PreferenceGlobal` and register `set_region`, so a missing region produces a same-path
+redirect before rendering and is carried into links. This opt-in stays on the three RootsControllers;
+the protocol BareControllers and their machine-facing endpoints retain their existing transport.
+
 The implementation is covered by the host exclusivity, Base route withdrawal, issuer/JWKS,
 ceremony-binding purpose, Jump edge catalog, OIDC browser, logout and static invariant tests. The
 Rails-side Jump handoff is documented but external Edge integration is not claimed.

@@ -7,13 +7,10 @@
     <p class="ui-description"><%= t("sign.shared.sign_out.confirm_description") %></p>
     <%= form_with url: sign_out_post_path, method: :post, data: { turbo: false } do %>
       <%= hidden_field_tag :logout_challenge, params[:logout_challenge] if params[:logout_challenge].present? %>
-      <%= hidden_field_tag :logout_intent_proof, browser_rp_logout_intent_proof_for(@logout_transaction) if
-            params[:logout_challenge].present? && respond_to?(:browser_rp_logout_intent_proof_for, true) %>
       <%= submit_tag t("sign.shared.sign_out.button"), class: "ui-button--danger" %>
       <noscript><p class="ui-description"><%= t("sign.shared.sign_out.confirm_description") %></p></noscript>
     <% end %>
-    <% if params[:logout_challenge].blank? &&
-          !(respond_to?(:browser_rp_logout_flow?, true) && browser_rp_logout_flow?) %>
+    <% if params[:logout_challenge].blank? %>
       <%= button_to t("actions.cancel"),
                     sign_out_post_path,
                     method: :delete,

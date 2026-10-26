@@ -8,8 +8,10 @@
 module OidcAuthorizationResultPost
   extend ActiveSupport::Concern
 
+  public
+
   def create
-    raise ArgumentError, "authorization start is required" unless params[:ceremony_action].present?
+    raise ArgumentError, "authorization start is required" if params[:ceremony_action].blank?
 
     start_authorization_from_post!
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
@@ -37,6 +39,7 @@ module OidcAuthorizationResultPost
   private
 
   def start_authorization_from_post!
+    validate_authorization_start_parameters!
     raise ArgumentError unless params[:ceremony_action].is_a?(String) && params[:ceremony_action] == "start" &&
       params[:result_ref].blank? && params[:transaction_ref].blank? && params[:result].blank?
 
@@ -44,6 +47,13 @@ module OidcAuthorizationResultPost
     return issue_authorization_code!(current_resource_for_oidc_authorization) if authorization_session_sufficient?
 
     start_authorization_ceremony!
+  end
+
+  def validate_authorization_start_parameters!
+    raise ArgumentError, "HEAD is not accepted at authorization start" if request.head?
+    return unless %w(result result_ref transaction_ref cancellation_ref switch_handoff).any? { |key| params.key?(key) }
+
+    raise ArgumentError, "continuation parameters are not accepted at authorization start"
   end
 
   def complete_authorization_from_post!

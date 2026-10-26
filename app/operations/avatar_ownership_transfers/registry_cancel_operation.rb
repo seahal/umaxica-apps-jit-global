@@ -26,18 +26,25 @@ module AvatarOwnershipTransfers
       },
     }.freeze
 
-    def initialize(actor:, surface:, subject_public_id:, reservation_public_id:, at: Avatar.database_now)
+    def initialize(actor:, surface:, subject_public_id:, reservation_public_id:, at: Avatar.database_now,
+                   step_up_token: nil, step_up_requirement: nil)
       super()
       @actor = actor
       @surface = surface.to_s
       @subject_public_id = subject_public_id.to_s
       @reservation_public_id = reservation_public_id.to_s
       @at = at
+      @step_up_token = step_up_token
+      @step_up_requirement = step_up_requirement
     end
 
     public
 
     def call
+      validate_step_up_context!(
+        actor: actor, surface: surface, scope: "avatar_transfer_cancel",
+        token: step_up_token, requirement: step_up_requirement,
+      )
       observed = find_reservation!
       definition = detail_definition(observed)
       detail = definition.fetch(:detail_class).find_by!(transfer_reservation_id: observed.id)
@@ -66,7 +73,8 @@ module AvatarOwnershipTransfers
 
     private
 
-    attr_reader :actor, :surface, :subject_public_id, :reservation_public_id, :at
+    attr_reader :actor, :surface, :subject_public_id, :reservation_public_id, :at,
+                :step_up_token, :step_up_requirement
 
     def cancel_locked!(observed:, definition:, detail:, avatar:)
       result = nil
@@ -80,7 +88,9 @@ module AvatarOwnershipTransfers
 
         assert_owner_current!(locked_avatar, definition, detail)
         assert_generation_current!(locked_avatar, detail)
-        locked.update!(state: expired?(locked) ? "expired" : "cancelled", completed_at: at)
+        state = expired?(locked) ? "expired" : "cancelled"
+        locked.update!(state:, completed_at: at)
+        consume_step_up!(step_up_token, step_up_requirement) if state == "cancelled"
         result = locked
       end
       raise Expired, "ownership transfer expired" if result.state == "expired"

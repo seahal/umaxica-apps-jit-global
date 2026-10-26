@@ -56,6 +56,7 @@ class AccountSessionRevocation < ApplicationService
         resource: account,
         token: token,
         reason: logout_reason,
+        cause: "browser_logout", # D-173
       )
     end
 

@@ -78,5 +78,4 @@ module AppSignUpEntryPage
       },
     ]
   end
-
 end

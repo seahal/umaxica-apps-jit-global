@@ -61,7 +61,7 @@ scope module: :palm, as: :palm do
       # Browser RP sign-out start and completion.
       namespace :sign do
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion",
+        resource :out_completion, only: :show, path: "out/completion",
                                   controller: "out/completions"
       end
 

@@ -26,6 +26,8 @@ module Visa
           },
         )
 
+        public
+
         def show
           render_oauth_userinfo(resource_type: "visitor")
         end

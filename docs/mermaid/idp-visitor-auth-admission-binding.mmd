@@ -26,4 +26,7 @@ stateDiagram-v2
         Browser receivers lock root owner/device/token when present,
         then the exact parent, binding and Auth rows in ID order.
         Auth cookies are written only after Ticket commit.
+        Binding collection waits for every sign-up Flow to be terminal,
+        physically purgeable, and cleanup completed or registration completed.
+        Flow rows are deleted before their restrictive Binding.
     end note

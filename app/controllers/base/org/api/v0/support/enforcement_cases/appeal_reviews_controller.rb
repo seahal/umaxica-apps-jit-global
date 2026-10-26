@@ -56,10 +56,16 @@ module Base
                 appeal = @enforcement_case.appeal
                 raise ActiveRecord::RecordNotFound, "appeal not found" unless appeal
 
-                appeal.resolve!(
-                  reviewer_operator_public_id: current_operator.public_id,
-                  resolution_code: params.expect(:resolution_code),
-                )
+                with_owner_step_up(STEP_UP_SCOPE) do |requirement|
+                  appeal.resolve!(
+                    reviewer_operator_public_id: current_operator.public_id,
+                    resolution_code: params.expect(:resolution_code),
+                    step_up_token: avatar_root,
+                    step_up_requirement: requirement,
+                  )
+                end
+                return if performed?
+
                 respond_to do |format|
                   format.json { render json: { public_id: appeal.public_id, state: appeal.state }, status: :ok }
                   format.html { redirect_to(enforcement_case_path_for(@enforcement_case), status: :see_other) }

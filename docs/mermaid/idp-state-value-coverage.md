@@ -1,550 +1,4998 @@
-# Reverse coverage of declared state values
+# Current transition inventory
 
-This extraction checks fixed reference-model constants, STATUS_/STATE_ constants, literal %w state
-lists, and current SQL string CHECK enumerations in indexed evidence sources.
-`MERMAID_NODE_OR_LABEL` includes explicitly aggregated labels; it does not prove reachability.
-`UNKNOWN` is an explicit unresolved disposition, not LEGACY or UNREACHABLE inferred from absence. No
-live reference-table rows were read. Dynamically constructed enumerations and nonliteral aliases
-require manual investigation and are not proven exhaustive by this extractor.
+## OP Back-Channel Logout participant (2026-10-25)
 
-| Axis                                      | Declaration              | ID / value            | Disposition                                                                   | Source                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------- | ------------------------ | --------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| idp-client-sign-in                        | PRIMARY_PENDING          | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:13`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | MFA_PENDING              | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:15`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | SESSION_LIMIT_PENDING    | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:16`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | GUARDRAIL_PENDING        | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:17`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | SESSION_ISSUANCE_PENDING | 50                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:18`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | CHECKPOINT_PENDING       | 60                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:19`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | SELECTOR_PENDING         | 65                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:20`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | DASHBOARD_PENDING        | 70                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:21`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | RETURN_PENDING           | 80                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:22`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:23`                                                                                                                                                                                                                                                         |
-| idp-client-sign-in                        | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_in_flow_status.rb:24`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | STARTED                  | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:13`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | CONTACT_PENDING          | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:15`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | CREDENTIAL_PENDING       | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:16`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | CONTACT_VERIFIED         | 35                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:17`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | SOCIAL_CALLBACK_PENDING  | 36                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:18`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | GUARDRAIL_PENDING        | 38                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:19`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | CHECKPOINT_PENDING       | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:20`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | FINALIZING               | 60                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:21`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | FINALIZED                | 70                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:22`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | SIGN_IN_HANDOFF_PENDING  | 80                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:23`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:24`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:25`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | EXPIRED                  | 910                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:26`                                                                                                                                                                                                                                                         |
-| idp-client-sign-up                        | CANCELLED                | 920                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_status.rb:27`                                                                                                                                                                                                                                                         |
-| idp-client-sign-out                       | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:13`                                                                                                                                                                                                                                                        |
-| idp-client-sign-out                       | REQUESTED                | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:15`                                                                                                                                                                                                                                                        |
-| idp-client-sign-out                       | ACCESS_DISCARDED         | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:16`                                                                                                                                                                                                                                                        |
-| idp-client-sign-out                       | LOGICALLY_REVOKED        | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:17`                                                                                                                                                                                                                                                        |
-| idp-client-sign-out                       | AWAITING_EXPIRY          | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:18`                                                                                                                                                                                                                                                        |
-| idp-client-sign-out                       | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:19`                                                                                                                                                                                                                                                        |
-| idp-client-sign-out                       | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_out_flow_status.rb:20`                                                                                                                                                                                                                                                        |
-| idp-client-auth-ceremony-session          | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/auth_ceremony_session.rb; app/models/client_auth_ceremony_session.rb; app/services/base_auth_admission_coordinator.rb; app/controllers/concerns/auth_ceremony_admission.rb`                                                                                                      |
-| idp-client-email-ceremony                 | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/email_ceremony_transactionable.rb:10`                                                                                                                                                                                                                                            |
-| idp-client-email-ceremony                 | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/email_ceremony_transactionable.rb:11`                                                                                                                                                                                                                                            |
-| idp-client-telephone-ceremony             | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/telephone_ceremony_transactionable.rb:6`                                                                                                                                                                                                                                         |
-| idp-client-telephone-ceremony             | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/telephone_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                         |
-| idp-client-passkey-ceremony               | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/passkey_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                           |
-| idp-client-passkey-ceremony               | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/passkey_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                           |
-| idp-client-secret-credential-ceremony     | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/secret_credential_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                 |
-| idp-client-secret-credential-ceremony     | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/secret_credential_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                 |
-| idp-client-step-up-ceremony               | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                           |
-| idp-client-step-up-ceremony               | STATUS_VERIFIED          | verified              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                           |
-| idp-client-step-up-ceremony               | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:10`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | STATUS_CANCELED          | canceled              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:11`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | pending                  | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | verified                 | verified              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | consumed                 | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | canceled                 | canceled              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | expired                  | expired               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | revoked                  | revoked               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-client-step-up-ceremony               | status                   | pending               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1044`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-ceremony               | status                   | verified              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1044`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-ceremony               | status                   | consumed              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1044`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-ceremony               | status                   | canceled              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1044`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-ceremony               | status                   | expired               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1044`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-ceremony               | status                   | revoked               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1044`                                                                                                                                                                                                                                                                   |
-| idp-client-oidc-authorization             | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:6`                                                                                                                                                                                                                                         |
-| idp-client-oidc-authorization             | STATUS_AUTHENTICATED     | authenticated         | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:8`                                                                                                                                                                                                                                         |
-| idp-client-oidc-authorization             | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:9`                                                                                                                                                                                                                                         |
-| idp-client-oauth-callback                 | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/oauth_callback_stateable.rb; app/models/client_oauth_callback_state.rb; app/services/social_auth_callback_state_store.rb`                                                                                                                                                        |
-| idp-client-sign-in-flow-evidence          | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/local_authentication_result_delivery.rb; app/models/client_sign_in_flow.rb; app/services/local_authentication_result_coordinator.rb; app/operations/local_authentication_session_committer.rb`                                                                                   |
-| idp-client-token                          | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_status.rb:14`                                                                                                                                                                                                                                                                |
-| idp-client-token                          | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_status.rb:16`                                                                                                                                                                                                                                                                |
-| idp-client-token                          | EXPIRED                  | 102                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_status.rb:17`                                                                                                                                                                                                                                                                |
-| idp-client-token                          | RESTRICTED               | 103                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_status.rb:18`                                                                                                                                                                                                                                                                |
-| idp-client-token                          | REVOKED                  | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_status.rb:19`                                                                                                                                                                                                                                                                |
-| idp-client-token                          | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:8`                                                                                                                                                                                                                                                    |
-| idp-client-token                          | STATUS_EXPIRED           | 102                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:10`                                                                                                                                                                                                                                                   |
-| idp-client-token                          | STATUS_RESTRICTED        | 103                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:11`                                                                                                                                                                                                                                                   |
-| idp-client-token                          | STATUS_REVOKED           | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:12`                                                                                                                                                                                                                                                   |
-| idp-client-dbsc                           | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_dbsc_status.rb:15`                                                                                                                                                                                                                                                           |
-| idp-client-dbsc                           | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_dbsc_status.rb:16`                                                                                                                                                                                                                                                           |
-| idp-client-dbsc                           | PENDING                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_dbsc_status.rb:17`                                                                                                                                                                                                                                                           |
-| idp-client-dbsc                           | FAILED                   | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_dbsc_status.rb:18`                                                                                                                                                                                                                                                           |
-| idp-client-dbsc                           | REVOKE                   | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_token_dbsc_status.rb:19`                                                                                                                                                                                                                                                           |
-| idp-client-device-session                 | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/device_sessionable.rb:8`                                                                                                                                                                                                                                                         |
-| idp-client-device-session                 | STATUS_REVOKED           | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/device_sessionable.rb:10`                                                                                                                                                                                                                                                        |
-| idp-client-rp-session                     | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/rp_session.rb; app/models/op_app_grant.rb; app/operations/rp_session_revoker.rb`                                                                                                                                                                                                 |
-| idp-client-passkey-credential             | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_passkey_status.rb:13`                                                                                                                                                                                                                                                              |
-| idp-client-passkey-credential             | DISABLED                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_passkey_status.rb:15`                                                                                                                                                                                                                                                              |
-| idp-client-passkey-credential             | REVOKED                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_passkey_status.rb:16`                                                                                                                                                                                                                                                              |
-| idp-client-passkey-credential             | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_passkey_status.rb:17`                                                                                                                                                                                                                                                              |
-| idp-client-passkey-credential             | NOTHING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_passkey_status.rb:18`                                                                                                                                                                                                                                                              |
-| idp-visitor-sign-in                       | PRIMARY_PENDING          | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:13`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | MFA_PENDING              | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:15`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | SESSION_LIMIT_PENDING    | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:16`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | GUARDRAIL_PENDING        | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:17`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | SESSION_ISSUANCE_PENDING | 50                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:18`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | CHECKPOINT_PENDING       | 60                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:19`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | SELECTOR_PENDING         | 65                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:20`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | DASHBOARD_PENDING        | 70                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:21`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | RETURN_PENDING           | 80                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:22`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:23`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-in                       | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_in_flow_status.rb:24`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | STARTED                  | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:13`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | CONTACT_PENDING          | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:15`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | CREDENTIAL_PENDING       | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:16`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | CONTACT_VERIFIED         | 35                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:17`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | GUARDRAIL_PENDING        | 38                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:18`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | CHECKPOINT_PENDING       | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:19`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | FINALIZING               | 60                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:20`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | FINALIZED                | 70                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:21`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | SIGN_IN_HANDOFF_PENDING  | 80                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:22`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:23`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:24`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | EXPIRED                  | 910                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:25`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-up                       | CANCELLED                | 920                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_status.rb:26`                                                                                                                                                                                                                                                        |
-| idp-visitor-sign-out                      | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:13`                                                                                                                                                                                                                                                       |
-| idp-visitor-sign-out                      | REQUESTED                | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:15`                                                                                                                                                                                                                                                       |
-| idp-visitor-sign-out                      | ACCESS_DISCARDED         | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:16`                                                                                                                                                                                                                                                       |
-| idp-visitor-sign-out                      | LOGICALLY_REVOKED        | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:17`                                                                                                                                                                                                                                                       |
-| idp-visitor-sign-out                      | AWAITING_EXPIRY          | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:18`                                                                                                                                                                                                                                                       |
-| idp-visitor-sign-out                      | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:19`                                                                                                                                                                                                                                                       |
-| idp-visitor-sign-out                      | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_out_flow_status.rb:20`                                                                                                                                                                                                                                                       |
-| idp-visitor-auth-ceremony-session         | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/auth_ceremony_session.rb; app/models/visitor_auth_ceremony_session.rb; app/services/base_auth_admission_coordinator.rb; app/controllers/concerns/auth_ceremony_admission.rb`                                                                                                     |
-| idp-visitor-email-ceremony                | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/email_ceremony_transactionable.rb:10`                                                                                                                                                                                                                                            |
-| idp-visitor-email-ceremony                | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/email_ceremony_transactionable.rb:11`                                                                                                                                                                                                                                            |
-| idp-visitor-telephone-ceremony            | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/telephone_ceremony_transactionable.rb:6`                                                                                                                                                                                                                                         |
-| idp-visitor-telephone-ceremony            | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/telephone_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                         |
-| idp-visitor-passkey-ceremony              | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/passkey_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                           |
-| idp-visitor-passkey-ceremony              | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/passkey_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                           |
-| idp-visitor-secret-credential-ceremony    | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/secret_credential_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                 |
-| idp-visitor-secret-credential-ceremony    | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/secret_credential_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                 |
-| idp-visitor-step-up-ceremony              | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                           |
-| idp-visitor-step-up-ceremony              | STATUS_VERIFIED          | verified              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                           |
-| idp-visitor-step-up-ceremony              | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:10`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | STATUS_CANCELED          | canceled              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:11`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | pending                  | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | verified                 | verified              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | consumed                 | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | canceled                 | canceled              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | expired                  | expired               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | revoked                  | revoked               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-visitor-step-up-ceremony              | status                   | pending               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:850`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-ceremony              | status                   | verified              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:850`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-ceremony              | status                   | consumed              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:850`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-ceremony              | status                   | canceled              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:850`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-ceremony              | status                   | expired               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:850`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-ceremony              | status                   | revoked               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:850`                                                                                                                                                                                                                                                                    |
-| idp-visitor-oidc-authorization            | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:6`                                                                                                                                                                                                                                         |
-| idp-visitor-oidc-authorization            | STATUS_AUTHENTICATED     | authenticated         | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:8`                                                                                                                                                                                                                                         |
-| idp-visitor-oidc-authorization            | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:9`                                                                                                                                                                                                                                         |
-| idp-visitor-sign-in-flow-evidence         | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/local_authentication_result_delivery.rb; app/models/visitor_sign_in_flow.rb; app/services/local_authentication_result_coordinator.rb; app/operations/local_authentication_session_committer.rb`                                                                                  |
-| idp-visitor-token                         | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:8`                                                                                                                                                                                                                                                    |
-| idp-visitor-token                         | STATUS_EXPIRED           | 102                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:10`                                                                                                                                                                                                                                                   |
-| idp-visitor-token                         | STATUS_RESTRICTED        | 103                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:11`                                                                                                                                                                                                                                                   |
-| idp-visitor-token                         | STATUS_REVOKED           | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:12`                                                                                                                                                                                                                                                   |
-| idp-visitor-token                         | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_status.rb:13`                                                                                                                                                                                                                                                               |
-| idp-visitor-token                         | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_status.rb:15`                                                                                                                                                                                                                                                               |
-| idp-visitor-token                         | EXPIRED                  | 102                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_status.rb:16`                                                                                                                                                                                                                                                               |
-| idp-visitor-token                         | RESTRICTED               | 103                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_status.rb:17`                                                                                                                                                                                                                                                               |
-| idp-visitor-token                         | REVOKED                  | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_status.rb:18`                                                                                                                                                                                                                                                               |
-| idp-visitor-dbsc                          | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_dbsc_status.rb:13`                                                                                                                                                                                                                                                          |
-| idp-visitor-dbsc                          | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_dbsc_status.rb:15`                                                                                                                                                                                                                                                          |
-| idp-visitor-dbsc                          | PENDING                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_dbsc_status.rb:16`                                                                                                                                                                                                                                                          |
-| idp-visitor-dbsc                          | FAILED                   | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_dbsc_status.rb:17`                                                                                                                                                                                                                                                          |
-| idp-visitor-dbsc                          | REVOKE                   | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_token_dbsc_status.rb:18`                                                                                                                                                                                                                                                          |
-| idp-visitor-device-session                | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/device_sessionable.rb:8`                                                                                                                                                                                                                                                         |
-| idp-visitor-device-session                | STATUS_REVOKED           | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/device_sessionable.rb:10`                                                                                                                                                                                                                                                        |
-| idp-visitor-rp-session                    | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/rp_session.rb; app/models/op_com_grant.rb; app/operations/rp_session_revoker.rb`                                                                                                                                                                                                 |
-| idp-visitor-passkey-credential            | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_passkey_status.rb:13`                                                                                                                                                                                                                                                             |
-| idp-visitor-passkey-credential            | DISABLED                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_passkey_status.rb:15`                                                                                                                                                                                                                                                             |
-| idp-visitor-passkey-credential            | REVOKED                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_passkey_status.rb:16`                                                                                                                                                                                                                                                             |
-| idp-visitor-passkey-credential            | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_passkey_status.rb:17`                                                                                                                                                                                                                                                             |
-| idp-visitor-passkey-credential            | NOTHING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_passkey_status.rb:18`                                                                                                                                                                                                                                                             |
-| idp-operator-sign-in                      | PRIMARY_PENDING          | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:13`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | MFA_PENDING              | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:15`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | SESSION_LIMIT_PENDING    | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:16`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | GUARDRAIL_PENDING        | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:17`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | SESSION_ISSUANCE_PENDING | 50                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:18`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | CHECKPOINT_PENDING       | 60                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:19`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | SELECTOR_PENDING         | 65                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:20`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | DASHBOARD_PENDING        | 70                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:21`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | RETURN_PENDING           | 80                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:22`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:23`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-in                      | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_in_flow_status.rb:24`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-up                      | STARTED                  | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_up_flow_status.rb:13`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-up                      | CONTACT_PENDING          | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_up_flow_status.rb:15`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-up                      | CREDENTIAL_PENDING       | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_up_flow_status.rb:16`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-up                      | CHECKPOINT_PENDING       | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_up_flow_status.rb:17`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-up                      | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_up_flow_status.rb:18`                                                                                                                                                                                                                                                       |
-| idp-operator-sign-out                     | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:13`                                                                                                                                                                                                                                                      |
-| idp-operator-sign-out                     | REQUESTED                | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:15`                                                                                                                                                                                                                                                      |
-| idp-operator-sign-out                     | ACCESS_DISCARDED         | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:16`                                                                                                                                                                                                                                                      |
-| idp-operator-sign-out                     | LOGICALLY_REVOKED        | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:17`                                                                                                                                                                                                                                                      |
-| idp-operator-sign-out                     | AWAITING_EXPIRY          | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:18`                                                                                                                                                                                                                                                      |
-| idp-operator-sign-out                     | COMPLETED                | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:19`                                                                                                                                                                                                                                                      |
-| idp-operator-sign-out                     | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_sign_out_flow_status.rb:20`                                                                                                                                                                                                                                                      |
-| idp-operator-auth-ceremony-session        | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/auth_ceremony_session.rb; app/models/operator_auth_ceremony_session.rb; app/services/base_auth_admission_coordinator.rb; app/controllers/concerns/auth_ceremony_admission.rb`                                                                                                    |
-| idp-operator-email-ceremony               | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/email_ceremony_transactionable.rb:10`                                                                                                                                                                                                                                            |
-| idp-operator-email-ceremony               | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/email_ceremony_transactionable.rb:11`                                                                                                                                                                                                                                            |
-| idp-operator-telephone-ceremony           | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/telephone_ceremony_transactionable.rb:6`                                                                                                                                                                                                                                         |
-| idp-operator-telephone-ceremony           | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/telephone_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                         |
-| idp-operator-passkey-ceremony             | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/passkey_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                           |
-| idp-operator-passkey-ceremony             | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/passkey_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                           |
-| idp-operator-secret-credential-ceremony   | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/secret_credential_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                 |
-| idp-operator-secret-credential-ceremony   | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/secret_credential_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                 |
-| idp-operator-step-up-ceremony             | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                           |
-| idp-operator-step-up-ceremony             | STATUS_VERIFIED          | verified              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                           |
-| idp-operator-step-up-ceremony             | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:10`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | STATUS_CANCELED          | canceled              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:11`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | pending                  | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | verified                 | verified              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | consumed                 | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | canceled                 | canceled              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | expired                  | expired               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | revoked                  | revoked               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/step_up_ceremony_transactionable.rb:12`                                                                                                                                                                                                                                          |
-| idp-operator-step-up-ceremony             | status                   | pending               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_org_structure.sql:799`                                                                                                                                                                                                                                                                    |
-| idp-operator-step-up-ceremony             | status                   | verified              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_org_structure.sql:799`                                                                                                                                                                                                                                                                    |
-| idp-operator-step-up-ceremony             | status                   | consumed              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_org_structure.sql:799`                                                                                                                                                                                                                                                                    |
-| idp-operator-step-up-ceremony             | status                   | canceled              | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_org_structure.sql:799`                                                                                                                                                                                                                                                                    |
-| idp-operator-step-up-ceremony             | status                   | expired               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_org_structure.sql:799`                                                                                                                                                                                                                                                                    |
-| idp-operator-step-up-ceremony             | status                   | revoked               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_org_structure.sql:799`                                                                                                                                                                                                                                                                    |
-| idp-operator-oidc-authorization           | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:6`                                                                                                                                                                                                                                         |
-| idp-operator-oidc-authorization           | STATUS_AUTHENTICATED     | authenticated         | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:8`                                                                                                                                                                                                                                         |
-| idp-operator-oidc-authorization           | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/oidc_authorization_transactionable.rb:9`                                                                                                                                                                                                                                         |
-| idp-operator-oauth-callback               | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/oauth_callback_stateable.rb; app/models/operator_oauth_callback_state.rb; app/services/social_auth_callback_state_store.rb`                                                                                                                                                      |
-| idp-operator-sign-in-flow-evidence        | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/local_authentication_result_delivery.rb; app/models/operator_sign_in_flow.rb; app/services/local_authentication_result_coordinator.rb; app/operations/local_authentication_session_committer.rb`                                                                                 |
-| idp-operator-token                        | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:8`                                                                                                                                                                                                                                                    |
-| idp-operator-token                        | STATUS_EXPIRED           | 102                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:10`                                                                                                                                                                                                                                                   |
-| idp-operator-token                        | STATUS_RESTRICTED        | 103                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:11`                                                                                                                                                                                                                                                   |
-| idp-operator-token                        | STATUS_REVOKED           | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/token_status_management.rb:12`                                                                                                                                                                                                                                                   |
-| idp-operator-token                        | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_status.rb:14`                                                                                                                                                                                                                                                              |
-| idp-operator-token                        | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_status.rb:16`                                                                                                                                                                                                                                                              |
-| idp-operator-token                        | EXPIRED                  | 102                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_status.rb:17`                                                                                                                                                                                                                                                              |
-| idp-operator-token                        | RESTRICTED               | 103                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_status.rb:18`                                                                                                                                                                                                                                                              |
-| idp-operator-token                        | REVOKED                  | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_status.rb:19`                                                                                                                                                                                                                                                              |
-| idp-operator-dbsc                         | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_dbsc_status.rb:13`                                                                                                                                                                                                                                                         |
-| idp-operator-dbsc                         | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_dbsc_status.rb:15`                                                                                                                                                                                                                                                         |
-| idp-operator-dbsc                         | PENDING                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_dbsc_status.rb:16`                                                                                                                                                                                                                                                         |
-| idp-operator-dbsc                         | FAILED                   | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_dbsc_status.rb:17`                                                                                                                                                                                                                                                         |
-| idp-operator-dbsc                         | REVOKE                   | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_token_dbsc_status.rb:18`                                                                                                                                                                                                                                                         |
-| idp-operator-device-session               | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/device_sessionable.rb:8`                                                                                                                                                                                                                                                         |
-| idp-operator-device-session               | STATUS_REVOKED           | 104                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/device_sessionable.rb:10`                                                                                                                                                                                                                                                        |
-| idp-operator-rp-session                   | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/rp_session.rb; app/models/op_org_grant.rb; app/operations/rp_session_revoker.rb`                                                                                                                                                                                                 |
-| idp-operator-passkey-credential           | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_passkey_status.rb:14`                                                                                                                                                                                                                                                            |
-| idp-operator-passkey-credential           | REVOKED                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_passkey_status.rb:15`                                                                                                                                                                                                                                                            |
-| idp-client-sign-up-cleanup                | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_cleanup_status.rb:13`                                                                                                                                                                                                                                                 |
-| idp-client-sign-up-cleanup                | IDLE                     | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_cleanup_status.rb:15`                                                                                                                                                                                                                                                 |
-| idp-client-sign-up-cleanup                | PENDING                  | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_cleanup_status.rb:16`                                                                                                                                                                                                                                                 |
-| idp-client-sign-up-cleanup                | COMPLETED                | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_cleanup_status.rb:17`                                                                                                                                                                                                                                                 |
-| idp-client-sign-up-cleanup                | FAILED                   | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_sign_up_flow_cleanup_status.rb:18`                                                                                                                                                                                                                                                 |
-| idp-client-withdrawal-ceremony            | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:10`                                                                                                                                                                                                                                            |
-| idp-client-withdrawal-ceremony            | STATUS_CONSUMED          | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:11`                                                                                                                                                                                                                                            |
-| idp-client-withdrawal-ceremony            | STATUS_REVOKED           | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:12`                                                                                                                                                                                                                                            |
-| idp-client-withdrawal-ceremony            | STATUS_EXPIRED           | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:13`                                                                                                                                                                                                                                            |
-| idp-client-enforcement-recovery-ceremony  | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/enforcement_recovery_ceremony_recordable.rb; app/models/client_enforcement_recovery_ceremony.rb; app/controllers/concerns/enforcement_recovery_ceremony_flow.rb`                                                                                                                 |
-| idp-visitor-sign-up-cleanup               | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_cleanup_status.rb:13`                                                                                                                                                                                                                                                |
-| idp-visitor-sign-up-cleanup               | IDLE                     | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_cleanup_status.rb:15`                                                                                                                                                                                                                                                |
-| idp-visitor-sign-up-cleanup               | PENDING                  | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_cleanup_status.rb:16`                                                                                                                                                                                                                                                |
-| idp-visitor-sign-up-cleanup               | COMPLETED                | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_cleanup_status.rb:17`                                                                                                                                                                                                                                                |
-| idp-visitor-sign-up-cleanup               | FAILED                   | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_sign_up_flow_cleanup_status.rb:18`                                                                                                                                                                                                                                                |
-| idp-visitor-withdrawal-ceremony           | STATUS_ACTIVE            | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:10`                                                                                                                                                                                                                                            |
-| idp-visitor-withdrawal-ceremony           | STATUS_CONSUMED          | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:11`                                                                                                                                                                                                                                            |
-| idp-visitor-withdrawal-ceremony           | STATUS_REVOKED           | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:12`                                                                                                                                                                                                                                            |
-| idp-visitor-withdrawal-ceremony           | STATUS_EXPIRED           | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/withdrawal_ceremony_recordable.rb:13`                                                                                                                                                                                                                                            |
-| idp-visitor-enforcement-recovery-ceremony | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/enforcement_recovery_ceremony_recordable.rb; app/models/visitor_enforcement_recovery_ceremony.rb; app/controllers/concerns/enforcement_recovery_ceremony_flow.rb`                                                                                                                |
-| idp-client-totp-ceremony                  | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/totp_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                              |
-| idp-client-totp-ceremony                  | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/totp_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                              |
-| idp-client-social-ceremony                | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/social_ceremony_transactionable.rb:8`                                                                                                                                                                                                                                            |
-| idp-client-social-ceremony                | STATUS_CONSUMED          | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/social_ceremony_transactionable.rb:9`                                                                                                                                                                                                                                            |
-| idp-client-secret-issuance                | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/client_secret_issuance.rb; app/operations/client_secret_manual_reservation_issuer.rb; app/operations/client_secret_storage_confirmation_committer.rb; app/operations/client_secret_manual_issuance_invalidator.rb; app/operations/client_secret_issuance_expiry_invalidator.rb`           |
-| idp-client-session-limit-resolution       | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_session_limit_resolution_transaction.rb:5`                                                                                                                                                                                                                                         |
-| idp-client-session-limit-resolution       | STATUS_SESSION_SELECTED  | session_selected      | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_session_limit_resolution_transaction.rb:6`                                                                                                                                                                                                                                         |
-| idp-client-session-limit-resolution       | STATUS_RESOLVED          | resolved              | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_session_limit_resolution_transaction.rb:7`                                                                                                                                                                                                                                         |
-| idp-client-session-limit-resolution       | STATUS_CANCELLED         | cancelled             | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_session_limit_resolution_transaction.rb:8`                                                                                                                                                                                                                                         |
-| idp-client-session-limit-resolution       | STATUS_EXPIRED           | expired               | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_session_limit_resolution_transaction.rb:9`                                                                                                                                                                                                                                         |
-| idp-client-apple-notification             | received                 | received              | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_apple_notification_event.rb:6`                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | retrying                 | retrying              | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_apple_notification_event.rb:6`                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | completed                | completed             | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_apple_notification_event.rb:6`                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | dead_letter              | dead_letter           | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_apple_notification_event.rb:6`                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | status                   | received              | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:498`                                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | status                   | retrying              | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:498`                                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | status                   | completed             | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:498`                                                                                                                                                                                                                                                                     |
-| idp-client-apple-notification             | status                   | dead_letter           | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:498`                                                                                                                                                                                                                                                                     |
-| idp-client-external-identity              | active                   | active                | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_external_identity.rb:6`                                                                                                                                                                                                                                                            |
-| idp-client-external-identity              | consent_revoked          | consent_revoked       | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_external_identity.rb:6`                                                                                                                                                                                                                                                            |
-| idp-client-external-identity              | account_deleted          | account_deleted       | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_external_identity.rb:6`                                                                                                                                                                                                                                                            |
-| idp-client-external-identity              | state                    | active                | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:765`                                                                                                                                                                                                                                                                     |
-| idp-client-external-identity              | state                    | consent_revoked       | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:765`                                                                                                                                                                                                                                                                     |
-| idp-client-external-identity              | state                    | account_deleted       | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:765`                                                                                                                                                                                                                                                                     |
-| idp-client-totp-credential                | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_totp_credential_status.rb:13`                                                                                                                                                                                                                                                      |
-| idp-client-totp-credential                | INACTIVE                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_totp_credential_status.rb:15`                                                                                                                                                                                                                                                      |
-| idp-client-totp-credential                | REVOKED                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_totp_credential_status.rb:16`                                                                                                                                                                                                                                                      |
-| idp-client-totp-credential                | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_totp_credential_status.rb:17`                                                                                                                                                                                                                                                      |
-| idp-client-totp-credential                | NOTHING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_totp_credential_status.rb:18`                                                                                                                                                                                                                                                      |
-| idp-identity-totp-enrollment              | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/identity_ceremony_candidate_record.rb; app/services/identity_totp_ceremony_candidate_store.rb; app/operations/identity_totp_enrollment_issuer.rb; app/operations/identity_totp_enrollment_verification_committer.rb; app/operations/identity_totp_enrollment_final_committer.rb` |
-| idp-identity-secret-credential-candidate  | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/identity_ceremony_candidate_record.rb; app/services/identity_secret_credential_ceremony_candidate_store.rb`                                                                                                                                                                      |
-| idp-identity-social-candidate             | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/identity_ceremony_candidate_record.rb; app/services/identity_social_ceremony_candidate_store.rb`                                                                                                                                                                                 |
-| idp-operator-organization-invitation      | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/organization_invitation.rb; app/services/org_operator_lifecycle_invitation_acceptance.rb`                                                                                                                                                                                                 |
-| idp-operator-operator-lifecycle           | STATUS_PENDING           | pending               | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_lifecycle_request.rb:58`                                                                                                                                                                                                                                                         |
-| idp-operator-operator-lifecycle           | STATUS_APPROVED          | approved              | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_lifecycle_request.rb:60`                                                                                                                                                                                                                                                         |
-| idp-operator-operator-lifecycle           | STATUS_REJECTED          | rejected              | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_lifecycle_request.rb:61`                                                                                                                                                                                                                                                         |
-| idp-operator-operator-lifecycle           | STATUS_EXECUTED          | executed              | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_lifecycle_request.rb:62`                                                                                                                                                                                                                                                         |
-| idp-operator-operator-lifecycle           | STATUS_CANCELLED         | cancelled             | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_lifecycle_request.rb:63`                                                                                                                                                                                                                                                         |
-| idp-shared-sequence-carrier               | STARTED                  | STARTED               | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | PRIMARY_VERIFIED         | PRIMARY_VERIFIED      | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | MFA_PENDING              | MFA_PENDING           | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | SESSION_LIMIT_PENDING    | SESSION_LIMIT_PENDING | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | GUARDRAIL_PENDING        | GUARDRAIL_PENDING     | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | SESSION_ISSUED           | SESSION_ISSUED        | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | CHECKPOINT_PENDING       | CHECKPOINT_PENDING    | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | DASHBOARD_PENDING        | DASHBOARD_PENDING     | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | COMPLETED                | COMPLETED             | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | FAILED                   | FAILED                | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | EXPIRED                  | EXPIRED               | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:5`                                                                                                                                                                                                                                                                    |
-| idp-shared-sequence-carrier               | COMPLETED                | COMPLETED             | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:20`                                                                                                                                                                                                                                                                   |
-| idp-shared-sequence-carrier               | FAILED                   | FAILED                | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:20`                                                                                                                                                                                                                                                                   |
-| idp-shared-sequence-carrier               | EXPIRED                  | EXPIRED               | MERMAID_NODE_OR_LABEL                                                         | `app/values/sign_in_sequence.rb:20`                                                                                                                                                                                                                                                                   |
-| idp-shared-authorization-code             | issued                   | issued                | MERMAID_NODE_OR_LABEL                                                         | `app/services/valkey/auth_state/authorization_code_store.rb:13`                                                                                                                                                                                                                                       |
-| idp-shared-authorization-code             | consumed                 | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/services/valkey/auth_state/authorization_code_store.rb:13`                                                                                                                                                                                                                                       |
-| idp-shared-opaque-admission               | issued                   | issued                | MERMAID_NODE_OR_LABEL                                                         | `app/services/valkey/auth_state/opaque_admission_store.rb:29`                                                                                                                                                                                                                                         |
-| idp-shared-opaque-admission               | consumed                 | consumed              | MERMAID_NODE_OR_LABEL                                                         | `app/services/valkey/auth_state/opaque_admission_store.rb:29`                                                                                                                                                                                                                                         |
-| idp-client-secret-credential              | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/client_secret_credential.rb; app/operations/client_secret_storage_confirmation_committer.rb; app/operations/client_secret_revocation_committer.rb; app/operations/client_secret_issuance_expiry_invalidator.rb`                                                                           |
-| idp-client-dpop-nonce                     | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/dpop_proof_stateable.rb; app/models/client_dpop_proof_state.rb; app/services/dpop_nonce_service.rb; app/lib/dpop_proof_verifier.rb; app/jobs/dpop_proof_state_purge_job.rb`                                                                                                      |
-| idp-client-administrative-access          | access_state             | enabled               | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:3069`                                                                                                                                                                                                                                                                    |
-| idp-client-administrative-access          | access_state             | admin_locked          | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:3069`                                                                                                                                                                                                                                                                    |
-| idp-client-email-verification-challenge   | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/email_verification_challengeable.rb; app/models/client_email_ceremony_transaction.rb`                                                                                                                                                                                            |
-| idp-client-preference-dbsc                | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/app_preference_dbsc_status.rb:15`                                                                                                                                                                                                                                                         |
-| idp-client-preference-dbsc                | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/app_preference_dbsc_status.rb:16`                                                                                                                                                                                                                                                         |
-| idp-client-preference-dbsc                | PENDING                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/app_preference_dbsc_status.rb:17`                                                                                                                                                                                                                                                         |
-| idp-client-preference-dbsc                | FAILED                   | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/app_preference_dbsc_status.rb:18`                                                                                                                                                                                                                                                         |
-| idp-client-preference-dbsc                | REVOKE                   | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/app_preference_dbsc_status.rb:19`                                                                                                                                                                                                                                                         |
-| idp-client-email-otp                      | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/email_otp_policy.rb; app/models/client_email.rb; app/models/concerns/email.rb; app/models/client_email_ceremony_transaction.rb; app/operations/email_sign_up_otp_issuer.rb`                                                                                                      |
-| idp-client-telephone-otp                  | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/telephone_otp_policy.rb; app/models/client_telephone.rb; app/models/concerns/telephone.rb; app/models/client_telephone_ceremony_transaction.rb; app/operations/telephone_sign_up_otp_issuer.rb`                                                                                  |
-| idp-visitor-secret-credential             | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_secret_credential_status.rb:13`                                                                                                                                                                                                                                                   |
-| idp-visitor-secret-credential             | EXPIRED                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_secret_credential_status.rb:15`                                                                                                                                                                                                                                                   |
-| idp-visitor-secret-credential             | REVOKED                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_secret_credential_status.rb:16`                                                                                                                                                                                                                                                   |
-| idp-visitor-secret-credential             | USED                     | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_secret_credential_status.rb:17`                                                                                                                                                                                                                                                   |
-| idp-visitor-secret-credential             | DELETED                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_secret_credential_status.rb:18`                                                                                                                                                                                                                                                   |
-| idp-visitor-secret-credential             | NOTHING                  | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_secret_credential_status.rb:19`                                                                                                                                                                                                                                                   |
-| idp-visitor-dpop-nonce                    | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/dpop_proof_stateable.rb; app/models/visitor_dpop_proof_state.rb; app/services/dpop_nonce_service.rb; app/lib/dpop_proof_verifier.rb; app/jobs/dpop_proof_state_purge_job.rb`                                                                                                     |
-| idp-visitor-administrative-access         | access_state             | enabled               | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:3009`                                                                                                                                                                                                                                                                    |
-| idp-visitor-administrative-access         | access_state             | admin_locked          | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:3009`                                                                                                                                                                                                                                                                    |
-| idp-visitor-email-verification-challenge  | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/email_verification_challengeable.rb; app/models/visitor_email_ceremony_transaction.rb`                                                                                                                                                                                           |
-| idp-visitor-preference-dbsc               | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/com_preference_dbsc_status.rb:15`                                                                                                                                                                                                                                                         |
-| idp-visitor-preference-dbsc               | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/com_preference_dbsc_status.rb:16`                                                                                                                                                                                                                                                         |
-| idp-visitor-preference-dbsc               | PENDING                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/com_preference_dbsc_status.rb:17`                                                                                                                                                                                                                                                         |
-| idp-visitor-preference-dbsc               | FAILED                   | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/com_preference_dbsc_status.rb:18`                                                                                                                                                                                                                                                         |
-| idp-visitor-preference-dbsc               | REVOKE                   | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/com_preference_dbsc_status.rb:19`                                                                                                                                                                                                                                                         |
-| idp-visitor-email-otp                     | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/email_otp_policy.rb; app/models/visitor_email.rb; app/models/concerns/email.rb; app/models/visitor_email_ceremony_transaction.rb; app/operations/email_sign_up_otp_issuer.rb`                                                                                                    |
-| idp-visitor-telephone-otp                 | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/telephone_otp_policy.rb; app/models/visitor_telephone.rb; app/models/concerns/telephone.rb; app/models/visitor_telephone_ceremony_transaction.rb; app/operations/telephone_sign_up_otp_issuer.rb`                                                                                |
-| idp-operator-secret-credential            | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_secret_credential_status.rb:14`                                                                                                                                                                                                                                                  |
-| idp-operator-secret-credential            | DELETED                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_secret_credential_status.rb:15`                                                                                                                                                                                                                                                  |
-| idp-operator-secret-credential            | EXPIRED                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_secret_credential_status.rb:16`                                                                                                                                                                                                                                                  |
-| idp-operator-secret-credential            | REVOKED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_secret_credential_status.rb:17`                                                                                                                                                                                                                                                  |
-| idp-operator-secret-credential            | USED                     | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_secret_credential_status.rb:18`                                                                                                                                                                                                                                                  |
-| idp-operator-dpop-nonce                   | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/dpop_proof_stateable.rb; app/models/operator_dpop_proof_state.rb; app/services/dpop_nonce_service.rb; app/lib/dpop_proof_verifier.rb; app/jobs/dpop_proof_state_purge_job.rb`                                                                                                    |
-| idp-operator-administrative-access        | access_state             | enabled               | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2780`                                                                                                                                                                                                                                                                    |
-| idp-operator-administrative-access        | access_state             | admin_locked          | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2780`                                                                                                                                                                                                                                                                    |
-| idp-operator-email-verification-challenge | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/email_verification_challengeable.rb; app/models/operator_email_ceremony_transaction.rb`                                                                                                                                                                                          |
-| idp-operator-preference-dbsc              | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/org_preference_dbsc_status.rb:13`                                                                                                                                                                                                                                                         |
-| idp-operator-preference-dbsc              | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/org_preference_dbsc_status.rb:15`                                                                                                                                                                                                                                                         |
-| idp-operator-preference-dbsc              | PENDING                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/org_preference_dbsc_status.rb:16`                                                                                                                                                                                                                                                         |
-| idp-operator-preference-dbsc              | FAILED                   | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/org_preference_dbsc_status.rb:17`                                                                                                                                                                                                                                                         |
-| idp-operator-preference-dbsc              | REVOKE                   | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/org_preference_dbsc_status.rb:18`                                                                                                                                                                                                                                                         |
-| idp-operator-email-otp                    | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/email_otp_policy.rb; app/models/operator_email.rb; app/models/concerns/email.rb; app/models/operator_email_ceremony_transaction.rb; app/operations/operator_email_registration_otp_finalizer.rb`                                                                                 |
-| idp-operator-telephone-otp                | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/telephone_otp_policy.rb; app/models/operator_telephone.rb; app/models/concerns/telephone.rb; app/models/operator_telephone_ceremony_transaction.rb; app/operations/operator_telephone_registration_otp_finalizer.rb`                                                             |
-| idp-client-withdrawal                     | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:13`                                                                                                                                                                                                                                                      |
-| idp-client-withdrawal                     | REQUESTED                | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:15`                                                                                                                                                                                                                                                      |
-| idp-client-withdrawal                     | CLOSING                  | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:16`                                                                                                                                                                                                                                                      |
-| idp-client-withdrawal                     | DISCARDED                | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:17`                                                                                                                                                                                                                                                      |
-| idp-client-withdrawal                     | RECOVERED                | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:18`                                                                                                                                                                                                                                                      |
-| idp-client-withdrawal                     | TERMINATED               | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:19`                                                                                                                                                                                                                                                      |
-| idp-client-withdrawal                     | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_withdrawal_flow_status.rb:20`                                                                                                                                                                                                                                                      |
-| idp-visitor-withdrawal                    | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:13`                                                                                                                                                                                                                                                     |
-| idp-visitor-withdrawal                    | REQUESTED                | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:15`                                                                                                                                                                                                                                                     |
-| idp-visitor-withdrawal                    | CLOSING                  | 20                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:16`                                                                                                                                                                                                                                                     |
-| idp-visitor-withdrawal                    | DISCARDED                | 30                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:17`                                                                                                                                                                                                                                                     |
-| idp-visitor-withdrawal                    | RECOVERED                | 40                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:18`                                                                                                                                                                                                                                                     |
-| idp-visitor-withdrawal                    | TERMINATED               | 100                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:19`                                                                                                                                                                                                                                                     |
-| idp-visitor-withdrawal                    | FAILED                   | 900                   | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_withdrawal_flow_status.rb:20`                                                                                                                                                                                                                                                     |
-| idp-security-one-time-reveal              | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/security_one_time_reveal.rb; app/services/identity_one_time_reveal.rb; app/controllers/concerns/passkey_registration_flow.rb; app/controllers/base/com/identity/recovery_secrets_controller.rb`                                                                                           |
-| idp-operator-entra-identity               | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_entra_identity_state.rb:13`                                                                                                                                                                                                                                                      |
-| idp-operator-entra-identity               | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_entra_identity_state.rb:15`                                                                                                                                                                                                                                                      |
-| idp-operator-entra-identity               | SUSPENDED                | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_entra_identity_state.rb:16`                                                                                                                                                                                                                                                      |
-| idp-operator-entra-identity               | REVOKED                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_entra_identity_state.rb:17`                                                                                                                                                                                                                                                      |
-| idp-client-step-up-session                | PENDING                  | PENDING               | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_step_up_session.rb:35`                                                                                                                                                                                                                                                             |
-| idp-client-step-up-session                | VERIFIED                 | VERIFIED              | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_step_up_session.rb:35`                                                                                                                                                                                                                                                             |
-| idp-client-step-up-passkey-challenge      | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/step_up_session_consumable.rb; app/models/client_step_up_session.rb; app/operations/identity_step_up_passkey_verification_committer.rb`                                                                                                                                          |
-| idp-client-step-up-email-challenge        | email_delivery_state     | pending               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1106`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-email-challenge        | email_delivery_state     | delivered             | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1106`                                                                                                                                                                                                                                                                   |
-| idp-client-step-up-email-challenge        | email_delivery_state     | failed                | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_app_structure.sql:1106`                                                                                                                                                                                                                                                                   |
-| idp-client-email-credential               | UNVERIFIED               | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:13`                                                                                                                                                                                                                                                                |
-| idp-client-email-credential               | VERIFIED                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:15`                                                                                                                                                                                                                                                                |
-| idp-client-email-credential               | SUSPENDED                | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:16`                                                                                                                                                                                                                                                                |
-| idp-client-email-credential               | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:17`                                                                                                                                                                                                                                                                |
-| idp-client-email-credential               | NOTHING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:18`                                                                                                                                                                                                                                                                |
-| idp-client-email-credential               | UNVERIFIED_WITH_SIGN_UP  | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:19`                                                                                                                                                                                                                                                                |
-| idp-client-email-credential               | VERIFIED_WITH_SIGN_UP    | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_email_status.rb:20`                                                                                                                                                                                                                                                                |
-| idp-client-telephone-credential           | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:15`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | VERIFIED                 | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:16`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | UNVERIFIED               | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:17`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | SUSPENDED                | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:18`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:19`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | LEGACY_NOTHING           | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:20`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | UNVERIFIED_WITH_SIGN_UP  | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:21`                                                                                                                                                                                                                                                            |
-| idp-client-telephone-credential           | VERIFIED_WITH_SIGN_UP    | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_telephone_status.rb:22`                                                                                                                                                                                                                                                            |
-| idp-client-actor-withdrawal               | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/withdrawable.rb; app/services/withdrawal_lifecycle.rb; app/controllers/concerns/authentication_withdrawal_gate.rb`                                                                                                                                                               |
-| idp-visitor-step-up-session               | PENDING                  | PENDING               | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_step_up_session.rb:35`                                                                                                                                                                                                                                                            |
-| idp-visitor-step-up-session               | VERIFIED                 | VERIFIED              | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_step_up_session.rb:35`                                                                                                                                                                                                                                                            |
-| idp-visitor-step-up-passkey-challenge     | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/step_up_session_consumable.rb; app/models/visitor_step_up_session.rb; app/operations/identity_step_up_passkey_verification_committer.rb`                                                                                                                                         |
-| idp-visitor-step-up-email-challenge       | email_delivery_state     | pending               | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:912`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-email-challenge       | email_delivery_state     | delivered             | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:912`                                                                                                                                                                                                                                                                    |
-| idp-visitor-step-up-email-challenge       | email_delivery_state     | failed                | MERMAID_NODE_OR_LABEL                                                         | `db/op_base_com_structure.sql:912`                                                                                                                                                                                                                                                                    |
-| idp-visitor-email-credential              | UNVERIFIED               | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:13`                                                                                                                                                                                                                                                               |
-| idp-visitor-email-credential              | VERIFIED                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:15`                                                                                                                                                                                                                                                               |
-| idp-visitor-email-credential              | SUSPENDED                | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:16`                                                                                                                                                                                                                                                               |
-| idp-visitor-email-credential              | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:17`                                                                                                                                                                                                                                                               |
-| idp-visitor-email-credential              | NOTHING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:18`                                                                                                                                                                                                                                                               |
-| idp-visitor-email-credential              | UNVERIFIED_WITH_SIGN_UP  | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:19`                                                                                                                                                                                                                                                               |
-| idp-visitor-email-credential              | VERIFIED_WITH_SIGN_UP    | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_email_status.rb:20`                                                                                                                                                                                                                                                               |
-| idp-visitor-telephone-credential          | UNVERIFIED               | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:13`                                                                                                                                                                                                                                                           |
-| idp-visitor-telephone-credential          | VERIFIED                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:15`                                                                                                                                                                                                                                                           |
-| idp-visitor-telephone-credential          | SUSPENDED                | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:16`                                                                                                                                                                                                                                                           |
-| idp-visitor-telephone-credential          | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:17`                                                                                                                                                                                                                                                           |
-| idp-visitor-telephone-credential          | NOTHING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:18`                                                                                                                                                                                                                                                           |
-| idp-visitor-telephone-credential          | UNVERIFIED_WITH_SIGN_UP  | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:19`                                                                                                                                                                                                                                                           |
-| idp-visitor-telephone-credential          | VERIFIED_WITH_SIGN_UP    | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_telephone_status.rb:20`                                                                                                                                                                                                                                                           |
-| idp-visitor-actor-withdrawal              | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/withdrawable.rb; app/services/withdrawal_lifecycle.rb; app/controllers/concerns/authentication_withdrawal_gate.rb`                                                                                                                                                               |
-| idp-operator-step-up-session              | PENDING                  | PENDING               | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_step_up_session.rb:34`                                                                                                                                                                                                                                                           |
-| idp-operator-step-up-session              | VERIFIED                 | VERIFIED              | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_step_up_session.rb:34`                                                                                                                                                                                                                                                           |
-| idp-operator-step-up-passkey-challenge    | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/step_up_session_consumable.rb; app/models/operator_step_up_session.rb; app/operations/identity_step_up_passkey_verification_committer.rb`                                                                                                                                        |
-| idp-operator-email-credential             | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:16`                                                                                                                                                                                                                                                              |
-| idp-operator-email-credential             | DELETED                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:17`                                                                                                                                                                                                                                                              |
-| idp-operator-email-credential             | INACTIVE                 | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:18`                                                                                                                                                                                                                                                              |
-| idp-operator-email-credential             | NOTHING                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:19`                                                                                                                                                                                                                                                              |
-| idp-operator-email-credential             | PENDING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:20`                                                                                                                                                                                                                                                              |
-| idp-operator-email-credential             | UNVERIFIED               | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:21`                                                                                                                                                                                                                                                              |
-| idp-operator-email-credential             | VERIFIED                 | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_email_status.rb:22`                                                                                                                                                                                                                                                              |
-| idp-operator-telephone-credential         | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:16`                                                                                                                                                                                                                                                          |
-| idp-operator-telephone-credential         | DELETED                  | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:17`                                                                                                                                                                                                                                                          |
-| idp-operator-telephone-credential         | INACTIVE                 | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:18`                                                                                                                                                                                                                                                          |
-| idp-operator-telephone-credential         | NOTHING                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:19`                                                                                                                                                                                                                                                          |
-| idp-operator-telephone-credential         | PENDING                  | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:20`                                                                                                                                                                                                                                                          |
-| idp-operator-telephone-credential         | UNVERIFIED               | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:21`                                                                                                                                                                                                                                                          |
-| idp-operator-telephone-credential         | VERIFIED                 | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_telephone_status.rb:22`                                                                                                                                                                                                                                                          |
-| idp-operator-actor-withdrawal             | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/models/concerns/withdrawable.rb; app/services/org_operator_lifecycle_execute.rb; app/controllers/concerns/authentication_withdrawal_gate.rb`                                                                                                                                                     |
-| idp-client-actor-provisioning             | NOTHING                  | 11                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:13`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:15`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | INACTIVE                 | 2                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:16`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | PENDING                  | 3                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:17`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | DELETED                  | 4                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:18`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | WITHDRAWN                | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:19`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | PENDING_DELETION         | 6                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:20`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | PRE_WITHDRAWAL_CONDITION | 7                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:21`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | WITHDRAWAL_COMPLETED     | 8                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:22`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | UNVERIFIED_WITH_SIGN_UP  | 9                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:23`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | VERIFIED_WITH_SIGN_UP    | 10                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:24`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | GHOST                    | 12                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:25`                                                                                                                                                                                                                                                                      |
-| idp-client-actor-provisioning             | RESERVED                 | 13                    | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_status.rb:26`                                                                                                                                                                                                                                                                      |
-| idp-shared-acme-logout                    | STATUS_INITIATED         | initiated             | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/acme_logout_transactionable.rb:8`                                                                                                                                                                                                                                                |
-| idp-shared-acme-logout                    | STATUS_IN_PROGRESS       | in_progress           | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/acme_logout_transactionable.rb:9`                                                                                                                                                                                                                                                |
-| idp-shared-acme-logout                    | STATUS_FINALIZED         | finalized             | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/acme_logout_transactionable.rb:10`                                                                                                                                                                                                                                               |
-| idp-shared-acme-logout                    | STATUS_FAILED            | failed                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/acme_logout_transactionable.rb:11`                                                                                                                                                                                                                                               |
-| idp-shared-acme-logout                    | STATUS_EXPIRED           | expired               | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/acme_logout_transactionable.rb:12`                                                                                                                                                                                                                                               |
-| idp-shared-webauthn-challenge             | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/services/webauthn/challenge_store.rb`                                                                                                                                                                                                                                                            |
-| idp-client-enforcement-case               | draft                    | draft                 | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-client-enforcement-case               | pending_approval         | pending_approval      | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-client-enforcement-case               | active                   | active                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-client-enforcement-case               | ended                    | ended                 | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-client-enforcement-case               | failed                   | failed                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-client-enforcement-case               | state                    | draft                 | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:227`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-case               | state                    | pending_approval      | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:227`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-case               | state                    | active                | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:227`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-case               | state                    | ended                 | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:227`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-case               | state                    | failed                | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:227`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-appeal             | submitted                | submitted             | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-client-enforcement-appeal             | under_review             | under_review          | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-client-enforcement-appeal             | approved                 | approved              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-client-enforcement-appeal             | rejected                 | rejected              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-client-enforcement-appeal             | redacted                 | redacted              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-client-enforcement-appeal             | state                    | submitted             | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:146`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-appeal             | state                    | under_review          | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:146`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-appeal             | state                    | approved              | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:146`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-appeal             | state                    | rejected              | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:146`                                                                                                                                                                                                                                                                     |
-| idp-client-enforcement-appeal             | state                    | redacted              | MERMAID_NODE_OR_LABEL                                                         | `db/app_zenith_structure.sql:146`                                                                                                                                                                                                                                                                     |
-| idp-visitor-enforcement-case              | draft                    | draft                 | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-visitor-enforcement-case              | pending_approval         | pending_approval      | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-visitor-enforcement-case              | active                   | active                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-visitor-enforcement-case              | ended                    | ended                 | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-visitor-enforcement-case              | failed                   | failed                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-visitor-enforcement-case              | state                    | draft                 | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:162`                                                                                                                                                                                                                                                                     |
-| idp-visitor-enforcement-case              | state                    | pending_approval      | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:162`                                                                                                                                                                                                                                                                     |
-| idp-visitor-enforcement-case              | state                    | active                | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:162`                                                                                                                                                                                                                                                                     |
-| idp-visitor-enforcement-case              | state                    | ended                 | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:162`                                                                                                                                                                                                                                                                     |
-| idp-visitor-enforcement-case              | state                    | failed                | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:162`                                                                                                                                                                                                                                                                     |
-| idp-visitor-enforcement-appeal            | submitted                | submitted             | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-visitor-enforcement-appeal            | under_review             | under_review          | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-visitor-enforcement-appeal            | approved                 | approved              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-visitor-enforcement-appeal            | rejected                 | rejected              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-visitor-enforcement-appeal            | redacted                 | redacted              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-visitor-enforcement-appeal            | state                    | submitted             | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:82`                                                                                                                                                                                                                                                                      |
-| idp-visitor-enforcement-appeal            | state                    | under_review          | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:82`                                                                                                                                                                                                                                                                      |
-| idp-visitor-enforcement-appeal            | state                    | approved              | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:82`                                                                                                                                                                                                                                                                      |
-| idp-visitor-enforcement-appeal            | state                    | rejected              | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:82`                                                                                                                                                                                                                                                                      |
-| idp-visitor-enforcement-appeal            | state                    | redacted              | MERMAID_NODE_OR_LABEL                                                         | `db/com_zenith_structure.sql:82`                                                                                                                                                                                                                                                                      |
-| idp-operator-enforcement-case             | draft                    | draft                 | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-operator-enforcement-case             | pending_approval         | pending_approval      | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-operator-enforcement-case             | active                   | active                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-operator-enforcement-case             | ended                    | ended                 | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-operator-enforcement-case             | failed                   | failed                | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_case_applicable.rb:17`                                                                                                                                                                                                                                               |
-| idp-operator-enforcement-case             | state                    | draft                 | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2918`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-case             | state                    | pending_approval      | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2918`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-case             | state                    | active                | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2918`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-case             | state                    | ended                 | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2918`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-case             | state                    | failed                | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2918`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-appeal           | submitted                | submitted             | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-operator-enforcement-appeal           | under_review             | under_review          | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-operator-enforcement-appeal           | approved                 | approved              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-operator-enforcement-appeal           | rejected                 | rejected              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-operator-enforcement-appeal           | redacted                 | redacted              | MERMAID_NODE_OR_LABEL                                                         | `app/models/concerns/enforcement_appeal.rb:7`                                                                                                                                                                                                                                                         |
-| idp-operator-enforcement-appeal           | state                    | submitted             | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2838`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-appeal           | state                    | under_review          | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2838`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-appeal           | state                    | approved              | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2838`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-appeal           | state                    | rejected              | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2838`                                                                                                                                                                                                                                                                    |
-| idp-operator-enforcement-appeal           | state                    | redacted              | MERMAID_NODE_OR_LABEL                                                         | `db/org_zenith_structure.sql:2838`                                                                                                                                                                                                                                                                    |
-| idp-shared-sign-out-notice                | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/services/valkey/auth_state/sign_out_notice_store.rb; app/controllers/concerns/authentication_logout_current_session.rb`                                                                                                                                                                          |
-| idp-client-mfa-readiness                  | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_mfa_status.rb:13`                                                                                                                                                                                                                                                                  |
-| idp-client-mfa-readiness                  | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_mfa_status.rb:15`                                                                                                                                                                                                                                                                  |
-| idp-client-mfa-readiness                  | UNCONFIGURED             | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/client_mfa_status.rb:16`                                                                                                                                                                                                                                                                  |
-| idp-visitor-mfa-readiness                 | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_mfa_status.rb:13`                                                                                                                                                                                                                                                                 |
-| idp-visitor-mfa-readiness                 | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_mfa_status.rb:15`                                                                                                                                                                                                                                                                 |
-| idp-visitor-mfa-readiness                 | UNCONFIGURED             | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/visitor_mfa_status.rb:16`                                                                                                                                                                                                                                                                 |
-| idp-operator-mfa-readiness                | NOTHING                  | 0                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_mfa_status.rb:13`                                                                                                                                                                                                                                                                |
-| idp-operator-mfa-readiness                | ACTIVE                   | 1                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_mfa_status.rb:15`                                                                                                                                                                                                                                                                |
-| idp-operator-mfa-readiness                | UNCONFIGURED             | 5                     | MERMAID_NODE_OR_LABEL                                                         | `app/models/operator_mfa_status.rb:16`                                                                                                                                                                                                                                                                |
-| idp-client-email-registration-session     | STATE_INIT               | init                  | MERMAID_NODE_OR_LABEL                                                         | `app/controllers/concerns/sign_email_registrable.rb:6`                                                                                                                                                                                                                                                |
-| idp-client-email-registration-session     | STATE_EMAIL_CREATED      | email_created         | MERMAID_NODE_OR_LABEL                                                         | `app/controllers/concerns/sign_email_registrable.rb:8`                                                                                                                                                                                                                                                |
-| idp-client-email-registration-session     | STATE_EMAIL_VERIFIED     | email_verified        | MERMAID_NODE_OR_LABEL                                                         | `app/controllers/concerns/sign_email_registrable.rb:9`                                                                                                                                                                                                                                                |
-| idp-visitor-email-registration-session    | Finite declaration       | UNKNOWN / derived     | NO_FINITE_DECLARATION_EXTRACTED: consult derived nodes and predicate evidence | `app/controllers/auth/com/sign/up/emails_controller.rb; app/controllers/auth/com/sign/up/check/email/otps_controller.rb`                                                                                                                                                                              |
+Axis: the durable per-grant delivery participant created by an OP authority stop. Diagram:
+[OP authority-stop participant](./idp-op-authority-stop-participant.mmd). The three OP realms use
+the same reference IDs and named transition writers.
 
-## Snapshot limitation
+| From | To | Public writer / guard and effect |
+|---|---|---|
+| absent | pending | `OpAuthorityStopCommitter` creates one participant in the same OP transaction as grant revocation |
+| pending | pending | `claim_delivery!` increments attempts and claims a bounded lease; `record_delivery_result!` schedules bounded retry for transient outcomes; a lease can be renewed before send |
+| pending | acknowledged | `record_delivery_result!` accepts HTTP 200 after the RP committed its receipt, tombstone and local session revocation |
+| pending | refused | `record_delivery_result!` records permanent endpoint/request failures, including stable 3xx and 413 classifications |
+| pending | expired | `expire_delivery_if_due!` or the Solid Queue sweep records expiry at or after BX-10 deadline; a late acknowledgment cannot replace it |
+| acknowledged / refused / expired | same | Terminal participant states are absorbing; retention may remove the row only after every target root is purge-eligible |
 
-The literal extraction reports532 declaration records with no absent labels/IDs in its indexed
-extraction scope. Source drift (see [README](./README.md)) was detected during the broader audit.
-Dynamic enumerations, test-only values, live reference rows and same-snapshot writer completeness
-remain UNCONFIRMED.
+HTTP executes after the claim transaction closes and without an OP row lock. Solid Queue enqueue is
+after commit; the recurring sweep recovers a missing enqueue, a crashed worker or an expired lease.
+Public transition and independent-worker coverage lives in
+`test/jobs/op_outbox_dispatch_job_test.rb` and
+`test/concurrency/op_authority_stop_concurrency_test.rb`; receiver ordering and tombstone coverage
+lives in `test/operations/rp_cell_session_revoker_test.rb` and
+`test/integration/rp_backchannel_logout_receiver_test.rb`.
+
+## DBSC HTTP admission (2026-10-22)
+
+The client, visitor and operator DBSC axes, including their preference axes, retain their existing
+state transitions. The HTTP entry points now parse Structured Field strings once and serialize
+response strings with escaping. Refresh requires a matching stored session identifier before
+challenge issuance; malformed or mismatched identifiers leave the challenge and cookies unchanged.
+The six `idp-*-dbsc.mmd` diagrams note this transport guard without introducing a new state or
+transition. See [DBSC HTTP boundary](../architecture/dbsc.md#http-header-boundary),
+`test/controllers/dbsc_header_boundary_test.rb` and
+`test/services/dbsc/proof_input_validation_test.rb`.
+
+## Root authentication epoch cutoff (2026-10-18)
+
+Axis: derived relation between a root's issuance epoch and its canonical actor's monotonic
+`authentication_epoch`. Diagram: [root epoch](./idp-root-authentication-epoch.mmd).
+
+| From    | To      | Public writer / guard and effect                                                                                                                                            |
+| ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| no root | current | root establishment stamps current actor epoch under actor-first locks                                                                                                       |
+| current | current | Code/Refresh/reissue checks current active actor before OP commit; `BaseSelfRpCredentialIssuer.call!` also locks actor then device/root/grant before claim mutation |
+| current | cut off | `IdentityAuthenticationStopRecorder.call` increments actor epoch and inserts the Zenith event in the locked actor transaction                                               |
+| cut off | cut off | stale root cannot mint or redeliver; `OpIdentityEventInvalidator.call` applies durable OP invalidation separately and idempotently                                          |
+
+The Base claim update releases actor/OP locks before token exchange; the coordinator independently
+rechecks current actor authority through rotation commit. A stale actor passed to reissue cannot
+change authentication claims after a higher epoch committed. No distributed transaction is claimed.
+New authority after recovery is a distinct current-epoch root; cutoff is absorbing for the
+historical root. See `base_self_rp_credential_issuer_test.rb`, the exchange/receipt suites and
+`op_identity_event_invalidator_test.rb` for public coverage. Actual results remain in evidence.
+
+## Separated RP local enrollment and logout (2026-10-18)
+
+Axis: row existence and derived timestamps in cell-local `rp_op_session_bindings` and `rp_sessions`.
+Diagram: [local enrollment](./idp-rp-local-enrollment.mmd). No status enum is added.
+
+| From                        | To         | Public writer / guard and effect                                                                                                                       |
+| --------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| unseen                      | enrolled   | `RpCallbackCommitter.call`; select writer, insert/lock sid anchor, fresh expiry check, immutable subject binding and enabled principal, create session |
+| unseen / enrolled / expired | tombstoned | `RpCellSessionRevoker.call`; writer sid anchor, absorbing revocation, session invalidation and replay receipt in one transaction                       |
+| enrolled                    | expired    | owning writer clock reaches absolute expiry; no extending mutation                                                                                     |
+| expired                     | enrolled   | verified callback with live incoming authority; close expired local session under the anchor before creating its successor                             |
+| tombstoned                  | tombstoned | duplicate verified logout; recheck receipt after acquiring anchor, acknowledge the committed result                                                    |
+
+Callback refuses tombstoned anchors without identity enrollment. Independent-connection regression
+coverage in `rp_refresh_logout_concurrency_test.rb` observes an actual PostgreSQL lock wait before
+releasing the first commit, exercises both absent-sid orders and concurrent duplicate delivery, and
+checks the absorbing tombstone, receipt count and revoked local sessions. Execution results belong
+in evidence, rather than this inventory. No secret-isolation or activation proof is implied.
+
+## Separated RP local Refresh attempt (removed 2026-10-25)
+
+WU-10 (D-25) dropped `rp_refresh_attempts` and `idp-rp-local-refresh-attempt.mmd`. No local Refresh
+state axis remains; `RpRefreshCommitter` installs through an `installed_generation`
+compare-and-set only (`rp_refresh_committer_test.rb`, `rp_refresh_logout_concurrency_test.rb`).
+
+The six per-record Email/Telephone OTP sections in the historical inventory below retain the
+pre-ceremony Source-HOTP transition rows for traceability. They are not current runtime authority:
+`store_otp`, `get_otp`, `clear_otp`, identifier-owned HOTP secrets and counters were retired. The
+current derived channel policies are `EmailOtpPolicy` and `TelephoneOtpPolicy`; current proof and
+delivery axes are the canonical ceremony diagrams listed in `docs/mermaid/README.md`. Do not use the
+historical rows to infer a writer, a shared stateful policy or a current database column.
+
+## Sign-flow expiry refusal transaction ownership
+
+`FlowBase` validates terminal absorption before TTL and requested source state. An overdue
+non-terminal row with `expires_at` becomes `EXPIRED` even when the requested edge is illegal. The
+Sign-out authority is recorded by OP authority-stop records; it has no flow-state graph or flow TTL.
+
+`with_cycle_lock` retains the row lock while a savepoint owns the operation's same-database writes.
+An expiry refusal unwinds that savepoint, reloads the row, and writes only the named `EXPIRED`
+transition. It returns `FlowTransitionResult(status: :expired)` instead of raising through an
+enclosing writer transaction. Named transition methods return that result whenever a transaction is
+already open, including a nonjoinable owner. Transaction ownership is read from the concrete writer
+connection even when the caller temporarily selected the reading role; standalone calls raise
+`FlowInvalidTransition` only after their own transaction commits. A transaction owner must stop on
+this result and may call `value!` only after its final commit. No callback commits an unrelated
+write or raises a deferred exception.
+
+Sign-in participants, root issuance, local authentication completion, social signup completion, and
+signup state-machine/controller owners propagate refusal before success effects. The root issuer
+returns `invalid_request` with `reason: flow_expired`; local completion preserves the expired state
+instead of attempting a second terminal transition. Nested operations reuse the same locked flow
+instance so a refusal aborts remaining writes in the owning operation.
+
+Regression coverage lives in `test/models/sign_flow_test.rb` and
+`test/services/sign_in/guardrail_participant_test.rb`, `test/models/flow_expiry_commit_test.rb`, and
+`test/controllers/concerns/auth/session_issuance_boundary_surfaces_test.rb`, including all three
+realms, invalid-source expiry, caller-owned transactions, rollback of earlier operation writes,
+terminal absorption, and the adjacent representable microsecond TTL values.
+
+### Sign-flow writer callers and refusal ownership
+
+| Caller                                                                                                                                                                      | Refusal disposition                                                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FlowSignIn`, `FlowSignUp`, `SignUpFlowTicket#complete_sign_up!`                                                                                             | Return the canonical named writer outcome unchanged.                                                                                                                                         |
+| `SignInGuardrailParticipant#advance_if_clear!`, `SignInCheckpointParticipant#advance_if_clear!`, `SignInSelectorParticipant#auto_commit_single!`                            | Own `with_cycle_lock`; return expiry without evaluating further participants or selection writes.                                                                                            |
+| `AuthenticationBase#commit_login_session!`, `#advance_sign_in_flow_to_issuance!`, `#complete_sign_in_flow_issuance!`                                                        | One locked flow instance encloses token/device/refresh/receipt writes. Expiry unwinds those writes; `log_in` returns `invalid_request` before browser success effects.                       |
+| `AuthenticationSequenceGate` guardrail/checkpoint/selector redirects, `#advance_pending_sign_in_flow_after_primary!`, pending-session resume                                | Check participant refusal before issuing locators, gates or session continuation. AuthenticationBase preserves the returned failure.                                                         |
+| `AuthenticationBase` primary-to-MFA entry                                                                                                                                   | Owns a locked transition and refuses before setting the pending MFA session.                                                                                                                 |
+| `AuthenticationBase#cancel_pending_mfa!`, `BaseSignInLimitations#cancel_pending_resolution!`, app limitations cancellation                                                  | Standalone named writers raise only after expiry commit. Any joined refusal permits only cancellation/locator clearing/Secret retirement, never issuance.                                    |
+| `CredentialSecurityTransition#revoke_authentication_admissions!`                                                                                                            | Explicitly expires overdue non-terminal flows; retains existing terminals. A deadline crossed while halting still commits expiry, and dependent authority revocation deliberately continues. |
+| `ClientSecretClaimFinalizer#expire_failed_flow_if_due!`                                                                                                                     | Calls explicit expiry while holding the Ticket owner transaction; no expiry refusal is needed for the requested expiry operation. Remaining effects only retire the claimed Secret.          |
+| `AuthEmailOtpChallenge#expire_email_otp_local_parent!`                                                                                                                      | Calls explicit expiry, returns unavailable inside the parent transaction, and raises only after that owner returns.                                                                          |
+| `SignUpStateMachine` dispatch/finalize/complete methods                                                                                                                     | Same locked instance; the outer state-machine call maps a returned expiry refusal to `SignUpResult(:expired)`.                                                                               |
+| `SignUpTermination#call`                                                                                                                                                    | Commits state-machine refusal before returning; subsequent cleanup requires its actual terminal state.                                                                                       |
+| `SignUpContactOtpControllerSupport#advance_sign_up_after_contact_otp!`                                                                                                      | Maps expiry to `SignUpResult(:expired)` before further OTP progression.                                                                                                                      |
+| `SignUpSequenceControllerSupport#finalize_sign_up_from_checkpoint!`                                                                                                         | Checks liveness before side effects and maps expiry before handoff/session cleanup/success response.                                                                                         |
+| `SignUpSocialPendingClientSupport#bind_social_pending_client!` / `#finalize_social_sign_up_identity!`                                                                       | The confirmation binds the pending Client under the Flow lock; Finalization runs inside `finalize_sign_up_from_checkpoint!`, so the shared liveness check and expiry mapping apply.          |
+| `SignAppUpTelephoneRegistrationFinalizer#call`, `SignComUpTelephoneRegistrationFinalizer#call`, `EmailContactBinding#finalize_sign_up_binding!` / `#mark_sign_up_verified!` | Lock-only callers; perform no named lifecycle transition and cannot produce an expiry result. Their existing source/binding guards remain in effect.                                         |
+| `SignUpPhaseViolationEnforcer#call`, `SignUpTermination#ensure_cleanup_pending!`, `SignUpArtifactCleanup#call`                                                              | Lock-only inspection/retention/auxiliary writes; no named lifecycle transition inside these blocks.                                                                                          |
+| `FlowBase#discard_cycle!`, `FlowWithdrawal#transition_withdrawal_to!`                                                                                                       | Retention or legacy withdrawal writer; neither raises the sign-flow expiry signal.                                                                                                           |
+| `ClientSecretPasskeyReservationIssuer#complete_sign_up!`, `ClientSecretLifecycleJob`                                                                                        | The similarly named method activates a reservation from an already completed signup; it is not a sign-flow transition writer.                                                                |
+
+## Ceremony-owned channel OTP primitives (2026-10-07)
+
+Storage is the six existing realm/channel ceremony tables. New facts are purpose, otp_generation,
+otp_verifier, otp_expires_at, otp_consumed_at, otp_cancelled_at, otp_receipt_verifier and
+otp_result_expires_at. EmailCeremonyOtp and TelephoneCeremonyOtp are separate stateful
+implementations; neither identifier policy includes the other. See
+`idp-email-ceremony-otp-primitive.mmd` and `idp-telephone-ceremony-otp-primitive.mmd`.
+
+| Edge                      | Guard                                                                                                                                             | Effects                                                                                                               | Evidence                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Issue/reissue             | pending unexpired parent, nonempty candidate, supported fixed purpose, no consumed/cancelled proof                                                | random six-digit code; new UUID; binding-specific HMAC; deadline bounded by parent                                    | ceremony_owned_otp_test and ceremony_owned_otp_lifecycle_test |
+| Telephone explicit resend | original issued live proof under its writing-role row lock; no consumption/cancellation                                                           | replace only generation and verifier; retain original OTP and parent deadlines; old generation refuses transport      | telephone_ceremony_otp_reissue_test                           |
+| Verify                    | writing-role row lock; pending parent; exact purpose/actor/session/operation/candidate; well-formed matching code; unexpired and unconsumed proof | set OTP consumption time, erase challenge verifier and store a deadline-bound keyed receipt atomically                | lifecycle and ceremony_owned_otp_concurrency_test             |
+| Read verified evidence    | writing-role row lock; consumed proof; still-pending parent; exact original binding/code; fixed live result deadline                              | no mutation, new verification or authority issuance; domain-separated HMAC also authenticates both receipt timestamps | ceremony_otp_verification_receipt_test                        |
+| Deliver                   | writing-role row lock; fresh DB clock; current generation; authentic code; pending unexpired, unconsumed and uncancelled proof                    | invoke transport while locked; no verification consumption or code persistence                                        | ceremony_otp_delivery_test                                    |
+| Cancel                    | writing-role row lock; unconsumed and uncancelled proof                                                                                           | cancellation timestamp and erased verifier; no reopening                                                              | lifecycle tests                                               |
+| Expire                    | database deadline reached                                                                                                                         | verification and reissue refused by parent expiry guard                                                               | lifecycle tests                                               |
+
+Delivery and verification require finite parent and OTP deadlines. PostgreSQL positive and negative
+infinity are rejected explicitly without transport or consumption; see
+`ceremony_otp_finite_deadline_test`. Terminal ORM guards also protect the original parent deadline;
+equivalent direct-SQL terminal guards are not yet delivered.
+
+Both verification and delivery bind the channel-specific normalized destination digest in the keyed
+verifier. Replacing that digest invalidates an already issued code, even when the candidate
+reference is unchanged; terminal proof guards also prohibit destination replacement. Evidence:
+`ceremony_otp_destination_binding_test`.
+
+APP/COM withdrawal and enforcement-recovery reentry now call `EmailReentryOtpIssuer` and
+`EmailReentryOtpVerificationCommitter`. The issuer changes only the identifier issuance timestamp,
+preserves failures and places keyed proof on its own Email ceremony with operation/purpose
+`withdrawal` or `recovery` and an opaque browser reference. Verification checks both the independent
+Email destination budget and identifier budget before consuming; a second DB clock check after
+budget admission prevents consumption at expiry. New issuance cancels the previous browser-owned
+proof. Each concrete realm Notifier carries encrypted code and transaction/generation references
+with the Source recipient GlobalID, not a plaintext address. Its argument-redacted Noticed Email job
+invokes the concrete Mailer once. The Mailer locks Source and transaction, checks current
+owner/candidate/destination, and rechecks proof after rendering immediately before delivery. Signed
+Email/Telephone registration permissions still accept only registration/replacement; the expanded
+internal OTP operation vocabulary does not expand that protocol. Other caller migrations remain
+pending; this does not certify every worker or route. The Source-owned diagrams below describe paths
+that still exist, not the final contract.
+
+## idp-credential-registration-otp-challenge
+
+Storage: APP/COM/ORG Email and Telephone ceremony random keyed verifier, generation, consumption and
+fixed receipt, implemented independently by channel. The settings Email HTTP callers use
+`EmailCredentialRegistrationOtpIssuer`, `EmailCredentialRegistrationOtpVerificationCommitter`,
+`EmailCredentialRegistrationOtpResendIssuer` and `EmailCredentialRegistrationOtpFinalizer`; Source
+status changes use the named model writer. APP/COM Telephone settings use their independent
+`TelephoneCredentialRegistrationOtp*` series and encrypted version-four SMS generation binding. ORG
+Telephone binds its opaque public candidate ID explicitly and uses its own passkey-only finalizer
+and named status writer. APP/COM/ORG management-create callers now enter their own registration
+ceremonies; shared legacy retirement remains pending. This derived OTP axis does not introduce a
+lifecycle status. Diagram: `idp-credential-registration-otp-challenge.mmd`.
+
+| Transition ID                                  | From     | Event                               | To                         | Guard and effect                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------- | -------- | ----------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| idp-credential-registration-otp-challenge:T001 | absent   | issue original challenge            | issued                     | Matching realm/owner/root/device/candidate, original ceremony UUID, Base nonce digest and owning DB clocks; independent random keyed proof for migrated channels and realms                                                                                                                                   |
+| idp-credential-registration-otp-challenge:T002 | issued   | deadline or authority lost          | unavailable predicate      | Original deadline and binding do not slide; no terminal fact is inferred or rewritten                                                                                                                                                                                                                         |
+| idp-credential-registration-otp-challenge:T003 | issued   | verify original code                | verified                   | Original Ticket/browser/root/owner/candidate and independent channel budgets; each migrated channel consumes proof atomically on Ticket, then reconciles Source failures without distributed-transaction claims                                                                                               |
+| idp-credential-registration-otp-challenge:T004 | verified | exact retry                         | verified                   | Same input and original binding; fixed result deadline; proof unchanged                                                                                                                                                                                                                                       |
+| idp-credential-registration-otp-challenge:T005 | verified | result deadline or authority lost   | unavailable predicate      | No proof replacement or revival                                                                                                                                                                                                                                                                               |
+| idp-credential-registration-otp-challenge:T006 | verified | finalize original binding           | verified proof retained    | Current Action Policy and live credential/root/browser binding; replacement and original audit intents commit in Source before original Ticket receipt; exact Source-provenance retry creates no duplicate fact                                                                                               |
+| idp-credential-registration-otp-challenge:T007 | issued   | resend original challenge           | issued                     | Independent Email and Telephone writers lock original pending flow/browser/root/owner/candidate; Email additionally checks original bootstrap authority and cooldown; candidate caps remain; replace generation and verifier without extending deadlines or resetting budgets; terminal proof refuses reissue |
+| idp-credential-registration-otp-challenge:T008 | verified | finalize first-email bootstrap      | verified proof retained    | Explicit original parent/Session/admission browser binding under locks; current Contact policy; Source commit before both receipts; exact Source provenance recovery; no Root freshness or completion-time primary-window recheck                                                                             |
+| idp-credential-registration-otp-challenge:T009 | issued   | same-browser candidate new issuance | cancelled superseded proof | Independent channel issuer matches actor/candidate/purpose and derives the prior transaction's original Root/browser tuple under the owning locks; cancellation precedes replacement issuance within Ticket transaction; foreign-browser challenges are not cancelled                                         |
+
+Legacy Source checks and immutable-proof triggers remain until remaining callers are retired. The
+Email series uses bounded keyed receipts and an original bootstrap FK bound into proof; Source
+binding/audit commit before Ticket receipts. APP/COM Email HTTP and encrypted Notifier journeys
+passed targeted tests. `EmailCredentialRegistrationOtpDeliveryGuard` checks original
+owner/device/Root/candidate/generation and bootstrap Parent/Session/admission under locks through
+transport without a state transition. Resend and verification reject cancelled or invalid original
+bootstrap authority rather than adopting a later permission. Whole-suite checks, HTTP receipt-fault
+coverage, database terminal-proof guards and complete legacy retirement remain acceptance work. No
+production queue or secret was changed.
+
+## idp-sign-up-otp-challenge
+
+Storage: APP/COM typed Email/Telephone Ticket ceremonies' OTP verifier, generation, expiry,
+consumption and bounded receipt columns. This is a derived issued/verified proof axis, not a new
+signup flow status. Sources are the independently implemented `EmailSignUpOtpIssuer`,
+`EmailSignUpOtpVerificationCommitter`, `EmailSignUpOtpDeliveryGuard` and corresponding Telephone
+operations. The old Source context/HOTP implementation is superseded for these wired signup paths;
+remaining legacy callers and column removal are separately tracked implementation work.
+
+The service requires the original browser nonce from the explicit APP/COM locator session, compares
+its digest with the original Ticket and repeats admission after taking its row lock. The public
+Ticket ID is not a browser credential. Missing, mistyped, malformed, foreign or rotated nonces
+refuse without proof consumption; Rails CSRF and the separate HTTP phase gate remain intact.
+
+| Transition ID                  | From               | Event                      | To                    | Guard and effect                                                                                                                            |
+| ------------------------------ | ------------------ | -------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| idp-sign-up-otp-challenge:T001 | absent             | channel issuer             | issued                | Original Ticket/nonce, pending owner and candidate, destination, operation, generation and keyed verifier; owning locks and fresh DB clocks |
+| idp-sign-up-otp-challenge:T002 | issued             | resend                     | issued                | Replace only this unconsumed generation; preserve candidate/shared failure limits                                                           |
+| idp-sign-up-otp-challenge:T003 | issued             | successful verification    | verified              | Recheck admission after owning locks and budget wait; atomically consume proof on its typed Ticket ceremony                                 |
+| idp-sign-up-otp-challenge:T004 | verified           | exact retry                | verified              | Same input and binding, eligible owner/candidate, live fixed result deadline and common failure budget; proof unchanged                     |
+| idp-sign-up-otp-challenge:T005 | issued or verified | deadline or authority lost | unavailable predicate | No proof mutation; parent expiry uses the existing named Ticket termination                                                                 |
+
+Forward CHECK constraints validate finite bounded receipt timestamps. Receipt HMAC binds the exact
+verification/result deadlines; model validation protects terminal OTP facts. The fixed result expiry
+is bounded by verification plus 60 seconds and the original Ticket deadline, distinct from the OTP
+deadline. No identifier HOTP reconstructs the new proof. Enqueue happens after Ticket binding and
+encrypts the random code; final mail/SMS transport checks the current transaction, generation and
+candidate while holding owning locks. HTTP checkpoint replay and cross-database recovery are
+separate contracts; this axis does not authorize a completed-step POST or imply distributed
+atomicity. Shared/production legacy queue handling remains unverified.
+
+The post-OTP Ticket transition chain holds one Ticket lock and transaction across verification,
+guardrail entry, checkpoint entry and OTP requirement clearing. An exceptional Ticket write rolls
+back that chain while preserving the independently consumed ceremony proof for an exact,
+deadline-bound retry. Signup OTP consumption and later Source attempt reset are separate database
+operations; this inventory does not certify their fault acceptance or a distributed transaction.
+
+## idp-auth-email-otp-challenge
+
+Storage: app/com Ticket `email_otp_context` on each Auth ceremony. Source: `AuthEmailOtpChallenge`;
+diagram: `idp-auth-email-otp-challenge.mmd`. App/com sign-in receipt, verification and resend are
+connected. Final delivery uses the original ceremony reference and generation; stale evidence
+refuses transport without advancing this axis.
+
+| Transition ID                     | From                 | Event                       | To                | Guard and effect                                                                                                                                                                           |
+| --------------------------------- | -------------------- | --------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| idp-auth-email-otp-challenge:T001 | absent or unverified | issue_email_otp!            | issued            | Active admitted continuity, pending locked parent, DB time; current effective Contact or dummy; replace only this ceremony generation                                                      |
+| idp-auth-email-otp-challenge:T002 | issued               | verify_email_otp!           | verified          | Current surface/purpose/SID/parent and Contact/owner/finalization facts, deadline, candidate cap, shared budget, bound code digest                                                         |
+| idp-auth-email-otp-challenge:T003 | issued               | wrong code                  | issued            | Atomic shared failure count and real candidate failures; stale scope refuses before comparison                                                                                             |
+| idp-auth-email-otp-challenge:T004 | verified             | verification retry          | verified          | Original result deadline remains live; original proof unchanged; already_verified receipt, not a second successful OTP consumption; controllers explicitly continue from verified evidence |
+| idp-auth-email-otp-challenge:T005 | issued or verified   | deadline elapsed            | expired predicate | No state write; parent and Auth expiry cap both deadlines                                                                                                                                  |
+| idp-auth-email-otp-challenge:T006 | issued               | cancel_email_otp_challenge! | cancelled         | App/com DELETE under pending parent and ceremony locks; retained cancellation time refuses verification and delivery; the browser's temporary email state is removed                       |
+| idp-auth-email-otp-challenge:T007 | cancelled            | issue_email_otp!            | issued            | A new generation may start on the still-pending parent; the cancelled generation does not regain authority                                                                                 |
+
+Verified proof reissue is refused. Source Contact OTP generations and root/RP authority remain
+unchanged. Forward shape checks and verified-proof immutability triggers are installed. The final
+transport guard rechecks the pending parent, active continuity, original effective Contact and
+owner, destination, generation and deadline under their owning locks. Provider transport stays
+inside those locks to prevent concurrent reissue or cancellation from making an already-checked
+payload stale; production lock-duration behavior remains unmeasured.
+
+At the initial locked parent decision and the post-Contact-lock issuance, verification and delivery
+decisions, an overdue primary-pending local sign-in parent uses its existing `expire_sign_in!`
+transition before refusal. Issuance raises after that owning transaction closes; verification and
+transport return explicit refusals. OIDC expiry/cancellation adds no invented transition.
+
+## idp-contact-audit-outbox
+
+Storage: `client_contact_audit_outboxes` in app Zenith and `visitor_contact_audit_outboxes` in com
+Zenith. Sources: `ContactAuditOutbox`, `ContactBindingAuditRecorder`, `ContactAuditDeliveryJob`.
+Tests: `contact_audit_delivery_job_test.rb`, `contact_ceremony_source_audit_test.rb`.
+
+| Transition ID                 | From                            | Event              | To                              | Guard and effect                                                                                        |
+| ----------------------------- | ------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| idp-contact-audit-outbox:T001 | absent                          | record!            | pending                         | Open owning Source transaction; allowlisted kind/event; opaque references; server UUID and Source clock |
+| idp-contact-audit-outbox:T002 | pending                         | periodic delivery  | Chronicle committed, ACK absent | Row lock; security retention policy; create event or recover unique UUID                                |
+| idp-contact-audit-outbox:T003 | Chronicle committed, ACK absent | Source ACK failure | Chronicle committed, ACK absent | Source rollback leaves the independent Chronicle fact                                                   |
+| idp-contact-audit-outbox:T004 | Chronicle committed, ACK absent | rescan             | acknowledged                    | Match action, occurrence, operation and references; ACK uses Source clock                               |
+| idp-contact-audit-outbox:T005 | acknowledged                    | duplicate scan     | acknowledged                    | Skip acknowledged rows; no second event                                                                 |
+
+No expiry/deletion transition is introduced. A mismatched UUID or unavailable dependency raises, and
+neither is successful acknowledgment. Development and production scan every 15 minutes.
+
+Static code and test-reading evidence only. Tests were not executed. Model-permitted edges are
+explicitly distinguished from wired orchestration. Expiry predicates do not imply persisted EXPIRED
+writes.
+
+## idp-client-sign-in
+
+Implementation: `FlowSignIn / participants / AuthenticationSessionCommitter`. Storage:
+`client_sign_in_flows` / `status_id`.
+
+Sources: `app/models/client_sign_in_flow.rb`, `app/models/client_sign_in_flow_status.rb`,
+`app/models/concerns/flow_sign_in.rb`, `app/models/concerns/sign_flow.rb`,
+`app/services/sign_in_state_machine.rb`, `app/services/sign_in_cycle_locator.rb`,
+`app/controllers/concerns/authentication_sequence_gate.rb`,
+`app/controllers/concerns/authentication_base.rb`,
+`app/operations/local_authentication_session_committer.rb`.
+
+Tests read: `test/services/sign_in/post_issuance_participants_test.rb`,
+`test/controllers/auth/app/sign_ins_controller_test.rb`.
+
+| Transition ID           | Mutation kind         | From                                                | Event / Trigger                                      | To                       | Guard                                                                                                                                                                                                                 | Side effect                                                                                                             | Source file                                                                        | Confidence  |
+| ----------------------- | --------------------- | --------------------------------------------------- | ---------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------- |
+| idp-client-sign-in:T001 | DOCUMENTED_TRANSITION | PRIMARY_PENDING                                     | advance_sign_in_to_mfa!                              | MFA_PENDING              | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T002 | DOCUMENTED_TRANSITION | PRIMARY_PENDING                                     | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T003 | DOCUMENTED_TRANSITION | MFA_PENDING                                         | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T004 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING                            | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T005 | DOCUMENTED_TRANSITION | PRIMARY_PENDING                                     | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T006 | DOCUMENTED_TRANSITION | MFA_PENDING                                         | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T007 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING                               | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T008 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING                                   | advance_sign_in_to_checkpoint!                       | CHECKPOINT_PENDING       | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T009 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING                                  | advance_sign_in_to_selector!                         | SELECTOR_PENDING         | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T010 | DOCUMENTED_TRANSITION | SELECTOR_PENDING                                    | advance_sign_in_to_session_issuance!                 | SESSION_ISSUANCE_PENDING | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T011 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING                                   | advance_sign_in_to_return!                           | RETURN_PENDING           | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T012 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING                            | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T013 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING                               | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T014 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING                                   | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T015 | DOCUMENTED_TRANSITION | RETURN_PENDING                                      | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T016 | DOCUMENTED_TRANSITION | PRIMARY_PENDING                                     | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T017 | DOCUMENTED_TRANSITION | MFA_PENDING                                         | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T018 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING                               | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T019 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING                                   | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T020 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING                            | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T021 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING                                  | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T022 | DOCUMENTED_TRANSITION | SELECTOR_PENDING                                    | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T023 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING                                   | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T024 | DOCUMENTED_TRANSITION | RETURN_PENDING                                      | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                                                | CONFIRMED   |
+| idp-client-sign-in:T025 | OUT_OF_BAND           | SELECTOR_PENDING                                    | AuthenticationSequenceGate direct update legacy path | DASHBOARD_PENDING        | Legacy participant completed checkpoint/selector; direct update! no named transition guard                                                                                                                            | status/state/step dashboard                                                                                             | app/controllers/concerns/authentication_sequence_gate.rb                           | CONFIRMED   |
+| idp-client-sign-in:T026 | DOCUMENTED_TRANSITION | MFA_PENDING                                         | cancel_pending_mfa                                   | HALTED                   | Matching pending principal/flow and live halt_sign_in! transition guard                                                                                                                                               | Halt flow; clear pending MFA/browser locator; retain outer Auth/OIDC admission; no Root issuance                        | app/controllers/concerns/authentication_base.rb                                    | CONFIRMED   |
+| idp-client-sign-in:T027 | DOCUMENTED_TRANSITION | Any pending app status with FAILED in its model map | expire_sign_in! via Secret claim reconciliation      | FAILED                   | Writer DB deadline reached; no issued session or token; same Ticket row lock as issuance; completed login immutable                                                                                                   | Synchronize status/state/step without extending admission; source retirement separately audits flow_expired             | app/models/client_sign_in_flow.rb; app/operations/client_secret_claim_finalizer.rb | CONFIRMED   |
+| idp-client-sign-in:T028 | INITIALIZATION        | absent                                              | ClientSecretClaimCommitter.bind_oidc_flow!           | PRIMARY_PENDING          | Saved complete value; Client lock; locked pending app OIDC transaction; matching admitted active browser ceremony; all writer deadlines valid                                                                         | Server-issued flow bound uniquely to OIDC transaction; retries reuse; no claim, proof or token                          | app/operations/client_secret_claim_committer.rb                                    | CONFIRMED   |
+| idp-client-sign-in:T029 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING                            | halt_sign_in! (session-limit waiting slot occupied)  | HALTED                   | DECIDED 2026-10-16, code pending (nine.md P-8): app full-access count is N=2 and the actor already holds an open session-limit child (pending/session_selected, unexpired) for another flow; actor lock; writer clock | No Root issuance and no new child; the existing child and all full-access sessions are unchanged; policy refusal reason | app/controllers/concerns/authentication_base.rb (target)                           | UNCONFIRMED |
+
+Terminal storage states now include COMPLETED (100), legacy FAILED (900), and the migration-owned
+HALTED (930) row for the implemented sign-in phase-admission paths. The strict phase gate records
+HALTED only for an attributable state-changing mismatch; a contradictory GET or HEAD is a 409
+observation with no lifecycle edge. Expiry is a predicate (`expires_at <= now`) on the unchanged
+local sign-in paths, not an EXPIRED status write; no cancel status/event exists there. Expired flows
+disappear from `SignInCycleLocator.current`. Named methods use FlowBase locks, but `transition_to!`
+checks its model transition map before entering the locked write. `complete_sign_in!` permits
+SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSITIONS map does not.
+These are real public method edges, not invented map edges.
+
+`SignInStateMachine` contains result classifiers and PRIMARY_VERIFIED_TRANSITIONS metadata only.
+`session_limit_conflict`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
+states. Participant blockers normally preserve the current state. New paths use selector before
+issuance; DASHBOARD_PENDING and RETURN_PENDING are legacy states with no incoming DASHBOARD_PENDING
+edge in the model map, but AuthenticationSequenceGate directly writes SELECTOR_PENDING to
+DASHBOARD_PENDING after the checkpoint participant. `advance_sign_in_to_dashboard!` actually calls
+complete_sign_in! with step dashboard; current model STEP_BY_STATUS_ID validation maps COMPLETED to
+completed (the historical migration CHECK is absent from current checked-in structure), so this
+public helper has a static constraint mismatch (not repaired).
+
+External boundaries: Auth records authentication evidence under the OIDC parent and advances
+guardrail/checkpoint/selector; Base commits the root login at authorization resume.
+SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity recheck, before
+successful session commit. Token/finalization evidence is an additional axis, not a backward edge
+after durable issuance.
+
+Direct writes outside transitions include `authentication_sequence_gate.rb` (legacy
+state/step/status update) and `credential_security_transition.rb` (calls fail_sign_in! and directly
+expires result delivery). `authentication_base.rb` records token/session evidence and calls named
+transitions. Storage duplicates status_id, state and step; model STEP_BY_STATUS_ID validations and
+model validations align them, including COMPLETED step. See mutation index for exact locations.
+Tests read cover participant rejection, selector binding, legacy dashboard/return, admission refusal
+and finalization replay; no test execution is claimed.
+
+## idp-visitor-sign-in
+
+Implementation: `FlowSignIn / participants / AuthenticationSessionCommitter`. Storage:
+`visitor_sign_in_flows` / `status_id`.
+
+Sources: `app/models/visitor_sign_in_flow.rb`, `app/models/visitor_sign_in_flow_status.rb`,
+`app/models/concerns/flow_sign_in.rb`, `app/models/concerns/sign_flow.rb`,
+`app/services/sign_in_state_machine.rb`, `app/services/sign_in_cycle_locator.rb`,
+`app/controllers/concerns/authentication_sequence_gate.rb`,
+`app/controllers/concerns/authentication_base.rb`,
+`app/operations/local_authentication_session_committer.rb`.
+
+Tests read: `test/services/sign_in/post_issuance_participants_test.rb`,
+`test/controllers/auth/com/sign_ins_controller_test.rb`.
+
+| Transition ID            | Mutation kind         | From                     | Event / Trigger                                      | To                       | Guard                                                                                                                                                                                                                 | Side effect                                                                                                             | Source file                                              | Confidence  |
+| ------------------------ | --------------------- | ------------------------ | ---------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------- |
+| idp-visitor-sign-in:T001 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | advance_sign_in_to_mfa!                              | MFA_PENDING              | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T002 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T003 | DOCUMENTED_TRANSITION | MFA_PENDING              | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T004 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T005 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T006 | DOCUMENTED_TRANSITION | MFA_PENDING              | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T007 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING    | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T008 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING        | advance_sign_in_to_checkpoint!                       | CHECKPOINT_PENDING       | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T009 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING       | advance_sign_in_to_selector!                         | SELECTOR_PENDING         | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T010 | DOCUMENTED_TRANSITION | SELECTOR_PENDING         | advance_sign_in_to_session_issuance!                 | SESSION_ISSUANCE_PENDING | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T011 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING        | advance_sign_in_to_return!                           | RETURN_PENDING           | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T012 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T013 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING    | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T014 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING        | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T015 | DOCUMENTED_TRANSITION | RETURN_PENDING           | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T016 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T017 | DOCUMENTED_TRANSITION | MFA_PENDING              | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T018 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING    | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T019 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING        | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T020 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T021 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING       | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T022 | DOCUMENTED_TRANSITION | SELECTOR_PENDING         | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T023 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING        | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T024 | DOCUMENTED_TRANSITION | RETURN_PENDING           | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-visitor-sign-in:T025 | OUT_OF_BAND           | SELECTOR_PENDING         | AuthenticationSequenceGate direct update legacy path | DASHBOARD_PENDING        | Legacy participant completed checkpoint/selector; direct update! no named transition guard                                                                                                                            | status/state/step dashboard                                                                                             | app/controllers/concerns/authentication_sequence_gate.rb | CONFIRMED   |
+| idp-visitor-sign-in:T026 | DOCUMENTED_TRANSITION | MFA_PENDING              | cancel_pending_mfa                                   | HALTED                   | Matching pending principal/flow and live halt_sign_in! transition guard                                                                                                                                               | Halt flow; clear pending MFA/browser locator; retain outer Auth/OIDC admission; no Root issuance                        | app/controllers/concerns/authentication_base.rb          | CONFIRMED   |
+| idp-visitor-sign-in:T027 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | halt_sign_in! (session-limit waiting slot occupied)  | HALTED                   | DECIDED 2026-10-16, code pending (nine.md P-8): com full-access count is N=1 and the actor already holds an open session-limit child (pending/session_selected, unexpired) for another flow; actor lock; writer clock | No Root issuance and no new child; the existing child and all full-access sessions are unchanged; policy refusal reason | app/controllers/concerns/authentication_base.rb (target) | UNCONFIRMED |
+
+Terminal storage states now include COMPLETED (100), legacy FAILED (900), and the migration-owned
+HALTED (930) row for the implemented sign-in phase-admission paths. The strict phase gate records
+HALTED only for an attributable state-changing mismatch; a contradictory GET or HEAD is a 409
+observation with no lifecycle edge. Expiry is a predicate (`expires_at <= now`) on the unchanged
+local sign-in paths, not an EXPIRED status write; no cancel status/event exists there. Expired flows
+disappear from `SignInCycleLocator.current`. Named methods use FlowBase locks, but `transition_to!`
+checks its model transition map before entering the locked write. `complete_sign_in!` permits
+SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSITIONS map does not.
+These are real public method edges, not invented map edges.
+
+`SignInStateMachine` contains result classifiers and PRIMARY_VERIFIED_TRANSITIONS metadata only.
+`session_limit_conflict`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
+states. Participant blockers normally preserve the current state. New paths use selector before
+issuance; DASHBOARD_PENDING and RETURN_PENDING are legacy states with no incoming DASHBOARD_PENDING
+edge in the model map, but AuthenticationSequenceGate directly writes SELECTOR_PENDING to
+DASHBOARD_PENDING after the checkpoint participant. `advance_sign_in_to_dashboard!` actually calls
+complete_sign_in! with step dashboard; current model STEP_BY_STATUS_ID validation maps COMPLETED to
+completed (the historical migration CHECK is absent from current checked-in structure), so this
+public helper has a static constraint mismatch (not repaired).
+
+External boundaries: Auth records authentication evidence under the OIDC parent and advances
+guardrail/checkpoint/selector; Base commits the root login at authorization resume.
+SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity recheck, before
+successful session commit. Token/finalization evidence is an additional axis, not a backward edge
+after durable issuance.
+
+Direct writes outside transitions include `authentication_sequence_gate.rb` (legacy
+state/step/status update) and `credential_security_transition.rb` (calls fail_sign_in! and directly
+expires result delivery). `authentication_base.rb` records token/session evidence and calls named
+transitions. Storage duplicates status_id, state and step; model STEP_BY_STATUS_ID validations and
+model validations align them, including COMPLETED step. See mutation index for exact locations.
+Tests read cover participant rejection, selector binding, legacy dashboard/return, admission refusal
+and finalization replay; no test execution is claimed.
+
+## idp-operator-sign-in
+
+Implementation: `FlowSignIn / participants / AuthenticationSessionCommitter`. Storage:
+`operator_sign_in_flows` / `status_id`.
+
+Sources: `app/models/operator_sign_in_flow.rb`, `app/models/operator_sign_in_flow_status.rb`,
+`app/models/concerns/flow_sign_in.rb`, `app/models/concerns/sign_flow.rb`,
+`app/services/sign_in_state_machine.rb`, `app/services/sign_in_cycle_locator.rb`,
+`app/controllers/concerns/authentication_sequence_gate.rb`,
+`app/controllers/concerns/authentication_base.rb`,
+`app/operations/local_authentication_session_committer.rb`.
+
+Tests read: `test/services/sign_in/post_issuance_participants_test.rb`,
+`test/controllers/auth/org/sign_ins_controller_test.rb`.
+
+| Transition ID             | Mutation kind         | From                     | Event / Trigger                                      | To                       | Guard                                                                                                                                                                                                                 | Side effect                                                                                                             | Source file                                              | Confidence  |
+| ------------------------- | --------------------- | ------------------------ | ---------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------- |
+| idp-operator-sign-in:T001 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | advance_sign_in_to_mfa!                              | MFA_PENDING              | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T002 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T003 | DOCUMENTED_TRANSITION | MFA_PENDING              | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T004 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | advance_sign_in_to_session_limit!                    | SESSION_LIMIT_PENDING    | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T005 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T006 | DOCUMENTED_TRANSITION | MFA_PENDING              | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T007 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING    | advance_sign_in_to_guardrail!                        | GUARDRAIL_PENDING        | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T008 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING        | advance_sign_in_to_checkpoint!                       | CHECKPOINT_PENDING       | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T009 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING       | advance_sign_in_to_selector!                         | SELECTOR_PENDING         | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T010 | DOCUMENTED_TRANSITION | SELECTOR_PENDING         | advance_sign_in_to_session_issuance!                 | SESSION_ISSUANCE_PENDING | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T011 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING        | advance_sign_in_to_return!                           | RETURN_PENDING           | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T012 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T013 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING    | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T014 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING        | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T015 | DOCUMENTED_TRANSITION | RETURN_PENDING           | complete_sign_in!                                    | COMPLETED                | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | completed_at; state COMPLETED; step argument                                                                            | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T016 | DOCUMENTED_TRANSITION | PRIMARY_PENDING          | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T017 | DOCUMENTED_TRANSITION | MFA_PENDING              | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T018 | DOCUMENTED_TRANSITION | SESSION_LIMIT_PENDING    | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T019 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING        | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T020 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T021 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING       | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T022 | DOCUMENTED_TRANSITION | SELECTOR_PENDING         | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T023 | DOCUMENTED_TRANSITION | DASHBOARD_PENDING        | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T024 | DOCUMENTED_TRANSITION | RETURN_PENDING           | fail_sign_in!                                        | FAILED                   | Allowed source; accessible; unexpired; row lock                                                                                                                                                                       | Synchronize status_id/state/step                                                                                        | app/models/concerns/flow_sign_in.rb                      | CONFIRMED   |
+| idp-operator-sign-in:T025 | OUT_OF_BAND           | SELECTOR_PENDING         | AuthenticationSequenceGate direct update legacy path | DASHBOARD_PENDING        | Legacy participant completed checkpoint/selector; direct update! no named transition guard                                                                                                                            | status/state/step dashboard                                                                                             | app/controllers/concerns/authentication_sequence_gate.rb | CONFIRMED   |
+| idp-operator-sign-in:T026 | DOCUMENTED_TRANSITION | MFA_PENDING              | cancel_pending_mfa                                   | HALTED                   | Matching pending principal/flow and live halt_sign_in! transition guard                                                                                                                                               | Halt flow; clear pending MFA/browser locator; retain outer Auth/OIDC admission; no Root issuance                        | app/controllers/concerns/authentication_base.rb          | CONFIRMED   |
+| idp-operator-sign-in:T027 | DOCUMENTED_TRANSITION | SESSION_ISSUANCE_PENDING | halt_sign_in! (session-limit waiting slot occupied)  | HALTED                   | DECIDED 2026-10-16, code pending (nine.md P-8): org full-access count is N=1 and the actor already holds an open session-limit child (pending/session_selected, unexpired) for another flow; actor lock; writer clock | No Root issuance and no new child; the existing child and all full-access sessions are unchanged; policy refusal reason | app/controllers/concerns/authentication_base.rb (target) | UNCONFIRMED |
+
+Terminal storage states now include COMPLETED (100), legacy FAILED (900), and the migration-owned
+HALTED (930) row for the implemented sign-in phase-admission paths. The strict phase gate records
+HALTED only for an attributable state-changing mismatch; a contradictory GET or HEAD is a 409
+observation with no lifecycle edge. Expiry is a predicate (`expires_at <= now`) on the unchanged
+local sign-in paths, not an EXPIRED status write; no cancel status/event exists there. Expired flows
+disappear from `SignInCycleLocator.current`. Named methods use FlowBase locks, but `transition_to!`
+checks its model transition map before entering the locked write. `complete_sign_in!` permits
+SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSITIONS map does not.
+These are real public method edges, not invented map edges.
+
+`SignInStateMachine` contains result classifiers and PRIMARY_VERIFIED_TRANSITIONS metadata only.
+`session_limit_conflict`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
+states. Participant blockers normally preserve the current state. New paths use selector before
+issuance; DASHBOARD_PENDING and RETURN_PENDING are legacy states with no incoming DASHBOARD_PENDING
+edge in the model map, but AuthenticationSequenceGate directly writes SELECTOR_PENDING to
+DASHBOARD_PENDING after the checkpoint participant. `advance_sign_in_to_dashboard!` actually calls
+complete_sign_in! with step dashboard; current model STEP_BY_STATUS_ID validation maps COMPLETED to
+completed (the historical migration CHECK is absent from current checked-in structure), so this
+public helper has a static constraint mismatch (not repaired).
+
+External boundaries: Auth records authentication evidence under the OIDC parent and advances
+guardrail/checkpoint/selector; Base commits the root login at authorization resume.
+SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity recheck, before
+successful session commit. Token/finalization evidence is an additional axis, not a backward edge
+after durable issuance.
+
+Direct writes outside transitions include `authentication_sequence_gate.rb` (legacy
+state/step/status update) and `credential_security_transition.rb` (calls fail_sign_in! and directly
+expires result delivery). `authentication_base.rb` records token/session evidence and calls named
+transitions. Storage duplicates status_id, state and step; model STEP_BY_STATUS_ID validations and
+model validations align them, including COMPLETED step. See mutation index for exact locations.
+Tests read cover participant rejection, selector binding, legacy dashboard/return, admission refusal
+and finalization replay; no test execution is claimed.
+
+## idp-sign-in-phase-admission
+
+Implementation: `SignInFlowBindingCodec`, `SignInPhaseBindingControllerSupport`, and
+`SignInPhaseViolationEnforcer`. Scope: local sign-in routes whose authoritative phase is a
+realm-specific `ClientSignInFlow`, `VisitorSignInFlow`, or `OperatorSignInFlow`.
+
+| Transition ID                    | Request class                             | Binding condition                                                                                         | Result                                                           | Lifecycle effect                                               | Side-effect rule                                                           |
+| -------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| idp-sign-in-phase-admission:T001 | Same-phase GET/HEAD or mutation           | Signed binding names the current flow, surface, phase, and immutable generation                           | Request proceeds through the existing public controller boundary | Unchanged or the controller's ordinary advance                 | Existing OTP, challenge, and session rules apply                           |
+| idp-sign-in-phase-admission:T002 | Contradictory GET/HEAD                    | Missing, malformed, expired, cross-surface, cross-flow, or wrong-phase binding                            | HTTP 409 `text/plain` with `戻るはだめです`                      | None; this is not a lifecycle edge                             | No redirect, state write, OTP/challenge, session, or provider side effect  |
+| idp-sign-in-phase-admission:T003 | Attributable state-changing mismatch      | Binding identifies the original flow, but the locked/reloaded flow has moved away from the expected phase | Request refused and halt recorded                                | `HALTED = 930`, reason `phase_regression` or `phase_violation` | No revival, second terminal transition, session issuance, or new challenge |
+| idp-sign-in-phase-admission:T004 | Invalid or unbound state-changing request | Binding cannot identify an attributable flow                                                              | HTTP 409 refusal                                                 | No current-locator substitution and no unrelated flow halt     | No new side effect                                                         |
+
+The binding is a signed, purpose-bound application capability and never carries a raw locator nonce,
+database primary key, OAuth/OIDC state, PKCE, CSRF token, or return-target token. The flow row lock,
+actor check, expiry handling, concrete provider transaction, and existing `commit_login_session!` /
+`lock_sign_in_flow_for_issuance!` boundary remain authoritative. The inventory is evidence for this
+implementation slice; provider-owned social/Entra ceremonies and untouched lifecycle axes retain
+APP telephone Passkey saving takes the Flow lock before the principal and revalidates state,
+expiry and the request gate after any wait. Terminal, lapsed and expired work is refused without a
+credential or allocation and without writing the Flow (D-177); an expired live Flow reaches EXPIRED
+and cleanup only through `SignUpExpiryJob`. A concurrent save that finds an already pending Passkey returns the existing
+success without another write. A rendered refusal stops the shared registration helper rather
+than falling through to a success response. Real HTTP concurrency and microsecond deadline cases
+are in `test/concurrency/sign_up_passkey_termination_http_test.rb`.
+
+their concrete authority until their own slice is completed.
+
+## idp-client-sign-up
+
+APP and COM contact entry is fail-closed (D-177): a second entry submit while the browser's attempt
+is not terminal-and-cleaned is refused and writes nothing; no entry path halts or cleans an earlier
+Flow. The former `superseded_by_restart` HALTED writer is removed. The birthdate checkpoint halts an
+attempt below the minimum age through `SignUpTermination` (HALTED with same-request cleanup) without
+writing the birthdate (D-178). The lifecycle edges and terminal absorption remain unchanged.
+
+Email finalization locks the Source owner before its candidate and commits the binding fact, app
+principal promotion and Source audit intent together. Credential after-commit MFA refresh reloads
+the owner under its lock. The independent-browser email journey verifies durable signup completion
+and anonymous audit attribution. After a Source commit followed by Ticket SQL failure, the same
+signed flow binding may retry only the cleared email birthdate update with all checkpoint
+requirements complete, an active owner, effective contact and exactly one original anonymous Source
+intent. The finalizer rechecks that provenance under owner/contact locks and preserves the binding
+timestamp and intent; birthdate is not rewritten. Duplicate intent, released binding, suspended
+owner and the exact Ticket deadline refuse. This adds no state edge and does not certify the
+complete fault/concurrency matrix.
+
+Signup policies compare expiry with the owning Ticket database clock; authorization is refused at
+and after the deadline. Real app/com Ticket policy tests cover the microsecond before, exact
+deadline and microsecond after. The controller rebuilds context and revalidates finalization policy
+after acquiring the Ticket lock, before Source mutation. Email HTTP deadline-crossing tests verify
+that refusal creates neither binding nor Source intent. Email and telephone Source finalizers
+additionally require an active owner under its lock; suspended-owner public tests preserve the
+candidate proof and create no intent. The complete fault/concurrency and exact recovery matrix
+remains unfinished.
+
+The independent Email and Telephone signup issuers/verifiers lock the signup parent before issuing
+or consuming its ceremony-owned proof. They check terminal state, expiry and logical discard against
+the owning Ticket DB clock and recheck authority after Source locks and budget admission. An overdue
+parent is refused without a write (D-177); the issuers, verification committers and delivery guards
+no longer invoke `SignUpTermination`, and only `SignUpExpiryJob` moves it to EXPIRED with cleanup.
+This adds no signup state or transition and does not claim distributed atomicity.
+
+Implementation: `SignUpStateMachine + SignFlow / FlowSignUp`. Storage: `client_sign_up_flows` /
+`status_id`.
+
+Sources: `app/models/client_sign_up_flow.rb`, `app/models/client_sign_up_flow_status.rb`,
+`app/services/sign_up_state_machine.rb`, `app/models/concerns/sign_flow.rb`,
+`app/models/concerns/sign_up_flow_ticket.rb`, `app/jobs/sign_up_expiry_job.rb`,
+`app/services/sign_up_termination.rb`.
+
+Tests read: `test/services/sign_up/state_machine_test.rb`,
+`test/services/sign_up_expiry_race_test.rb`,
+`test/services/sign_up_termination_idempotence_test.rb`.
+
+| Transition ID           | Mutation kind         | From                    | Event / Trigger                            | To                      | Guard                                                                  | Side effect                                           | Source file                           | Confidence |
+| ----------------------- | --------------------- | ----------------------- | ------------------------------------------ | ----------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------- | ---------- |
+| idp-client-sign-up:T001 | DOCUMENTED_TRANSITION | STARTED                 | submit_contact                             | CONTACT_PENDING         | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T002 | DOCUMENTED_TRANSITION | STARTED                 | advance_sign_up_to_credential! / model map | CREDENTIAL_PENDING      | Named helper; model-permitted source; DB clock and row lock            | status_id/state/step; terminal timestamp when defined | app/models/concerns/flow_sign_up.rb   | CONFIRMED  |
+| idp-client-sign-up:T003 | DOCUMENTED_TRANSITION | STARTED                 | start_social_callback                      | SOCIAL_CALLBACK_PENDING | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T004 | DOCUMENTED_TRANSITION | STARTED                 | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T005 | DOCUMENTED_TRANSITION | STARTED                 | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T006 | DOCUMENTED_TRANSITION | STARTED                 | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T007 | DOCUMENTED_TRANSITION | CONTACT_PENDING         | advance_sign_up_to_credential! / model map | CREDENTIAL_PENDING      | Named helper; model-permitted source; DB clock and row lock            | status_id/state/step; terminal timestamp when defined | app/models/concerns/flow_sign_up.rb   | CONFIRMED  |
+| idp-client-sign-up:T008 | DOCUMENTED_TRANSITION | CONTACT_PENDING         | verify_contact                             | CONTACT_VERIFIED        | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T009 | DOCUMENTED_TRANSITION | CONTACT_PENDING         | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T010 | DOCUMENTED_TRANSITION | CONTACT_PENDING         | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T011 | DOCUMENTED_TRANSITION | CONTACT_PENDING         | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T012 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING      | verify_contact                             | CONTACT_VERIFIED        | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T013 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING      | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T014 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING      | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T015 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING      | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T016 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED        | enter_guardrail                            | GUARDRAIL_PENDING       | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T017 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED        | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T018 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED        | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T019 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED        | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T020 | DOCUMENTED_TRANSITION | SOCIAL_CALLBACK_PENDING | verify_sign_up_contact! / model map        | CONTACT_VERIFIED        | Caller reachability UNCONFIRMED                                        | status_id/state/step; terminal timestamp when defined | app/models/client_sign_up_flow.rb     | CONFIRMED  |
+| idp-client-sign-up:T021 | DOCUMENTED_TRANSITION | SOCIAL_CALLBACK_PENDING | advance_sign_up_to_guardrail! / model map  | GUARDRAIL_PENDING       | Caller reachability UNCONFIRMED                                        | status_id/state/step; terminal timestamp when defined | app/models/client_sign_up_flow.rb     | CONFIRMED  |
+| idp-client-sign-up:T022 | DOCUMENTED_TRANSITION | SOCIAL_CALLBACK_PENDING | complete_social_callback new identity      | CHECKPOINT_PENDING      | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T023 | DOCUMENTED_TRANSITION | SOCIAL_CALLBACK_PENDING | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T024 | DOCUMENTED_TRANSITION | SOCIAL_CALLBACK_PENDING | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T025 | DOCUMENTED_TRANSITION | SOCIAL_CALLBACK_PENDING | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T026 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING       | enter_checkpoint                           | CHECKPOINT_PENDING      | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T027 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING       | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T028 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING       | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T029 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING       | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T030 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING      | finalize accepted                          | FINALIZING              | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T031 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING      | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T032 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING      | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T033 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING      | cancel                                     | CANCELLED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T034 | DOCUMENTED_TRANSITION | FINALIZING              | complete                                   | COMPLETED               | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T035 | DOCUMENTED_TRANSITION | FINALIZING              | halt                                       | HALTED                  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T036 | DOCUMENTED_TRANSITION | FINALIZING              | expire                                     | EXPIRED                 | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-client-sign-up:T037 | DOCUMENTED_TRANSITION | FINALIZING              | cancel_sign_up! / model map                | CANCELLED               | Named helper permits this edge; StateMachine cancel rejects FINALIZING | status_id/state/step; terminal timestamp when defined | app/models/concerns/flow_sign_up.rb   | CONFIRMED  |
+| idp-client-sign-up:T040 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING      | clear_requirement                          | CHECKPOINT_PENDING      | Matching checkpoint_version; in-order uncleared registry requirement   | completed_requirements; checkpoint_version +1         | app/services/sign_up_state_machine.rb | CONFIRMED  |
+
+Current terminals are COMPLETED=100, EXPIRED=910, CANCELLED=920 and HALTED=930. FAILED=900,
+FINALIZED=70 and SIGN_IN_HANDOFF_PENDING=80 are retained tombstones with no incoming runtime
+transitions. `start` may return ok without writing but never reopens a terminal. StateMachine cancel
+is allowed only through CHECKPOINT_PENDING; CANCELLED replay is idempotent. The model's named
+cancel_sign_up! also permits FINALIZING, as explicitly distinguished in its row. Social transitions
+exist only for client/app; complete_social_callback advances the new identity to CHECKPOINT_PENDING
+without a sign-in handoff branch.
+
+`finalize` requires every registry requirement and an accepted finalization_result, then writes
+FINALIZING; `complete` writes COMPLETED directly with completed_at. Missing result is blocked; a
+rejected result requests cleanup without writing a terminal. The controller completes the durable
+account before entering ordinary sign-in admission; there is no handoff_to_sign_in state-machine
+event or intermediate FINALIZED/HANDOFF_PENDING authority. FINALIZING permits expiry and halt.
+Expired nonterminal decisions persist EXPIRED using the owning Ticket DB clock before refusal;
+logical discard is independently rejected. Named FlowBase operations synchronize
+status_id/state/step, check the model transition map and retention/expiry under the row lock. These
+source observations do not imply distributed Source/Ticket atomicity or complete exact-outcome
+recovery.
+
+`SignUpTermination` wraps cancel/expire/halt, schedules retention, writes cleanup_status_id and runs
+compensation; raw state-machine calls skip that orchestration. Checkpoint clearing locks the
+decision and rejects stale version, wrong order and repeated clearing while preserving state.
+FlowSignUp's named helpers route through the private FlowBase writer and synchronize
+status_id/state/step. Tests cover contact/social ordering, stale checkpoints, required accepted
+finalization, direct completion, expired mutation, halt, cancel-after-finalizing refusal, cancel
+replay and expiry races. Historical handoff transition IDs are retired, not current edges; no
+terminal back edge is inferred.
+
+APP/COM Email and Telephone signup use separate `EmailSignUpOtp*` and `TelephoneSignUpOtp*`
+implementations. An overdue admitted nonterminal invokes the existing `SignUpTermination` boundary
+before returning refusal. Existing terminals remain absorbing: returning to an earlier clock cannot
+reopen the parent. Ceremony code expiry is separate from the parent deadline and does not by itself
+expire signup. Candidate creation preserves artifacts of a previous halted flow until its existing
+cleanup owner reaches the purge boundary.
+
+## idp-visitor-sign-up
+
+The email entry POST preserves its previous durable locator while resetting the session phase. After
+Turnstile, identifier and explicit consent validation, `supersede_active_sign_up_flow!` uses the
+existing halt/cleanup operation before allocating replacement artifacts. The HTTP restart regression
+verifies distinct flow IDs, an absorbing HALTED predecessor, and refusal of its stale signed screen
+without changing the replacement flow.
+
+The binding-only recovery does not restore COM's original recovery-passcode distribution
+destination. A stricter real HTTP fault test preserves all ten credentials and the original reveal
+row but fails the retained destination check. The owner deferred COM distribution recovery outside
+the current Goal on 2026-10-07; its evidence and failing reproduction remain in the separate backlog
+task. No Source receipt, GET/POST receiver change or ten-to-two change is approved in this cycle.
+This deferral does not establish a successful whole-operation recovery or a fully passing fault
+suite.
+
+Email finalization locks the Source owner before its candidate and commits the binding fact and
+Source audit intent together. Credential after-commit MFA refresh reloads the owner under its lock.
+The independent-browser email journey verifies durable signup completion and anonymous audit
+attribution. The same Source-committed/Ticket-failed email checkpoint reconciliation guard described
+for client signup applies to visitor signup; it preserves the binding, intent and original
+birthdate. Public HTTP fault tests verify recovery and duplicate-intent, released-binding,
+suspended-owner and exact-deadline refusal. The complete fault/concurrency matrix remains open.
+
+Signup policies compare expiry with the owning Ticket database clock; authorization is refused at
+and after the deadline. Real app/com Ticket policy tests cover the microsecond before, exact
+deadline and microsecond after. The controller rebuilds context and revalidates finalization policy
+after acquiring the Ticket lock, before Source mutation. Email HTTP deadline-crossing tests verify
+that refusal creates neither binding nor Source intent. Email and telephone Source finalizers
+additionally require an active owner under its lock; suspended-owner public tests preserve the
+candidate proof and create no intent. The complete fault/concurrency and exact recovery matrix
+remains unfinished.
+
+Implementation: `SignUpStateMachine + SignFlow / FlowSignUp`. Storage: `visitor_sign_up_flows` /
+`status_id`.
+
+Sources: `app/models/visitor_sign_up_flow.rb`, `app/models/visitor_sign_up_flow_status.rb`,
+`app/services/sign_up_state_machine.rb`, `app/models/concerns/sign_flow.rb`,
+`app/models/concerns/sign_up_flow_ticket.rb`, `app/jobs/sign_up_expiry_job.rb`,
+`app/services/sign_up_termination.rb`.
+
+Tests read: `test/services/sign_up/state_machine_test.rb`,
+`test/services/sign_up_expiry_race_test.rb`,
+`test/services/sign_up_termination_idempotence_test.rb`.
+
+| Transition ID            | Mutation kind         | From               | Event / Trigger                            | To                 | Guard                                                                  | Side effect                                           | Source file                           | Confidence |
+| ------------------------ | --------------------- | ------------------ | ------------------------------------------ | ------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------- | ---------- |
+| idp-visitor-sign-up:T001 | DOCUMENTED_TRANSITION | STARTED            | submit_contact                             | CONTACT_PENDING    | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T002 | DOCUMENTED_TRANSITION | STARTED            | advance_sign_up_to_credential! / model map | CREDENTIAL_PENDING | Named helper; model-permitted source; DB clock and row lock            | status_id/state/step; terminal timestamp when defined | app/models/concerns/flow_sign_up.rb   | CONFIRMED  |
+| idp-visitor-sign-up:T003 | DOCUMENTED_TRANSITION | STARTED            | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T004 | DOCUMENTED_TRANSITION | STARTED            | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T005 | DOCUMENTED_TRANSITION | STARTED            | cancel                                     | CANCELLED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T006 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | advance_sign_up_to_credential! / model map | CREDENTIAL_PENDING | Named helper; model-permitted source; DB clock and row lock            | status_id/state/step; terminal timestamp when defined | app/models/concerns/flow_sign_up.rb   | CONFIRMED  |
+| idp-visitor-sign-up:T007 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | verify_contact                             | CONTACT_VERIFIED   | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T008 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T009 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T010 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | cancel                                     | CANCELLED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T011 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING | verify_contact                             | CONTACT_VERIFIED   | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T012 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T013 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T014 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING | cancel                                     | CANCELLED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T015 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED   | enter_guardrail                            | GUARDRAIL_PENDING  | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T016 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED   | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T017 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED   | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T018 | DOCUMENTED_TRANSITION | CONTACT_VERIFIED   | cancel                                     | CANCELLED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T019 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING  | enter_checkpoint                           | CHECKPOINT_PENDING | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T020 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING  | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T021 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING  | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T022 | DOCUMENTED_TRANSITION | GUARDRAIL_PENDING  | cancel                                     | CANCELLED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T023 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING | finalize accepted                          | FINALIZING         | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T024 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T025 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T026 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING | cancel                                     | CANCELLED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T027 | DOCUMENTED_TRANSITION | FINALIZING         | complete                                   | COMPLETED          | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T028 | DOCUMENTED_TRANSITION | FINALIZING         | halt                                       | HALTED             | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T029 | DOCUMENTED_TRANSITION | FINALIZING         | expire                                     | EXPIRED            | Model map; event-specific guard below                                  | status_id/state/step; terminal timestamp when defined | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-visitor-sign-up:T030 | DOCUMENTED_TRANSITION | FINALIZING         | cancel_sign_up! / model map                | CANCELLED          | Named helper permits this edge; StateMachine cancel rejects FINALIZING | status_id/state/step; terminal timestamp when defined | app/models/concerns/flow_sign_up.rb   | CONFIRMED  |
+| idp-visitor-sign-up:T033 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING | clear_requirement                          | CHECKPOINT_PENDING | Matching checkpoint_version; in-order uncleared registry requirement   | completed_requirements; checkpoint_version +1         | app/services/sign_up_state_machine.rb | CONFIRMED  |
+
+Current terminals are COMPLETED=100, EXPIRED=910, CANCELLED=920 and HALTED=930. FAILED=900,
+FINALIZED=70 and SIGN_IN_HANDOFF_PENDING=80 are retained tombstones with no incoming runtime
+transitions. `start` may return ok without writing but never reopens a terminal. StateMachine cancel
+is allowed only through CHECKPOINT_PENDING; CANCELLED replay is idempotent. The model's named
+cancel_sign_up! also permits FINALIZING, as explicitly distinguished in its row. Social transitions
+exist only for client/app; complete_social_callback advances the new identity to CHECKPOINT_PENDING
+without a sign-in handoff branch.
+
+`finalize` requires every registry requirement and an accepted finalization_result, then writes
+FINALIZING; `complete` writes COMPLETED directly with completed_at. Missing result is blocked; a
+rejected result requests cleanup without writing a terminal. The controller completes the durable
+account before entering ordinary sign-in admission; there is no handoff_to_sign_in state-machine
+event or intermediate FINALIZED/HANDOFF_PENDING authority. FINALIZING permits expiry and halt.
+Expired nonterminal decisions persist EXPIRED using the owning Ticket DB clock before refusal;
+logical discard is independently rejected. Named FlowBase operations synchronize
+status_id/state/step, check the model transition map and retention/expiry under the row lock. These
+source observations do not imply distributed Source/Ticket atomicity or complete exact-outcome
+recovery.
+
+`SignUpTermination` wraps cancel/expire/halt, schedules retention, writes cleanup_status_id and runs
+compensation; raw state-machine calls skip that orchestration. Checkpoint clearing locks the
+decision and rejects stale version, wrong order and repeated clearing while preserving state.
+FlowSignUp's named helpers route through the private FlowBase writer and synchronize
+status_id/state/step. Tests cover contact/social ordering, stale checkpoints, required accepted
+finalization, direct completion, expired mutation, halt, cancel-after-finalizing refusal, cancel
+replay and expiry races. Historical handoff transition IDs are retired, not current edges; no
+terminal back edge is inferred.
+
+## idp-operator-sign-up
+
+Implementation: `FlowSignUp (model only)`. Storage: `operator_sign_up_flows` / `status_id`.
+
+Sources: `app/models/operator_sign_up_flow.rb`, `app/models/operator_sign_up_flow_status.rb`,
+`app/models/concerns/flow_sign_up.rb`, `app/models/concerns/sign_flow.rb`,
+`app/models/concerns/sign_up_flow_ticket.rb`, `app/jobs/sign_up_expiry_job.rb`,
+`app/services/sign_up_termination.rb`.
+
+Tests read: `test/models/operator_sign_up_flow_test.rb`,
+`test/controllers/auth/org/sign_ups_controller_test.rb`.
+
+| Transition ID             | Mutation kind         | From               | Event / Trigger                | To                 | Guard                                       | Side effect                                            | Source file                           | Confidence |
+| ------------------------- | --------------------- | ------------------ | ------------------------------ | ------------------ | ------------------------------------------- | ------------------------------------------------------ | ------------------------------------- | ---------- |
+| idp-operator-sign-up:T001 | DOCUMENTED_TRANSITION | STARTED            | advance_sign_up_to_contact!    | CONTACT_PENDING    | Model-permitted source; serialized decision | status_id/state/step write                             | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T002 | DOCUMENTED_TRANSITION | STARTED            | advance_sign_up_to_credential! | CREDENTIAL_PENDING | Model-permitted source; serialized decision | status_id/state/step write                             | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T003 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | advance_sign_up_to_credential! | CREDENTIAL_PENDING | Model-permitted source; serialized decision | status_id/state/step write                             | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T004 | DOCUMENTED_TRANSITION | STARTED            | advance_sign_up_to_checkpoint! | CHECKPOINT_PENDING | Model-permitted source; serialized decision | status_id/state/step write                             | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T005 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | advance_sign_up_to_checkpoint! | CHECKPOINT_PENDING | Model-permitted source; serialized decision | status_id/state/step write                             | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T006 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING | advance_sign_up_to_checkpoint! | CHECKPOINT_PENDING | Model-permitted source; serialized decision | status_id/state/step write                             | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T007 | DOCUMENTED_TRANSITION | STARTED            | complete_sign_up!              | COMPLETED          | Model-permitted source; serialized decision | completed_at/step; state is NOT assigned by FlowSignUp | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T008 | DOCUMENTED_TRANSITION | CONTACT_PENDING    | complete_sign_up!              | COMPLETED          | Model-permitted source; serialized decision | completed_at/step; state is NOT assigned by FlowSignUp | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T009 | DOCUMENTED_TRANSITION | CREDENTIAL_PENDING | complete_sign_up!              | COMPLETED          | Model-permitted source; serialized decision | completed_at/step; state is NOT assigned by FlowSignUp | app/services/sign_up_state_machine.rb | CONFIRMED  |
+| idp-operator-sign-up:T010 | DOCUMENTED_TRANSITION | CHECKPOINT_PENDING | complete_sign_up!              | COMPLETED          | Model-permitted source; serialized decision | completed_at/step; state is NOT assigned by FlowSignUp | app/services/sign_up_state_machine.rb | CONFIRMED  |
+
+This is an existing model machine, not the app/com SignUpStateMachine path. Reference table has only
+STARTED/CONTACT_PENDING/CREDENTIAL_PENDING/CHECKPOINT_PENDING/COMPLETED. No FAILED/EXPIRED/CANCELLED
+ids, no persisted expiry/cancel path. FlowSignUp updates status_id and step but does not update
+state; SignFlow only fills state when blank and validates it against status_id, so a persisted
+nonblank legacy state can reject named transitions. The operator model test uses synthetic
+FlowSignUpTestRecord with different terminal ids and no real operator schema validation; it proves
+concern behavior, not an operational operator signup route. Current `Auth::Org::Sign::UpsController`
+includes SignUpSuspensionGuard and has no operator flow transition calls, so HTTP entry reachability
+is UNCONFIRMED. Operator onboarding invitation acceptance is a separate machine. No normalization to
+target vocabulary is made.
+
+## idp-client-sign-up-cleanup
+
+Implementation: `SignUpTermination / SignUpArtifactCleanup`. Storage: `client_sign_up_flows` /
+`cleanup_status_id`.
+
+Sources: `app/services/sign_up_artifact_cleanup.rb`, `app/services/sign_up_termination.rb`,
+`app/models/client_sign_up_flow_cleanup_status.rb`.
+
+Tests read: `test/services/sign_up_artifact_cleanup_test.rb`,
+`test/services/sign_up_termination_idempotence_test.rb`.
+
+| Transition ID                   | Mutation kind         | From    | Event / Trigger                           | To        | Guard                                                                         | Side effect                                    | Source file                              | Confidence |
+| ------------------------------- | --------------------- | ------- | ----------------------------------------- | --------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------- |
+| idp-client-sign-up-cleanup:T001 | DOCUMENTED_TRANSITION | IDLE    | SignUpTermination terminal retention      | PENDING   | Terminal sign-up reached                                                      | Schedule retention and cleanup                 | app/services/sign_up_termination.rb      | CONFIRMED  |
+| idp-client-sign-up-cleanup:T002 | DOCUMENTED_TRANSITION | FAILED  | SignUpTermination replay / cleanup worker | PENDING   | Not completed; worker attempts <10                                            | Increment attempts; clear error                | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T003 | DOCUMENTED_TRANSITION | PENDING | cleanup successful                        | COMPLETED | Terminal Flow; principal locked and still unfinished; atomic principal writes | cleanup_completed_at; clear error              | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T004 | DOCUMENTED_TRANSITION | PENDING | cleanup exception                         | FAILED    | ActiveRecordError or ArgumentError                                            | bounded error; attempted_at                    | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T005 | DOCUMENTED_TRANSITION | PENDING | cleanup attempt                           | PENDING   | Not completed                                                                 | attempt count +1                               | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T006 | OUT_OF_BAND           | NOTHING | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T007 | OUT_OF_BAND           | IDLE    | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T008 | OUT_OF_BAND           | FAILED  | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+
+Cleanup is an independent status_id axis on the sign-up fact row, not duplicate main flow state.
+NOTHING has no identified setter/caller. Public cleanup requires a terminal main Flow and accepts
+any not-completed cleanup state, including IDLE/NOTHING if called directly; ordinary termination
+enqueues PENDING. Worker uses SKIP LOCKED, retries PENDING/FAILED only for CANCELLED/EXPIRED/FAILED
+main flows and stops at 10 attempts. FAILED is retryable until that cap, then operationally stranded
+without a new terminal id. Cross-database dependent updates are not atomic with the ticket DB; tests
+exercise failures and retry. No cancellation/expiry lifecycle of cleanup itself is implemented.
+Direct status writes are the implementation, not routed through the main SignUpStateMachine.
+
+The principal decision is re-read under the Zenith writer row lock after the Flow lock. Contact,
+Passkey, their audit outbox facts and actor retention commit in one principal transaction; a failure
+rolls all of them back before the OP cleanup becomes FAILED. Registered principals are preserved.
+The OP cleanup fact is a separate commit; a retry after a principal commit rechecks eligibility.
+
+## idp-visitor-sign-up-cleanup
+
+Implementation: `SignUpTermination / SignUpArtifactCleanup`. Storage: `visitor_sign_up_flows` /
+`cleanup_status_id`.
+
+Sources: `app/services/sign_up_artifact_cleanup.rb`, `app/services/sign_up_termination.rb`,
+`app/models/visitor_sign_up_flow_cleanup_status.rb`.
+
+Tests read: `test/services/sign_up_artifact_cleanup_test.rb`,
+`test/services/sign_up_termination_idempotence_test.rb`.
+
+| Transition ID                    | Mutation kind         | From    | Event / Trigger                           | To        | Guard                                                                         | Side effect                                    | Source file                              | Confidence |
+| -------------------------------- | --------------------- | ------- | ----------------------------------------- | --------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------- |
+| idp-visitor-sign-up-cleanup:T001 | DOCUMENTED_TRANSITION | IDLE    | SignUpTermination terminal retention      | PENDING   | Terminal sign-up reached                                                      | Schedule retention and cleanup                 | app/services/sign_up_termination.rb      | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T002 | DOCUMENTED_TRANSITION | FAILED  | SignUpTermination replay / cleanup worker | PENDING   | Not completed; worker attempts <10                                            | Increment attempts; clear error                | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T003 | DOCUMENTED_TRANSITION | PENDING | cleanup successful                        | COMPLETED | Terminal Flow; principal locked and still unfinished; atomic principal writes | cleanup_completed_at; clear error              | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T004 | DOCUMENTED_TRANSITION | PENDING | cleanup exception                         | FAILED    | ActiveRecordError or ArgumentError                                            | bounded error; attempted_at                    | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T005 | DOCUMENTED_TRANSITION | PENDING | cleanup attempt                           | PENDING   | Not completed                                                                 | attempt count +1                               | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T006 | OUT_OF_BAND           | NOTHING | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T007 | OUT_OF_BAND           | IDLE    | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T008 | OUT_OF_BAND           | FAILED  | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+
+Cleanup is an independent status_id axis on the sign-up fact row, not duplicate main flow state.
+NOTHING has no identified setter/caller. Public cleanup requires a terminal main Flow and accepts
+any not-completed cleanup state, including IDLE/NOTHING if called directly; ordinary termination
+enqueues PENDING. Worker uses SKIP LOCKED, retries PENDING/FAILED only for CANCELLED/EXPIRED/FAILED
+main flows and stops at 10 attempts. FAILED is retryable until that cap, then operationally stranded
+without a new terminal id. Cross-database dependent updates are not atomic with the ticket DB; tests
+exercise failures and retry. No cancellation/expiry lifecycle of cleanup itself is implemented.
+Direct status writes are the implementation, not routed through the main SignUpStateMachine.
+
+The principal decision is re-read under the Zenith writer row lock after the Flow lock. Contact,
+Passkey, their audit outbox facts and actor retention commit in one principal transaction; a failure
+rolls all of them back before the OP cleanup becomes FAILED. Registered principals are preserved.
+The OP cleanup fact is a separate commit; a retry after a principal commit rechecks eligibility.
+
+## idp-client-auth-ceremony-session
+
+Implementation: `AuthCeremonySession`. Storage: `client_auth_ceremony_sessions` /
+`admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at`.
+
+Sources: `app/models/concerns/auth_ceremony_session.rb`,
+`app/models/client_auth_ceremony_session.rb`, `app/services/base_auth_admission_coordinator.rb`,
+`app/controllers/concerns/auth_ceremony_admission.rb`.
+
+Tests read: `test/models/auth_ceremony_session_test.rb`,
+`test/models/auth_ceremony_session_concurrency_test.rb`,
+`test/models/auth_ceremony_revocation_concurrency_test.rb`.
+
+| Transition ID                         | Mutation kind         | From     | Event / Trigger                          | To        | Guard                                                | Side effect                                   | Source file                                  | Confidence |
+| ------------------------------------- | --------------------- | -------- | ---------------------------------------- | --------- | ---------------------------------------------------- | --------------------------------------------- | -------------------------------------------- | ---------- |
+| idp-client-auth-ceremony-session:T001 | DOCUMENTED_TRANSITION | issued   | admit!                                   | admitted  | active; unadmitted; known purpose; row lock          | admitted_at; purpose; binding                 | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T002 | DOCUMENTED_TRANSITION | admitted | record_authentication_evidence!          | evidence  | active/admitted; no prior evidence; supported method | method/event timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T003 | DOCUMENTED_TRANSITION | issued   | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T004 | DOCUMENTED_TRANSITION | issued   | rotate! same row                         | issued    | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T005 | DOCUMENTED_TRANSITION | admitted | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T006 | DOCUMENTED_TRANSITION | admitted | rotate! same row                         | admitted  | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T007 | DOCUMENTED_TRANSITION | evidence | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T008 | DOCUMENTED_TRANSITION | evidence | rotate! same row                         | evidence  | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T009 | DOCUMENTED_TRANSITION | admitted | complete!                                | completed | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T010 | DOCUMENTED_TRANSITION | admitted | cancel!                                  | cancelled | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T011 | DOCUMENTED_TRANSITION | evidence | complete!                                | completed | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-client-auth-ceremony-session:T012 | DOCUMENTED_TRANSITION | evidence | cancel!                                  | cancelled | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+
+No status string/id or reference table: labels are explicit predicates over timestamps. issue!
+creates unadmitted; rotate_and_admit! creates an already-admitted replacement and revokes the old
+row atomically. TTL is 30 minutes; expired continuity is inactive but not a stored terminal. revoke!
+deliberately permits expiry while complete!/cancel! require active admission. Terminal timestamps
+are mutually exclusive by CHECK. Authentication evidence is a one-time handoff input, not Base
+session authority. No ordinary failure state; errors reject mutation. Row locks and unique
+previous_sid_digest protect conflicting replacement. Direct previous-row revoked_at update is inside
+rotate_and_admit!, while callers terminate through the model; token security transition revokes
+linked continuity.
+
+## idp-visitor-auth-ceremony-session
+
+Implementation: `AuthCeremonySession`. Storage: `visitor_auth_ceremony_sessions` /
+`admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at`.
+
+Sources: `app/models/concerns/auth_ceremony_session.rb`,
+`app/models/visitor_auth_ceremony_session.rb`, `app/services/base_auth_admission_coordinator.rb`,
+`app/controllers/concerns/auth_ceremony_admission.rb`.
+
+Tests read: `test/models/auth_ceremony_session_test.rb`,
+`test/models/auth_ceremony_session_concurrency_test.rb`,
+`test/models/auth_ceremony_revocation_concurrency_test.rb`.
+
+| Transition ID                          | Mutation kind         | From     | Event / Trigger                          | To        | Guard                                                | Side effect                                   | Source file                                  | Confidence |
+| -------------------------------------- | --------------------- | -------- | ---------------------------------------- | --------- | ---------------------------------------------------- | --------------------------------------------- | -------------------------------------------- | ---------- |
+| idp-visitor-auth-ceremony-session:T001 | DOCUMENTED_TRANSITION | issued   | admit!                                   | admitted  | active; unadmitted; known purpose; row lock          | admitted_at; purpose; binding                 | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T002 | DOCUMENTED_TRANSITION | admitted | record_authentication_evidence!          | evidence  | active/admitted; no prior evidence; supported method | method/event timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T003 | DOCUMENTED_TRANSITION | issued   | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T004 | DOCUMENTED_TRANSITION | issued   | rotate! same row                         | issued    | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T005 | DOCUMENTED_TRANSITION | admitted | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T006 | DOCUMENTED_TRANSITION | admitted | rotate! same row                         | admitted  | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T007 | DOCUMENTED_TRANSITION | evidence | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T008 | DOCUMENTED_TRANSITION | evidence | rotate! same row                         | evidence  | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T009 | DOCUMENTED_TRANSITION | admitted | complete!                                | completed | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T010 | DOCUMENTED_TRANSITION | admitted | cancel!                                  | cancelled | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T011 | DOCUMENTED_TRANSITION | evidence | complete!                                | completed | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-visitor-auth-ceremony-session:T012 | DOCUMENTED_TRANSITION | evidence | cancel!                                  | cancelled | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+
+No status string/id or reference table: labels are explicit predicates over timestamps. issue!
+creates unadmitted; rotate_and_admit! creates an already-admitted replacement and revokes the old
+row atomically. TTL is 30 minutes; expired continuity is inactive but not a stored terminal. revoke!
+deliberately permits expiry while complete!/cancel! require active admission. Terminal timestamps
+are mutually exclusive by CHECK. Authentication evidence is a one-time handoff input, not Base
+session authority. No ordinary failure state; errors reject mutation. Row locks and unique
+previous_sid_digest protect conflicting replacement. Direct previous-row revoked_at update is inside
+rotate_and_admit!, while callers terminate through the model; token security transition revokes
+linked continuity.
+
+## idp-operator-auth-ceremony-session
+
+Implementation: `AuthCeremonySession`. Storage: `operator_auth_ceremony_sessions` /
+`admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at`.
+
+Sources: `app/models/concerns/auth_ceremony_session.rb`,
+`app/models/operator_auth_ceremony_session.rb`, `app/services/base_auth_admission_coordinator.rb`,
+`app/controllers/concerns/auth_ceremony_admission.rb`.
+
+Tests read: `test/models/auth_ceremony_session_test.rb`,
+`test/models/auth_ceremony_session_concurrency_test.rb`,
+`test/models/auth_ceremony_revocation_concurrency_test.rb`.
+
+| Transition ID                           | Mutation kind         | From     | Event / Trigger                          | To        | Guard                                                | Side effect                                   | Source file                                  | Confidence |
+| --------------------------------------- | --------------------- | -------- | ---------------------------------------- | --------- | ---------------------------------------------------- | --------------------------------------------- | -------------------------------------------- | ---------- |
+| idp-operator-auth-ceremony-session:T001 | DOCUMENTED_TRANSITION | issued   | admit!                                   | admitted  | active; unadmitted; known purpose; row lock          | admitted_at; purpose; binding                 | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T002 | DOCUMENTED_TRANSITION | admitted | record_authentication_evidence!          | evidence  | active/admitted; no prior evidence; supported method | method/event timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T003 | DOCUMENTED_TRANSITION | issued   | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T004 | DOCUMENTED_TRANSITION | issued   | rotate! same row                         | issued    | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T005 | DOCUMENTED_TRANSITION | admitted | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T006 | DOCUMENTED_TRANSITION | admitted | rotate! same row                         | admitted  | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T007 | DOCUMENTED_TRANSITION | evidence | revoke! / rotate_and_admit! previous row | revoked   | Not terminal; revoke! permits expired continuity     | revoked_at; replacement is a distinct row     | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T008 | DOCUMENTED_TRANSITION | evidence | rotate! same row                         | evidence  | active; row lock                                     | digest and expires_at replacement; rotated_at | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T009 | DOCUMENTED_TRANSITION | admitted | complete!                                | completed | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T010 | DOCUMENTED_TRANSITION | admitted | cancel!                                  | cancelled | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T011 | DOCUMENTED_TRANSITION | evidence | complete!                                | completed | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+| idp-operator-auth-ceremony-session:T012 | DOCUMENTED_TRANSITION | evidence | cancel!                                  | cancelled | active; admitted; row lock                           | one terminal timestamp                        | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
+
+No status string/id or reference table: labels are explicit predicates over timestamps. issue!
+creates unadmitted; rotate_and_admit! creates an already-admitted replacement and revokes the old
+row atomically. TTL is 30 minutes; expired continuity is inactive but not a stored terminal. revoke!
+deliberately permits expiry while complete!/cancel! require active admission. Terminal timestamps
+are mutually exclusive by CHECK. Authentication evidence is a one-time handoff input, not Base
+session authority. No ordinary failure state; errors reject mutation. Row locks and unique
+previous_sid_digest protect conflicting replacement. Direct previous-row revoked_at update is inside
+rotate_and_admit!, while callers terminate through the model; token security transition revokes
+linked continuity.
+
+## idp-auth-admission-binding
+
+Implementation: `AuthAdmissionBinding` / `AuthAdmissionBindingPurger`. Storage:
+`client_auth_admission_bindings`, `visitor_auth_admission_bindings`, and
+`operator_auth_admission_bindings` / `base_confirmed_at`, `redeemed_at`, `retired_at`, `expires_at`,
+required immutable `curfew_at` and `entry_intent` facts.
+
+Sources: `app/models/concerns/auth_admission_binding.rb`,
+`app/models/client_auth_admission_binding.rb`, `app/models/visitor_auth_admission_binding.rb`,
+`app/models/operator_auth_admission_binding.rb`, `app/operations/auth_admission_binding_purger.rb`.
+
+| Transition ID                   | Mutation kind         | From                               | Event / Trigger            | To                  | Guard                                                                                                                                  | Side effect                                                                                    | Source file                                     | Confidence |
+| ------------------------------- | --------------------- | ---------------------------------- | -------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------- |
+| idp-auth-admission-binding:T001 | INITIALIZATION        | absent                             | admission issuer           | issued              | Exactly one realm-local parent; immutable entry_ref, purpose, token and browser digest; bounded expiry                                 | Binding row and opaque entry are created in the parent Ticket transaction                      | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
+| idp-auth-admission-binding:T002 | DOCUMENTED_TRANSITION | issued                             | attach_auth_session!       | attached            | Live binding; active Auth session, including previously admitted continuity; unique confirmation_ref; binding lock before session lock | Auth session and confirmation_ref recorded as one proof pair; no authority for the new purpose | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T003 | DOCUMENTED_TRANSITION | attached                           | confirm_base!              | Base confirmed      | Matching base token and SHA-256 browser nonce digest; attachment present; binding lock                                                 | base_confirmed_at recorded once                                                                | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T004 | DOCUMENTED_TRANSITION | Base confirmed                     | redeem!                    | redeemed / admitted | Matching attached sid; active admitted rotated session; confirmation present; expiry not reached                                       | redeemed_at and admitted_auth_ceremony_session_id recorded atomically with admission           | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T005 | DOCUMENTED_TRANSITION | issued / attached / Base confirmed | retire!                    | retired             | Unredeemed binding; explicit expiry or restart                                                                                         | retired_at recorded without clearing terminal proof facts                                      | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T006 | CLEANUP               | retired / redeemed                 | AuthAdmissionBindingPurger | absent              | Parent retention reached; referenced Auth sessions expired/terminal and retained; restrictive child-first order                        | Binding is deleted before parent and Auth-session rows                                         | app/operations/auth_admission_binding_purger.rb | CONFIRMED  |
+
+The three tables have the same constraints: one parent, purpose-to-parent matching, step-up token
+requirement, all-or-none proof pairs, mutually exclusive redeemed/retired terminal facts, immutable
+identity/proof/deadline facts, and one live binding per parent. `entry_ref` and `confirmation_ref`
+are independent lookup references; neither is accepted as browser or Auth proof.
+
+Sign-in entry and redemption validate one effective intent through `AuthEntryIntentResolver` before
+consumption: persisted Switch selection, otherwise the OP prompt (`create` means Sign Up; ordinary
+authentication means Sign In). Admitted Auth checks and Base confirmation return targeting use the
+same resolver. Re-verification retains its separate purpose check.
+
+WU-24c/d store one immutable `curfew_at` at OP database issuance time + 30 minutes; Switch copies
+the original deadline and refuses inconsistent history. `entry_intent` is NOT NULL and immutable:
+APP/COM Binding collection also locks every owned sign-up Flow in ID order and retains the whole
+set if any child is in progress, not physically purgeable, or awaiting artifact cleanup. A completed
+registration does not require artifact cleanup, but still obeys its own physical-retention boundary;
+the default infinite retention is not shortened here. Eligible Flow rows are deleted before their
+restrictive Binding. The collector does not delete principals or Auth-session rows.
+
+authorization purposes use `sign_in`/`sign_up`, and re-verification purposes use `not_applicable`,
+with the same rule enforced in each realm database. These are issuance facts, not new lifecycle
+transitions. Curfew consumption is still WU-06; the existing acceptance/parent expiry checks remain.
+
+## idp-client-email-ceremony
+
+Implementation: `EmailCeremonyTransactionable`. Storage: `client_email_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/client_email_ceremony_transaction.rb`,
+`app/models/concerns/email_ceremony_transactionable.rb`,
+`app/operations/identity_email_ceremony_final_committer.rb`,
+`app/consumers/identity_email_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_email_ceremony_final_committer_test.rb`.
+
+| Transition ID                  | Mutation kind         | From    | Event / Trigger              | To       | Guard                                                                                                                                | Side effect                                                                                        | Source file                                           | Confidence |
+| ------------------------------ | --------------------- | ------- | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-client-email-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result!              | consumed | Unconsumed; TTL not reached; transaction row lock                                                                                    | result_jti + consumed_at                                                                           | app/models/concerns/email_ceremony_transactionable.rb | CONFIRMED  |
+| idp-client-email-ceremony:T002 | DOCUMENTED_TRANSITION | pending | consume_registration_result! | consumed | Original registration Ticket locked; own DB clock strictly before expiry; Source binding and original audit intent already committed | Server-issued receipt UUID and consumed_at; exact Source-provenance recovery after receipt failure | app/models/concerns/email_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states. Email EVP outcome is a
+separate machine indexed below.
+
+## idp-client-telephone-ceremony
+
+Implementation: `TelephoneCeremonyTransactionable`. Storage:
+`client_telephone_ceremony_transactions` / `status`.
+
+Sources: `app/models/client_telephone_ceremony_transaction.rb`,
+`app/models/concerns/telephone_ceremony_transactionable.rb`,
+`app/operations/identity_telephone_ceremony_final_committer.rb`,
+`app/consumers/identity_telephone_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_telephone_ceremony_final_committer_test.rb`.
+
+| Transition ID                      | Mutation kind         | From    | Event / Trigger              | To       | Guard                                                                                                                                | Side effect                                                                                        | Source file                                               | Confidence |
+| ---------------------------------- | --------------------- | ------- | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-client-telephone-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result!              | consumed | Unconsumed; TTL not reached; transaction row lock                                                                                    | result_jti + consumed_at                                                                           | app/models/concerns/telephone_ceremony_transactionable.rb | CONFIRMED  |
+| idp-client-telephone-ceremony:T002 | DOCUMENTED_TRANSITION | pending | consume_registration_result! | consumed | Original registration Ticket locked; own DB clock strictly before expiry; Source binding and original audit intent already committed | Server-issued receipt UUID and consumed_at; exact Source-provenance recovery after receipt failure | app/models/concerns/telephone_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states.
+
+## idp-client-passkey-ceremony
+
+Implementation: `PasskeyCeremonyTransactionable`. Storage: `client_passkey_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/client_passkey_ceremony_transaction.rb`,
+`app/models/concerns/passkey_ceremony_transactionable.rb`,
+`app/operations/identity_passkey_ceremony_final_committer.rb`,
+`app/consumers/identity_passkey_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_passkey_ceremony_final_committer_test.rb`.
+
+| Transition ID                    | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                             | Confidence |
+| -------------------------------- | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ------------------------------------------------------- | ---------- |
+| idp-client-passkey-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/passkey_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states. Passkey enrollment can be
+linked to step-up through a RESTRICT FK; committed by Base operations.
+
+## idp-client-secret-credential-ceremony
+
+Implementation: `SecretCredentialCeremonyTransactionable`. Storage:
+`client_secret_credential_ceremony_transactions` / `status`.
+
+Sources: `app/models/client_secret_credential_ceremony_transaction.rb`,
+`app/models/concerns/secret_credential_ceremony_transactionable.rb`,
+`app/operations/identity_secret_credential_ceremony_final_committer.rb`,
+`app/consumers/identity_secret_credential_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_secret_credential_ceremony_final_committer_test.rb`.
+
+| Transition ID                              | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                                       | Confidence |
+| ------------------------------------------ | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ----------------------------------------------------------------- | ---------- |
+| idp-client-secret-credential-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/secret_credential_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states.
+
+## idp-visitor-email-ceremony
+
+Implementation: `EmailCeremonyTransactionable`. Storage: `visitor_email_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/visitor_email_ceremony_transaction.rb`,
+`app/models/concerns/email_ceremony_transactionable.rb`,
+`app/operations/identity_email_ceremony_final_committer.rb`,
+`app/consumers/identity_email_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_email_ceremony_final_committer_test.rb`.
+
+| Transition ID                   | Mutation kind         | From    | Event / Trigger              | To       | Guard                                                                                                                                | Side effect                                                                                        | Source file                                           | Confidence |
+| ------------------------------- | --------------------- | ------- | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-visitor-email-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result!              | consumed | Unconsumed; TTL not reached; transaction row lock                                                                                    | result_jti + consumed_at                                                                           | app/models/concerns/email_ceremony_transactionable.rb | CONFIRMED  |
+| idp-visitor-email-ceremony:T002 | DOCUMENTED_TRANSITION | pending | consume_registration_result! | consumed | Original registration Ticket locked; own DB clock strictly before expiry; Source binding and original audit intent already committed | Server-issued receipt UUID and consumed_at; exact Source-provenance recovery after receipt failure | app/models/concerns/email_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states. Email EVP outcome is a
+separate machine indexed below.
+
+## idp-visitor-telephone-ceremony
+
+Implementation: `TelephoneCeremonyTransactionable`. Storage:
+`visitor_telephone_ceremony_transactions` / `status`.
+
+Sources: `app/models/visitor_telephone_ceremony_transaction.rb`,
+`app/models/concerns/telephone_ceremony_transactionable.rb`,
+`app/operations/identity_telephone_ceremony_final_committer.rb`,
+`app/consumers/identity_telephone_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_telephone_ceremony_final_committer_test.rb`.
+
+| Transition ID                       | Mutation kind         | From    | Event / Trigger              | To       | Guard                                                                                                                                | Side effect                                                                                        | Source file                                               | Confidence |
+| ----------------------------------- | --------------------- | ------- | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-visitor-telephone-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result!              | consumed | Unconsumed; TTL not reached; transaction row lock                                                                                    | result_jti + consumed_at                                                                           | app/models/concerns/telephone_ceremony_transactionable.rb | CONFIRMED  |
+| idp-visitor-telephone-ceremony:T002 | DOCUMENTED_TRANSITION | pending | consume_registration_result! | consumed | Original registration Ticket locked; own DB clock strictly before expiry; Source binding and original audit intent already committed | Server-issued receipt UUID and consumed_at; exact Source-provenance recovery after receipt failure | app/models/concerns/telephone_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states.
+
+## idp-visitor-passkey-ceremony
+
+Implementation: `PasskeyCeremonyTransactionable`. Storage: `visitor_passkey_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/visitor_passkey_ceremony_transaction.rb`,
+`app/models/concerns/passkey_ceremony_transactionable.rb`,
+`app/operations/identity_passkey_ceremony_final_committer.rb`,
+`app/consumers/identity_passkey_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_passkey_ceremony_final_committer_test.rb`.
+
+| Transition ID                     | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                             | Confidence |
+| --------------------------------- | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ------------------------------------------------------- | ---------- |
+| idp-visitor-passkey-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/passkey_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states. Passkey enrollment can be
+linked to step-up through a RESTRICT FK; committed by Base operations.
+
+## idp-visitor-secret-credential-ceremony
+
+Implementation: `SecretCredentialCeremonyTransactionable`. Storage:
+`visitor_secret_credential_ceremony_transactions` / `status`.
+
+Sources: `app/models/visitor_secret_credential_ceremony_transaction.rb`,
+`app/models/concerns/secret_credential_ceremony_transactionable.rb`,
+`app/operations/identity_secret_credential_ceremony_final_committer.rb`,
+`app/consumers/identity_secret_credential_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_secret_credential_ceremony_final_committer_test.rb`.
+
+| Transition ID                               | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                                       | Confidence |
+| ------------------------------------------- | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ----------------------------------------------------------------- | ---------- |
+| idp-visitor-secret-credential-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/secret_credential_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states.
+
+## idp-operator-email-ceremony
+
+Implementation: `EmailCeremonyTransactionable`. Storage: `operator_email_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/operator_email_ceremony_transaction.rb`,
+`app/models/concerns/email_ceremony_transactionable.rb`,
+`app/operations/identity_email_ceremony_final_committer.rb`,
+`app/consumers/identity_email_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_email_ceremony_final_committer_test.rb`.
+
+| Transition ID                    | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                           | Confidence |
+| -------------------------------- | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ----------------------------------------------------- | ---------- |
+| idp-operator-email-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/email_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states. Email EVP outcome is a
+separate machine indexed below.
+
+## idp-operator-telephone-ceremony
+
+Implementation: `TelephoneCeremonyTransactionable`. Storage:
+`operator_telephone_ceremony_transactions` / `status`.
+
+Sources: `app/models/operator_telephone_ceremony_transaction.rb`,
+`app/models/concerns/telephone_ceremony_transactionable.rb`,
+`app/operations/identity_telephone_ceremony_final_committer.rb`,
+`app/consumers/identity_telephone_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_telephone_ceremony_final_committer_test.rb`.
+
+| Transition ID                        | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                               | Confidence |
+| ------------------------------------ | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | --------------------------------------------------------- | ---------- |
+| idp-operator-telephone-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/telephone_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states.
+
+## idp-operator-passkey-ceremony
+
+Implementation: `PasskeyCeremonyTransactionable`. Storage: `operator_passkey_ceremony_transactions`
+/ `status`.
+
+Sources: `app/models/operator_passkey_ceremony_transaction.rb`,
+`app/models/concerns/passkey_ceremony_transactionable.rb`,
+`app/operations/identity_passkey_ceremony_final_committer.rb`,
+`app/consumers/identity_passkey_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_passkey_ceremony_final_committer_test.rb`.
+
+| Transition ID                      | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                             | Confidence |
+| ---------------------------------- | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ------------------------------------------------------- | ---------- |
+| idp-operator-passkey-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/passkey_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states. Passkey enrollment can be
+linked to step-up through a RESTRICT FK; committed by Base operations.
+
+## idp-operator-secret-credential-ceremony
+
+Implementation: `SecretCredentialCeremonyTransactionable`. Storage:
+`operator_secret_credential_ceremony_transactions` / `status`.
+
+Sources: `app/models/operator_secret_credential_ceremony_transaction.rb`,
+`app/models/concerns/secret_credential_ceremony_transactionable.rb`,
+`app/operations/identity_secret_credential_ceremony_final_committer.rb`,
+`app/consumers/identity_secret_credential_ceremony_result_consumer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_secret_credential_ceremony_final_committer_test.rb`.
+
+| Transition ID                                | Mutation kind         | From    | Event / Trigger | To       | Guard                                             | Side effect              | Source file                                                       | Confidence |
+| -------------------------------------------- | --------------------- | ------- | --------------- | -------- | ------------------------------------------------- | ------------------------ | ----------------------------------------------------------------- | ---------- |
+| idp-operator-secret-credential-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! | consumed | Unconsumed; TTL not reached; transaction row lock | result_jti + consumed_at | app/models/concerns/secret_credential_ceremony_transactionable.rb | CONFIRMED  |
+
+SQL default pending; status has model inclusion and consumed_at/result_jti duplication but no state
+reference FK. TTL expiry is a predicate and purge path, not stored expired. No cancel/failure status
+exists: result verification failures reject without transition. Auth result issuance crosses to Base
+final committer through signed grant/result; consumer reloads binding and consumes exactly once. Row
+lock plus unique result_jti rejects replay. Candidate/principal persistence can use another
+database, so no cross-DB atomicity is inferred. The model suite explicitly exercises client models;
+realm-specific committer tests are separate and test execution is unverified. Direct final-committer
+writes to credential/contact status are side effects, not ceremony states.
+
+## idp-client-totp-ceremony
+
+Implementation: `TotpCeremonyTransactionable`. Storage: `client_totp_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/client_totp_ceremony_transaction.rb`,
+`app/models/concerns/totp_ceremony_transactionable.rb`,
+`app/operations/identity_totp_ceremony_final_committer.rb`.
+
+Tests read: `test/models/concerns/ceremony_transactionable_test.rb`,
+`test/operations/identity_totp_ceremony_final_committer_test.rb`.
+
+| Transition ID                 | Mutation kind         | From    | Event / Trigger                        | To       | Guard                                        | Side effect                     | Source file                                          | Confidence |
+| ----------------------------- | --------------------- | ------- | -------------------------------------- | -------- | -------------------------------------------- | ------------------------------- | ---------------------------------------------------- | ---------- |
+| idp-client-totp-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! / Base final committer | consumed | unconsumed; TTL; row lock; unique result_jti | consumed_at and result evidence | app/models/concerns/totp_ceremony_transactionable.rb | CONFIRMED  |
+
+These concrete machines exist only in app/client. pending default; consumed terminal; TTL 10 minutes
+is predicate-only and background purge retires rows after retention. No canceled/failed state or
+persisted expiry edge. Social supports provider-specific signed Auth-to-Base link/login/signup
+results; provider outcome does not create a social transaction state. TOTP is enrollment rather than
+primary login; new step-up enrollment final committer directly writes child consumed along with
+candidate and parent transaction under ticket locks. Results are unique and repeated consumption
+rejects. Credential creation may occur in a separate principal DB; failures and replay tests
+describe compensation/retained proof, not a guaranteed distributed transaction.
+
+## idp-client-social-ceremony
+
+Implementation: `SocialCeremonyTransactionable`. Storage: `client_social_ceremony_transactions` /
+`status`.
+
+Sources: `app/models/client_social_ceremony_transaction.rb`,
+`app/models/concerns/social_ceremony_transactionable.rb`,
+`app/controllers/auth/app/social/link_completions_controller.rb`.
+
+Tests: `test/models/concerns/social_ceremony_transactionable_test.rb`.
+
+| Transition ID                   | Mutation kind         | From    | Event / Trigger                          | To                         | Guard                                                 | Side effect                                                   | Source file                                                    | Confidence |
+| ------------------------------- | --------------------- | ------- | ---------------------------------------- | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- | ---------- |
+| idp-client-social-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! (no writer since WU-05g) | consumed                   | unconsumed; TTL; row lock; unique result_jti          | consumed_at and result evidence                               | app/models/concerns/social_ceremony_transactionable.rb         | CONFIRMED  |
+| idp-client-social-ceremony:T002 | DOCUMENTED_TRANSITION | pending | app link completion                      | pending with expired grant | pending; unconsumed; TTL; candidate and session match | expires_at set to current DB time after candidate consumption | app/controllers/auth/app/social/link_completions_controller.rb | CONFIRMED  |
+
+These concrete machines exist only in app/client. pending default; consumed terminal; TTL 10 minutes
+is predicate-only and background purge retires rows after retention. No canceled/failed state or
+persisted expiry edge. Social supports provider-specific signed Auth-to-Base link/login/signup
+results; provider outcome does not create a social transaction state. TOTP is enrollment rather than
+primary login; new step-up enrollment final committer directly writes child consumed along with
+Signup commit and committed-receipt lookup require the signed session reference to identify a
+redeemed sign-up Admission whose `id` matches the Flow's immutable `auth_admission_binding_id`.
+The committer reads this ownership on the OP writer before principal creation or fresh result and
+candidate consumption. The Base receiver also scopes completion-reference access to that Binding.
+A valid signature or independent browser proof does not authorize another Binding's Flow, and a
+rejected receipt leaves registered identities intact.
+
+candidate and parent transaction under ticket locks. Results are unique and repeated consumption
+rejects. Credential creation may occur in a separate principal DB; failures and replay tests
+describe compensation/retained proof, not a guaranteed distributed transaction.
+
+## idp-client-step-up-ceremony
+
+Base cancellation and ordinary freshness finalization require a usable DeviceSession and its current
+root token under source-owner/device/token/parent locks. These guards also apply to visitor and
+operator Base committers; broader direct model APIs remain inventoried separately.
+
+Implementation: `StepUpCeremonyTransactionable / Base committers`. Storage:
+`client_step_up_ceremony_transactions` / `status`.
+
+Sources: `app/models/concerns/step_up_ceremony_transactionable.rb`,
+`app/operations/identity_step_up_ceremony_cancellation_committer.rb`,
+`app/models/concerns/token_status_management.rb`,
+`app/operations/identity_step_up_ceremony_freshness_committer.rb`,
+`app/operations/identity_totp_enrollment_final_committer.rb`.
+
+Tests read: `test/models/opaque_step_up_transaction_test.rb`,
+`test/operations/identity_step_up_ceremony_cancellation_committer_test.rb`,
+`test/operations/identity_totp_enrollment_final_committer_test.rb`.
+
+| Transition ID                    | Mutation kind         | From     | Event / Trigger                                          | To       | Guard                                                                                                                                                  | Side effect                                                                                               | Source file                                                        | Confidence |
+| -------------------------------- | --------------------- | -------- | -------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------- |
+| idp-client-step-up-ceremony:T001 | DOCUMENTED_TRANSITION | pending  | record_verification! / record_registration_verification! | verified | pending/unexpired; allowed method/purpose; evidence/assurance checks; lock                                                                             | method/AAL/time/credential; result_jti                                                                    | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+| idp-client-step-up-ceremony:T002 | DOCUMENTED_TRANSITION | verified | prepare_result_delivery!                                 | verified | verified/unexpired; digest; ttl>0                                                                                                                      | generation +1; bounded result TTL                                                                         | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+| idp-client-step-up-ceremony:T003 | DOCUMENTED_TRANSITION | pending  | Base cancellation committer                              | canceled | Matching current actor/token; purpose binding; unexpired; lock                                                                                         | canceled_at; linked Auth cancel                                                                           | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-client-step-up-ceremony:T004 | DOCUMENTED_TRANSITION | pending  | Base cancellation at TTL                                 | expired  | Same binding; expires_at <= DB now                                                                                                                     | status expired; no cancel side effect                                                                     | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-client-step-up-ceremony:T005 | DOCUMENTED_TRANSITION | pending  | token revoke_step_up_authority!                          | revoked  | Linked session; status pending or verified; ordered locks                                                                                              | revoked_at; discard child; clear token freshness; revoke Auth                                             | app/models/concerns/token_status_management.rb                     | CONFIRMED  |
+| idp-client-step-up-ceremony:T006 | DOCUMENTED_TRANSITION | verified | Base cancellation committer                              | canceled | Matching current actor/token; purpose binding; unexpired; lock                                                                                         | canceled_at; linked Auth cancel                                                                           | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-client-step-up-ceremony:T007 | DOCUMENTED_TRANSITION | verified | Base cancellation at TTL                                 | expired  | Same binding; expires_at <= DB now                                                                                                                     | status expired; no cancel side effect                                                                     | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-client-step-up-ceremony:T008 | DOCUMENTED_TRANSITION | verified | token revoke_step_up_authority!                          | revoked  | Linked session; status pending or verified; ordered locks                                                                                              | revoked_at; discard child; clear token freshness; revoke Auth                                             | app/models/concerns/token_status_management.rb                     | CONFIRMED  |
+| idp-client-step-up-ceremony:T009 | DOCUMENTED_TRANSITION | verified | Base freshness / registration final committer            | consumed | verified evidence; binding/generation/resource/policy recheck                                                                                          | consumed_at; token freshness OR credential creation                                                       | app/operations/identity_step_up_ceremony_freshness_committer.rb    | CONFIRMED  |
+| idp-client-step-up-ceremony:T017 | DOCUMENTED_TRANSITION | pending  | consume_email_registration!                              | consumed | Original email-only bootstrap/registration parent locked; own DB clock before expiry; Source binding and original audit already committed by finalizer | Named model transition writes original registered credential and server-issued receipt; no Root freshness | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+
+Status is a string CHECK without a reference FK. Every status write passes through the single named
+model transition boundary; consumed, canceled, expired and revoked are absorbing. Base operations
+serialize owner, device, current Root and original parent, and recheck the current authorization
+facts. Expiry is a read predicate until a mutation-capable owner commits it. Registration consumes
+permission without granting freshness; authentication verification requires a separate ceremony.
+Result reissue rotates generation without extending the original parent deadline.
+
+The former generic consume_result!/cancel! APIs are absent from the current implementation; their
+permissive legacy edges are not current transitions. SQL terminal/evidence constraints remain an
+independent protection. APP/COM first-email bootstrap consumption additionally uses
+consume_email_registration!, which locks the original parent and obtains its own DB clock after
+Source binding commits.
+
+## idp-visitor-step-up-ceremony
+
+Implementation: `StepUpCeremonyTransactionable / Base committers`. Storage:
+`visitor_step_up_ceremony_transactions` / `status`.
+
+Sources: `app/models/concerns/step_up_ceremony_transactionable.rb`,
+`app/operations/identity_step_up_ceremony_cancellation_committer.rb`,
+`app/models/concerns/token_status_management.rb`,
+`app/operations/identity_step_up_ceremony_freshness_committer.rb`,
+`app/operations/identity_totp_enrollment_final_committer.rb`.
+
+Tests read: `test/models/opaque_step_up_transaction_test.rb`,
+`test/operations/identity_step_up_ceremony_cancellation_committer_test.rb`,
+`test/operations/identity_totp_enrollment_final_committer_test.rb`.
+
+| Transition ID                     | Mutation kind         | From     | Event / Trigger                                          | To       | Guard                                                                                                                                                  | Side effect                                                                                               | Source file                                                        | Confidence |
+| --------------------------------- | --------------------- | -------- | -------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------- |
+| idp-visitor-step-up-ceremony:T001 | DOCUMENTED_TRANSITION | pending  | record_verification! / record_registration_verification! | verified | pending/unexpired; allowed method/purpose; evidence/assurance checks; lock                                                                             | method/AAL/time/credential; result_jti                                                                    | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T002 | DOCUMENTED_TRANSITION | verified | prepare_result_delivery!                                 | verified | verified/unexpired; digest; ttl>0                                                                                                                      | generation +1; bounded result TTL                                                                         | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T003 | DOCUMENTED_TRANSITION | pending  | Base cancellation committer                              | canceled | Matching current actor/token; purpose binding; unexpired; lock                                                                                         | canceled_at; linked Auth cancel                                                                           | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T004 | DOCUMENTED_TRANSITION | pending  | Base cancellation at TTL                                 | expired  | Same binding; expires_at <= DB now                                                                                                                     | status expired; no cancel side effect                                                                     | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T005 | DOCUMENTED_TRANSITION | pending  | token revoke_step_up_authority!                          | revoked  | Linked session; status pending or verified; ordered locks                                                                                              | revoked_at; discard child; clear token freshness; revoke Auth                                             | app/models/concerns/token_status_management.rb                     | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T006 | DOCUMENTED_TRANSITION | verified | Base cancellation committer                              | canceled | Matching current actor/token; purpose binding; unexpired; lock                                                                                         | canceled_at; linked Auth cancel                                                                           | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T007 | DOCUMENTED_TRANSITION | verified | Base cancellation at TTL                                 | expired  | Same binding; expires_at <= DB now                                                                                                                     | status expired; no cancel side effect                                                                     | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T008 | DOCUMENTED_TRANSITION | verified | token revoke_step_up_authority!                          | revoked  | Linked session; status pending or verified; ordered locks                                                                                              | revoked_at; discard child; clear token freshness; revoke Auth                                             | app/models/concerns/token_status_management.rb                     | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T009 | DOCUMENTED_TRANSITION | verified | Base freshness / registration final committer            | consumed | verified evidence; binding/generation/resource/policy recheck                                                                                          | consumed_at; token freshness OR credential creation                                                       | app/operations/identity_step_up_ceremony_freshness_committer.rb    | CONFIRMED  |
+| idp-visitor-step-up-ceremony:T017 | DOCUMENTED_TRANSITION | pending  | consume_email_registration!                              | consumed | Original email-only bootstrap/registration parent locked; own DB clock before expiry; Source binding and original audit already committed by finalizer | Named model transition writes original registered credential and server-issued receipt; no Root freshness | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+
+Status is a string CHECK without a reference FK. Every status write passes through the single named
+model transition boundary; consumed, canceled, expired and revoked are absorbing. Base operations
+serialize owner, device, current Root and original parent, and recheck the current authorization
+facts. Expiry is a read predicate until a mutation-capable owner commits it. Registration consumes
+permission without granting freshness; authentication verification requires a separate ceremony.
+Result reissue rotates generation without extending the original parent deadline.
+
+The former generic consume_result!/cancel! APIs are absent from the current implementation; their
+permissive legacy edges are not current transitions. SQL terminal/evidence constraints remain an
+independent protection. APP/COM first-email bootstrap consumption additionally uses
+consume_email_registration!, which locks the original parent and obtains its own DB clock after
+Source binding commits.
+
+## idp-operator-step-up-ceremony
+
+Implementation: `StepUpCeremonyTransactionable / Base committers`. Storage:
+`operator_step_up_ceremony_transactions` / `status`.
+
+Sources: `app/models/concerns/step_up_ceremony_transactionable.rb`,
+`app/operations/identity_step_up_ceremony_cancellation_committer.rb`,
+`app/models/concerns/token_status_management.rb`,
+`app/operations/identity_step_up_ceremony_freshness_committer.rb`,
+`app/operations/identity_totp_enrollment_final_committer.rb`.
+
+Tests read: `test/models/opaque_step_up_transaction_test.rb`,
+`test/operations/identity_step_up_ceremony_cancellation_committer_test.rb`,
+`test/operations/identity_totp_enrollment_final_committer_test.rb`.
+
+| Transition ID                      | Mutation kind         | From     | Event / Trigger                                          | To       | Guard                                                                      | Side effect                                                   | Source file                                                        | Confidence |
+| ---------------------------------- | --------------------- | -------- | -------------------------------------------------------- | -------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ | ---------- |
+| idp-operator-step-up-ceremony:T001 | DOCUMENTED_TRANSITION | pending  | record_verification! / record_registration_verification! | verified | pending/unexpired; allowed method/purpose; evidence/assurance checks; lock | method/AAL/time/credential; result_jti                        | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+| idp-operator-step-up-ceremony:T002 | DOCUMENTED_TRANSITION | verified | prepare_result_delivery!                                 | verified | verified/unexpired; digest; ttl>0                                          | generation +1; bounded result TTL                             | app/models/concerns/step_up_ceremony_transactionable.rb            | CONFIRMED  |
+| idp-operator-step-up-ceremony:T003 | DOCUMENTED_TRANSITION | pending  | Base cancellation committer                              | canceled | Matching current actor/token; purpose binding; unexpired; lock             | canceled_at; linked Auth cancel                               | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-operator-step-up-ceremony:T004 | DOCUMENTED_TRANSITION | pending  | Base cancellation at TTL                                 | expired  | Same binding; expires_at <= DB now                                         | status expired; no cancel side effect                         | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-operator-step-up-ceremony:T005 | DOCUMENTED_TRANSITION | pending  | token revoke_step_up_authority!                          | revoked  | Linked session; status pending or verified; ordered locks                  | revoked_at; discard child; clear token freshness; revoke Auth | app/models/concerns/token_status_management.rb                     | CONFIRMED  |
+| idp-operator-step-up-ceremony:T006 | DOCUMENTED_TRANSITION | verified | Base cancellation committer                              | canceled | Matching current actor/token; purpose binding; unexpired; lock             | canceled_at; linked Auth cancel                               | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-operator-step-up-ceremony:T007 | DOCUMENTED_TRANSITION | verified | Base cancellation at TTL                                 | expired  | Same binding; expires_at <= DB now                                         | status expired; no cancel side effect                         | app/operations/identity_step_up_ceremony_cancellation_committer.rb | CONFIRMED  |
+| idp-operator-step-up-ceremony:T008 | DOCUMENTED_TRANSITION | verified | token revoke_step_up_authority!                          | revoked  | Linked session; status pending or verified; ordered locks                  | revoked_at; discard child; clear token freshness; revoke Auth | app/models/concerns/token_status_management.rb                     | CONFIRMED  |
+| idp-operator-step-up-ceremony:T009 | DOCUMENTED_TRANSITION | verified | Base freshness / registration final committer            | consumed | verified evidence; binding/generation/resource/policy recheck              | consumed_at; token freshness OR credential creation           | app/operations/identity_step_up_ceremony_freshness_committer.rb    | CONFIRMED  |
+
+Status is a string CHECK without a reference FK. Every status write passes through the single named
+model transition boundary; consumed, canceled, expired and revoked are absorbing. Base operations
+serialize owner, device, current Root and original parent, and recheck the current authorization
+facts. Expiry is a read predicate until a mutation-capable owner commits it. Registration consumes
+permission without granting freshness; authentication verification requires a separate ceremony.
+Result reissue rotates generation without extending the original parent deadline.
+
+The former generic consume_result!/cancel! APIs are absent from the current implementation; their
+permissive legacy edges are not current transitions. SQL terminal/evidence constraints remain an
+independent protection. APP/COM first-email bootstrap consumption additionally uses
+consume_email_registration!, which locks the original parent and obtains its own DB clock after
+Source binding commits.
+
+## idp-client-oidc-authorization
+
+Implementation: `OidcAuthorizationTransactionable`. Storage:
+`client_oidc_authorization_transactions` / `status`.
+
+Sources: `app/models/concerns/oidc_authorization_transactionable.rb`,
+`app/models/client_oidc_authorization_transaction.rb`,
+`app/services/oidc_authorization_transaction_coordinator.rb`,
+`app/services/credential_security_transition.rb`.
+
+Tests read: `test/models/concerns/oidc_authorization_transactionable_test.rb`,
+`test/services/oidc_authorization_transaction_service_test.rb`.
+
+| Transition ID                      | Mutation kind         | From          | Event / Trigger               | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
+| ---------------------------------- | --------------------- | ------------- | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-client-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!      | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!      | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                      | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success        | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant!    | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T006 | DOCUMENTED_TRANSITION | pending       | prepare_cancellation_handoff! | pending       | pending; unexpired; row lock; same handoff is idempotent, another is refused             | cancellation_handoff_ref; cancellation_handoff_ciphertext               | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T007 | DOCUMENTED_TRANSITION | pending       | cancel!                       | canceled      | pending; unexpired; handoff bound; row lock; canceled with the same digest is idempotent | canceled_at; cancellation_handoff_digest                                | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+
+OIDC `state` is request CSRF correlation, not lifecycle duplication of status. No reference table or
+persisted failed/expired status; `canceled` is the D09 first-page Cancel (2026-10-19), reached only
+from pending, and register_authentication! refuses a canceled parent. Expiry predicates check
+authorization and login-challenge independently; security transitions clamp deadlines and revoke
+linked Auth continuity without status change. consumed ends authentication transition but
+authorization grant redemption remains a second one-time fact; finalize_base! idempotently reuses
+persisted browser-session reference. Raw consume! lacks Base finalization fact, so consumed alone
+does not prove grant readiness. Row locking serializes authentication and redemption; test reads
+cover exact microsecond deadline neighbors, stale generation, overwritten authentication rejection
+and concurrent one winner. Auth-to-Base result uses opaque admission transport; code issuance then
+redemption creates RP session. No target external_result event is inferred.
+
+## idp-visitor-oidc-authorization
+
+Implementation: `OidcAuthorizationTransactionable`. Storage:
+`visitor_oidc_authorization_transactions` / `status`.
+
+Sources: `app/models/concerns/oidc_authorization_transactionable.rb`,
+`app/models/visitor_oidc_authorization_transaction.rb`,
+`app/services/oidc_authorization_transaction_coordinator.rb`,
+`app/services/credential_security_transition.rb`.
+
+Tests read: `test/models/concerns/oidc_authorization_transactionable_test.rb`,
+`test/services/oidc_authorization_transaction_service_test.rb`.
+
+| Transition ID                       | Mutation kind         | From          | Event / Trigger               | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
+| ----------------------------------- | --------------------- | ------------- | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-visitor-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!      | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!      | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                      | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success        | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant!    | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T006 | DOCUMENTED_TRANSITION | pending       | prepare_cancellation_handoff! | pending       | pending; unexpired; row lock; same handoff is idempotent, another is refused             | cancellation_handoff_ref; cancellation_handoff_ciphertext               | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T007 | DOCUMENTED_TRANSITION | pending       | cancel!                       | canceled      | pending; unexpired; handoff bound; row lock; canceled with the same digest is idempotent | canceled_at; cancellation_handoff_digest                                | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+
+OIDC `state` is request CSRF correlation, not lifecycle duplication of status. No reference table or
+persisted failed/expired status; `canceled` is the D09 first-page Cancel (2026-10-19), reached only
+from pending, and register_authentication! refuses a canceled parent. Expiry predicates check
+authorization and login-challenge independently; security transitions clamp deadlines and revoke
+linked Auth continuity without status change. consumed ends authentication transition but
+authorization grant redemption remains a second one-time fact; finalize_base! idempotently reuses
+persisted browser-session reference. Raw consume! lacks Base finalization fact, so consumed alone
+does not prove grant readiness. Row locking serializes authentication and redemption; test reads
+cover exact microsecond deadline neighbors, stale generation, overwritten authentication rejection
+and concurrent one winner. Auth-to-Base result uses opaque admission transport; code issuance then
+redemption creates RP session. No target external_result event is inferred.
+
+## idp-operator-oidc-authorization
+
+Implementation: `OidcAuthorizationTransactionable`. Storage:
+`operator_oidc_authorization_transactions` / `status`.
+
+Sources: `app/models/concerns/oidc_authorization_transactionable.rb`,
+`app/models/operator_oidc_authorization_transaction.rb`,
+`app/services/oidc_authorization_transaction_coordinator.rb`,
+`app/services/credential_security_transition.rb`.
+
+Tests read: `test/models/concerns/oidc_authorization_transactionable_test.rb`,
+`test/services/oidc_authorization_transaction_service_test.rb`.
+
+| Transition ID                        | Mutation kind         | From          | Event / Trigger               | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
+| ------------------------------------ | --------------------- | ------------- | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-operator-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!      | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!      | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                      | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success        | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant!    | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T006 | DOCUMENTED_TRANSITION | pending       | prepare_cancellation_handoff! | pending       | pending; unexpired; row lock; same handoff is idempotent, another is refused             | cancellation_handoff_ref; cancellation_handoff_ciphertext               | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T007 | DOCUMENTED_TRANSITION | pending       | cancel!                       | canceled      | pending; unexpired; handoff bound; row lock; canceled with the same digest is idempotent | canceled_at; cancellation_handoff_digest                                | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+
+OIDC `state` is request CSRF correlation, not lifecycle duplication of status. No reference table or
+persisted failed/expired status; `canceled` is the D09 first-page Cancel (2026-10-19), reached only
+from pending, and register_authentication! refuses a canceled parent. Expiry predicates check
+authorization and login-challenge independently; security transitions clamp deadlines and revoke
+linked Auth continuity without status change. consumed ends authentication transition but
+authorization grant redemption remains a second one-time fact; finalize_base! idempotently reuses
+persisted browser-session reference. Raw consume! lacks Base finalization fact, so consumed alone
+does not prove grant readiness. Row locking serializes authentication and redemption; test reads
+cover exact microsecond deadline neighbors, stale generation, overwritten authentication rejection
+and concurrent one winner. Auth-to-Base result uses opaque admission transport; code issuance then
+redemption creates RP session. No target external_result event is inferred.
+
+## idp-client-oauth-callback
+
+Implementation: `OauthCallbackStateable`. Storage: `client_oauth_callback_states` /
+`consumed_at / expires_at`.
+
+Sources: `app/models/concerns/oauth_callback_stateable.rb`,
+`app/models/client_oauth_callback_state.rb`, `app/services/social_auth_callback_state_store.rb`.
+
+Tests read: `test/models/oauth_callback_state_test.rb`.
+
+| Transition ID                  | Mutation kind         | From       | Event / Trigger            | To       | Guard                                                      | Side effect | Source file                                     | Confidence |
+| ------------------------------ | --------------------- | ---------- | -------------------------- | -------- | ---------------------------------------------------------- | ----------- | ----------------------------------------------- | ---------- |
+| idp-client-oauth-callback:T001 | DOCUMENTED_TRANSITION | unconsumed | consume! provider callback | consumed | provider/digest match; active TTL; row lock in transaction | consumed_at | app/models/concerns/oauth_callback_stateable.rb | CONFIRMED  |
+
+No lifecycle `state` column: state_digest identifies OAuth anti-CSRF state. TTL 300 seconds; expiry
+leaves row unconsumed but unresumable. Duplicate issuance find_or_create may return existing
+expired/consumed row; does not reset TTL/consumption. Provider mismatch/replay reject without state
+mutation. Production SocialAuthCallbackStateStore only supports configured providers; tests
+explicitly refuse unsupported org/com google names. Operator model has working transaction API but
+production provider wiring must be assessed independently; visitor has no callback model/table and
+no invented diagram.
+
+## idp-operator-oauth-callback
+
+Implementation: `OauthCallbackStateable`. Storage: `operator_oauth_callback_states` /
+`consumed_at / expires_at`.
+
+Sources: `app/models/concerns/oauth_callback_stateable.rb`,
+`app/models/operator_oauth_callback_state.rb`, `app/services/social_auth_callback_state_store.rb`.
+
+Tests read: `test/models/oauth_callback_state_test.rb`.
+
+| Transition ID                    | Mutation kind         | From       | Event / Trigger            | To       | Guard                                                      | Side effect | Source file                                     | Confidence |
+| -------------------------------- | --------------------- | ---------- | -------------------------- | -------- | ---------------------------------------------------------- | ----------- | ----------------------------------------------- | ---------- |
+| idp-operator-oauth-callback:T001 | DOCUMENTED_TRANSITION | unconsumed | consume! provider callback | consumed | provider/digest match; active TTL; row lock in transaction | consumed_at | app/models/concerns/oauth_callback_stateable.rb | CONFIRMED  |
+
+No lifecycle `state` column: state_digest identifies OAuth anti-CSRF state. TTL 300 seconds; expiry
+leaves row unconsumed but unresumable. Duplicate issuance find_or_create may return existing
+expired/consumed row; does not reset TTL/consumption. Provider mismatch/replay reject without state
+mutation. Production SocialAuthCallbackStateStore only supports configured providers; tests
+explicitly refuse unsupported org/com google names. Operator model has working transaction API but
+production provider wiring must be assessed independently; visitor has no callback model/table and
+no invented diagram.
+
+## idp-client-sign-in-flow-evidence
+
+Implementation: `SignInFlowAuthenticationEvidence`. Storage: `client_sign_in_flows` /
+`authentication_method / authentication_event_at / authentication_context`.
+
+Sources: `app/models/concerns/sign_in_flow_authentication_evidence.rb`,
+`app/models/client_sign_in_flow.rb`, `app/controllers/concerns/authentication_base.rb`
+(`record_oidc_flow_evidence!`).
+
+Tests read: `test/models/sign_in_flow_authentication_evidence_test.rb`.
+
+| Transition ID                         | Mutation kind         | From  | Event / Trigger                 | To       | Guard                                                          | Side effect               | Source                                                      | Status    |
+| ------------------------------------- | --------------------- | ----- | ------------------------------- | -------- | -------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- | --------- |
+| idp-client-sign-in-flow-evidence:T001 | DOCUMENTED_TRANSITION | empty | record_authentication_evidence! | evidence | PRIMARY/MFA_PENDING; principal; expiry; supported method; lock | method/event time/context | app/models/concerns/sign_in_flow_authentication_evidence.rb | CONFIRMED |
+
+A subordinate fact on sign-in rows, not a status reference. The Local result-delivery transitions
+(`prepare_local_result_delivery!`, Base Local completion) were removed with the entry-less Local
+Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and `result_expires_at`
+on this table have no writer since then. Under the OIDC parent Auth records the evidence and Base
+issues the session at authorization resume.
+
+## idp-visitor-sign-in-flow-evidence
+
+Implementation: `SignInFlowAuthenticationEvidence`. Storage: `visitor_sign_in_flows` /
+`authentication_method / authentication_event_at / authentication_context`.
+
+Sources: `app/models/concerns/sign_in_flow_authentication_evidence.rb`,
+`app/models/visitor_sign_in_flow.rb`, `app/controllers/concerns/authentication_base.rb`
+(`record_oidc_flow_evidence!`).
+
+Tests read: `test/models/sign_in_flow_authentication_evidence_test.rb`.
+
+| Transition ID                          | Mutation kind         | From  | Event / Trigger                 | To       | Guard                                                          | Side effect               | Source                                                      | Status    |
+| -------------------------------------- | --------------------- | ----- | ------------------------------- | -------- | -------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- | --------- |
+| idp-visitor-sign-in-flow-evidence:T001 | DOCUMENTED_TRANSITION | empty | record_authentication_evidence! | evidence | PRIMARY/MFA_PENDING; principal; expiry; supported method; lock | method/event time/context | app/models/concerns/sign_in_flow_authentication_evidence.rb | CONFIRMED |
+
+A subordinate fact on sign-in rows, not a status reference. The Local result-delivery transitions
+(`prepare_local_result_delivery!`, Base Local completion) were removed with the entry-less Local
+Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and `result_expires_at`
+on this table have no writer since then. Under the OIDC parent Auth records the evidence and Base
+issues the session at authorization resume.
+
+## idp-operator-sign-in-flow-evidence
+
+Implementation: `SignInFlowAuthenticationEvidence`. Storage: `operator_sign_in_flows` /
+`authentication_method / authentication_event_at / authentication_context`.
+
+Sources: `app/models/concerns/sign_in_flow_authentication_evidence.rb`,
+`app/models/operator_sign_in_flow.rb`, `app/controllers/concerns/authentication_base.rb`
+(`record_oidc_flow_evidence!`).
+
+Tests read: `test/models/sign_in_flow_authentication_evidence_test.rb`.
+
+| Transition ID                           | Mutation kind         | From  | Event / Trigger                 | To       | Guard                                                          | Side effect               | Source                                                      | Status    |
+| --------------------------------------- | --------------------- | ----- | ------------------------------- | -------- | -------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- | --------- |
+| idp-operator-sign-in-flow-evidence:T001 | DOCUMENTED_TRANSITION | empty | record_authentication_evidence! | evidence | PRIMARY/MFA_PENDING; principal; expiry; supported method; lock | method/event time/context | app/models/concerns/sign_in_flow_authentication_evidence.rb | CONFIRMED |
+
+A subordinate fact on sign-in rows, not a status reference. The Local result-delivery transitions
+(`prepare_local_result_delivery!`, Base Local completion) were removed with the entry-less Local
+Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and `result_expires_at`
+on this table have no writer since then. Under the OIDC parent Auth records the evidence and Base
+issues the session at authorization resume.
+
+## idp-client-token
+
+Implementation: `TokenStatusManagement / RefreshTokenable`. Storage: `client_tokens` /
+`actor token status FK`.
+
+Sources: `app/models/concerns/token_status_management.rb`,
+`app/models/concerns/refresh_tokenable.rb`, `app/models/client_token.rb`,
+`app/controllers/concerns/authentication_base.rb`.
+
+Tests read: `test/models/concerns/token_status_management_test.rb`,
+`test/models/concerns/refresh_tokenable_test.rb`, `test/models/refresh_token_concurrency_test.rb`.
+
+R2-WU04 current-state note (2026-10-16): the status rows and historical transitions below are
+retained for traceability. The current implementation exposes no `mark_restricted!` or
+`promote_to_active!` writer; `RESTRICTED` (103) is read-only historical data. `revoke!` remains the
+lifecycle writer, and refresh/reauthentication replacement requires an ACTIVE predecessor.
+
+| Transition ID         | Mutation kind         | From       | Event / Trigger    | To         | Guard                                                                         | Side effect                                                           | Source file                                    | Confidence |
+| --------------------- | --------------------- | ---------- | ------------------ | ---------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-client-token:T001 | DOCUMENTED_TRANSITION | ACTIVE     | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T002 | DOCUMENTED_TRANSITION | ACTIVE     | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T003 | DOCUMENTED_TRANSITION | ACTIVE     | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T004 | DOCUMENTED_TRANSITION | EXPIRED    | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T005 | DOCUMENTED_TRANSITION | EXPIRED    | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T006 | DOCUMENTED_TRANSITION | EXPIRED    | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T007 | DOCUMENTED_TRANSITION | RESTRICTED | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T008 | DOCUMENTED_TRANSITION | RESTRICTED | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T009 | DOCUMENTED_TRANSITION | RESTRICTED | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T010 | DOCUMENTED_TRANSITION | REVOKED    | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T011 | DOCUMENTED_TRANSITION | REVOKED    | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T012 | DOCUMENTED_TRANSITION | REVOKED    | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T013 | DOCUMENTED_TRANSITION | ACTIVE     | rotate_refresh!    | rotated    | usable; matching digest; actor/device/token locks; no previous rotation       | rotated_at; revoke old step-up; replacement row; generation+1         | app/models/concerns/refresh_tokenable.rb       | CONFIRMED  |
+| idp-client-token:T014 | DOCUMENTED_TRANSITION | RESTRICTED | rotate_refresh!    | rotated    | usable; matching digest; actor/device/token locks; no previous rotation       | rotated_at; revoke old step-up; replacement row; generation+1         | app/models/concerns/refresh_tokenable.rb       | CONFIRMED  |
+| idp-client-token:T015 | OUT_OF_BAND           | NOTHING    | promote_to_active! | ACTIVE     | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T016 | OUT_OF_BAND           | NOTHING    | mark_restricted!   | RESTRICTED | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-client-token:T017 | OUT_OF_BAND           | NOTHING    | revoke!            | REVOKED    | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+
+EXPIRED is a reference id, but no production setter was found; time/discard/rotation independently
+make a row unusable without setting EXPIRED. The historical promote/restrict and RESTRICTED-refresh
+rows above are retained only for traceability; current source exposes no such writers and requires
+ACTIVE for refresh/reauthentication replacement. therefore no universal absorbing terminal is drawn.
+revoke! is locked and clears bound step-up authority; promote/restrict are status saves without
+their own row lock. Refresh rotation marks old row unusable and creates a separate replacement, not
+an old row transition back to ACTIVE. Old digest replay returns replay; surrounding verifier can
+revoke family. Device current-refresh ownership is distinct. Default constructor uses ACTIVE;
+restricted issuance is an existing path. Storage includes status plus
+discard_at/rotated_at/generation rather than a single lifecycle authority; DBSC is independently
+indexed.
+
+## idp-client-dbsc
+
+Implementation: `DbscBindable / DbscRegistrationService`. Storage: `client_tokens` /
+`actor token DBSC status FK`.
+
+Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
+`app/services/dbsc_record_adapter.rb`, `app/controllers/concerns/authentication_base.rb`.
+
+Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
+`test/services/dbsc/registration_service_test.rb`.
+
+| Transition ID        | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
+| -------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
+| idp-client-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-client-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-client-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-client-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+
+DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
+reference/predicate vocabulary with no located production setter; proof failure returns ok:false
+without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
+NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
+Preference creation defaults are in topology; no preference pending writer was confirmed.
+Registration validates proof before acquiring record lock and does not recheck source state in its
+write; concurrency/replay is controlled by proof validation and challenge transport, not a
+transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
+enforced. Tests are inspected, not executed.
+
+## idp-client-preference-dbsc
+
+Implementation: `DbscBindable / DbscRegistrationService`. Storage: `app_preferences` /
+`dbsc_status_id`.
+
+Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
+`app/services/dbsc_record_adapter.rb`,
+`app/controllers/concerns/preference_dbsc_registration_endpoint.rb`.
+
+Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
+`test/services/dbsc/registration_service_test.rb`,
+`test/controllers/concerns/preference/dbsc_registration_endpoint_test.rb`.
+
+| Transition ID                   | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
+| ------------------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
+| idp-client-preference-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-preference-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-preference-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-client-preference-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-preference-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-client-preference-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-preference-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-client-preference-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-client-preference-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+
+DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
+reference/predicate vocabulary with no located production setter; proof failure returns ok:false
+without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
+NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
+Preference creation defaults are in topology; no preference pending writer was confirmed.
+Registration validates proof before acquiring record lock and does not recheck source state in its
+write; concurrency/replay is controlled by proof validation and challenge transport, not a
+transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
+enforced. Tests are inspected, not executed.
+
+## idp-client-device-session
+
+Implementation: `DeviceSessionable`. Storage: `client_device_sessions` / `status_id`.
+
+Sources: `app/models/concerns/device_sessionable.rb`, `app/models/client_device_session.rb`,
+`app/models/concerns/refresh_tokenable.rb`.
+
+Tests read: `test/models/concerns/device_sessionable_test.rb`.
+
+| Transition ID                  | Mutation kind         | From    | Event / Trigger       | To      | Guard                                | Side effect                                    | Source file                               | Confidence |
+| ------------------------------ | --------------------- | ------- | --------------------- | ------- | ------------------------------------ | ---------------------------------------------- | ----------------------------------------- | ---------- |
+| idp-client-device-session:T001 | DOCUMENTED_TRANSITION | ACTIVE  | revoke!               | REVOKED | No own source guard or lock          | status and revoked_at/reason                   | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-client-device-session:T002 | DOCUMENTED_TRANSITION | REVOKED | revoke! replay        | REVOKED | No guard; preserves first revoked_at | reason may change                              | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-client-device-session:T003 | OUT_OF_BAND           | ACTIVE  | bind_dbsc!            | ACTIVE  | No own lifecycle guard               | update_columns digest/thumbprint/dbsc_bound_at | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-client-device-session:T004 | DOCUMENTED_TRANSITION | REVOKED | bind_dbsc! public API | REVOKED | No own lifecycle guard               | binding columns can still change               | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+
+No state reference FK or explicit enum validation beyond status presence. status_id and revoked_at
+duplicate the revoked predicate. revoke! has no own row lock; surrounding root rotation/revocation
+callers may supply locks. bind_dbsc! uses update_columns even for revoked rows; binding is a
+subordinate axis, not reactivation. Token/device composite owner and current refresh FKs do not
+encode status transitions. No own expires_at/expiry/cancel/failure state; root token lifetimes
+govern authentication.
+
+## idp-client-rp-session
+
+Implementation: `RpSession`. Storage: `op_app_grants` / `revoked_at / expires_at`.
+
+Sources: `app/models/concerns/rp_session.rb`, `app/models/op_app_grant.rb`,
+`app/operations/rp_session_revoker.rb`.
+
+Tests read: `test/models/rp_session_test.rb`, `test/models/rp_session_retirement_window_test.rb`,
+`test/operations/rp_session_revoker_test.rb`.
+
+| Transition ID              | Mutation kind         | From    | Event / Trigger                              | To      | Guard                                                     | Side effect                                     | Source file                       | Confidence |
+| -------------------------- | --------------------- | ------- | -------------------------------------------- | ------- | --------------------------------------------------------- | ----------------------------------------------- | --------------------------------- | ---------- |
+| idp-client-rp-session:T001 | DOCUMENTED_TRANSITION | active  | issue_refresh_token! / rotate_refresh_token! | active  | Parent and RP row locks; active root; absolute expiry cap | digest/previous digest/last_used/refresh expiry | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-client-rp-session:T002 | DOCUMENTED_TRANSITION | active  | revoke!                                      | revoked | Parent and RP row locks                                   | revoked_at; logout timestamps/result            | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-client-rp-session:T003 | DOCUMENTED_TRANSITION | revoked | revoke! repeat                               | revoked | No source-state guard                                     | replaces revocation/logout timestamp            | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-client-rp-session:T004 | DOCUMENTED_TRANSITION | revoked | retirement_pending? clock predicate          | retired | now >= max issued access exp + leeway; known max          | No DB write                                     | app/models/concerns/rp_session.rb | CONFIRMED  |
+
+Labels are timestamp/root validity predicates, not stored status strings. A nonrevoked row may be
+inactive due to parent or refresh expiry; that inactive condition is not a persisted terminal.
+Retirement_pending? remains true for an unknown maximum access JWT expiry, including legacy rows:
+hidden operational non-retirement, not failed state. last_logout_status
+success/no_session/unsupported/failed describes delivery outcome, not RP lifecycle. Max access
+expiry is monotonic; same-row refresh rotation tracks previous digest, and token exchange recognizes
+replay. Parent token expiry immediately removes active authority; issued access tokens can outlive
+revocation until max expiry/leeway. No universal EXPIRED/cancel state.
+
+## idp-visitor-token
+
+Implementation: `TokenStatusManagement / RefreshTokenable`. Storage: `visitor_tokens` /
+`actor token status FK`.
+
+Sources: `app/models/concerns/token_status_management.rb`,
+`app/models/concerns/refresh_tokenable.rb`, `app/models/visitor_token.rb`,
+`app/controllers/concerns/authentication_base.rb`.
+
+Tests read: `test/models/concerns/token_status_management_test.rb`,
+`test/models/concerns/refresh_tokenable_test.rb`, `test/models/refresh_token_concurrency_test.rb`.
+
+R2-WU04 current-state note (2026-10-16): the status rows and historical transitions below are
+retained for traceability. The current implementation exposes no `mark_restricted!` or
+`promote_to_active!` writer; `RESTRICTED` (103) is read-only historical data. `revoke!` remains the
+lifecycle writer, and refresh/reauthentication replacement requires an ACTIVE predecessor.
+
+| Transition ID          | Mutation kind         | From       | Event / Trigger    | To         | Guard                                                                         | Side effect                                                           | Source file                                    | Confidence |
+| ---------------------- | --------------------- | ---------- | ------------------ | ---------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-visitor-token:T001 | DOCUMENTED_TRANSITION | ACTIVE     | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T002 | DOCUMENTED_TRANSITION | ACTIVE     | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T003 | DOCUMENTED_TRANSITION | ACTIVE     | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T004 | DOCUMENTED_TRANSITION | EXPIRED    | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T005 | DOCUMENTED_TRANSITION | EXPIRED    | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T006 | DOCUMENTED_TRANSITION | EXPIRED    | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T007 | DOCUMENTED_TRANSITION | RESTRICTED | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T008 | DOCUMENTED_TRANSITION | RESTRICTED | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T009 | DOCUMENTED_TRANSITION | RESTRICTED | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T010 | DOCUMENTED_TRANSITION | REVOKED    | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T011 | DOCUMENTED_TRANSITION | REVOKED    | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T012 | DOCUMENTED_TRANSITION | REVOKED    | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T013 | DOCUMENTED_TRANSITION | ACTIVE     | rotate_refresh!    | rotated    | usable; matching digest; actor/device/token locks; no previous rotation       | rotated_at; revoke old step-up; replacement row; generation+1         | app/models/concerns/refresh_tokenable.rb       | CONFIRMED  |
+| idp-visitor-token:T014 | DOCUMENTED_TRANSITION | RESTRICTED | rotate_refresh!    | rotated    | usable; matching digest; actor/device/token locks; no previous rotation       | rotated_at; revoke old step-up; replacement row; generation+1         | app/models/concerns/refresh_tokenable.rb       | CONFIRMED  |
+| idp-visitor-token:T015 | OUT_OF_BAND           | NOTHING    | promote_to_active! | ACTIVE     | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T016 | OUT_OF_BAND           | NOTHING    | mark_restricted!   | RESTRICTED | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-visitor-token:T017 | OUT_OF_BAND           | NOTHING    | revoke!            | REVOKED    | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+
+EXPIRED is a reference id, but no production setter was found; time/discard/rotation independently
+make a row unusable without setting EXPIRED. The historical promote/restrict and RESTRICTED-refresh
+rows above are retained only for traceability; current source exposes no such writers and requires
+ACTIVE for refresh/reauthentication replacement. therefore no universal absorbing terminal is drawn.
+revoke! is locked and clears bound step-up authority; promote/restrict are status saves without
+their own row lock. Refresh rotation marks old row unusable and creates a separate replacement, not
+an old row transition back to ACTIVE. Old digest replay returns replay; surrounding verifier can
+revoke family. Device current-refresh ownership is distinct. Default constructor uses ACTIVE;
+restricted issuance is an existing path. Storage includes status plus
+discard_at/rotated_at/generation rather than a single lifecycle authority; DBSC is independently
+indexed.
+
+## idp-visitor-dbsc
+
+Implementation: `DbscBindable / DbscRegistrationService`. Storage: `visitor_tokens` /
+`actor token DBSC status FK`.
+
+Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
+`app/services/dbsc_record_adapter.rb`, `app/controllers/concerns/authentication_base.rb`.
+
+Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
+`test/services/dbsc/registration_service_test.rb`.
+
+| Transition ID         | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
+| --------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
+| idp-visitor-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-visitor-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-visitor-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-visitor-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+
+DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
+reference/predicate vocabulary with no located production setter; proof failure returns ok:false
+without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
+NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
+Preference creation defaults are in topology; no preference pending writer was confirmed.
+Registration validates proof before acquiring record lock and does not recheck source state in its
+write; concurrency/replay is controlled by proof validation and challenge transport, not a
+transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
+enforced. Tests are inspected, not executed.
+
+## idp-visitor-preference-dbsc
+
+Implementation: `DbscBindable / DbscRegistrationService`. Storage: `com_preferences` /
+`dbsc_status_id`.
+
+Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
+`app/services/dbsc_record_adapter.rb`,
+`app/controllers/concerns/preference_dbsc_registration_endpoint.rb`.
+
+Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
+`test/services/dbsc/registration_service_test.rb`,
+`test/controllers/concerns/preference/dbsc_registration_endpoint_test.rb`.
+
+| Transition ID                    | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
+| -------------------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
+| idp-visitor-preference-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-preference-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-preference-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-visitor-preference-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-preference-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-visitor-preference-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-preference-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-visitor-preference-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-visitor-preference-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+
+DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
+reference/predicate vocabulary with no located production setter; proof failure returns ok:false
+without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
+NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
+Preference creation defaults are in topology; no preference pending writer was confirmed.
+Registration validates proof before acquiring record lock and does not recheck source state in its
+write; concurrency/replay is controlled by proof validation and challenge transport, not a
+transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
+enforced. Tests are inspected, not executed.
+
+## idp-visitor-device-session
+
+Implementation: `DeviceSessionable`. Storage: `visitor_device_sessions` / `status_id`.
+
+Sources: `app/models/concerns/device_sessionable.rb`, `app/models/visitor_device_session.rb`,
+`app/models/concerns/refresh_tokenable.rb`.
+
+Tests read: `test/models/concerns/device_sessionable_test.rb`.
+
+| Transition ID                   | Mutation kind         | From    | Event / Trigger       | To      | Guard                                | Side effect                                    | Source file                               | Confidence |
+| ------------------------------- | --------------------- | ------- | --------------------- | ------- | ------------------------------------ | ---------------------------------------------- | ----------------------------------------- | ---------- |
+| idp-visitor-device-session:T001 | DOCUMENTED_TRANSITION | ACTIVE  | revoke!               | REVOKED | No own source guard or lock          | status and revoked_at/reason                   | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-visitor-device-session:T002 | DOCUMENTED_TRANSITION | REVOKED | revoke! replay        | REVOKED | No guard; preserves first revoked_at | reason may change                              | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-visitor-device-session:T003 | OUT_OF_BAND           | ACTIVE  | bind_dbsc!            | ACTIVE  | No own lifecycle guard               | update_columns digest/thumbprint/dbsc_bound_at | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-visitor-device-session:T004 | DOCUMENTED_TRANSITION | REVOKED | bind_dbsc! public API | REVOKED | No own lifecycle guard               | binding columns can still change               | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+
+No state reference FK or explicit enum validation beyond status presence. status_id and revoked_at
+duplicate the revoked predicate. revoke! has no own row lock; surrounding root rotation/revocation
+callers may supply locks. bind_dbsc! uses update_columns even for revoked rows; binding is a
+subordinate axis, not reactivation. Token/device composite owner and current refresh FKs do not
+encode status transitions. No own expires_at/expiry/cancel/failure state; root token lifetimes
+govern authentication.
+
+## idp-visitor-rp-session
+
+Implementation: `RpSession`. Storage: `op_com_grants` / `revoked_at / expires_at`.
+
+Sources: `app/models/concerns/rp_session.rb`, `app/models/op_com_grant.rb`,
+`app/operations/rp_session_revoker.rb`.
+
+Tests read: `test/models/rp_session_test.rb`, `test/models/rp_session_retirement_window_test.rb`,
+`test/operations/rp_session_revoker_test.rb`.
+
+| Transition ID               | Mutation kind         | From    | Event / Trigger                              | To      | Guard                                                     | Side effect                                     | Source file                       | Confidence |
+| --------------------------- | --------------------- | ------- | -------------------------------------------- | ------- | --------------------------------------------------------- | ----------------------------------------------- | --------------------------------- | ---------- |
+| idp-visitor-rp-session:T001 | DOCUMENTED_TRANSITION | active  | issue_refresh_token! / rotate_refresh_token! | active  | Parent and RP row locks; active root; absolute expiry cap | digest/previous digest/last_used/refresh expiry | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-visitor-rp-session:T002 | DOCUMENTED_TRANSITION | active  | revoke!                                      | revoked | Parent and RP row locks                                   | revoked_at; logout timestamps/result            | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-visitor-rp-session:T003 | DOCUMENTED_TRANSITION | revoked | revoke! repeat                               | revoked | No source-state guard                                     | replaces revocation/logout timestamp            | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-visitor-rp-session:T004 | DOCUMENTED_TRANSITION | revoked | retirement_pending? clock predicate          | retired | now >= max issued access exp + leeway; known max          | No DB write                                     | app/models/concerns/rp_session.rb | CONFIRMED  |
+
+Labels are timestamp/root validity predicates, not stored status strings. A nonrevoked row may be
+inactive due to parent or refresh expiry; that inactive condition is not a persisted terminal.
+Retirement_pending? remains true for an unknown maximum access JWT expiry, including legacy rows:
+hidden operational non-retirement, not failed state. last_logout_status
+success/no_session/unsupported/failed describes delivery outcome, not RP lifecycle. Max access
+expiry is monotonic; same-row refresh rotation tracks previous digest, and token exchange recognizes
+replay. Parent token expiry immediately removes active authority; issued access tokens can outlive
+revocation until max expiry/leeway. No universal EXPIRED/cancel state.
+
+## idp-operator-token
+
+Implementation: `TokenStatusManagement / RefreshTokenable`. Storage: `operator_tokens` /
+`actor token status FK`.
+
+Sources: `app/models/concerns/token_status_management.rb`,
+`app/models/concerns/refresh_tokenable.rb`, `app/models/operator_token.rb`,
+`app/controllers/concerns/authentication_base.rb`.
+
+Tests read: `test/models/concerns/token_status_management_test.rb`,
+`test/models/concerns/refresh_tokenable_test.rb`, `test/models/refresh_token_concurrency_test.rb`.
+
+R2-WU04 current-state note (2026-10-16): the status rows and historical transitions below are
+retained for traceability. The current implementation exposes no `mark_restricted!` or
+`promote_to_active!` writer; `RESTRICTED` (103) is read-only historical data. `revoke!` remains the
+lifecycle writer, and refresh/reauthentication replacement requires an ACTIVE predecessor.
+
+| Transition ID           | Mutation kind         | From       | Event / Trigger    | To         | Guard                                                                         | Side effect                                                           | Source file                                    | Confidence |
+| ----------------------- | --------------------- | ---------- | ------------------ | ---------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-operator-token:T001 | DOCUMENTED_TRANSITION | ACTIVE     | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T002 | DOCUMENTED_TRANSITION | ACTIVE     | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T003 | DOCUMENTED_TRANSITION | ACTIVE     | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T004 | DOCUMENTED_TRANSITION | EXPIRED    | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T005 | DOCUMENTED_TRANSITION | EXPIRED    | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T006 | DOCUMENTED_TRANSITION | EXPIRED    | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T007 | DOCUMENTED_TRANSITION | RESTRICTED | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T008 | DOCUMENTED_TRANSITION | RESTRICTED | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T009 | DOCUMENTED_TRANSITION | RESTRICTED | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T010 | DOCUMENTED_TRANSITION | REVOKED    | promote_to_active! | ACTIVE     | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T011 | DOCUMENTED_TRANSITION | REVOKED    | mark_restricted!   | RESTRICTED | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T012 | DOCUMENTED_TRANSITION | REVOKED    | revoke!            | REVOKED    | Public method has no source-status guard                                      | status/timestamp; revoke discards and closes step-up                  | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T013 | DOCUMENTED_TRANSITION | ACTIVE     | rotate_refresh!    | rotated    | usable; matching digest; actor/device/token locks; no previous rotation       | rotated_at; revoke old step-up; replacement row; generation+1         | app/models/concerns/refresh_tokenable.rb       | CONFIRMED  |
+| idp-operator-token:T014 | DOCUMENTED_TRANSITION | RESTRICTED | rotate_refresh!    | rotated    | usable; matching digest; actor/device/token locks; no previous rotation       | rotated_at; revoke old step-up; replacement row; generation+1         | app/models/concerns/refresh_tokenable.rb       | CONFIRMED  |
+| idp-operator-token:T015 | OUT_OF_BAND           | NOTHING    | promote_to_active! | ACTIVE     | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T016 | OUT_OF_BAND           | NOTHING    | mark_restricted!   | RESTRICTED | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+| idp-operator-token:T017 | OUT_OF_BAND           | NOTHING    | revoke!            | REVOKED    | Public method has no source-status guard; model/schema validity still applies | Set status; revoke also discards and revokes linked step-up authority | app/models/concerns/token_status_management.rb | CONFIRMED  |
+
+EXPIRED is a reference id, but no production setter was found; time/discard/rotation independently
+make a row unusable without setting EXPIRED. The historical promote/restrict and RESTRICTED-refresh
+rows above are retained only for traceability; current source exposes no such writers and requires
+ACTIVE for refresh/reauthentication replacement. therefore no universal absorbing terminal is drawn.
+revoke! is locked and clears bound step-up authority; promote/restrict are status saves without
+their own row lock. Refresh rotation marks old row unusable and creates a separate replacement, not
+an old row transition back to ACTIVE. Old digest replay returns replay; surrounding verifier can
+revoke family. Device current-refresh ownership is distinct. Default constructor uses ACTIVE;
+restricted issuance is an existing path. Storage includes status plus
+discard_at/rotated_at/generation rather than a single lifecycle authority; DBSC is independently
+indexed.
+
+## idp-operator-dbsc
+
+Implementation: `DbscBindable / DbscRegistrationService`. Storage: `operator_tokens` /
+`actor token DBSC status FK`.
+
+Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
+`app/services/dbsc_record_adapter.rb`, `app/controllers/concerns/authentication_base.rb`.
+
+Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
+`test/services/dbsc/registration_service_test.rb`.
+
+| Transition ID          | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
+| ---------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
+| idp-operator-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-operator-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-operator-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-operator-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+
+DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
+reference/predicate vocabulary with no located production setter; proof failure returns ok:false
+without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
+NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
+Preference creation defaults are in topology; no preference pending writer was confirmed.
+Registration validates proof before acquiring record lock and does not recheck source state in its
+write; concurrency/replay is controlled by proof validation and challenge transport, not a
+transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
+enforced. Tests are inspected, not executed.
+
+## idp-operator-preference-dbsc
+
+Implementation: `DbscBindable / DbscRegistrationService`. Storage: `org_preferences` /
+`dbsc_status_id`.
+
+Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
+`app/services/dbsc_record_adapter.rb`,
+`app/controllers/concerns/preference_dbsc_registration_endpoint.rb`.
+
+Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
+`test/services/dbsc/registration_service_test.rb`,
+`test/controllers/concerns/preference/dbsc_registration_endpoint_test.rb`.
+
+| Transition ID                     | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
+| --------------------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
+| idp-operator-preference-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-preference-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-preference-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-operator-preference-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-preference-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-operator-preference-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-preference-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+| idp-operator-preference-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
+| idp-operator-preference-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
+
+DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
+reference/predicate vocabulary with no located production setter; proof failure returns ok:false
+without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
+NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
+Preference creation defaults are in topology; no preference pending writer was confirmed.
+Registration validates proof before acquiring record lock and does not recheck source state in its
+write; concurrency/replay is controlled by proof validation and challenge transport, not a
+transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
+enforced. Tests are inspected, not executed.
+
+## idp-operator-device-session
+
+Implementation: `DeviceSessionable`. Storage: `operator_device_sessions` / `status_id`.
+
+Sources: `app/models/concerns/device_sessionable.rb`, `app/models/operator_device_session.rb`,
+`app/models/concerns/refresh_tokenable.rb`.
+
+Tests read: `test/models/concerns/device_sessionable_test.rb`.
+
+| Transition ID                    | Mutation kind         | From    | Event / Trigger       | To      | Guard                                | Side effect                                    | Source file                               | Confidence |
+| -------------------------------- | --------------------- | ------- | --------------------- | ------- | ------------------------------------ | ---------------------------------------------- | ----------------------------------------- | ---------- |
+| idp-operator-device-session:T001 | DOCUMENTED_TRANSITION | ACTIVE  | revoke!               | REVOKED | No own source guard or lock          | status and revoked_at/reason                   | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-operator-device-session:T002 | DOCUMENTED_TRANSITION | REVOKED | revoke! replay        | REVOKED | No guard; preserves first revoked_at | reason may change                              | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-operator-device-session:T003 | OUT_OF_BAND           | ACTIVE  | bind_dbsc!            | ACTIVE  | No own lifecycle guard               | update_columns digest/thumbprint/dbsc_bound_at | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+| idp-operator-device-session:T004 | DOCUMENTED_TRANSITION | REVOKED | bind_dbsc! public API | REVOKED | No own lifecycle guard               | binding columns can still change               | app/models/concerns/device_sessionable.rb | CONFIRMED  |
+
+No state reference FK or explicit enum validation beyond status presence. status_id and revoked_at
+duplicate the revoked predicate. revoke! has no own row lock; surrounding root rotation/revocation
+callers may supply locks. bind_dbsc! uses update_columns even for revoked rows; binding is a
+subordinate axis, not reactivation. Token/device composite owner and current refresh FKs do not
+encode status transitions. No own expires_at/expiry/cancel/failure state; root token lifetimes
+govern authentication.
+
+## idp-operator-rp-session
+
+Implementation: `RpSession`. Storage: `op_org_grants` / `revoked_at / expires_at`.
+
+Sources: `app/models/concerns/rp_session.rb`, `app/models/op_org_grant.rb`,
+`app/operations/rp_session_revoker.rb`.
+
+Tests read: `test/models/rp_session_test.rb`, `test/models/rp_session_retirement_window_test.rb`,
+`test/operations/rp_session_revoker_test.rb`.
+
+| Transition ID                | Mutation kind         | From    | Event / Trigger                              | To      | Guard                                                     | Side effect                                     | Source file                       | Confidence |
+| ---------------------------- | --------------------- | ------- | -------------------------------------------- | ------- | --------------------------------------------------------- | ----------------------------------------------- | --------------------------------- | ---------- |
+| idp-operator-rp-session:T001 | DOCUMENTED_TRANSITION | active  | issue_refresh_token! / rotate_refresh_token! | active  | Parent and RP row locks; active root; absolute expiry cap | digest/previous digest/last_used/refresh expiry | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-operator-rp-session:T002 | DOCUMENTED_TRANSITION | active  | revoke!                                      | revoked | Parent and RP row locks                                   | revoked_at; logout timestamps/result            | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-operator-rp-session:T003 | DOCUMENTED_TRANSITION | revoked | revoke! repeat                               | revoked | No source-state guard                                     | replaces revocation/logout timestamp            | app/models/concerns/rp_session.rb | CONFIRMED  |
+| idp-operator-rp-session:T004 | DOCUMENTED_TRANSITION | revoked | retirement_pending? clock predicate          | retired | now >= max issued access exp + leeway; known max          | No DB write                                     | app/models/concerns/rp_session.rb | CONFIRMED  |
+
+Labels are timestamp/root validity predicates, not stored status strings. A nonrevoked row may be
+inactive due to parent or refresh expiry; that inactive condition is not a persisted terminal.
+Retirement_pending? remains true for an unknown maximum access JWT expiry, including legacy rows:
+hidden operational non-retirement, not failed state. last_logout_status
+success/no_session/unsupported/failed describes delivery outcome, not RP lifecycle. Max access
+expiry is monotonic; same-row refresh rotation tracks previous digest, and token exchange recognizes
+replay. Parent token expiry immediately removes active authority; issued access tokens can outlive
+revocation until max expiry/leeway. No universal EXPIRED/cancel state.
+
+## idp-visitor-secret-credential
+
+Implementation: `SecretCredential / SignSecretVerify`. Storage: `visitor_secret_credentials` /
+`visitor_secret_credential_status_id`.
+
+Sources: `app/models/concerns/secret_credential.rb`,
+`app/models/visitor_secret_credential_status.rb`, `app/models/visitor_secret_credential.rb`,
+`app/services/sign_secret_verify.rb`, `app/services/visitor_secret_credentials_create.rb`.
+
+Tests read: `test/models/concerns/secret_credential_test.rb`,
+`test/models/visitor_secret_credential_test.rb`.
+
+| Transition ID                      | Mutation kind         | From    | Event / Trigger                           | To      | Guard                                                                                                 | Side effect                                        | Source file                                           | Confidence |
+| ---------------------------------- | --------------------- | ------- | ----------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-visitor-secret-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE  | expire_if_needed!                         | EXPIRED | active; finite discard_at <= now (infinity ignored)                                                   | FK status save                                     | app/models/concerns/secret_credential.rb              | CONFIRMED  |
+| idp-visitor-secret-credential:T002 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify accepted single-use      | USED    | Matching new-axis credential; not expired/locked/revoked/consumed                                     | consumed_at/use_count; status USED                 | app/services/sign_secret_verify.rb                    | CONFIRMED  |
+| idp-visitor-secret-credential:T003 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify mismatch at failure cap  | REVOKED | Mismatch; max_failures finite and reached; normally row lock (blank input failure occurs before lock) | Increment failure_count; locked_at; revoked status | app/services/sign_secret_verify.rb                    | CONFIRMED  |
+| idp-visitor-secret-credential:T004 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify accepted reusable secret | ACTIVE  | Current active unexpired unlocked matching credential; usage policy permits                           | Increment use_count / last_used_at                 | app/services/sign_secret_verify.rb                    | CONFIRMED  |
+| idp-visitor-secret-credential:T005 | OUT_OF_BAND           | ACTIVE  | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T006 | OUT_OF_BAND           | EXPIRED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T007 | OUT_OF_BAND           | REVOKED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T008 | OUT_OF_BAND           | USED    | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T009 | OUT_OF_BAND           | DELETED | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+| idp-visitor-secret-credential:T010 | OUT_OF_BAND           | NOTHING | withdrawal anonymize                      | REVOKED | Actor association iteration; dynamic status key; no source-status guard                               | status revoked; discard_at when supported          | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED  |
+
+Current realm ids differ: operator EXPIRED=3/REVOKED=4/USED=5, visitor EXPIRED=2/REVOKED=3/USED=4.
+`SecretCredential` has no transition graph/locks; expire_if_needed! ignores both infinity sentinels.
+Verification locks through SignSecretVerify and writes consumed/use_count/status for single-use.
+Status and timestamps/usage are separate admission authorities. Operator legacy services write
+staff_secret_status_id whereas concrete storage is staff_identity_secret_status_id; concrete
+alias_attribute maps these names, so service writes target the storage column. No model cancel path;
+revoked/deleted enabling is not inherently forbidden by update service. This legacy generic machine
+is not the current app/client Secret rebuild.
+
+## idp-operator-secret-credential
+
+Implementation: `SecretCredential / SignSecretVerify`. Storage: `operator_secret_credentials` /
+`staff_identity_secret_status_id`.
+
+Sources: `app/models/concerns/secret_credential.rb`,
+`app/models/operator_secret_credential_status.rb`, `app/models/operator_secret_credential.rb`,
+`app/services/sign_secret_verify.rb`, `app/services/operator_secret_credentials_update.rb`,
+`app/services/operator_secret_credentials_destroy.rb`.
+
+Tests read: `test/models/concerns/secret_credential_test.rb`,
+`test/models/operator_secret_credential_test.rb`.
+
+| Transition ID                       | Mutation kind         | From    | Event / Trigger                           | To      | Guard                                                                                                 | Side effect                                        | Source file                                         | Confidence |
+| ----------------------------------- | --------------------- | ------- | ----------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- | ---------- |
+| idp-operator-secret-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE  | expire_if_needed!                         | EXPIRED | active; finite discard_at <= now (infinity ignored)                                                   | FK status save                                     | app/models/concerns/secret_credential.rb            | CONFIRMED  |
+| idp-operator-secret-credential:T002 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify accepted single-use      | USED    | Matching new-axis credential; not expired/locked/revoked/consumed                                     | consumed_at/use_count; status USED                 | app/services/sign_secret_verify.rb                  | CONFIRMED  |
+| idp-operator-secret-credential:T003 | DOCUMENTED_TRANSITION | ACTIVE  | OperatorSecretCredentialsUpdate enabled   | ACTIVE  | enabled true; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed    | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T004 | DOCUMENTED_TRANSITION | ACTIVE  | OperatorSecretCredentialsUpdate disabled  | REVOKED | enabled false; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed   | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T005 | DOCUMENTED_TRANSITION | ACTIVE  | OperatorSecretCredentialsDestroy          | DELETED | concrete OperatorSecretCredential alias staff_secret_status_id confirmed                              | discard and status alias; audit                    | app/services/operator_secret_credentials_destroy.rb | CONFIRMED  |
+| idp-operator-secret-credential:T006 | DOCUMENTED_TRANSITION | DELETED | OperatorSecretCredentialsUpdate enabled   | ACTIVE  | enabled true; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed    | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T007 | DOCUMENTED_TRANSITION | DELETED | OperatorSecretCredentialsUpdate disabled  | REVOKED | enabled false; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed   | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T008 | DOCUMENTED_TRANSITION | DELETED | OperatorSecretCredentialsDestroy          | DELETED | concrete OperatorSecretCredential alias staff_secret_status_id confirmed                              | discard and status alias; audit                    | app/services/operator_secret_credentials_destroy.rb | CONFIRMED  |
+| idp-operator-secret-credential:T009 | DOCUMENTED_TRANSITION | EXPIRED | OperatorSecretCredentialsUpdate enabled   | ACTIVE  | enabled true; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed    | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T010 | DOCUMENTED_TRANSITION | EXPIRED | OperatorSecretCredentialsUpdate disabled  | REVOKED | enabled false; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed   | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T011 | DOCUMENTED_TRANSITION | EXPIRED | OperatorSecretCredentialsDestroy          | DELETED | concrete OperatorSecretCredential alias staff_secret_status_id confirmed                              | discard and status alias; audit                    | app/services/operator_secret_credentials_destroy.rb | CONFIRMED  |
+| idp-operator-secret-credential:T012 | DOCUMENTED_TRANSITION | REVOKED | OperatorSecretCredentialsUpdate enabled   | ACTIVE  | enabled true; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed    | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T013 | DOCUMENTED_TRANSITION | REVOKED | OperatorSecretCredentialsUpdate disabled  | REVOKED | enabled false; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed   | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T014 | DOCUMENTED_TRANSITION | REVOKED | OperatorSecretCredentialsDestroy          | DELETED | concrete OperatorSecretCredential alias staff_secret_status_id confirmed                              | discard and status alias; audit                    | app/services/operator_secret_credentials_destroy.rb | CONFIRMED  |
+| idp-operator-secret-credential:T015 | DOCUMENTED_TRANSITION | USED    | OperatorSecretCredentialsUpdate enabled   | ACTIVE  | enabled true; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed    | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T016 | DOCUMENTED_TRANSITION | USED    | OperatorSecretCredentialsUpdate disabled  | REVOKED | enabled false; model save; concrete OperatorSecretCredential alias staff_secret_status_id confirmed   | status alias assignment/audit                      | app/services/operator_secret_credentials_update.rb  | CONFIRMED  |
+| idp-operator-secret-credential:T017 | DOCUMENTED_TRANSITION | USED    | OperatorSecretCredentialsDestroy          | DELETED | concrete OperatorSecretCredential alias staff_secret_status_id confirmed                              | discard and status alias; audit                    | app/services/operator_secret_credentials_destroy.rb | CONFIRMED  |
+| idp-operator-secret-credential:T018 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify mismatch at failure cap  | REVOKED | Mismatch; max_failures finite and reached; normally row lock (blank input failure occurs before lock) | Increment failure_count; locked_at; revoked status | app/services/sign_secret_verify.rb                  | CONFIRMED  |
+| idp-operator-secret-credential:T019 | DOCUMENTED_TRANSITION | ACTIVE  | SignSecretVerify accepted reusable secret | ACTIVE  | Current active unexpired unlocked matching credential; usage policy permits                           | Increment use_count / last_used_at                 | app/services/sign_secret_verify.rb                  | CONFIRMED  |
+
+Current realm ids differ: operator EXPIRED=3/REVOKED=4/USED=5, visitor EXPIRED=2/REVOKED=3/USED=4.
+`SecretCredential` has no transition graph/locks; expire_if_needed! ignores both infinity sentinels.
+Verification locks through SignSecretVerify and writes consumed/use_count/status for single-use.
+Status and timestamps/usage are separate admission authorities. Operator legacy services write
+staff_secret_status_id whereas concrete storage is staff_identity_secret_status_id; concrete
+alias_attribute maps these names, so service writes target the storage column. No model cancel path;
+revoked/deleted enabling is not inherently forbidden by update service. This legacy generic machine
+is not the current app/client Secret rebuild.
+
+## idp-client-secret-credential
+
+Implementation: `ClientSecretCredential (current rebuild)`. Storage: `client_secret_credentials` /
+`confirmed_at / claimed_at / claim_operation_id / revoked_at / discard_at`.
+
+Sources: `app/models/client_secret_credential.rb`,
+`app/operations/client_secret_storage_confirmation_committer.rb`,
+`app/operations/client_secret_revocation_committer.rb`,
+`app/operations/client_secret_issuance_expiry_invalidator.rb`.
+
+Tests read: `test/operations/client_secret_storage_confirmation_committer_test.rb`,
+`test/operations/client_secret_revocation_committer_test.rb`,
+`test/models/client_secret_credential_rebuild_test.rb`,
+`test/models/client_secret_credential_test.rb`.
+
+| Transition ID                     | Mutation kind         | From      | Event / Trigger                         | To        | Guard                                                                                                                                                                                                                                    | Side effect                                                                                                     | Source file                                                                             | Confidence |
+| --------------------------------- | --------------------- | --------- | --------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------- |
+| idp-client-secret-credential:T001 | DOCUMENTED_TRANSITION | candidate | commit_storage_confirmation!            | available | Source DB transaction; audited owning issuance; no claim/revoke; accessible                                                                                                                                                              | immutable confirmed_at                                                                                          | app/models/client_secret_credential.rb                                                  | CONFIRMED  |
+| idp-client-secret-credential:T002 | DOCUMENTED_TRANSITION | available | commit_management_revocation!           | revoked   | Bound Base actor; locks; current availability; can_remove guard; audit                                                                                                                                                                   | revoked_at/discard_at/purge; two source events                                                                  | app/models/client_secret_credential.rb                                                  | CONFIRMED  |
+| idp-client-secret-credential:T003 | DOCUMENTED_TRANSITION | candidate | issuance cancel/expiry invalidator      | discarded | Locked pending allocation; no confirmed/claim/revoke fact                                                                                                                                                                                | discard/purge; audit; payload retirement                                                                        | app/operations/client_secret_manual_issuance_invalidator.rb                             | CONFIRMED  |
+| idp-client-secret-credential:T004 | DOCUMENTED_TRANSITION | available | correct value and admitted browser flow | claimed   | Client and credential locks; durable primary-pending Ticket flow and ceremony; complete value match; local admission or locked pending app OIDC transaction uniquely referencing that flow with matching admitted authorization ceremony | Source claim, immutable operation/flow binding and outbox; OIDC evidence/session HTTP wiring remains incomplete | app/operations/client_secret_claim_committer.rb; app/models/client_secret_credential.rb | CONFIRMED  |
+| idp-client-secret-credential:T005 | DOCUMENTED_TRANSITION | claimed   | canonical root receipt confirmed        | discarded | Flow lock; matching committed Token and receipt                                                                                                                                                                                          | consumed_at, discard_at, retention and source audit                                                             | app/operations/client_secret_claim_finalizer.rb                                         | CONFIRMED  |
+| idp-client-secret-credential:T006 | DOCUMENTED_TRANSITION | claimed   | terminal unsuccessful flow confirmed    | discarded | Same Ticket exclusion as canonical issuance; no successful receipt; matching persisted browser ceremony; terminal ownership repair after Ticket rollback only                                                                            | Irreversible discard and reason-bearing source audit; unknown outcome remains claimed                           | app/operations/client_secret_claim_finalizer.rb                                         | CONFIRMED  |
+| idp-client-secret-credential:T007 | DOCUMENTED_TRANSITION | discarded | physical collection                     | purged    | Retention deadline and hold guards; credential-specific discarded event acknowledged and identity-matched in Chronicle; unconfirmed non-withdrawal candidate also requires acknowledged allocation terminal event                        | Source DELETE and surviving secret.purged outbox commit atomically; partial terminal delivery holds candidate   | app/operations/client_secret_credential_purger.rb                                       | CONFIRMED  |
+
+Current ClientSecretCredential does not include SecretCredential and has no status FK. It derives
+availability from immutable confirmation/claim/revocation/retention facts.
+ClientSecretClaimCommitter rereads admitted flow and ceremony under Ticket locks and commits an
+irreversible source claim. AuthenticationBase writes a matching success receipt in the canonical
+Token transaction; ClientSecretClaimFinalizer consumes and discards only after verifying it. Unknown
+outcomes remain claimed. Legacy ClientSecretCredentialStatus class/tests remain, but current DB
+ownership is issuance_id→client_secret_issuances plus client_id. `client_secret_credential_test.rb`
+still expects issue!/kind/status/legacy methods absent in the current model; mismatch documented
+without running/reconciling tests. Revocation/confirmation guard ordinary assignments and
+update_columns; issuing/signing-in and presentation wiring must not be assumed complete from target
+ADR. No conventional FAILED/CANCELLED/EXPIRED status; issuance cancellation affects unconfirmed
+allocation only.
+
+## idp-client-withdrawal-ceremony
+
+Implementation: `WithdrawalCeremonyRecordable`. Storage: `client_withdrawal_ceremonies` /
+`status_id`.
+
+Sources: `app/models/concerns/withdrawal_ceremony_recordable.rb`,
+`app/models/client_withdrawal_ceremony.rb`,
+`app/controllers/concerns/withdrawal_ceremony_authentication.rb`.
+
+Tests read: `test/integration/withdrawal_ceremony_session_test.rb`.
+
+| Transition ID                       | Mutation kind         | From     | Event / Trigger | To       | Guard                                     | Side effect                           | Source file                                           | Confidence |
+| ----------------------------------- | --------------------- | -------- | --------------- | -------- | ----------------------------------------- | ------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-client-withdrawal-ceremony:T001 | DOCUMENTED_TRANSITION | ACTIVE   | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T002 | DOCUMENTED_TRANSITION | ACTIVE   | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T003 | DOCUMENTED_TRANSITION | CONSUMED | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T004 | DOCUMENTED_TRANSITION | CONSUMED | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T005 | DOCUMENTED_TRANSITION | REVOKED  | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T006 | DOCUMENTED_TRANSITION | REVOKED  | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T007 | DOCUMENTED_TRANSITION | EXPIRED  | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-withdrawal-ceremony:T008 | DOCUMENTED_TRANSITION | EXPIRED  | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+
+No state reference table is used despite integer status_id. Active authentication verifies token
+digest and TTL 30m; withdrawal additionally requires restricted/terminated subject. consume!/revoke!
+themselves have no guards/locks and can rewrite terminal ids, leaving both timestamps populated;
+therefore no universally absorbing terminal is drawn. Expiry is predicate-only; withdrawal EXPIRED=4
+is accepted but no production setter found. This proof does not create a normal authenticated
+session. Callers must supply operation binding and guards; replay protection cannot be inferred from
+these two setters alone.
+
+## idp-client-enforcement-recovery-ceremony
+
+Implementation: `EnforcementRecoveryCeremonyRecordable`. Storage:
+`client_enforcement_recovery_ceremonies` / `status_id`.
+
+Sources: `app/models/concerns/enforcement_recovery_ceremony_recordable.rb`,
+`app/models/client_enforcement_recovery_ceremony.rb`,
+`app/controllers/concerns/enforcement_recovery_ceremony_flow.rb`.
+
+Tests read: `test/models/enforcement_recovery_ceremony_test.rb`.
+
+| Transition ID                                 | Mutation kind         | From     | Event / Trigger | To       | Guard                                     | Side effect                           | Source file                                                     | Confidence |
+| --------------------------------------------- | --------------------- | -------- | --------------- | -------- | ----------------------------------------- | ------------------------------------- | --------------------------------------------------------------- | ---------- |
+| idp-client-enforcement-recovery-ceremony:T001 | DOCUMENTED_TRANSITION | ACTIVE   | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-enforcement-recovery-ceremony:T002 | DOCUMENTED_TRANSITION | ACTIVE   | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-enforcement-recovery-ceremony:T003 | DOCUMENTED_TRANSITION | CONSUMED | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-enforcement-recovery-ceremony:T004 | DOCUMENTED_TRANSITION | CONSUMED | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-enforcement-recovery-ceremony:T005 | DOCUMENTED_TRANSITION | REVOKED  | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-client-enforcement-recovery-ceremony:T006 | DOCUMENTED_TRANSITION | REVOKED  | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+
+No state reference table is used despite integer status_id. Active authentication verifies token
+digest and TTL 30m; withdrawal additionally requires restricted/terminated subject. consume!/revoke!
+themselves have no guards/locks and can rewrite terminal ids, leaving both timestamps populated;
+therefore no universally absorbing terminal is drawn. Expiry is predicate-only; withdrawal EXPIRED=4
+is accepted but no production setter found. This proof does not create a normal authenticated
+session. Callers must supply operation binding and guards; replay protection cannot be inferred from
+these two setters alone.
+
+## idp-visitor-withdrawal-ceremony
+
+Implementation: `WithdrawalCeremonyRecordable`. Storage: `visitor_withdrawal_ceremonies` /
+`status_id`.
+
+Sources: `app/models/concerns/withdrawal_ceremony_recordable.rb`,
+`app/models/visitor_withdrawal_ceremony.rb`,
+`app/controllers/concerns/withdrawal_ceremony_authentication.rb`.
+
+Tests read: `test/integration/withdrawal_ceremony_session_test.rb`.
+
+| Transition ID                        | Mutation kind         | From     | Event / Trigger | To       | Guard                                     | Side effect                           | Source file                                           | Confidence |
+| ------------------------------------ | --------------------- | -------- | --------------- | -------- | ----------------------------------------- | ------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-visitor-withdrawal-ceremony:T001 | DOCUMENTED_TRANSITION | ACTIVE   | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T002 | DOCUMENTED_TRANSITION | ACTIVE   | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T003 | DOCUMENTED_TRANSITION | CONSUMED | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T004 | DOCUMENTED_TRANSITION | CONSUMED | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T005 | DOCUMENTED_TRANSITION | REVOKED  | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T006 | DOCUMENTED_TRANSITION | REVOKED  | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T007 | DOCUMENTED_TRANSITION | EXPIRED  | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-withdrawal-ceremony:T008 | DOCUMENTED_TRANSITION | EXPIRED  | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/withdrawal_ceremony_recordable.rb | CONFIRMED  |
+
+No state reference table is used despite integer status_id. Active authentication verifies token
+digest and TTL 30m; withdrawal additionally requires restricted/terminated subject. consume!/revoke!
+themselves have no guards/locks and can rewrite terminal ids, leaving both timestamps populated;
+therefore no universally absorbing terminal is drawn. Expiry is predicate-only; withdrawal EXPIRED=4
+is accepted but no production setter found. This proof does not create a normal authenticated
+session. Callers must supply operation binding and guards; replay protection cannot be inferred from
+these two setters alone.
+
+## idp-visitor-enforcement-recovery-ceremony
+
+Implementation: `EnforcementRecoveryCeremonyRecordable`. Storage:
+`visitor_enforcement_recovery_ceremonies` / `status_id`.
+
+Sources: `app/models/concerns/enforcement_recovery_ceremony_recordable.rb`,
+`app/models/visitor_enforcement_recovery_ceremony.rb`,
+`app/controllers/concerns/enforcement_recovery_ceremony_flow.rb`.
+
+Tests read: `test/models/enforcement_recovery_ceremony_test.rb`.
+
+| Transition ID                                  | Mutation kind         | From     | Event / Trigger | To       | Guard                                     | Side effect                           | Source file                                                     | Confidence |
+| ---------------------------------------------- | --------------------- | -------- | --------------- | -------- | ----------------------------------------- | ------------------------------------- | --------------------------------------------------------------- | ---------- |
+| idp-visitor-enforcement-recovery-ceremony:T001 | DOCUMENTED_TRANSITION | ACTIVE   | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-enforcement-recovery-ceremony:T002 | DOCUMENTED_TRANSITION | ACTIVE   | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-enforcement-recovery-ceremony:T003 | DOCUMENTED_TRANSITION | CONSUMED | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-enforcement-recovery-ceremony:T004 | DOCUMENTED_TRANSITION | CONSUMED | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-enforcement-recovery-ceremony:T005 | DOCUMENTED_TRANSITION | REVOKED  | consume!        | CONSUMED | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+| idp-visitor-enforcement-recovery-ceremony:T006 | DOCUMENTED_TRANSITION | REVOKED  | revoke!         | REVOKED  | No public source/expiry guard or row lock | status_id and corresponding timestamp | app/models/concerns/enforcement_recovery_ceremony_recordable.rb | CONFIRMED  |
+
+No state reference table is used despite integer status_id. Active authentication verifies token
+digest and TTL 30m; withdrawal additionally requires restricted/terminated subject. consume!/revoke!
+themselves have no guards/locks and can rewrite terminal ids, leaving both timestamps populated;
+therefore no universally absorbing terminal is drawn. Expiry is predicate-only; withdrawal EXPIRED=4
+is accepted but no production setter found. This proof does not create a normal authenticated
+session. Callers must supply operation binding and guards; replay protection cannot be inferred from
+these two setters alone.
+
+## idp-client-withdrawal
+
+Implementation: `FlowWithdrawal / WithdrawalLifecycle`. Storage: `client_withdrawal_flows` /
+`status_id`.
+
+Sources: `app/models/concerns/flow_withdrawal.rb`, `app/models/concerns/withdrawal_flow.rb`,
+`app/models/client_withdrawal_flow.rb`, `app/models/client_withdrawal_flow_status.rb`,
+`app/services/withdrawal_lifecycle.rb`.
+
+Tests read: `test/models/withdrawal_flow_test.rb`, `test/services/withdrawal_lifecycle_test.rb`,
+`test/integration/withdrawal_lifecycle_security_test.rb`.
+
+| Transition ID              | Mutation kind         | From      | Event / Trigger       | To         | Guard                                | Side effect                                                   | Source file                            | Confidence |
+| -------------------------- | --------------------- | --------- | --------------------- | ---------- | ------------------------------------ | ------------------------------------------------------------- | -------------------------------------- | ---------- |
+| idp-client-withdrawal:T001 | DOCUMENTED_TRANSITION | NOTHING   | request_withdrawal!   | REQUESTED  | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T002 | DOCUMENTED_TRANSITION | REQUESTED | confirm_withdrawal!   | CLOSING    | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T003 | DOCUMENTED_TRANSITION | CLOSING   | discard_withdrawal!   | DISCARDED  | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T004 | DOCUMENTED_TRANSITION | DISCARDED | recover_withdrawal!   | RECOVERED  | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T005 | DOCUMENTED_TRANSITION | DISCARDED | terminate_withdrawal! | TERMINATED | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T006 | DOCUMENTED_TRANSITION | REQUESTED | fail_withdrawal!      | FAILED     | source matches; accessible; row lock | failed_at and event                                           | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T007 | DOCUMENTED_TRANSITION | CLOSING   | fail_withdrawal!      | FAILED     | source matches; accessible; row lock | failed_at and event                                           | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-client-withdrawal:T008 | DOCUMENTED_TRANSITION | DISCARDED | fail_withdrawal!      | FAILED     | source matches; accessible; row lock | failed_at and event                                           | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+
+RECOVERED=40 and TERMINATED=100 are formal terminals. FAILED=900 has no outgoing edge yet
+WithdrawalFlow.terminal? excludes it: hidden terminal/dead end. Default creation REQUESTED records
+NOTHING→REQUESTED event via after_create. Events have from/to FKs with RESTRICT NOT VALID; they are
+records of transitions, not ownership authority. WithdrawalLifecycle orchestrates actor
+closing/discarded/terminated timestamps, revokes sessions and issues withdrawal proof; actor state
+facts are related independent authority. Recovery is an explicit permitted edge from DISCARDED, not
+generic back. No cancel/expiry status path; recovery deadline is owned by lifecycle/actor retention
+logic.
+
+## idp-visitor-withdrawal
+
+Implementation: `FlowWithdrawal / WithdrawalLifecycle`. Storage: `visitor_withdrawal_flows` /
+`status_id`.
+
+Sources: `app/models/concerns/flow_withdrawal.rb`, `app/models/concerns/withdrawal_flow.rb`,
+`app/models/visitor_withdrawal_flow.rb`, `app/models/visitor_withdrawal_flow_status.rb`,
+`app/services/withdrawal_lifecycle.rb`.
+
+Tests read: `test/models/withdrawal_flow_test.rb`, `test/services/withdrawal_lifecycle_test.rb`,
+`test/integration/withdrawal_lifecycle_security_test.rb`.
+
+| Transition ID               | Mutation kind         | From      | Event / Trigger       | To         | Guard                                | Side effect                                                   | Source file                            | Confidence |
+| --------------------------- | --------------------- | --------- | --------------------- | ---------- | ------------------------------------ | ------------------------------------------------------------- | -------------------------------------- | ---------- |
+| idp-visitor-withdrawal:T001 | DOCUMENTED_TRANSITION | NOTHING   | request_withdrawal!   | REQUESTED  | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T002 | DOCUMENTED_TRANSITION | REQUESTED | confirm_withdrawal!   | CLOSING    | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T003 | DOCUMENTED_TRANSITION | CLOSING   | discard_withdrawal!   | DISCARDED  | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T004 | DOCUMENTED_TRANSITION | DISCARDED | recover_withdrawal!   | RECOVERED  | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T005 | DOCUMENTED_TRANSITION | DISCARDED | terminate_withdrawal! | TERMINATED | Source matches; accessible; row lock | status plus immutable transition event; terminal completed_at | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T006 | DOCUMENTED_TRANSITION | REQUESTED | fail_withdrawal!      | FAILED     | source matches; accessible; row lock | failed_at and event                                           | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T007 | DOCUMENTED_TRANSITION | CLOSING   | fail_withdrawal!      | FAILED     | source matches; accessible; row lock | failed_at and event                                           | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+| idp-visitor-withdrawal:T008 | DOCUMENTED_TRANSITION | DISCARDED | fail_withdrawal!      | FAILED     | source matches; accessible; row lock | failed_at and event                                           | app/models/concerns/flow_withdrawal.rb | CONFIRMED  |
+
+RECOVERED=40 and TERMINATED=100 are formal terminals. FAILED=900 has no outgoing edge yet
+WithdrawalFlow.terminal? excludes it: hidden terminal/dead end. Default creation REQUESTED records
+NOTHING→REQUESTED event via after_create. Events have from/to FKs with RESTRICT NOT VALID; they are
+records of transitions, not ownership authority. WithdrawalLifecycle orchestrates actor
+closing/discarded/terminated timestamps, revokes sessions and issues withdrawal proof; actor state
+facts are related independent authority. Recovery is an explicit permitted edge from DISCARDED, not
+generic back. No cancel/expiry status path; recovery deadline is owned by lifecycle/actor retention
+logic.
+
+## idp-client-email-verification-challenge
+
+Implementation: `EmailVerificationChallengeable`. Storage: `client_email_ceremony_transactions` /
+`evp_outcome / expires_at`.
+
+Sources: `app/models/concerns/email_verification_challengeable.rb`,
+`app/models/client_email_ceremony_transaction.rb`.
+
+Tests read: `test/models/email_verification_challengeable_test.rb`.
+
+| Transition ID                                | Mutation kind         | From    | Event / Trigger      | To       | Guard                                                      | Side effect                                                 | Source file                                             | Confidence |
+| -------------------------------------------- | --------------------- | ------- | -------------------- | -------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------- | ---------- |
+| idp-client-email-verification-challenge:T001 | DOCUMENTED_TRANSITION | pending | record_evp_verified! | verified | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+| idp-client-email-verification-challenge:T002 | DOCUMENTED_TRANSITION | pending | record_evp_fallback! | fallback | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+| idp-client-email-verification-challenge:T003 | DOCUMENTED_TRANSITION | pending | record_evp_rejected! | rejected | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+
+This outcome is persisted as a separate EVP submachine; it does not consume the parent ceremony
+result or verify the email credential. SQL ownership remains the email ceremony transaction, not a
+new reference FK. TTL shares expires_at (10 minutes); no expired/cancel state. Terminal outcomes
+refuse replay; unique evp_token_digest prevents cross-challenge token reuse. No production callsites
+for issue_evp_challenge!/record_evp_* were found outside this declaration; tests exercise model API,
+so HTTP runtime wiring is UNCONFIRMED. Legacy email ceremonies allow evp_outcome nil.
+
+## idp-shared-otp-verification-budget
+
+Storage: auth-state Valkey integer at
+`otp-verification:<surface>:<purpose>:<channel>:<destination digest>`; existing test-run namespace
+isolation prefixes the scope in test runs. Owner, candidate, flow and browser do not partition the
+key. Connected to app/com signup email/telephone, app/com email sign-in and app/com/org
+authenticated destination confirmation. Independent Email/Telephone enforcement recovery and
+withdrawal reentry use their explicit purpose scopes; credential-distribution recovery is unchanged.
+Dummy app/com email sign-in counts well-formed six-digit input in its authentication scope and
+always refuses, including `000000`. Malformed input does not spend the budget. No transient dummy
+Contact is persisted or validated as an owned credential.
+
+Sources: `app/models/email_otp_verification_failure_budget.rb`,
+`app/models/telephone_otp_verification_failure_budget.rb`, the independent ceremony OTP concerns and
+explicit scope at each consuming operation. The historical diagram name denotes sharing across
+candidate/flow/browser recreations, not a shared Email/Telephone policy implementation. The removed
+`SignOtpCeremony` and `CommonOtp` are not current owners. Tests:
+`test/models/channel_otp_verification_failure_budget_test.rb`,
+`test/models/otp_verification_failure_budget_test.rb` and
+`test/operations/email_sign_up_otp_verification_committer_test.rb` (independent current APIs).
+Public sign-in integration coverage is in `test/controllers/auth/app/in/emails_controller_test.rb`
+and `test/controllers/auth/com/in/emails_controller_test.rb`; complete lifecycle/timing parity
+remains open.
+
+| Transition ID                           | From          | Trigger                 | To        | Guard and effect                                                                                                  |
+| --------------------------------------- | ------------- | ----------------------- | --------- | ----------------------------------------------------------------------------------------------------------------- |
+| idp-shared-otp-verification-budget:T001 | absent        | admissible wrong OTP    | 1         | Atomic Lua SET 1 EX 900; native clock fixes first-failure deadline                                                |
+| idp-shared-otp-verification-budget:T002 | 1–3           | admissible wrong OTP    | 2–4       | Atomic INCR preserves deadline                                                                                    |
+| idp-shared-otp-verification-budget:T003 | 4             | admissible wrong OTP    | 5         | Atomic INCR; refusal starts at fifth failure                                                                      |
+| idp-shared-otp-verification-budget:T004 | 5             | any comparison          | 5         | Refuse without count/deadline changes                                                                             |
+| idp-shared-otp-verification-budget:T005 | absent or 1–4 | correct OTP             | unchanged | Allow comparison without resetting destination budget; proof consumption remains under its original ceremony lock |
+| idp-shared-otp-verification-budget:T006 | 1–5           | native deadline expires | absent    | Native Valkey expiration; candidate lock is not reset                                                             |
+
+Malformed count or absent TTL raises SerializationError. Dependency outage raises Unavailable before
+OTP consumption; no alternate store or permissive fallback exists. The counter can conservatively
+survive a later Source rollback, since no distributed transaction is claimed. Success, resend,
+recreated flow and rejected verification never extend the deadline. Independent
+purpose/surface/channel scopes prevent public signup exhaustion from crossing into sign-in/settings
+budgets. Same-scope third-party destination exhaustion remains an accepted, bounded 15-minute denial
+risk; existing admission, CSRF, delivery and candidate controls are retained. Complete
+dispatch/parity integration is not established by this increment.
+
+Valkey command behavior was checked against the official [EVAL](https://valkey.io/commands/eval/)
+and [EXPIRE](https://valkey.io/commands/expire/) references; INCR retains an existing timeout.
+
+## idp-client-email-otp
+
+Sign-in resend uses version-2 encrypted state bound to server-owned Auth continuity and
+Contact/owner/binding facts. The exact Source Contact is locked and rechecked against the normalized
+destination digest; released destinations are never re-resolved to a successor owner. Dummy state
+cannot adopt a later binding. Stale code-entry pages restart without minting new state. The
+seven-file public sign-in/resend selection passed 101 tests and 778 assertions; complete
+late-delivery and timing guarantees remain unverified.
+
+Signup issuance and verification require the bound candidate's owner to equal the locked Ticket
+principal before use and again under the Source contact lock. A mismatch raises explicitly without
+dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP
+mutation, including under the contact lock. Admissible signup comparisons also use the shared
+destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain
+independent; this does not certify all D-87 acceptance.
+
+Implementation: `EmailOtpPolicy`. Storage: `client_emails` /
+`otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
+
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
+only explicit successful consumption can reset them. The channel policy is independent. Both
+channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining
+acceptance work is route, fixture and constraint evidence.
+
+Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/client_email.rb`,
+`app/models/concerns/email.rb`, `app/operations/email_sign_up_otp_issuer.rb`,
+`app/models/client_email_ceremony_transaction.rb`.
+
+Tests read: `test/models/otp_failure_retention_test.rb`,
+`test/operations/contact_registration_otp_verification_committer_test.rb`.
+
+| Transition ID             | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                             | Confidence |
+| ------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | --------------------------------------- | ---------- |
+| idp-client-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+
+This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
+Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
+proof, not a Source secret/counter. The shared SignOtpCeremony implementation has been removed.
+Source failed-attempt and lock state remain independently channel-owned; locked_at stores the
+lockout deadline, and all Telephone realms use explicit otp_last_sent_at rather than created_at. Old
+Source proof columns and methods are pending retirement, not a current workflow recommendation.
+
+## idp-client-telephone-otp
+
+Signup issuance and verification require the bound candidate's owner to equal the locked Ticket
+principal before use and again under the Source contact lock. A mismatch raises explicitly without
+dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP
+mutation, including under the contact lock. Admissible signup comparisons also use the shared
+destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain
+independent; this does not certify all D-87 acceptance.
+
+Implementation: `TelephoneOtpPolicy`. Storage: `client_telephones` /
+`otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
+
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
+only explicit successful consumption can reset them. The channel policy is independent. Both
+channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining
+acceptance work is route, fixture and constraint evidence.
+
+Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/client_telephone.rb`,
+`app/models/concerns/telephone.rb`, `app/operations/telephone_sign_up_otp_issuer.rb`,
+`app/models/client_telephone_ceremony_transaction.rb`.
+
+Tests read: `test/models/otp_failure_retention_test.rb`,
+`test/operations/contact_registration_otp_verification_committer_test.rb`.
+
+| Transition ID                 | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                                 | Confidence |
+| ----------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ------------------------------------------- | ---------- |
+| idp-client-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+
+This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
+Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
+proof, not a Source secret/counter. The shared SignOtpCeremony implementation has been removed.
+Source failed-attempt and lock state remain independently channel-owned; locked_at stores the
+lockout deadline, and all Telephone realms use explicit otp_last_sent_at rather than created_at. Old
+Source proof columns and methods are pending retirement, not a current workflow recommendation.
+
+## idp-client-dpop-nonce
+
+Implementation: `DpopProofStateable`. Storage: `client_dpop_proof_states` /
+`nonce_used_at / expires_at`.
+
+Sources: `app/models/concerns/dpop_proof_stateable.rb`, `app/models/client_dpop_proof_state.rb`,
+`app/services/dpop_nonce_service.rb`, `app/lib/dpop_proof_verifier.rb`,
+`app/jobs/dpop_proof_state_purge_job.rb`.
+
+Tests read: `test/models/concerns/dpop_proof_stateable_test.rb`,
+`test/services/dpop/nonce_service_test.rb`.
+
+| Transition ID              | Mutation kind         | From   | Event / Trigger | To   | Guard                                          | Side effect   | Source file                                 | Confidence |
+| -------------------------- | --------------------- | ------ | --------------- | ---- | ---------------------------------------------- | ------------- | ------------------------------------------- | ---------- |
+| idp-client-dpop-nonce:T001 | DOCUMENTED_TRANSITION | unused | consume_nonce!  | used | nonce match; expires_at>now; unconsumed lookup | nonce_used_at | app/models/concerns/dpop_proof_stateable.rb | CONFIRMED  |
+
+TTL 300 seconds; no reference or expiry state. JTI insertion in the same table is append-only replay
+bookkeeping, excluded as a separate mutable machine. consume_nonce! uses SELECT lock but has no
+explicit enclosing transaction across lookup/update; do not claim that alone guarantees one winner.
+Time expiry rejects use; purge deletes expired rows. Base connection role switching and actual
+multi-DB runtime are not verified. Nonce handshake and JTI verification are external proof
+boundaries; rejection is a result.
+
+## idp-client-administrative-access
+
+Implementation: `AdministrativeAccessLock`. Storage: `clients` / `access_state`.
+
+Sources: `app/services/administrative_access_lock.rb`,
+`app/models/concerns/administrative_access_lockable.rb`, `app/models/client.rb`,
+`app/models/account_access_event.rb`.
+
+Tests read: `test/services/administrative_access_lock_test.rb`,
+`test/models/concerns/administrative_access_lockable_test.rb`.
+
+| Transition ID                         | Mutation kind         | From         | Event / Trigger | To           | Guard                                                                                                   | Side effect                                                    | Source file                                | Confidence |
+| ------------------------------------- | --------------------- | ------------ | --------------- | ------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------ | ---------- |
+| idp-client-administrative-access:T001 | DOCUMENTED_TRANSITION | enabled      | unlock!         | enabled      | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-client-administrative-access:T002 | DOCUMENTED_TRANSITION | enabled      | lock!           | admin_locked | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-client-administrative-access:T003 | DOCUMENTED_TRANSITION | admin_locked | unlock!         | enabled      | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-client-administrative-access:T004 | DOCUMENTED_TRANSITION | admin_locked | lock!           | admin_locked | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+
+Actor access_state CHECK default enabled, no reference FK. Model consistency binds lock metadata;
+audit events persist previous/next strings in Chronicle. No source-state guard: lock repeats
+reaffirmed event, unlock repeats enabled state. Account update commits before session
+revocation/event creation on other DBs; no distributed atomicity is inferred. This state is separate
+from identity/provisioning, withdrawal or Entra entitlement. No time expiry or cancellation:
+explicit administrator unlock is escape.
+
+## idp-visitor-email-verification-challenge
+
+Implementation: `EmailVerificationChallengeable`. Storage: `visitor_email_ceremony_transactions` /
+`evp_outcome / expires_at`.
+
+Sources: `app/models/concerns/email_verification_challengeable.rb`,
+`app/models/visitor_email_ceremony_transaction.rb`.
+
+Tests read: `test/models/email_verification_challengeable_test.rb`.
+
+| Transition ID                                 | Mutation kind         | From    | Event / Trigger      | To       | Guard                                                      | Side effect                                                 | Source file                                             | Confidence |
+| --------------------------------------------- | --------------------- | ------- | -------------------- | -------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------- | ---------- |
+| idp-visitor-email-verification-challenge:T001 | DOCUMENTED_TRANSITION | pending | record_evp_verified! | verified | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+| idp-visitor-email-verification-challenge:T002 | DOCUMENTED_TRANSITION | pending | record_evp_fallback! | fallback | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+| idp-visitor-email-verification-challenge:T003 | DOCUMENTED_TRANSITION | pending | record_evp_rejected! | rejected | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+
+This outcome is persisted as a separate EVP submachine; it does not consume the parent ceremony
+result or verify the email credential. SQL ownership remains the email ceremony transaction, not a
+new reference FK. TTL shares expires_at (10 minutes); no expired/cancel state. Terminal outcomes
+refuse replay; unique evp_token_digest prevents cross-challenge token reuse. No production callsites
+for issue_evp_challenge!/record_evp_* were found outside this declaration; tests exercise model API,
+so HTTP runtime wiring is UNCONFIRMED. Legacy email ceremonies allow evp_outcome nil.
+
+## idp-visitor-email-otp
+
+Sign-in resend uses version-2 encrypted state bound to server-owned Auth continuity and
+Contact/owner/binding facts. The exact Source Contact is locked and rechecked against the normalized
+destination digest; released destinations are never re-resolved to a successor owner. Dummy state
+cannot adopt a later binding. Stale code-entry pages restart without minting new state. The
+seven-file public sign-in/resend selection passed 101 tests and 778 assertions; complete
+late-delivery and timing guarantees remain unverified.
+
+Signup issuance and verification require the bound candidate's owner to equal the locked Ticket
+principal before use and again under the Source contact lock. A mismatch raises explicitly without
+dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP
+mutation, including under the contact lock. Admissible signup comparisons also use the shared
+destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain
+independent; this does not certify all D-87 acceptance.
+
+Implementation: `EmailOtpPolicy`. Storage: `visitor_emails` /
+`otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
+
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
+only explicit successful consumption can reset them. The channel policy is independent. Both
+channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining
+acceptance work is route, fixture and constraint evidence.
+
+Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/visitor_email.rb`,
+`app/models/concerns/email.rb`, `app/operations/email_sign_up_otp_issuer.rb`,
+`app/models/visitor_email_ceremony_transaction.rb`.
+
+Tests read: `test/models/otp_failure_retention_test.rb`,
+`test/operations/contact_registration_otp_verification_committer_test.rb`.
+
+| Transition ID              | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                             | Confidence |
+| -------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | --------------------------------------- | ---------- |
+| idp-visitor-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+
+This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
+Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
+proof, not a Source secret/counter. The shared SignOtpCeremony implementation has been removed.
+Source failed-attempt and lock state remain independently channel-owned; locked_at stores the
+lockout deadline, and all Telephone realms use explicit otp_last_sent_at rather than created_at. Old
+Source proof columns and methods are pending retirement, not a current workflow recommendation.
+
+## idp-visitor-telephone-otp
+
+Signup issuance and verification require the bound candidate's owner to equal the locked Ticket
+principal before use and again under the Source contact lock. A mismatch raises explicitly without
+dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP
+mutation, including under the contact lock. Admissible signup comparisons also use the shared
+destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain
+independent; this does not certify all D-87 acceptance.
+
+Implementation: `TelephoneOtpPolicy`. Storage: `visitor_telephones` /
+`otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
+
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
+only explicit successful consumption can reset them. The channel policy is independent. Both
+channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining
+acceptance work is route, fixture and constraint evidence.
+
+Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/visitor_telephone.rb`,
+`app/models/concerns/telephone.rb`, `app/operations/telephone_sign_up_otp_issuer.rb`,
+`app/models/visitor_telephone_ceremony_transaction.rb`.
+
+Tests read: `test/models/otp_failure_retention_test.rb`,
+`test/operations/contact_registration_otp_verification_committer_test.rb`.
+
+| Transition ID                  | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                                 | Confidence |
+| ------------------------------ | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ------------------------------------------- | ---------- |
+| idp-visitor-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+
+This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
+Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
+proof, not a Source secret/counter. The shared SignOtpCeremony implementation has been removed.
+Source failed-attempt and lock state remain independently channel-owned; locked_at stores the
+lockout deadline, and all Telephone realms use explicit otp_last_sent_at rather than created_at. Old
+Source proof columns and methods are pending retirement, not a current workflow recommendation.
+
+## idp-visitor-dpop-nonce
+
+Implementation: `DpopProofStateable`. Storage: `visitor_dpop_proof_states` /
+`nonce_used_at / expires_at`.
+
+Sources: `app/models/concerns/dpop_proof_stateable.rb`, `app/models/visitor_dpop_proof_state.rb`,
+`app/services/dpop_nonce_service.rb`, `app/lib/dpop_proof_verifier.rb`,
+`app/jobs/dpop_proof_state_purge_job.rb`.
+
+Tests read: `test/models/concerns/dpop_proof_stateable_test.rb`,
+`test/services/dpop/nonce_service_test.rb`.
+
+| Transition ID               | Mutation kind         | From   | Event / Trigger | To   | Guard                                          | Side effect   | Source file                                 | Confidence |
+| --------------------------- | --------------------- | ------ | --------------- | ---- | ---------------------------------------------- | ------------- | ------------------------------------------- | ---------- |
+| idp-visitor-dpop-nonce:T001 | DOCUMENTED_TRANSITION | unused | consume_nonce!  | used | nonce match; expires_at>now; unconsumed lookup | nonce_used_at | app/models/concerns/dpop_proof_stateable.rb | CONFIRMED  |
+
+TTL 300 seconds; no reference or expiry state. JTI insertion in the same table is append-only replay
+bookkeeping, excluded as a separate mutable machine. consume_nonce! uses SELECT lock but has no
+explicit enclosing transaction across lookup/update; do not claim that alone guarantees one winner.
+Time expiry rejects use; purge deletes expired rows. Base connection role switching and actual
+multi-DB runtime are not verified. Nonce handshake and JTI verification are external proof
+boundaries; rejection is a result.
+
+## idp-visitor-administrative-access
+
+Implementation: `AdministrativeAccessLock`. Storage: `visitors` / `access_state`.
+
+Sources: `app/services/administrative_access_lock.rb`,
+`app/models/concerns/administrative_access_lockable.rb`, `app/models/visitor.rb`,
+`app/models/account_access_event.rb`.
+
+Tests read: `test/services/administrative_access_lock_test.rb`,
+`test/models/concerns/administrative_access_lockable_test.rb`.
+
+| Transition ID                          | Mutation kind         | From         | Event / Trigger | To           | Guard                                                                                                   | Side effect                                                    | Source file                                | Confidence |
+| -------------------------------------- | --------------------- | ------------ | --------------- | ------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------ | ---------- |
+| idp-visitor-administrative-access:T001 | DOCUMENTED_TRANSITION | enabled      | unlock!         | enabled      | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-visitor-administrative-access:T002 | DOCUMENTED_TRANSITION | enabled      | lock!           | admin_locked | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-visitor-administrative-access:T003 | DOCUMENTED_TRANSITION | admin_locked | unlock!         | enabled      | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-visitor-administrative-access:T004 | DOCUMENTED_TRANSITION | admin_locked | lock!           | admin_locked | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+
+Actor access_state CHECK default enabled, no reference FK. Model consistency binds lock metadata;
+audit events persist previous/next strings in Chronicle. No source-state guard: lock repeats
+reaffirmed event, unlock repeats enabled state. Account update commits before session
+revocation/event creation on other DBs; no distributed atomicity is inferred. This state is separate
+from identity/provisioning, withdrawal or Entra entitlement. No time expiry or cancellation:
+explicit administrator unlock is escape.
+
+## idp-operator-email-verification-challenge
+
+Implementation: `EmailVerificationChallengeable`. Storage: `operator_email_ceremony_transactions` /
+`evp_outcome / expires_at`.
+
+Sources: `app/models/concerns/email_verification_challengeable.rb`,
+`app/models/operator_email_ceremony_transaction.rb`.
+
+Tests read: `test/models/email_verification_challengeable_test.rb`.
+
+| Transition ID                                  | Mutation kind         | From    | Event / Trigger      | To       | Guard                                                      | Side effect                                                 | Source file                                             | Confidence |
+| ---------------------------------------------- | --------------------- | ------- | -------------------- | -------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------- | ---------- |
+| idp-operator-email-verification-challenge:T001 | DOCUMENTED_TRANSITION | pending | record_evp_verified! | verified | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+| idp-operator-email-verification-challenge:T002 | DOCUMENTED_TRANSITION | pending | record_evp_fallback! | fallback | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+| idp-operator-email-verification-challenge:T003 | DOCUMENTED_TRANSITION | pending | record_evp_rejected! | rejected | pending; TTL>now; row lock; required token/metadata/reason | digest only; evp_consumed_at; attempts; unique token digest | app/models/concerns/email_verification_challengeable.rb | CONFIRMED  |
+
+This outcome is persisted as a separate EVP submachine; it does not consume the parent ceremony
+result or verify the email credential. SQL ownership remains the email ceremony transaction, not a
+new reference FK. TTL shares expires_at (10 minutes); no expired/cancel state. Terminal outcomes
+refuse replay; unique evp_token_digest prevents cross-challenge token reuse. No production callsites
+for issue_evp_challenge!/record_evp_* were found outside this declaration; tests exercise model API,
+so HTTP runtime wiring is UNCONFIRMED. Legacy email ceremonies allow evp_outcome nil.
+
+## idp-operator-email-otp
+
+Authenticated destination confirmation checks the shared verification budget under the Contact lock.
+It neither replaces candidate limits nor gives org a signup or email sign-in workflow.
+
+Implementation: `EmailOtpPolicy`. Storage: `operator_emails` /
+`otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
+
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
+only explicit successful consumption can reset them. The channel policy is independent. Both
+channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining
+acceptance work is route, fixture and constraint evidence.
+
+Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/operator_email.rb`,
+`app/models/concerns/email.rb`, `app/operations/email_sign_up_otp_issuer.rb`,
+`app/models/operator_email_ceremony_transaction.rb`.
+
+Tests read: `test/models/otp_failure_retention_test.rb`,
+`test/operations/contact_registration_otp_verification_committer_test.rb`.
+
+| Transition ID               | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                             | Confidence |
+| --------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | --------------------------------------- | ---------- |
+| idp-operator-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+
+This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
+Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
+proof, not a Source secret/counter. The shared SignOtpCeremony implementation has been removed.
+Source failed-attempt and lock state remain independently channel-owned; locked_at stores the
+lockout deadline, and all Telephone realms use explicit otp_last_sent_at rather than created_at. Old
+Source proof columns and methods are pending retirement, not a current workflow recommendation.
+
+## idp-operator-telephone-otp
+
+Authenticated destination confirmation checks the shared verification budget under the Contact lock.
+It neither replaces candidate limits nor gives org a signup or telephone sign-in workflow.
+
+Implementation: `TelephoneOtpPolicy`. Storage: `operator_telephones` /
+`otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
+
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
+only explicit successful consumption can reset them. The channel policy is independent. Both
+channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining
+acceptance work is route, fixture and constraint evidence.
+
+Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/operator_telephone.rb`,
+`app/models/concerns/telephone.rb`, `app/operations/telephone_sign_up_otp_issuer.rb`,
+`app/models/operator_telephone_ceremony_transaction.rb`.
+
+Tests read: `test/models/otp_failure_retention_test.rb`,
+`test/operations/contact_registration_otp_verification_committer_test.rb`.
+
+| Transition ID                   | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                                 | Confidence |
+| ------------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ------------------------------------------- | ---------- |
+| idp-operator-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+
+This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
+Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
+proof, not a Source secret/counter. The shared SignOtpCeremony implementation has been removed.
+Source failed-attempt and lock state remain independently channel-owned; locked_at stores the
+lockout deadline, and all Telephone realms use explicit otp_last_sent_at rather than created_at. Old
+Source proof columns and methods are pending retirement, not a current workflow recommendation.
+
+## idp-operator-dpop-nonce
+
+Implementation: `DpopProofStateable`. Storage: `operator_dpop_proof_states` /
+`nonce_used_at / expires_at`.
+
+Sources: `app/models/concerns/dpop_proof_stateable.rb`, `app/models/operator_dpop_proof_state.rb`,
+`app/services/dpop_nonce_service.rb`, `app/lib/dpop_proof_verifier.rb`,
+`app/jobs/dpop_proof_state_purge_job.rb`.
+
+Tests read: `test/models/concerns/dpop_proof_stateable_test.rb`,
+`test/services/dpop/nonce_service_test.rb`.
+
+| Transition ID                | Mutation kind         | From   | Event / Trigger | To   | Guard                                          | Side effect   | Source file                                 | Confidence |
+| ---------------------------- | --------------------- | ------ | --------------- | ---- | ---------------------------------------------- | ------------- | ------------------------------------------- | ---------- |
+| idp-operator-dpop-nonce:T001 | DOCUMENTED_TRANSITION | unused | consume_nonce!  | used | nonce match; expires_at>now; unconsumed lookup | nonce_used_at | app/models/concerns/dpop_proof_stateable.rb | CONFIRMED  |
+
+TTL 300 seconds; no reference or expiry state. JTI insertion in the same table is append-only replay
+bookkeeping, excluded as a separate mutable machine. consume_nonce! uses SELECT lock but has no
+explicit enclosing transaction across lookup/update; do not claim that alone guarantees one winner.
+Time expiry rejects use; purge deletes expired rows. Base connection role switching and actual
+multi-DB runtime are not verified. Nonce handshake and JTI verification are external proof
+boundaries; rejection is a result.
+
+## idp-operator-administrative-access
+
+Implementation: `AdministrativeAccessLock`. Storage: `operators` / `access_state`.
+
+Sources: `app/services/administrative_access_lock.rb`,
+`app/models/concerns/administrative_access_lockable.rb`, `app/models/operator.rb`,
+`app/models/account_access_event.rb`.
+
+Tests read: `test/services/administrative_access_lock_test.rb`,
+`test/models/concerns/administrative_access_lockable_test.rb`.
+
+| Transition ID                           | Mutation kind         | From         | Event / Trigger | To           | Guard                                                                                                   | Side effect                                                    | Source file                                | Confidence |
+| --------------------------------------- | --------------------- | ------------ | --------------- | ------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------ | ---------- |
+| idp-operator-administrative-access:T001 | DOCUMENTED_TRANSITION | enabled      | unlock!         | enabled      | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-operator-administrative-access:T002 | DOCUMENTED_TRANSITION | enabled      | lock!           | admin_locked | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-operator-administrative-access:T003 | DOCUMENTED_TRANSITION | admin_locked | unlock!         | enabled      | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+| idp-operator-administrative-access:T004 | DOCUMENTED_TRANSITION | admin_locked | lock!           | admin_locked | Supported actor; Operator executor; reason metadata; account lock; last-enabled-operator guard for lock | access fields; token_valid_after; event; lock revokes sessions | app/services/administrative_access_lock.rb | CONFIRMED  |
+
+Actor access_state CHECK default enabled, no reference FK. Model consistency binds lock metadata;
+audit events persist previous/next strings in Chronicle. No source-state guard: lock repeats
+reaffirmed event, unlock repeats enabled state. Account update commits before session
+revocation/event creation on other DBs; no distributed atomicity is inferred. This state is separate
+from identity/provisioning, withdrawal or Entra entitlement. No time expiry or cancellation:
+explicit administrator unlock is escape.
+
+## idp-security-one-time-reveal
+
+Implementation: `SecurityOneTimeReveal / IdentityOneTimeReveal`. Storage:
+`security_one_time_reveals` / `consumed_at / expires_at`.
+
+Sources: `app/models/security_one_time_reveal.rb`, `app/services/identity_one_time_reveal.rb`,
+`app/controllers/concerns/passkey_registration_flow.rb`,
+`app/controllers/base/com/identity/recovery_secrets_controller.rb`.
+
+Tests read: `test/models/security_one_time_reveal_test.rb`,
+`test/services/identity/one_time_reveal_test.rb`.
+
+| Transition ID                     | Mutation kind         | From   | Event / Trigger                | To       | Guard                                                             | Side effect                                 | Source file                            | Confidence |
+| --------------------------------- | --------------------- | ------ | ------------------------------ | -------- | ----------------------------------------------------------------- | ------------------------------------------- | -------------------------------------- | ---------- |
+| idp-security-one-time-reveal:T001 | DOCUMENTED_TRANSITION | unused | IdentityOneTimeReveal.consume! | consumed | Signed claims; actor/session/purpose; expires_at>now; DB row lock | consume before decrypting/returning payload | app/models/security_one_time_reveal.rb | CONFIRMED  |
+
+TTL default 15 minutes; expiry makes unused row unreadable with no stored expired state. No
+reference/cancel/failure state. Consume commits before decrypt/JSON decoding; invalid encrypted
+payload can therefore burn the reveal even when service returns nil (hidden terminal). One-time
+actor/session/purpose binding under transaction prevents replay. Uses OpBaseAppRecord for this
+existing shared security store; do not infer separate realm tables. Recovery-secret presentation is
+distinct from credential consumption.
+
+## idp-client-passkey-credential
+
+Implementation: `IdentityPasskeyCeremonyFinalCommitter / IdentityCredentialRemovalCommitter`.
+Storage: `client_passkeys` / `status_id`.
+
+Sources: `app/models/client_passkey.rb`, `app/models/client_passkey_status.rb`,
+`app/operations/identity_passkey_ceremony_final_committer.rb`,
+`app/operations/identity_credential_removal_committer.rb`.
+
+Tests read: `test/models/client_passkey_test.rb`,
+`test/operations/identity_credential_removal_committer_test.rb`.
+
+| Transition ID                      | Mutation kind         | From     | Event / Trigger                           | To      | Guard                                                                                                         | Side effect                                                        | Source file                                             | Confidence |
+| ---------------------------------- | --------------------- | -------- | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- | ---------- |
+| idp-client-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE   | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-passkey-credential:T002 | DOCUMENTED_TRANSITION | DISABLED | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-passkey-credential:T003 | DOCUMENTED_TRANSITION | NOTHING  | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-passkey-credential:T004 | OUT_OF_BAND           | ACTIVE   | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-passkey-credential:T005 | OUT_OF_BAND           | DISABLED | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-passkey-credential:T006 | OUT_OF_BAND           | REVOKED  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-passkey-credential:T007 | OUT_OF_BAND           | DELETED  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-passkey-credential:T008 | OUT_OF_BAND           | NOTHING  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-passkey-credential:T009 | OUT_OF_BAND           | ACTIVE   | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-client-passkey-credential:T010 | OUT_OF_BAND           | DISABLED | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-client-passkey-credential:T011 | OUT_OF_BAND           | REVOKED  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-client-passkey-credential:T012 | OUT_OF_BAND           | DELETED  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-client-passkey-credential:T013 | OUT_OF_BAND           | NOTHING  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+
+Registration creates ACTIVE through model default; SQL default and FK are recorded in topology.
+Operator model explicitly defaults ACTIVE=1, while checked-in SQL default is 0; raw SQL inserts
+therefore differ from model creation. Slot limit is four under owner lock; retained revoked/deleted
+history does not consume slots. Removal is idempotent on revoked/deleted and guards the last usable
+authentication method. Other declared states have no production entry setter identified; model
+attributes remain assignable. No expiry/cancel state; cancellation belongs to ceremony.
+Authentication updates sign_count and last_used_at independently of lifecycle.
+
+## idp-visitor-passkey-credential
+
+Implementation: `IdentityPasskeyCeremonyFinalCommitter / IdentityCredentialRemovalCommitter`.
+Storage: `visitor_passkeys` / `status_id`.
+
+Sources: `app/models/visitor_passkey.rb`, `app/models/visitor_passkey_status.rb`,
+`app/operations/identity_passkey_ceremony_final_committer.rb`,
+`app/operations/identity_credential_removal_committer.rb`.
+
+Tests read: `test/models/visitor_passkey_test.rb`,
+`test/operations/identity_credential_removal_committer_test.rb`.
+
+| Transition ID                       | Mutation kind         | From     | Event / Trigger                           | To      | Guard                                                                                                         | Side effect                                                        | Source file                                             | Confidence |
+| ----------------------------------- | --------------------- | -------- | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- | ---------- |
+| idp-visitor-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE   | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-visitor-passkey-credential:T002 | DOCUMENTED_TRANSITION | DISABLED | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-visitor-passkey-credential:T003 | DOCUMENTED_TRANSITION | NOTHING  | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-visitor-passkey-credential:T004 | OUT_OF_BAND           | ACTIVE   | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-visitor-passkey-credential:T005 | OUT_OF_BAND           | DISABLED | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-visitor-passkey-credential:T006 | OUT_OF_BAND           | REVOKED  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-visitor-passkey-credential:T007 | OUT_OF_BAND           | DELETED  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-visitor-passkey-credential:T008 | OUT_OF_BAND           | NOTHING  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-visitor-passkey-credential:T009 | OUT_OF_BAND           | ACTIVE   | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-visitor-passkey-credential:T010 | OUT_OF_BAND           | DISABLED | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-visitor-passkey-credential:T011 | OUT_OF_BAND           | REVOKED  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-visitor-passkey-credential:T012 | OUT_OF_BAND           | DELETED  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+| idp-visitor-passkey-credential:T013 | OUT_OF_BAND           | NOTHING  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
+
+Registration creates ACTIVE through model default; SQL default and FK are recorded in topology.
+Operator model explicitly defaults ACTIVE=1, while checked-in SQL default is 0; raw SQL inserts
+therefore differ from model creation. Slot limit is four under owner lock; retained revoked/deleted
+history does not consume slots. Removal is idempotent on revoked/deleted and guards the last usable
+authentication method. Other declared states have no production entry setter identified; model
+attributes remain assignable. No expiry/cancel state; cancellation belongs to ceremony.
+Authentication updates sign_count and last_used_at independently of lifecycle.
+
+## idp-operator-passkey-credential
+
+Implementation: `IdentityPasskeyCeremonyFinalCommitter / IdentityCredentialRemovalCommitter`.
+Storage: `operator_passkeys` / `status_id`.
+
+Sources: `app/models/operator_passkey.rb`, `app/models/operator_passkey_status.rb`,
+`app/operations/identity_passkey_ceremony_final_committer.rb`,
+`app/operations/identity_credential_removal_committer.rb`.
+
+Tests read: `test/models/operator_passkey_test.rb`,
+`test/operations/identity_credential_removal_committer_test.rb`.
+
+| Transition ID                        | Mutation kind         | From   | Event / Trigger                    | To      | Guard                                                                                                         | Side effect                                                        | Source file                                             | Confidence |
+| ------------------------------------ | --------------------- | ------ | ---------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- | ---------- |
+| idp-operator-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE | IdentityCredentialRemovalCommitter | REVOKED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+
+Registration creates ACTIVE through model default; SQL default and FK are recorded in topology.
+Operator model explicitly defaults ACTIVE=1, while checked-in SQL default is 0; raw SQL inserts
+therefore differ from model creation. Slot limit is four under owner lock; retained revoked/deleted
+history does not consume slots. Removal is idempotent on revoked/deleted and guards the last usable
+authentication method. Other declared states have no production entry setter identified; model
+attributes remain assignable. No expiry/cancel state; cancellation belongs to ceremony.
+Authentication updates sign_count and last_used_at independently of lifecycle.
+
+## idp-client-secret-issuance
+
+Implementation: `ClientSecretIssuance / reservation, confirmation and invalidation operations`.
+Storage: `client_secret_issuances` / `presented_at / confirmed_at / canceled_at / expires_at`.
+
+Sources: `app/models/client_secret_issuance.rb`,
+`app/operations/client_secret_manual_reservation_issuer.rb`,
+`app/operations/client_secret_storage_confirmation_committer.rb`,
+`app/operations/client_secret_manual_issuance_invalidator.rb`,
+`app/operations/client_secret_issuance_expiry_invalidator.rb`.
+
+Tests read: `test/models/client_secret_issuance_test.rb`,
+`test/operations/client_secret_storage_confirmation_committer_test.rb`,
+`test/operations/client_secret_storage_confirmation_concurrency_test.rb`,
+`test/operations/client_secret_issuance_expiry_invalidator_test.rb`,
+`test/jobs/client_secret_issuance_collection_job_test.rb`.
+
+`ClientSecretIssuanceCollectionJob` scans at most 500 allocations per execution, captures a fixed
+upper ID bound, and durably queues its next cursor past retained rows. A fresh periodic lifecycle
+scan recovers lost enqueue. The continuation reuses the expiry invalidator to clear expired
+payloads, and existing purgers recheck authority, retention, dependencies, holds and Chronicle
+before deletion. Cursor position grants no transition authority. Worker-stop/start continuation was
+observed with actual Solid Queue on the guarded disposable database fleet. The lifecycle signup
+phase separately queues bounded fixed-horizon continuations; live signup allocations do not prevent
+later terminal-flow reconciliation. Credential claim reconciliation and collection use their own
+lifecycle continuation phase so unresolved claims or held credentials do not block later source
+rows. Each continuation rechecks the purge suspension flag and existing operation guards.
+
+| Transition ID                   | Mutation kind         | From                                      | Event / Trigger                                    | To                                          | Guard                                                                                                                                                                          | Side effect                                                                                                                                                                                | Source file                                                                                                                         | Confidence |
+| ------------------------------- | --------------------- | ----------------------------------------- | -------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| idp-client-secret-issuance:T008 | DOCUMENTED_TRANSITION | signup batch; activation absent           | signup cancel, expiry or failure                   | signup batch discarded                      | Source Client lock then durable terminal Ticket flow lock; no signup completion; no candidate claim                                                                            | Retire all candidates and issuance, clear payload, persist reason-bearing discarded outboxes in source transaction; reservation count excludes discarded issuance                          | app/operations/client_secret_passkey_reservation_issuer.rb                                                                          | CONFIRMED  |
+| idp-client-secret-issuance:T007 | DOCUMENTED_TRANSITION | confirmed signup batch; activation absent | completed signup reconciliation                    | confirmed signup batch; activation recorded | Locked durable completed app signup flow; same Client; saved batch; source Client lock; source status ACTIVE or VERIFIED_WITH_SIGN_UP and login allowed                        | Source completion fact and secret.signup_completed outbox commit together; retries preserve original fact                                                                                  | app/operations/client_secret_passkey_reservation_issuer.rb                                                                          | CONFIRMED  |
+| idp-client-secret-issuance:T001 | DOCUMENTED_TRANSITION | pending_confirmation                      | storage confirmation                               | confirmed                                   | Bound Base actor/session; scoped step-up; matching audited presentation set; owner lock                                                                                        | Confirm issuance and candidates; erase encrypted payload                                                                                                                                   | app/operations/client_secret_storage_confirmation_committer.rb                                                                      | CONFIRMED  |
+| idp-client-secret-issuance:T002 | DOCUMENTED_TRANSITION | pending_presentation                      | manual cancel                                      | canceled                                    | Owner lock; context binding; manual issuance; terminal refusal; audit written first                                                                                            | Cancel timestamp; discard candidates and erase payload                                                                                                                                     | app/operations/client_secret_manual_issuance_invalidator.rb                                                                         | CONFIRMED  |
+| idp-client-secret-issuance:T014 | DOCUMENTED_TRANSITION | pending_presentation                      | protected presentation rejects unavailable payload | canceled                                    | Existing owner, session and scoped Step-Up checks repeated by invalidator; unconfirmed candidate set only; source audit in same transaction                                    | Cancel and discard with existing payload_unavailable reason; erase payload and release reservation; no replacement generation                                                              | app/controllers/base/app/secret_presentations_controller.rb; app/operations/client_secret_manual_issuance_invalidator.rb            | CONFIRMED  |
+| idp-client-secret-issuance:T015 | DOCUMENTED_TRANSITION | pending_presentation                      | signup presentation rejects unavailable payload    | canceled                                    | Original signup flow, browser nonce, pending Client and saved Passkey verified through existing delivery boundary; unpresented unconfirmed set only; explicit finite retention | Audited payload_unavailable cancellation and candidate discard in Source transaction; reserve count zero; saved Passkey retained and requirement uncleared; subsequent confirmation denied | app/controllers/auth/app/sign/up/check/telephone/secrets_controller.rb; app/operations/client_secret_manual_issuance_invalidator.rb | CONFIRMED  |
+
+T013 also accepts T015's original `payload_unavailable` audit after the Ticket flow is terminal. The
+immutable cancellation must equal the Source discard time, and allocation/candidate events must
+match that time and their durable Chronicle records. This preserves the earlier retirement reason
+without deriving a new reason from a later flow outcome. Live flow and proof-retention guards
+remain. | idp-client-secret-issuance:T003 | DOCUMENTED_TRANSITION | pending_confirmation | manual
+cancel | canceled | Owner lock; context binding; manual issuance; terminal refusal; audit written
+first | Cancel timestamp; discard candidates and erase payload |
+app/operations/client_secret_manual_issuance_invalidator.rb | CONFIRMED | |
+idp-client-secret-issuance:T004 | DOCUMENTED_TRANSITION | pending_presentation | clock reaches
+expires_at | expired | Positive planned_count; no terminal fact | No status write; expiry
+invalidator separately discards candidates | app/models/client_secret_issuance.rb | CONFIRMED | |
+idp-client-secret-issuance:T005 | DOCUMENTED_TRANSITION | pending_confirmation | clock reaches
+expires_at | expired | Positive planned_count; no terminal fact | No status write; expiry
+invalidator separately discards candidates | app/models/client_secret_issuance.rb | CONFIRMED | |
+idp-client-secret-issuance:T006 | DOCUMENTED_TRANSITION | pending_presentation | explicit protected
+presentation POST | pending_confirmation | Current owner/session/scope/expiry; exact encrypted
+candidate set | presented_at, source events; encrypted payload erased |
+app/operations/client_secret_presentation_issuer.rb | CONFIRMED | |
+idp-client-secret-issuance:T009 | DOCUMENTED_TRANSITION | expired | lifecycle physical collection |
+expired_purged | Source Client/issuance locks; retired unconfirmed allocation; no credentials;
+retention deadline; no hold; terminal Chronicle acknowledgment | DELETE and surviving
+secret.issuance_purged outbox commit together | app/operations/client_secret_issuance_purger.rb |
+CONFIRMED | | idp-client-secret-issuance:T010 | REJECTED_TRANSITION | expired_purged | reservation
+replay | pending_presentation | Surviving issuance_purged source event | Denied; no new allocation,
+candidates or source event | app/operations/client_secret_manual_reservation_issuer.rb;
+app/operations/client_secret_passkey_reservation_issuer.rb | CONFIRMED | |
+idp-client-secret-issuance:T011 | DOCUMENTED_TRANSITION | omitted | lifecycle physical collection |
+omitted_purged | Source Client then Ticket authority then issuance lock; explicit proof retention
+after authority deadline and completion facts; completed signup if bound; no candidates or holds;
+delivered Chronicle omission/completion audit | DELETE and count-zero issuance_purged outbox commit
+together; original authority and Chronicle remain | app/operations/client_secret_issuance_purger.rb;
+app/jobs/client_secret_lifecycle_job.rb | CONFIRMED | | idp-client-secret-issuance:T012 |
+DOCUMENTED_TRANSITION | confirmed | lifecycle call_confirmed! | confirmed_purged | Original
+authority deadline and allocation expiry plus explicit proof retention; no credentials or receipts;
+matching storage/creation and signup audits delivered; credential purges committed in Chronicle; no
+hold | DELETE and surviving issuance_purged outbox in Source transaction; manual issuance
+public-operation/job journey tested, signup and Passkey collection unverified |
+app/operations/client_secret_issuance_purger.rb; app/jobs/client_secret_lifecycle_job.rb |
+CONFIRMED | | idp-client-secret-issuance:T013 | DOCUMENTED_TRANSITION | signup batch discarded;
+activation absent | collection call_terminated_signup! | signup_retired_purged | Source Client then
+matching terminal Ticket signup flow then issuance lock; no credentials or receipts; payload absent;
+original flow expiry and purge deadline plus explicit proof retention; matching reason-bearing
+discarded audit and credential purge audits in Chronicle; no hold | DELETE and surviving
+issuance_purged outbox in Source transaction; canceled zero-count job path and
+CANCELLED/EXPIRED/FAILED counts 0/1/2 public-operation matrix tested |
+app/operations/client_secret_issuance_purger.rb; app/jobs/client_secret_issuance_collection_job.rb |
+CONFIRMED |
+
+No status FK: planned_count=0 implies omitted; positive count requires expiry. Model derives
+priority confirmed/canceled/expired/presented. Presentation must precede confirmation and expiry;
+immutable facts resist direct update_columns; cancellation requires matching source audit.
+ClientSecretPresentationIssuer writes presented_at only after validating and auditing the fixed
+candidate collection; its protected POST response uses a dedicated document rather than Inertia
+props. SQL CHECKs and model tests confirm fact invariants. Existing uncommitted Secret rebuild is
+analyzed as current; no old status-based issuance vocabulary is imported.
+
+## idp-client-session-limit-resolution
+
+Implementation:
+`SessionLimitResolutionTransactionable / Base::App::Sign::In::LimitationsController`. Storage:
+`client_session_limit_resolution_transactions` / `state_id`.
+
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`,
+`app/models/client_session_limit_resolution_transaction.rb`,
+`app/controllers/base/app/sign/in/limitations_controller.rb`.
+
+The browser gate carries an opaque raw challenge; its lookup uses the model's digest primitive and
+the persisted `challenge_digest`, never a nonexistent raw `challenge` column. Actor, browser
+binding, original parent and expiry checks still precede selection or revocation. APP/COM
+session-limit promotion and APP controller/gate checks passed the 18-test selection recorded in
+`evidence/2026-10-08-email-login-capacity-query-3Q7M.md`.
+
+Tests executed: `test/models/session_limit_resolution_transactionable_test.rb`.
+
+Waiting-slot contract (2026-10-16, `nine.md` P-8; R2-WU01 lease layer and R2-WU02 occupied-slot
+refusal implemented): app allows N=2 full-access sessions and one waiting unit, which is this open
+child. The named writer claims one `waiting_slot=1` per actor, expires elapsed rows before a new
+claim, and leaves terminal rows with `waiting_slot=NULL`; a competing live claim returns the
+existing generic `:session_limit_conflict` result with HTTP 403 and leaves the existing flow/lease
+unchanged. The waiting unit may only select one target, explicitly continue the bound flow, or
+cancel; it has no token and cannot reach MFA reset or any full-access page. Finalization purges the
+selected target only when capacity is still full.
+
+| Transition ID                            | Mutation kind         | From                     | Event / Trigger                | To               | Guard                                                                                                                                                                                                                                                             | Side effect                                                                                                     | Source file                                                                                                                                                         | Confidence |
+| ---------------------------------------- | --------------------- | ------------------------ | ------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| idp-client-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending                  | select_session!                | session_selected | Actor, challenge, browser binding, parent and selected-session ownership; row locks                                                                                                                                                                               | selected_session_ref and selected_at                                                                            | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-client-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending/session_selected | finalize_for_session_issuance! | resolved         | Actor, parent, browser and capacity are revalidated under canonical locks; a selected active target is revoked only if capacity remains full                                                                                                                      | resolved_at, finalized_at, waiting_slot=NULL and audit; selected facts may remain when capacity is already free | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb                                                    | CONFIRMED  |
+| idp-client-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending/session_selected | cancel!                        | cancelled        | Actor, challenge, browser binding, parent and TTL                                                                                                                                                                                                                 | cancelled_at and cancellation audit                                                                             | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-client-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | pending/session_selected | expire!                        | expired          | Deadline is reached; terminal rows remain immutable                                                                                                                                                                                                               | expired_at and expiry audit                                                                                     | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-client-session-limit-resolution:T005 | DOCUMENTED_TRANSITION | absent                   | issue!                         | pending          | R2-WU01: canonical actor lock and OP writer; elapsed open rows transition to expired first; same-flow issuance is idempotent; a second live actor lease raises the named occupied-slot outcome; R2-WU02 catches it at root admission and returns generic HTTP 403 | `waiting_slot=1`; actor partial unique index; child becomes the app waiting unit (slot N+1, N=2)                | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb and db/op_base_app_migrate waiting-slot migrations | CONFIRMED  |
+
+## idp-visitor-session-limit-resolution
+
+Implementation:
+`SessionLimitResolutionTransactionable / Base::Com::Sign::In::LimitationsController`. Storage:
+`visitor_session_limit_resolution_transactions` / `state_id`.
+
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`,
+`app/models/visitor_session_limit_resolution_transaction.rb`,
+`app/controllers/base/com/sign/in/limitations_controller.rb`,
+`app/controllers/concerns/base_sign_in_limitations.rb`.
+
+Waiting-slot contract (2026-10-16, `nine.md` P-8; R2-WU01 lease layer and R2-WU02 occupied-slot
+refusal implemented): com allows N=1 full-access session and one waiting unit, which is this open
+child. The named writer claims one `waiting_slot=1` per actor, expires elapsed rows before a new
+claim, and leaves terminal rows with `waiting_slot=NULL`; a competing live claim returns the
+existing generic `:session_limit_conflict` result with HTTP 403 and leaves the existing flow/lease
+unchanged. The waiting unit may only select one target, explicitly continue the bound flow, or
+cancel; it has no token and cannot reach MFA reset or any full-access page. Finalization purges the
+selected target only when capacity is still full.
+
+| Transition ID                             | Mutation kind         | From                     | Event / Trigger                | To               | Guard                                                                                                                                                                                                                                                             | Side effect                                                                                                     | Source file                                                                                                                                                         | Confidence |
+| ----------------------------------------- | --------------------- | ------------------------ | ------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| idp-visitor-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending                  | select_session!                | session_selected | Visitor ownership, challenge, browser binding, parent and selected-session ownership; row locks                                                                                                                                                                   | selected_session_ref and selected_at                                                                            | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-visitor-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending/session_selected | finalize_for_session_issuance! | resolved         | Actor, parent, browser and capacity are revalidated under canonical locks; a selected active target is revoked only if capacity remains full                                                                                                                      | resolved_at, finalized_at, waiting_slot=NULL and audit; selected facts may remain when capacity is already free | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb                                                    | CONFIRMED  |
+| idp-visitor-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending/session_selected | cancel!                        | cancelled        | Visitor ownership, challenge, browser binding, parent and TTL                                                                                                                                                                                                     | cancelled_at and cancellation audit                                                                             | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-visitor-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | pending/session_selected | expire!                        | expired          | Deadline is reached; terminal rows remain immutable                                                                                                                                                                                                               | expired_at and expiry audit                                                                                     | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-visitor-session-limit-resolution:T005 | DOCUMENTED_TRANSITION | absent                   | issue!                         | pending          | R2-WU01: canonical actor lock and OP writer; elapsed open rows transition to expired first; same-flow issuance is idempotent; a second live actor lease raises the named occupied-slot outcome; R2-WU02 catches it at root admission and returns generic HTTP 403 | `waiting_slot=1`; actor partial unique index; child becomes the com waiting unit (slot N+1, N=1)                | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb and db/op_base_com_migrate waiting-slot migrations | CONFIRMED  |
+
+## idp-operator-session-limit-resolution
+
+Implementation:
+`SessionLimitResolutionTransactionable / Base::Org::Sign::In::LimitationsController`. Storage:
+`operator_session_limit_resolution_transactions` / `state_id`.
+
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`,
+`app/models/operator_session_limit_resolution_transaction.rb`,
+`app/controllers/base/org/sign/in/limitations_controller.rb`.
+
+Waiting-slot contract (2026-10-16, `nine.md` P-8; R2-WU01 lease layer and R2-WU02 occupied-slot
+refusal implemented): org allows N=1 full-access session and one waiting unit, which is this open
+child. The named writer claims one `waiting_slot=1` per actor, expires elapsed rows before a new
+claim, and leaves terminal rows with `waiting_slot=NULL`; a competing live claim returns the
+existing generic `:session_limit_conflict` result with HTTP 403 and leaves the existing flow/lease
+unchanged. The waiting unit may only select one target, explicitly continue the bound flow, or
+cancel; it has no token and cannot reach MFA reset or any full-access page. Finalization purges the
+selected target only when capacity is still full.
+
+| Transition ID                              | Mutation kind         | From                     | Event / Trigger                | To               | Guard                                                                                                                                                                                                                                                             | Side effect                                                                                                     | Source file                                                                                                                                                         | Confidence |
+| ------------------------------------------ | --------------------- | ------------------------ | ------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| idp-operator-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending                  | select_session!                | session_selected | Operator ownership, evidence, challenge, browser binding, parent and selected-session ownership; row locks                                                                                                                                                        | selected_session_ref and selected_at                                                                            | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-operator-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending/session_selected | finalize_for_session_issuance! | resolved         | Actor, parent, browser and capacity are revalidated under canonical locks; a selected active target is revoked only if capacity remains full                                                                                                                      | resolved_at, finalized_at, waiting_slot=NULL and audit; selected facts may remain when capacity is already free | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb                                                    | CONFIRMED  |
+| idp-operator-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending/session_selected | cancel!                        | cancelled        | Operator ownership, evidence, challenge, browser binding, parent and TTL                                                                                                                                                                                          | cancelled_at and cancellation audit                                                                             | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-operator-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | pending/session_selected | expire!                        | expired          | Deadline is reached; terminal rows remain immutable                                                                                                                                                                                                               | expired_at and expiry audit                                                                                     | app/models/concerns/session_limit_resolution_transactionable.rb                                                                                                     | CONFIRMED  |
+| idp-operator-session-limit-resolution:T005 | DOCUMENTED_TRANSITION | absent                   | issue!                         | pending          | R2-WU01: canonical actor lock and OP writer; elapsed open rows transition to expired first; same-flow issuance is idempotent; a second live actor lease raises the named occupied-slot outcome; R2-WU02 catches it at root admission and returns generic HTTP 403 | `waiting_slot=1`; actor partial unique index; child becomes the org waiting unit (slot N+1, N=1)                | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb and db/op_base_org_migrate waiting-slot migrations | CONFIRMED  |
+
+## idp-client-apple-notification
+
+Implementation: `ClientAppleNotificationEvent / AppleNotificationProcessingJob`. Storage:
+`client_apple_notification_events` / `status`.
+
+Sources: `app/models/client_apple_notification_event.rb`,
+`app/jobs/apple_notification_processing_job.rb`,
+`app/services/external_authentication_apple_notification_ingress.rb`,
+`app/services/external_authentication_apple_notification_processor.rb`.
+
+Tests read: `test/models/client_apple_notification_event_test.rb`,
+`test/jobs/apple_notification_processing_job_test.rb`,
+`test/services/external_authentication_apple_notification_processor_test.rb`.
+
+| Transition ID                      | Mutation kind         | From     | Event / Trigger                    | To          | Guard                              | Side effect                                                      | Source file                                                          | Confidence |
+| ---------------------------------- | --------------------- | -------- | ---------------------------------- | ----------- | ---------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------- | ---------- |
+| idp-client-apple-notification:T001 | DOCUMENTED_TRANSITION | received | processor success                  | completed   | Processor refuses terminal events  | Apply provider state; revoke sessions when changed; processed_at | app/services/external_authentication_apple_notification_processor.rb | CONFIRMED  |
+| idp-client-apple-notification:T002 | DOCUMENTED_TRANSITION | received | processor failure below retry caps | retrying    | Next attempt <10 and elapsed <24h  | Exponential retry capped2h; schedule job                         | app/models/client_apple_notification_event.rb                        | CONFIRMED  |
+| idp-client-apple-notification:T003 | DOCUMENTED_TRANSITION | received | processor failure at retry cap     | dead_letter | Next attempt >=10 or elapsed >=24h | Record failure; alert                                            | app/models/client_apple_notification_event.rb                        | CONFIRMED  |
+| idp-client-apple-notification:T004 | DOCUMENTED_TRANSITION | retrying | processor success                  | completed   | Processor refuses terminal events  | Apply provider state; revoke sessions when changed; processed_at | app/services/external_authentication_apple_notification_processor.rb | CONFIRMED  |
+| idp-client-apple-notification:T005 | DOCUMENTED_TRANSITION | retrying | processor failure below retry caps | retrying    | Next attempt <10 and elapsed <24h  | Exponential retry capped2h; schedule job                         | app/models/client_apple_notification_event.rb                        | CONFIRMED  |
+| idp-client-apple-notification:T006 | DOCUMENTED_TRANSITION | retrying | processor failure at retry cap     | dead_letter | Next attempt >=10 or elapsed >=24h | Record failure; alert                                            | app/models/client_apple_notification_event.rb                        | CONFIRMED  |
+
+JTI uniqueness supplies ingress deduplication; verified signature/audience/time precede acceptance.
+Production processor/job guard terminal states, but public complete!/retry_or_dead_letter!
+themselves have no source-state guard. Job lock.find_by! is outside a surrounding transaction:
+durable multi-worker serialization is UNCONFIRMED. Identity update, session revocation and event
+completion span DBs; retry can see prior identity event timestamp and skip transition, so
+side-effect atomicity is not assumed. Email-enabled/disabled events complete without identity-state
+changes. Retry-window expiry yields dead_letter, not an EXPIRED state.
+
+## idp-client-external-identity
+
+Implementation: `ClientExternalIdentityRepositoryAdapter / Apple notification processor`. Storage:
+`client_external_identities` / `state`.
+
+Sources: `app/models/client_external_identity.rb`,
+`app/services/external_authentication_apple_notification_processor.rb`,
+`app/adapters/external_authentication/client_external_identity_repository_adapter.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
+
+Tests read: `test/models/client_external_identity_test.rb`,
+`test/services/external_authentication_apple_notification_processor_test.rb`,
+`test/adapters/external_authentication/client_external_identity_repository_adapter_test.rb`.
+
+| Transition ID                     | Mutation kind         | From                      | Event / Trigger            | To              | Guard                                                                 | Side effect                                                | Source file                                                                         | Confidence |
+| --------------------------------- | --------------------- | ------------------------- | -------------------------- | --------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- |
+| idp-client-external-identity:T001 | DOCUMENTED_TRANSITION | active                    | consent-revoked            | consent_revoked | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T002 | DOCUMENTED_TRANSITION | active                    | account-deleted            | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T003 | DOCUMENTED_TRANSITION | consent_revoked           | consent-revoked            | consent_revoked | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T004 | DOCUMENTED_TRANSITION | consent_revoked           | account-deleted            | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T005 | OUT_OF_BAND           | active                    | repository.activate!       | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
+| idp-client-external-identity:T006 | OUT_OF_BAND           | consent_revoked           | repository.activate!       | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
+| idp-client-external-identity:T007 | DOCUMENTED_TRANSITION | active or consent_revoked | app withdrawal termination | removed         | Source owner transaction and subject lock                             | release proof commits before identity removal              | app/operations/withdrawal_personal_data_anonymizer.rb                               | CONFIRMED  |
+
+String CHECK/no state reference. Consent revocation can reactivate through repository; account
+deletion cannot. Provider-event ordering uses timestamp comparison without row lock in processor.
+Event result and identity state are separate. Public repository destroy physically removes identity,
+separate from account_deleted. App withdrawal termination records a keyed social release proof in
+the same Source transaction before removing the row; org Entra ID is unaffected. Authentication
+metadata refresh does not change lifecycle. No cancel or deadline: entitlement remains until
+provider/admin action.
+
+## idp-client-totp-credential
+
+Implementation: `ClientTotpCredential / IdentityTotpEnrollmentFinalCommitter`. Storage:
+`client_totp_credentials` / `user_identity_totp_credential_status_id`.
+
+Sources: `app/models/client_totp_credential.rb`, `app/models/client_totp_credential_status.rb`,
+`app/operations/identity_totp_enrollment_final_committer.rb`,
+`app/operations/identity_step_up_totp_verification_committer.rb`,
+`app/operations/identity_credential_removal_committer.rb`.
+
+Tests read: `test/models/client_totp_credential_test.rb`,
+`test/models/client_totp_credential_enrollment_concurrency_test.rb`.
+
+| Transition ID                   | Mutation kind         | From     | Event / Trigger                    | To      | Guard                                                               | Side effect                            | Source file                                             | Confidence |
+| ------------------------------- | --------------------- | -------- | ---------------------------------- | ------- | ------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------- | ---------- |
+| idp-client-totp-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE   | record_totp_failure! below100      | ACTIVE  | Caller holds row lock; active                                       | Increment consecutive failures         | app/models/client_totp_credential.rb                    | CONFIRMED  |
+| idp-client-totp-credential:T002 | DOCUMENTED_TRANSITION | ACTIVE   | record_totp_failure! at100         | REVOKED | Caller holds row lock; active; count reaches100                     | Counter capped100; save validate:false | app/models/client_totp_credential.rb                    | CONFIRMED  |
+| idp-client-totp-credential:T003 | DOCUMENTED_TRANSITION | ACTIVE   | record_totp_success!               | ACTIVE  | Caller holds row lock; active; code acceptance checked by operation | Reset counter and record OTP time      | app/models/client_totp_credential.rb                    | CONFIRMED  |
+| idp-client-totp-credential:T004 | DOCUMENTED_TRANSITION | ACTIVE   | credential removal                 | DELETED | Owner/credential locks; owning context; last method guard           | Security transition side effects       | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-totp-credential:T005 | DOCUMENTED_TRANSITION | INACTIVE | credential removal                 | DELETED | Owner/credential locks; owning context; last method guard           | Security transition side effects       | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-totp-credential:T006 | DOCUMENTED_TRANSITION | NOTHING  | credential removal                 | DELETED | Owner/credential locks; owning context; last method guard           | Security transition side effects       | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-totp-credential:T007 | OUT_OF_BAND           | ACTIVE   | withdrawal anonymizer direct write | REVOKED | Early termination; model allows write into REVOKED                  | Direct status update / discard         | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-totp-credential:T008 | OUT_OF_BAND           | INACTIVE | withdrawal anonymizer direct write | REVOKED | Early termination; model allows write into REVOKED                  | Direct status update / discard         | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-totp-credential:T009 | OUT_OF_BAND           | NOTHING  | withdrawal anonymizer direct write | REVOKED | Early termination; model allows write into REVOKED                  | Direct status update / discard         | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-totp-credential:T010 | OUT_OF_BAND           | DELETED  | withdrawal anonymizer direct write | REVOKED | Early termination; model allows write into REVOKED                  | Direct status update / discard         | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+| idp-client-totp-credential:T011 | OUT_OF_BAND           | REVOKED  | withdrawal anonymizer direct write | REVOKED | Early termination; model allows write into REVOKED                  | Direct status update / discard         | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
+
+SQL/model default NOTHING=5; production enrollment explicitly creates ACTIVE=1 (new row, not
+NOTHING->ACTIVE). Two-slot limit counts ACTIVE and INACTIVE under owner lock. REVOKED is
+model-terminal; validation:false and update_columns remain lower-level bypass routes, not invented
+production transitions. No production entry setter for INACTIVE identified. OTP replay uses
+last_otp_at; lock and current credential check owned by verification operation. No credential
+expiry/cancel path.
+
+## idp-identity-totp-enrollment
+
+Implementation:
+`IdentityCeremonyCandidateRecord / app/services/identity_totp_ceremony_candidate_store.rb`. Storage:
+`identity_totp_ceremony_candidates` / `consumed_at / expires_at`.
+
+Sources: `app/models/concerns/identity_ceremony_candidate_record.rb`,
+`app/services/identity_totp_ceremony_candidate_store.rb`,
+`app/operations/identity_totp_enrollment_issuer.rb`,
+`app/operations/identity_totp_enrollment_verification_committer.rb`,
+`app/operations/identity_totp_enrollment_final_committer.rb`.
+
+Tests read: `test/operations/identity_totp_enrollment_final_committer_test.rb`.
+
+| Transition ID                     | Mutation kind         | From       | Event / Trigger              | To        | Guard                                                                      | Side effect                                                   | Source file                                                       | Confidence |
+| --------------------------------- | --------------------- | ---------- | ---------------------------- | --------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- | ---------- |
+| idp-identity-totp-enrollment:T001 | DOCUMENTED_TRANSITION | available  | store.consume!               | consumed  | Row lock; ref exists; unconsumed; expiry checked at integer seconds        | consumed_at; payload returned                                 | app/models/concerns/identity_ceremony_candidate_record.rb         | CONFIRMED  |
+| idp-identity-totp-enrollment:T002 | OUT_OF_BAND           | available  | store.delete                 | consumed  | Ref exists; no expiry/consumed guard or row lock                           | Direct consumed_at update                                     | app/services/identity_totp_ceremony_candidate_store.rb            | CONFIRMED  |
+| idp-identity-totp-enrollment:T003 | OUT_OF_BAND           | expired    | store.delete                 | consumed  | Ref exists; no expiry guard                                                | Direct consumed_at update                                     | app/services/identity_totp_ceremony_candidate_store.rb            | CONFIRMED  |
+| idp-identity-totp-enrollment:T004 | DOCUMENTED_TRANSITION | consumed   | store.delete                 | consumed  | Ref exists; no immutability guard                                          | Replaces consumed_at                                          | app/services/identity_totp_ceremony_candidate_store.rb            | CONFIRMED  |
+| idp-identity-totp-enrollment:T005 | DOCUMENTED_TRANSITION | available  | clock reaches deadline       | expired   | expires_at <= now                                                          | Predicate only                                                | app/models/concerns/identity_ceremony_candidate_record.rb         | CONFIRMED  |
+| idp-identity-totp-enrollment:T006 | DOCUMENTED_TRANSITION | unverified | accepted enrollment code     | available | Bound pending parent and token; candidate and actor locks                  | Candidate proof time; parent becomes verified                 | app/operations/identity_totp_enrollment_verification_committer.rb | CONFIRMED  |
+| idp-identity-totp-enrollment:T007 | DOCUMENTED_TRANSITION | available  | Base enrollment final commit | consumed  | Current verified parent, candidate digest and authorization binding; locks | Create ACTIVE credential; consume child, candidate and parent | app/operations/identity_totp_enrollment_final_committer.rb        | CONFIRMED  |
+| idp-identity-totp-enrollment:T008 | DOCUMENTED_TRANSITION | unverified | clock reaches deadline       | expired   | Candidate expiry                                                           | Predicate only                                                | app/models/concerns/identity_ceremony_candidate_record.rb         | CONFIRMED  |
+
+Shared AppTicket candidate, no state FK. Store consume is single-use and TTL guarded; delete is
+actually a direct consumed_at write and can replace terminal timestamps. Fetch validates payload;
+social consumed payload reconstruction can fail after burn, a hidden terminal. Candidate binding
+The Base signup committer now verifies the Flow's required Admission owner before fresh candidate
+consumption. Signed candidate/session agreement remains necessary but does not authorize a Flow
+whose `auth_admission_binding_id` identifies another Admission. See
+`test/services/identity/social_signup_admission_ownership_test.rb` for fresh and committed ownership
+refusals through the public committer and Base HTTP receiver.
+
+must be rechecked by final committer, not supplied by consume(ref) itself. TOTP supports both
+preverified store path and new step-up-bound unverified enrollment. Expired candidate may be marked
+consumed by delete; terminal arrows describe proof usability rather than immutable row state.
+
+## idp-identity-secret-credential-candidate
+
+Implementation:
+`IdentityCeremonyCandidateRecord / app/services/identity_secret_credential_ceremony_candidate_store.rb`.
+Storage: `identity_secret_credential_ceremony_candidates` / `consumed_at / expires_at`.
+
+Sources: `app/models/concerns/identity_ceremony_candidate_record.rb`,
+`app/services/identity_secret_credential_ceremony_candidate_store.rb`.
+
+Tests read: UNKNOWN: no dedicated test identified.
+
+| Transition ID                                 | Mutation kind         | From      | Event / Trigger        | To       | Guard                                                               | Side effect                   | Source file                                                         | Confidence |
+| --------------------------------------------- | --------------------- | --------- | ---------------------- | -------- | ------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------- | ---------- |
+| idp-identity-secret-credential-candidate:T001 | DOCUMENTED_TRANSITION | available | store.consume!         | consumed | Row lock; ref exists; unconsumed; expiry checked at integer seconds | consumed_at; payload returned | app/models/concerns/identity_ceremony_candidate_record.rb           | CONFIRMED  |
+| idp-identity-secret-credential-candidate:T002 | OUT_OF_BAND           | available | store.delete           | consumed | Ref exists; no expiry/consumed guard or row lock                    | Direct consumed_at update     | app/services/identity_secret_credential_ceremony_candidate_store.rb | CONFIRMED  |
+| idp-identity-secret-credential-candidate:T003 | OUT_OF_BAND           | expired   | store.delete           | consumed | Ref exists; no expiry guard                                         | Direct consumed_at update     | app/services/identity_secret_credential_ceremony_candidate_store.rb | CONFIRMED  |
+| idp-identity-secret-credential-candidate:T004 | DOCUMENTED_TRANSITION | consumed  | store.delete           | consumed | Ref exists; no immutability guard                                   | Replaces consumed_at          | app/services/identity_secret_credential_ceremony_candidate_store.rb | CONFIRMED  |
+| idp-identity-secret-credential-candidate:T005 | DOCUMENTED_TRANSITION | available | clock reaches deadline | expired  | expires_at <= now                                                   | Predicate only                | app/models/concerns/identity_ceremony_candidate_record.rb           | CONFIRMED  |
+
+Shared AppTicket candidate, no state FK. Store consume is single-use and TTL guarded; delete is
+actually a direct consumed_at write and can replace terminal timestamps. Fetch validates payload;
+social consumed payload reconstruction can fail after burn, a hidden terminal. Candidate binding
+must be rechecked by final committer, not supplied by consume(ref) itself. TOTP supports both
+preverified store path and new step-up-bound unverified enrollment. Expired candidate may be marked
+consumed by delete; terminal arrows describe proof usability rather than immutable row state.
+
+## idp-identity-social-candidate
+
+Implementation:
+`IdentityCeremonyCandidateRecord / app/services/identity_social_ceremony_candidate_store.rb`.
+Storage: `identity_social_ceremony_candidates` / `consumed_at / expires_at`.
+
+Sources: `app/models/concerns/identity_ceremony_candidate_record.rb`,
+`app/services/identity_social_ceremony_candidate_store.rb`.
+
+Tests read: `test/services/identity_social_ceremony_candidate_store_failures_test.rb`.
+
+| Transition ID                      | Mutation kind         | From      | Event / Trigger        | To       | Guard                                                               | Side effect                   | Source file                                               | Confidence |
+| ---------------------------------- | --------------------- | --------- | ---------------------- | -------- | ------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------- | ---------- |
+| idp-identity-social-candidate:T001 | DOCUMENTED_TRANSITION | available | store.consume!         | consumed | Row lock; ref exists; unconsumed; expiry checked at integer seconds | consumed_at; payload returned | app/models/concerns/identity_ceremony_candidate_record.rb | CONFIRMED  |
+| idp-identity-social-candidate:T002 | OUT_OF_BAND           | available | store.delete           | consumed | Ref exists; no expiry/consumed guard or row lock                    | Direct consumed_at update     | app/services/identity_social_ceremony_candidate_store.rb  | CONFIRMED  |
+| idp-identity-social-candidate:T003 | OUT_OF_BAND           | expired   | store.delete           | consumed | Ref exists; no expiry guard                                         | Direct consumed_at update     | app/services/identity_social_ceremony_candidate_store.rb  | CONFIRMED  |
+| idp-identity-social-candidate:T004 | DOCUMENTED_TRANSITION | consumed  | store.delete           | consumed | Ref exists; no immutability guard                                   | Replaces consumed_at          | app/services/identity_social_ceremony_candidate_store.rb  | CONFIRMED  |
+| idp-identity-social-candidate:T005 | DOCUMENTED_TRANSITION | available | clock reaches deadline | expired  | expires_at <= now                                                   | Predicate only                | app/models/concerns/identity_ceremony_candidate_record.rb | CONFIRMED  |
+
+Shared AppTicket candidate, no state FK. Store consume is single-use and TTL guarded; delete is
+actually a direct consumed_at write and can replace terminal timestamps. Fetch validates payload;
+social consumed payload reconstruction can fail after burn, a hidden terminal. Candidate binding
+must be rechecked by final committer, not supplied by consume(ref) itself. TOTP supports both
+preverified store path and new step-up-bound unverified enrollment. Expired candidate may be marked
+consumed by delete; terminal arrows describe proof usability rather than immutable row state.
+
+## idp-operator-organization-invitation
+
+Implementation: `OrganizationInvitation / OrgOperatorLifecycleInvitationAcceptance`. Storage:
+`organization_invitations` / `consumed_at / expires_at`.
+
+Sources: `app/models/organization_invitation.rb`,
+`app/services/org_operator_lifecycle_invitation_acceptance.rb`.
+
+Tests read: `test/models/organization_invitation_test.rb`,
+`test/services/org/operator_lifecycle/invitation_acceptance_test.rb`.
+
+| Transition ID                             | Mutation kind         | From   | Event / Trigger        | To       | Guard                                 | Side effect    | Source file                           | Confidence |
+| ----------------------------------------- | --------------------- | ------ | ---------------------- | -------- | ------------------------------------- | -------------- | ------------------------------------- | ---------- |
+| idp-operator-organization-invitation:T001 | DOCUMENTED_TRANSITION | active | consume!               | consumed | Row lock; active? repeated under lock | consumed_at    | app/models/organization_invitation.rb | CONFIRMED  |
+| idp-operator-organization-invitation:T002 | DOCUMENTED_TRANSITION | active | clock reaches deadline | expired  | expires_at <= now                     | No state write | app/models/organization_invitation.rb | CONFIRMED  |
+
+Default TTL7days. find_valid optionally checks case-insensitive email; consumption lock prevents
+duplicate wins for low-level consumption. Legacy issuance and admission are held pending an explicit
+Bureau target and authority contract. Acceptance validates then refuses without consumption or
+Principal/Identity/Agent/Bureau writes; it no longer bootstraps an unrelated Bureau. Logical
+cross-DB IDs are not FKs merely because belongs_to exists. No stored cancel/failure state.
+Expired_at remains independent of consumed_at, so expired? can be true for already-consumed row.
+
+## idp-operator-operator-lifecycle
+
+Implementation: `OrgOperatorLifecycleApprove / Reject / Execute`. Storage:
+`operator_lifecycle_requests` / `status`.
+
+Sources: `app/models/operator_lifecycle_request.rb`,
+`app/services/org_operator_lifecycle_approve.rb`, `app/services/org_operator_lifecycle_reject.rb`,
+`app/services/org_operator_lifecycle_execute.rb`.
+
+Tests read: `test/models/operator_lifecycle_request_test.rb`,
+`test/services/org/operator_lifecycle/approve_test.rb`,
+`test/services/org/operator_lifecycle/execute_test.rb`,
+`test/services/org_operator_lifecycle_reject_test.rb`.
+
+| Transition ID                        | Mutation kind         | From     | Event / Trigger | To       | Guard                                                             | Side effect                                                                                                                | Source file                                    | Confidence |
+| ------------------------------------ | --------------------- | -------- | --------------- | -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-operator-operator-lifecycle:T001 | DOCUMENTED_TRANSITION | pending  | approve         | approved | Pending; actor differs requester                                  | Approver and timestamp                                                                                                     | app/services/org_operator_lifecycle_approve.rb | CONFIRMED  |
+| idp-operator-operator-lifecycle:T002 | DOCUMENTED_TRANSITION | pending  | reject          | rejected | Pending; actor differs requester                                  | Rejector/time/reason                                                                                                       | app/services/org_operator_lifecycle_reject.rb  | CONFIRMED  |
+| idp-operator-operator-lifecycle:T003 | DOCUMENTED_TRANSITION | approved | execute         | executed | Approved; actor differs requester; last active operator preserved | JOIN refused pending Bureau migration; otherwise withdraw/suspend/terminate/restore actor; revoke sessions / Entra mapping | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+
+New JOIN requests and issuance from approved legacy JOIN requests are refused pending Bureau
+migration; an approved JOIN stays approved with no invitation or executed timestamp written.
+Cancelled is declared closed but no production entry writer identified; isolated state intentional.
+No expiry path. lock_version provides optimistic stale-save checks; pending/approved guards occur
+before update, not an explicit locked decision. Execution transaction is org_principal, while
+invitation/session writes use the ticket DB; Entra and actor writes share consolidated org_zenith:
+no distributed atomic guarantee. Restore clears actor withdrawal facts but deliberately does not
+reactivate Entra. Failed service result leaves request unchanged, not a FAILED state.
+
+## idp-operator-entra-identity
+
+Implementation: `OperatorEntraIdentityProvisioner / Activation / OrgOperatorLifecycleExecute`.
+Storage: `operator_entra_identities` / `status_id`.
+
+Sources: `app/models/operator_entra_identity.rb`, `app/models/operator_entra_identity_state.rb`,
+`app/operations/operator_entra_identity_provisioner.rb`,
+`app/services/operator_entra_identity_activation.rb`,
+`app/services/org_operator_lifecycle_execute.rb`.
+
+Tests read: `test/models/operator_entra_identity_test.rb`,
+`test/services/operator_entra_identity_activation_test.rb`,
+`test/operations/operator_entra_identity_provisioner_test.rb`.
+
+| Transition ID                    | Mutation kind | From      | Event / Trigger | To        | Guard                                                                  | Side effect             | Source file                                        | Confidence |
+| -------------------------------- | ------------- | --------- | --------------- | --------- | ---------------------------------------------------------------------- | ----------------------- | -------------------------------------------------- | ---------- |
+| idp-operator-entra-identity:T001 | OUT_OF_BAND   | NOTHING   | activate        | ACTIVE    | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T002 | OUT_OF_BAND   | NOTHING   | suspend         | SUSPENDED | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T003 | OUT_OF_BAND   | NOTHING   | revoke          | REVOKED   | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T004 | OUT_OF_BAND   | ACTIVE    | activate        | ACTIVE    | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T005 | OUT_OF_BAND   | ACTIVE    | suspend         | SUSPENDED | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T006 | OUT_OF_BAND   | ACTIVE    | revoke          | REVOKED   | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T007 | OUT_OF_BAND   | SUSPENDED | activate        | ACTIVE    | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T008 | OUT_OF_BAND   | SUSPENDED | suspend         | SUSPENDED | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T009 | OUT_OF_BAND   | SUSPENDED | revoke          | REVOKED   | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T010 | OUT_OF_BAND   | REVOKED   | activate        | ACTIVE    | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T011 | OUT_OF_BAND   | REVOKED   | suspend         | SUSPENDED | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+| idp-operator-entra-identity:T012 | OUT_OF_BAND   | REVOKED   | revoke          | REVOKED   | Supported requested state; existing identity; no source guard/row lock | Direct status_id update | app/services/operator_entra_identity_activation.rb | CONFIRMED  |
+
+Provisioning explicit NOTHING=0 denies sign-in; resolver requires ACTIVE. Admin rake activation
+accepts all previous states, including REVOKED->ACTIVE; therefore no universally absorbing terminal.
+Lifecycle withdraw/suspend writes SUSPENDED and terminate writes REVOKED directly (same source
+permissiveness); restore does not reactivate. Model inherits semantic OrgRpRecord, whose current
+connection owner is OrgZenithRecord; SQL topology is org_zenith. No clock expiry/cancel.
+
+## idp-shared-sequence-carrier
+
+Implementation: `SignInSequenceCarrier / SignInSequence`. Storage: `None (session / Valkey)` /
+`state / terminal_state`.
+
+Sources: `app/services/sign_in_sequence_carrier.rb`, `app/values/sign_in_sequence.rb`,
+`app/controllers/concerns/authentication_sequence_gate.rb`.
+
+Tests read: `test/services/sign_in/sequence_carrier_test.rb`.
+
+| Transition ID                    | Mutation kind         | From      | Event / Trigger         | To        | Guard                                                                                       | Side effect                                                    | Source file                              | Confidence |
+| -------------------------------- | --------------------- | --------- | ----------------------- | --------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------- | ---------- |
+| idp-shared-sequence-carrier:T001 | DOCUMENTED_TRANSITION | open      | complete!               | COMPLETED | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T002 | DOCUMENTED_TRANSITION | open      | fail!                   | FAILED    | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T003 | DOCUMENTED_TRANSITION | open      | expire!                 | EXPIRED   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T004 | DOCUMENTED_TRANSITION | open      | clear!                  | missing   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T005 | DOCUMENTED_TRANSITION | COMPLETED | complete!               | COMPLETED | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T006 | DOCUMENTED_TRANSITION | COMPLETED | fail!                   | FAILED    | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T007 | DOCUMENTED_TRANSITION | COMPLETED | expire!                 | EXPIRED   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T008 | DOCUMENTED_TRANSITION | COMPLETED | clear!                  | missing   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T009 | DOCUMENTED_TRANSITION | FAILED    | complete!               | COMPLETED | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T010 | DOCUMENTED_TRANSITION | FAILED    | fail!                   | FAILED    | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T011 | DOCUMENTED_TRANSITION | FAILED    | expire!                 | EXPIRED   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T012 | DOCUMENTED_TRANSITION | FAILED    | clear!                  | missing   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T013 | DOCUMENTED_TRANSITION | EXPIRED   | complete!               | COMPLETED | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T014 | DOCUMENTED_TRANSITION | EXPIRED   | fail!                   | FAILED    | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T015 | DOCUMENTED_TRANSITION | EXPIRED   | expire!                 | EXPIRED   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T016 | DOCUMENTED_TRANSITION | EXPIRED   | clear!                  | missing   | Present carrier for finish; no terminal/TTL guard; clear deletes surface and compatible key | state and terminal_state both overwritten; participant cleared | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T017 | DOCUMENTED_TRANSITION | open      | advance! to nonterminal | open      | Present and not terminal; supported state and participant; no expiry guard                  | Replace state/references; renewTTL15m                          | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T018 | DOCUMENTED_TRANSITION | open      | advance! to COMPLETED   | COMPLETED | Present and not terminal; supported state and participant                                   | state changes but terminal_state remains null                  | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T019 | DOCUMENTED_TRANSITION | open      | advance! to FAILED      | FAILED    | Present and not terminal; supported state and participant                                   | state changes but terminal_state remains null                  | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+| idp-shared-sequence-carrier:T020 | DOCUMENTED_TRANSITION | open      | advance! to EXPIRED     | EXPIRED   | Present and not terminal; supported state and participant                                   | state changes but terminal_state remains null                  | app/services/sign_in_sequence_carrier.rb | CONFIRMED  |
+
+Open state labels accepted: STARTED, PRIMARY_VERIFIED, MFA_PENDING, SESSION_LIMIT_PENDING,
+GUARDRAIL_PENDING, SESSION_ISSUED, CHECKPOINT_PENDING, DASHBOARD_PENDING. start! can initialize any
+STATES value with supported participant, and overwrite existing payload; there is no adjacency
+graph. Diagram groups the fully connected open set to remain readable, rather than inventing
+progression. advance! also accepts terminal labels but finish! accepts arbitrary terminal_state
+strings, so UNKNOWN custom values are possible through public API; production wrappers use three
+labels. Finish can rewrite terminals; clear removes payload. state and terminal_state duplicate
+terminal authority; validity checks actor/surface/participant/TTL but advance itself ignores TTL.
+Surface-specific session keys plus legacy migration; not DB authoritative.
+
+## idp-shared-authorization-code
+
+Implementation: `Valkey::AuthState::AuthorizationCodeStore`. Storage: `None (session / Valkey)` /
+`state`.
+
+Sources: `app/services/valkey/auth_state/authorization_code_store.rb`,
+`app/operations/oidc_authorization_code_issuer.rb`.
+
+Tests read: `test/services/valkey/auth_state/authorization_code_store_test.rb`.
+
+| Transition ID                      | Mutation kind         | From     | Event / Trigger    | To       | Guard                                                                                  | Side effect                                                      | Source file                                                | Confidence |
+| ---------------------------------- | --------------------- | -------- | ------------------ | -------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------- | ---------- |
+| idp-shared-authorization-code:T001 | DOCUMENTED_TRANSITION | issued   | consume! / Lua CAS | consumed | Expected binding matches; state issued; atomic EVAL; logical expiry checked before CAS | Consumed tombstone; replay returns outcome with no state rewrite | app/services/valkey/auth_state/authorization_code_store.rb | CONFIRMED  |
+| idp-shared-authorization-code:T002 | DOCUMENTED_TRANSITION | consumed | link_family!       | consumed | Atomic same-owner idempotency; refuse changed owner or replay marker                   | RP session/refresh family refs                                   | app/services/valkey/auth_state/authorization_code_store.rb | CONFIRMED  |
+| idp-shared-authorization-code:T003 | DOCUMENTED_TRANSITION | consumed | mark_replay!       | consumed | Atomic; consumed; first marker retained                                                | Replay evidence; exchange caller can revoke family               | app/services/valkey/auth_state/authorization_code_store.rb | CONFIRMED  |
+
+No SQL FK. Code TTL10s with longer retained key for logical expiry/replay; consumed tombstone
+minimum60s. PKCE S256 issue; expected field check precedes replay classification. Link/replay Lua
+scripts close consume-to-family-link race; mismatches do not burn. Legacy exchange consumes before
+SQL root/RP commit: later failure can burn code. Current durable OIDC grantclaim is separate
+authority.
+
+## idp-shared-opaque-admission
+
+Implementation: `Valkey::AuthState::OpaqueAdmissionStore`. Storage: `None (session / Valkey)` /
+`state`.
+
+Sources: `app/services/valkey/auth_state/opaque_admission_store.rb`,
+`app/services/base_auth_admission_coordinator.rb`.
+
+Tests read: `test/services/valkey/auth_state/opaque_admission_store_test.rb`.
+
+| Transition ID                    | Mutation kind         | From   | Event / Trigger    | To       | Guard                                                                                                           | Side effect                                                      | Source file                                              | Confidence |
+| -------------------------------- | --------------------- | ------ | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- | ---------- |
+| idp-shared-opaque-admission:T001 | DOCUMENTED_TRANSITION | issued | consume! / Lua CAS | consumed | Expected binding matches; state issued; atomic EVAL; relies on Redis wall-clock TTL, no expires_at check in Lua | Consumed tombstone; replay returns outcome with no state rewrite | app/services/valkey/auth_state/opaque_admission_store.rb | CONFIRMED  |
+
+No SQL FK. Purpose-specific Base/Auth handoff and result code TTL60s, atomic primary/reference index
+issuance and CAS consumption. Actor/surface/subject/session/ceremony binding checked when supplied
+by caller. Mismatch does not burn; wrong/used code replay refused. Lua does not compare payload
+expires_at; TTL controls availability. Multi-tab generation is separately checked by durable
+ceremony/flow consumer. No persisted FAILED/EXPIRED/CANCELLED state.
+
+## idp-client-step-up-session
+
+Implementation: `StepUpSessionConsumable / BaseStepUpAdmissionIssuer`. Storage:
+`client_step_up_sessions` / `status / discard_at`.
+
+Sources: `app/models/concerns/step_up_session_consumable.rb`,
+`app/models/client_step_up_session.rb`, `app/operations/base_step_up_admission_issuer.rb`.
+
+Tests read: `test/models/client_step_up_session_test.rb`,
+`test/models/step_up_session_consumption_concurrency_test.rb`.
+
+| Transition ID                   | Mutation kind         | From                | Event / Trigger                      | To                | Guard                                                                                    | Side effect                                                                                                   | Source file                                       | Confidence |
+| ------------------------------- | --------------------- | ------------------- | ------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| idp-client-step-up-session:T001 | DOCUMENTED_TRANSITION | PENDING             | consume_pending! completion block    | removed           | Row lock; PENDING; discard_at>now; block returns non-nil                                 | Destroy row after one completion                                                                              | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-session:T002 | DOCUMENTED_TRANSITION | PENDING             | clock reaches discard_at             | expired           | Deadline                                                                                 | No status write                                                                                               | app/models/client_step_up_session.rb              | CONFIRMED  |
+| idp-client-step-up-session:T003 | DOCUMENTED_TRANSITION | PENDING             | Base admission reissue               | PENDING           | Actor/token locks; matching current transaction or replacement                           | Bind transaction; reset proof fields                                                                          | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-client-step-up-session:T004 | DOCUMENTED_TRANSITION | VERIFIED            | Base admission replacement           | PENDING           | Actor/token locks; existing transaction matching guards; persist_session! writes pending | Reset status, method, verified_at and deadline                                                                | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-client-step-up-session:T005 | DOCUMENTED_TRANSITION | expired             | Base admission replacement           | PENDING           | New eligible ceremony under actor/token locks                                            | Bind fresh pending parent                                                                                     | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-client-step-up-session:T006 | DOCUMENTED_TRANSITION | PENDING or VERIFIED | revoke_authority! on root revocation | expired predicate | Session lock and owning DB clock; original deadline never extended                       | Discard session; clear challenge secret; preserve challenge reference, RP, Origin, deadline and existing burn | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+
+No reference/status ID. VERIFIED accepted by model but production status writer was not found; new
+verification writes parent ceremony evidence, not this status. consume_pending! is a public legacy
+completion API with concurrency tests; production callers were not found, so runtime reachability
+PARTIAL. Admission may reset an existing row to PENDING; TTL in discard_at, not EXPIRED. Token
+revocation discards linked session and revokes parent; generic retention can delete rows. No stored
+cancelled state. Session proof metadata and parent ceremony are separate authority axes.
+
+## idp-client-step-up-passkey-challenge
+
+Implementation: `StepUpSessionConsumable`. Storage: `client_step_up_sessions` /
+`passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at`.
+
+Sources: `app/models/concerns/step_up_session_consumable.rb`,
+`app/models/client_step_up_session.rb`,
+`app/operations/identity_step_up_passkey_verification_committer.rb`.
+
+Tests read: `test/models/step_up_passkey_challenge_test.rb`,
+`test/operations/identity_step_up_passkey_verification_committer_test.rb`.
+
+| Transition ID                             | Mutation kind         | From             | Event / Trigger                  | To                     | Guard                                                                                  | Side effect                                                                                                                                                             | Source file                                       | Confidence |
+| ----------------------------------------- | --------------------- | ---------------- | -------------------------------- | ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| idp-client-step-up-passkey-challenge:T001 | DOCUMENTED_TRANSITION | empty            | issue_bound_passkey_challenge!   | issued                 | Session/parent locks; bound pending parent and token; allowed passkey; session PENDING | Create ref; deadline=min(existing-or10m,parentTTL)                                                                                                                      | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-passkey-challenge:T002 | DOCUMENTED_TRANSITION | issued           | issue_bound_passkey_challenge!   | issued                 | Same bound parent and session; deadline cannot extend                                  | Replace challenge/ref; reset consumed_at                                                                                                                                | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-passkey-challenge:T003 | DOCUMENTED_TRANSITION | burned           | issue_bound_passkey_challenge!   | issued                 | Parent still pending and session PENDING; existing deadline still live                 | New reference, reset consumed_at                                                                                                                                        | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-passkey-challenge:T004 | DOCUMENTED_TRANSITION | issued           | consume_bound_passkey_challenge! | burned                 | Parent/session locks; exact unconsumed reference; binding valid                        | Burn committed before challenge TTL/origin/RP validation; later assertion can fail                                                                                      | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-passkey-challenge:T005 | DOCUMENTED_TRANSITION | issued           | clock reaches challenge deadline | expired                | Challenge TTL                                                                          | Predicate only                                                                                                                                                          | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-passkey-challenge:T006 | DOCUMENTED_TRANSITION | expired          | consume_bound_passkey_challenge! | burned                 | Parent and session still live; matching ref                                            | Burn then raise challenge expired                                                                                                                                       | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-client-step-up-passkey-challenge:T007 | DOCUMENTED_TRANSITION | issued or burned | revoke_authority!                | burned and unavailable | Session lock and own DB clock; root revocation owner                                   | Clear challenge secret without replacing reference/RP/Origin/original deadline; retain existing consumed_at or burn now; discard session without extending its deadline | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+
+Challenge deadline10m capped by parent; reissue preserves original live deadline. Consume validates
+parent before burn; after matching ref it commits burn even for expired challenge or origin/RP
+mismatch, so failed assertion cannot replay that ref. Public reissue can reset consumed_at while
+parent remains pending, so burn is per reference/generation and not globally absorbing. No lifecycle
+status/ref FK for challenge; SQL stores it on step-up-session row.
+
+## idp-client-step-up-email-challenge
+
+Implementation: `StepUpEmailChallenge`. Storage: `client_step_up_sessions` /
+`email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at`.
+
+Sources: `app/models/concerns/step_up_email_challenge.rb`,
+`app/operations/identity_step_up_email_code_issuer.rb`,
+`app/operations/identity_step_up_email_delivery_recorder.rb`,
+`app/operations/identity_step_up_email_verification_committer.rb`.
+
+Tests read: `test/models/step_up_email_challenge_test.rb`,
+`test/operations/identity_step_up_email_verification_committer_test.rb`.
+
+| Transition ID                           | Mutation kind         | From      | Event / Trigger                    | To        | Guard                                                                    | Side effect                                                          | Source file                                    | Confidence |
+| --------------------------------------- | --------------------- | --------- | ---------------------------------- | --------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-client-step-up-email-challenge:T001 | DOCUMENTED_TRANSITION | empty     | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T002 | DOCUMENTED_TRANSITION | pending   | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T003 | DOCUMENTED_TRANSITION | delivered | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T004 | DOCUMENTED_TRANSITION | failed    | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T005 | DOCUMENTED_TRANSITION | consumed  | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T006 | DOCUMENTED_TRANSITION | expired   | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T007 | DOCUMENTED_TRANSITION | pending   | mark_bound_email_delivery! success | delivered | Current positive generation; pending; parent/session live; codeTTLlive   | delivery state only                                                  | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T008 | DOCUMENTED_TRANSITION | pending   | mark_bound_email_delivery! failure | failed    | Same guarded current generation                                          | delivery state only                                                  | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T009 | DOCUMENTED_TRANSITION | delivered | consume_bound_email_code!          | consumed  | Current credential/ref/code digest; six digits; unconsumed; live; locks  | Code consumed timestamp; parent records email_otp verification       | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T010 | DOCUMENTED_TRANSITION | pending   | clock reaches code deadline        | expired   | Code TTL elapsed                                                         | Derived code unusability; delivery state unchanged                   | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T011 | DOCUMENTED_TRANSITION | delivered | clock reaches code deadline        | expired   | Code TTL elapsed                                                         | Derived code unusability; delivery state unchanged                   | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-client-step-up-email-challenge:T012 | DOCUMENTED_TRANSITION | failed    | clock reaches code deadline        | expired   | Code TTL elapsed                                                         | Derived code unusability; delivery state unchanged                   | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+
+Delivery state pending/delivered/failed is distinct from consumed timestamp and parent status. Only
+delivered code can verify; failed/pending cannot authenticate. Reissue increments generation without
+extending parent deadline, and may reset old consumed/expired code while parent pending; stale
+delivery callback is rejected. Parent record_verification advances pending->verified in same locked
+operation. Row eligibility and credential availability are rechecked by operations. Expiry is
+derived and no cancellation state; parent cancellation invalidates use.
+
+## idp-visitor-step-up-session
+
+Implementation: `StepUpSessionConsumable / BaseStepUpAdmissionIssuer`. Storage:
+`visitor_step_up_sessions` / `status / discard_at`.
+
+Sources: `app/models/concerns/step_up_session_consumable.rb`,
+`app/models/visitor_step_up_session.rb`, `app/operations/base_step_up_admission_issuer.rb`.
+
+Tests read: `test/models/visitor_step_up_session_test.rb`,
+`test/models/step_up_session_consumption_concurrency_test.rb`.
+
+| Transition ID                    | Mutation kind         | From                | Event / Trigger                      | To                | Guard                                                                                    | Side effect                                                                                                   | Source file                                       | Confidence |
+| -------------------------------- | --------------------- | ------------------- | ------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| idp-visitor-step-up-session:T001 | DOCUMENTED_TRANSITION | PENDING             | consume_pending! completion block    | removed           | Row lock; PENDING; discard_at>now; block returns non-nil                                 | Destroy row after one completion                                                                              | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-session:T002 | DOCUMENTED_TRANSITION | PENDING             | clock reaches discard_at             | expired           | Deadline                                                                                 | No status write                                                                                               | app/models/visitor_step_up_session.rb             | CONFIRMED  |
+| idp-visitor-step-up-session:T003 | DOCUMENTED_TRANSITION | PENDING             | Base admission reissue               | PENDING           | Actor/token locks; matching current transaction or replacement                           | Bind transaction; reset proof fields                                                                          | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-visitor-step-up-session:T004 | DOCUMENTED_TRANSITION | VERIFIED            | Base admission replacement           | PENDING           | Actor/token locks; existing transaction matching guards; persist_session! writes pending | Reset status, method, verified_at and deadline                                                                | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-visitor-step-up-session:T005 | DOCUMENTED_TRANSITION | expired             | Base admission replacement           | PENDING           | New eligible ceremony under actor/token locks                                            | Bind fresh pending parent                                                                                     | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-visitor-step-up-session:T006 | DOCUMENTED_TRANSITION | PENDING or VERIFIED | revoke_authority! on root revocation | expired predicate | Session lock and owning DB clock; original deadline never extended                       | Discard session; clear challenge secret; preserve challenge reference, RP, Origin, deadline and existing burn | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+
+No reference/status ID. VERIFIED accepted by model but production status writer was not found; new
+verification writes parent ceremony evidence, not this status. consume_pending! is a public legacy
+completion API with concurrency tests; production callers were not found, so runtime reachability
+PARTIAL. Admission may reset an existing row to PENDING; TTL in discard_at, not EXPIRED. Token
+revocation discards linked session and revokes parent; generic retention can delete rows. No stored
+cancelled state. Session proof metadata and parent ceremony are separate authority axes.
+
+## idp-visitor-step-up-passkey-challenge
+
+Implementation: `StepUpSessionConsumable`. Storage: `visitor_step_up_sessions` /
+`passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at`.
+
+Sources: `app/models/concerns/step_up_session_consumable.rb`,
+`app/models/visitor_step_up_session.rb`,
+`app/operations/identity_step_up_passkey_verification_committer.rb`.
+
+Tests read: `test/models/step_up_passkey_challenge_test.rb`,
+`test/operations/identity_step_up_passkey_verification_committer_test.rb`.
+
+| Transition ID                              | Mutation kind         | From             | Event / Trigger                  | To                     | Guard                                                                                  | Side effect                                                                                                                                                             | Source file                                       | Confidence |
+| ------------------------------------------ | --------------------- | ---------------- | -------------------------------- | ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| idp-visitor-step-up-passkey-challenge:T001 | DOCUMENTED_TRANSITION | empty            | issue_bound_passkey_challenge!   | issued                 | Session/parent locks; bound pending parent and token; allowed passkey; session PENDING | Create ref; deadline=min(existing-or10m,parentTTL)                                                                                                                      | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-passkey-challenge:T002 | DOCUMENTED_TRANSITION | issued           | issue_bound_passkey_challenge!   | issued                 | Same bound parent and session; deadline cannot extend                                  | Replace challenge/ref; reset consumed_at                                                                                                                                | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-passkey-challenge:T003 | DOCUMENTED_TRANSITION | burned           | issue_bound_passkey_challenge!   | issued                 | Parent still pending and session PENDING; existing deadline still live                 | New reference, reset consumed_at                                                                                                                                        | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-passkey-challenge:T004 | DOCUMENTED_TRANSITION | issued           | consume_bound_passkey_challenge! | burned                 | Parent/session locks; exact unconsumed reference; binding valid                        | Burn committed before challenge TTL/origin/RP validation; later assertion can fail                                                                                      | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-passkey-challenge:T005 | DOCUMENTED_TRANSITION | issued           | clock reaches challenge deadline | expired                | Challenge TTL                                                                          | Predicate only                                                                                                                                                          | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-passkey-challenge:T006 | DOCUMENTED_TRANSITION | expired          | consume_bound_passkey_challenge! | burned                 | Parent and session still live; matching ref                                            | Burn then raise challenge expired                                                                                                                                       | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-visitor-step-up-passkey-challenge:T007 | DOCUMENTED_TRANSITION | issued or burned | revoke_authority!                | burned and unavailable | Session lock and own DB clock; root revocation owner                                   | Clear challenge secret without replacing reference/RP/Origin/original deadline; retain existing consumed_at or burn now; discard session without extending its deadline | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+
+Challenge deadline10m capped by parent; reissue preserves original live deadline. Consume validates
+parent before burn; after matching ref it commits burn even for expired challenge or origin/RP
+mismatch, so failed assertion cannot replay that ref. Public reissue can reset consumed_at while
+parent remains pending, so burn is per reference/generation and not globally absorbing. No lifecycle
+status/ref FK for challenge; SQL stores it on step-up-session row.
+
+## idp-visitor-step-up-email-challenge
+
+Implementation: `StepUpEmailChallenge`. Storage: `visitor_step_up_sessions` /
+`email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at`.
+
+Sources: `app/models/concerns/step_up_email_challenge.rb`,
+`app/operations/identity_step_up_email_code_issuer.rb`,
+`app/operations/identity_step_up_email_delivery_recorder.rb`,
+`app/operations/identity_step_up_email_verification_committer.rb`.
+
+Tests read: `test/models/step_up_email_challenge_test.rb`,
+`test/operations/identity_step_up_email_verification_committer_test.rb`.
+
+| Transition ID                            | Mutation kind         | From      | Event / Trigger                    | To        | Guard                                                                    | Side effect                                                          | Source file                                    | Confidence |
+| ---------------------------------------- | --------------------- | --------- | ---------------------------------- | --------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-visitor-step-up-email-challenge:T001 | DOCUMENTED_TRANSITION | empty     | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T002 | DOCUMENTED_TRANSITION | pending   | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T003 | DOCUMENTED_TRANSITION | delivered | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T004 | DOCUMENTED_TRANSITION | failed    | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T005 | DOCUMENTED_TRANSITION | consumed  | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T006 | DOCUMENTED_TRANSITION | expired   | issue_bound_email_code!            | pending   | Session/parent locks; matching pending email_otp parent; session PENDING | New generation/digest; reset consumed_at; deadline=min10m,parentTTL) | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T007 | DOCUMENTED_TRANSITION | pending   | mark_bound_email_delivery! success | delivered | Current positive generation; pending; parent/session live; codeTTLlive   | delivery state only                                                  | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T008 | DOCUMENTED_TRANSITION | pending   | mark_bound_email_delivery! failure | failed    | Same guarded current generation                                          | delivery state only                                                  | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T009 | DOCUMENTED_TRANSITION | delivered | consume_bound_email_code!          | consumed  | Current credential/ref/code digest; six digits; unconsumed; live; locks  | Code consumed timestamp; parent records email_otp verification       | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T010 | DOCUMENTED_TRANSITION | pending   | clock reaches code deadline        | expired   | Code TTL elapsed                                                         | Derived code unusability; delivery state unchanged                   | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T011 | DOCUMENTED_TRANSITION | delivered | clock reaches code deadline        | expired   | Code TTL elapsed                                                         | Derived code unusability; delivery state unchanged                   | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+| idp-visitor-step-up-email-challenge:T012 | DOCUMENTED_TRANSITION | failed    | clock reaches code deadline        | expired   | Code TTL elapsed                                                         | Derived code unusability; delivery state unchanged                   | app/models/concerns/step_up_email_challenge.rb | CONFIRMED  |
+
+Delivery state pending/delivered/failed is distinct from consumed timestamp and parent status. Only
+delivered code can verify; failed/pending cannot authenticate. Reissue increments generation without
+extending parent deadline, and may reset old consumed/expired code while parent pending; stale
+delivery callback is rejected. Parent record_verification advances pending->verified in same locked
+operation. Row eligibility and credential availability are rechecked by operations. Expiry is
+derived and no cancellation state; parent cancellation invalidates use.
+
+## idp-operator-step-up-session
+
+Implementation: `StepUpSessionConsumable / BaseStepUpAdmissionIssuer`. Storage:
+`operator_step_up_sessions` / `status / discard_at`.
+
+Sources: `app/models/concerns/step_up_session_consumable.rb`,
+`app/models/operator_step_up_session.rb`, `app/operations/base_step_up_admission_issuer.rb`.
+
+Tests read: `test/models/operator_step_up_session_test.rb`,
+`test/models/step_up_session_consumption_concurrency_test.rb`.
+
+| Transition ID                     | Mutation kind         | From                | Event / Trigger                      | To                | Guard                                                                                    | Side effect                                                                                                   | Source file                                       | Confidence |
+| --------------------------------- | --------------------- | ------------------- | ------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| idp-operator-step-up-session:T001 | DOCUMENTED_TRANSITION | PENDING             | consume_pending! completion block    | removed           | Row lock; PENDING; discard_at>now; block returns non-nil                                 | Destroy row after one completion                                                                              | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-session:T002 | DOCUMENTED_TRANSITION | PENDING             | clock reaches discard_at             | expired           | Deadline                                                                                 | No status write                                                                                               | app/models/operator_step_up_session.rb            | CONFIRMED  |
+| idp-operator-step-up-session:T003 | DOCUMENTED_TRANSITION | PENDING             | Base admission reissue               | PENDING           | Actor/token locks; matching current transaction or replacement                           | Bind transaction; reset proof fields                                                                          | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-operator-step-up-session:T004 | DOCUMENTED_TRANSITION | VERIFIED            | Base admission replacement           | PENDING           | Actor/token locks; existing transaction matching guards; persist_session! writes pending | Reset status, method, verified_at and deadline                                                                | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-operator-step-up-session:T005 | DOCUMENTED_TRANSITION | expired             | Base admission replacement           | PENDING           | New eligible ceremony under actor/token locks                                            | Bind fresh pending parent                                                                                     | app/operations/base_step_up_admission_issuer.rb   | CONFIRMED  |
+| idp-operator-step-up-session:T006 | DOCUMENTED_TRANSITION | PENDING or VERIFIED | revoke_authority! on root revocation | expired predicate | Session lock and owning DB clock; original deadline never extended                       | Discard session; clear challenge secret; preserve challenge reference, RP, Origin, deadline and existing burn | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+
+No reference/status ID. VERIFIED accepted by model but production status writer was not found; new
+verification writes parent ceremony evidence, not this status. consume_pending! is a public legacy
+completion API with concurrency tests; production callers were not found, so runtime reachability
+PARTIAL. Admission may reset an existing row to PENDING; TTL in discard_at, not EXPIRED. Token
+revocation discards linked session and revokes parent; generic retention can delete rows. No stored
+cancelled state. Session proof metadata and parent ceremony are separate authority axes.
+
+## idp-operator-step-up-passkey-challenge
+
+Implementation: `StepUpSessionConsumable`. Storage: `operator_step_up_sessions` /
+`passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at`.
+
+Sources: `app/models/concerns/step_up_session_consumable.rb`,
+`app/models/operator_step_up_session.rb`,
+`app/operations/identity_step_up_passkey_verification_committer.rb`.
+
+Tests read: `test/models/step_up_passkey_challenge_test.rb`,
+`test/operations/identity_step_up_passkey_verification_committer_test.rb`.
+
+| Transition ID                               | Mutation kind         | From             | Event / Trigger                  | To                     | Guard                                                                                  | Side effect                                                                                                                                                             | Source file                                       | Confidence |
+| ------------------------------------------- | --------------------- | ---------------- | -------------------------------- | ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| idp-operator-step-up-passkey-challenge:T001 | DOCUMENTED_TRANSITION | empty            | issue_bound_passkey_challenge!   | issued                 | Session/parent locks; bound pending parent and token; allowed passkey; session PENDING | Create ref; deadline=min(existing-or10m,parentTTL)                                                                                                                      | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-passkey-challenge:T002 | DOCUMENTED_TRANSITION | issued           | issue_bound_passkey_challenge!   | issued                 | Same bound parent and session; deadline cannot extend                                  | Replace challenge/ref; reset consumed_at                                                                                                                                | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-passkey-challenge:T003 | DOCUMENTED_TRANSITION | burned           | issue_bound_passkey_challenge!   | issued                 | Parent still pending and session PENDING; existing deadline still live                 | New reference, reset consumed_at                                                                                                                                        | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-passkey-challenge:T004 | DOCUMENTED_TRANSITION | issued           | consume_bound_passkey_challenge! | burned                 | Parent/session locks; exact unconsumed reference; binding valid                        | Burn committed before challenge TTL/origin/RP validation; later assertion can fail                                                                                      | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-passkey-challenge:T005 | DOCUMENTED_TRANSITION | issued           | clock reaches challenge deadline | expired                | Challenge TTL                                                                          | Predicate only                                                                                                                                                          | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-passkey-challenge:T006 | DOCUMENTED_TRANSITION | expired          | consume_bound_passkey_challenge! | burned                 | Parent and session still live; matching ref                                            | Burn then raise challenge expired                                                                                                                                       | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+| idp-operator-step-up-passkey-challenge:T007 | DOCUMENTED_TRANSITION | issued or burned | revoke_authority!                | burned and unavailable | Session lock and own DB clock; root revocation owner                                   | Clear challenge secret without replacing reference/RP/Origin/original deadline; retain existing consumed_at or burn now; discard session without extending its deadline | app/models/concerns/step_up_session_consumable.rb | CONFIRMED  |
+
+Challenge deadline10m capped by parent; reissue preserves original live deadline. Consume validates
+parent before burn; after matching ref it commits burn even for expired challenge or origin/RP
+mismatch, so failed assertion cannot replay that ref. Public reissue can reset consumed_at while
+parent remains pending, so burn is per reference/generation and not globally absorbing. No lifecycle
+status/ref FK for challenge; SQL stores it on step-up-session row.
+
+## idp-client-email-credential
+
+The named Source writer `EmailContactBinding#finalize_registration_binding!` moves an original
+pending registration candidate to VERIFIED with its binding timestamp under its own row lock and DB
+clock. The independent Email and Telephone registration finalizers check current Action Policy,
+root, browser, original bounded verification proof and current credential under
+owner/root/Ticket/Contact locks. Replacement and both Source audit intents commit before the Ticket
+receipt; receipt recovery requires the original effective binding and Source audit operation.
+Settings HTTP adoption remains incomplete.
+
+New forward migrations enforce a non-null, non-empty, non-whitespace digest whenever a client or
+visitor email/telephone binding has a finalization fact. Basic and Unicode-aware checks were
+validated in the owned disposable test databases. New client/visitor forward recognition guards
+require exact Source finalization/release intent or completed Ticket signup proof, including its
+required cleared evidence. They retain proven suspended/OTP-locked bindings, recognize missing facts
+at one Source database timestamp, and reject unknown completion/release, missing owners and
+effective conflicts with row IDs. Existing facts, release history, status and OTP counters are never
+rewritten. Seventy owned historical probe scenarios passed; shared-environment rollout remains
+unverified. No status transition or historical migration was rewritten. This fact guard applies to
+all four Contact credential axes below.
+
+App/com email and telephone ceremony committers now write Contact audit intents in the owning Zenith
+transaction with the binding. Their binding timestamp uses the Source database clock. Delivery is
+independent of Ticket consumption and follows `idp-contact-audit-outbox`. The owner lock serializes
+mutation. Exact consumed-result retries require the original Ticket
+result/grant/operation/browser/actor/candidate/digest provenance and an identity-matched Source
+intent; released bindings and consumed Tickets without a committed Source fact remain refused.
+Initial consumption requires the same Ticket candidate reference and digest; final binding mutation
+rechecks the digest under the Source lock, rejecting same-owner candidate substitution. Base app/com
+settings confirmation commits finalization and its Source intent under the owner lock. App/com
+telephone signup OTP success retains the original signed flow binding when redirecting to the guard
+checkpoint; the next endpoint does not infer another Ticket from destination or browser input.
+Replacement releases the old effective binding without overwriting its status, clears its old OTP
+and finalizes the new candidate with both Source intents in that transaction. Wrong OTP leaves the
+old binding effective. Base removal records its own one-way release/status/intention transaction.
+Email signup additionally reconciles its original Source intent after Ticket failure as described in
+the client/visitor signup sections. These statements do not certify other candidate writers or the
+full failure/concurrency matrix.
+
+Implementation: `Identity contact final committer / sign-up controllers / withdrawal anonymizer`.
+Storage: `client_emails` / `user_email_status_id`.
+
+Sources: `app/models/client_email.rb`, `app/models/client_email_status.rb`,
+`app/operations/identity_email_ceremony_final_committer.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
+
+Tests read: `test/models/client_email_test.rb`,
+`test/operations/identity_email_ceremony_final_committer_test.rb`.
+
+| Transition ID                    | Mutation kind         | From                    | Event / Trigger                           | To                    | Guard                                                                                                                                                                | Side effect                                                                                                                                | Source file                                               | Confidence |
+| -------------------------------- | --------------------- | ----------------------- | ----------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ---------- |
+| idp-client-email-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED              | Base ceremony final commit                | VERIFIED              | Signed result bound to actor/session; pending contact under row lock                                                                                                 | Consume ceremony on ticket DB before principal status commit                                                                               | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED  |
+| idp-client-email-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED              | finalize_registration_binding!            | VERIFIED              | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt    | app/models/concerns/contact_binding.rb                    | CONFIRMED  |
+| idp-client-email-credential:T002 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_sign_up_binding!                 | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP requirement, exact browser/owner/candidate and historically consumed typed Email proof under locks                             | Source status and binding timestamp; no failure reset or new receipt                                                                       | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T101 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | mark_sign_up_verified!                    | VERIFIED_WITH_SIGN_UP | Original live signup Parent/browser/owner/candidate and consumed bounded keyed receipt; Source locks and owning clocks                                               | Verification status only; binding remains unfinalized and failures unchanged                                                               | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T102 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | finalize_sign_up_binding!                 | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP, browser/owner/candidate and historically consumed proof under locks                                                           | Binding fact only; existing verification status retained                                                                                   | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T003 | DOCUMENTED_TRANSITION | UNVERIFIED              | signup Base ceremony final commit         | VERIFIED_WITH_SIGN_UP | Actor UNVERIFIED_WITH_SIGN_UP; signed binding and locked contact                                                                                                     | Update actor VERIFIED_WITH_SIGN_UP                                                                                                         | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED  |
+| idp-client-email-credential:T004 | DOCUMENTED_TRANSITION | UNVERIFIED              | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T005 | DOCUMENTED_TRANSITION | VERIFIED                | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T006 | DOCUMENTED_TRANSITION | SUSPENDED               | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T007 | DOCUMENTED_TRANSITION | DELETED                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T008 | DOCUMENTED_TRANSITION | NOTHING                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T009 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T010 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-client-email-credential:T011 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED               | Selected pending contact; current column exists; deleted reference ID resolves; lock                                                                                 | Schedule discard/purge and direct dynamic status-column update                                                                             | app/services/sign_up_artifact_cleanup.rb                  | CONFIRMED  |
+| idp-client-email-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED                | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb   | CONFIRMED  |
+| idp-client-email-credential:T013 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb   | CONFIRMED  |
+| idp-client-email-credential:T014 | DOCUMENTED_TRANSITION | SUSPENDED               | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb   | CONFIRMED  |
+
+No independent transition map: controllers/operations directly write state FK. Fixed declarations
+with no incoming production state writer remain isolated intentionally; DELETED is a
+reference/uniqueness exclusion, not presumed destroy event. Base Contact removal retains the row,
+records one-way binding release and DELETED status together with its Source audit intent, and
+requires the owning authenticated Actor context plus usable session under the owner/contact/session
+locks. Terminal retries create no further intent; a Source rollback preserves the binding without
+restoring invalidated Ticket authority. OTP lock/expiry lives on separate columns and is diagrammed
+separately. Anonymizer rewrites any client/visitor contact to SUSPENDED with no source guard; no
+universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING labels coexist with
+UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
+
+## idp-client-telephone-credential
+
+The named Source writer `TelephoneContactBinding#finalize_registration_binding!` moves an original
+pending registration candidate to VERIFIED with its binding timestamp under its own row lock and DB
+clock. The independent Email and Telephone registration finalizers check current Action Policy,
+root, browser, original bounded verification proof and current credential under
+owner/root/Ticket/Contact locks. Replacement and both Source audit intents commit before the Ticket
+receipt; receipt recovery requires the original effective binding and Source audit operation.
+Settings HTTP adoption remains incomplete.
+
+Implementation: `Identity contact final committer / sign-up controllers / withdrawal anonymizer`.
+Storage: `client_telephones` / `user_identity_telephone_status_id`.
+
+Sources: `app/models/client_telephone.rb`, `app/models/client_telephone_status.rb`,
+`app/operations/identity_telephone_ceremony_final_committer.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
+
+Tests read: `test/models/client_telephone_test.rb`,
+`test/operations/identity_telephone_ceremony_final_committer_test.rb`.
+
+| Transition ID                        | Mutation kind         | From                    | Event / Trigger                           | To                    | Guard                                                                                                                                                                | Side effect                                                                                                                                | Source file                                                    | Confidence |
+| ------------------------------------ | --------------------- | ----------------------- | ----------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | ---------- |
+| idp-client-telephone-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED              | Base ceremony final commit                | VERIFIED              | Signed result bound to actor/session; pending contact under row lock                                                                                                 | Consume ceremony on ticket DB before principal status commit                                                                               | app/operations/identity_telephone_ceremony_final_committer.rb  | CONFIRMED  |
+| idp-client-telephone-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED              | finalize_registration_binding!            | VERIFIED              | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt    | app/models/concerns/contact_binding.rb                         | CONFIRMED  |
+| idp-client-telephone-credential:T002 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | sign-up contact finalization              | VERIFIED_WITH_SIGN_UP | Bound signup candidate/OTP; owner then contact lock; required passkey; explicit Actor context and flow operation reference                                           | Contact status, binding fact, OTP clearing, principal verification and Source audit intent in one transaction                              | app/operations/sign_app_up_telephone_registration_finalizer.rb | CONFIRMED  |
+| idp-client-telephone-credential:T003 | DOCUMENTED_TRANSITION | NOTHING                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T004 | DOCUMENTED_TRANSITION | VERIFIED                | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T005 | DOCUMENTED_TRANSITION | UNVERIFIED              | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T006 | DOCUMENTED_TRANSITION | SUSPENDED               | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T007 | DOCUMENTED_TRANSITION | DELETED                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T008 | DOCUMENTED_TRANSITION | LEGACY_NOTHING          | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T009 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T010 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-client-telephone-credential:T011 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED               | Selected pending contact; current column exists; deleted reference ID resolves; lock                                                                                 | Schedule discard/purge and direct dynamic status-column update                                                                             | app/services/sign_up_artifact_cleanup.rb                       | CONFIRMED  |
+| idp-client-telephone-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED                | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb        | CONFIRMED  |
+| idp-client-telephone-credential:T013 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb        | CONFIRMED  |
+| idp-client-telephone-credential:T014 | DOCUMENTED_TRANSITION | SUSPENDED               | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb        | CONFIRMED  |
+
+No independent transition map: controllers/operations directly write state FK. Fixed declarations
+with no incoming production state writer remain isolated intentionally; DELETED is a
+reference/uniqueness exclusion, not presumed destroy event. Base Contact removal retains the row,
+records one-way binding release and DELETED status together with its Source audit intent, and
+requires the owning authenticated Actor context plus usable session under the owner/contact/session
+locks. Terminal retries create no further intent; a Source rollback preserves the binding without
+restoring invalidated Ticket authority. OTP lock/expiry lives on separate columns and is diagrammed
+separately. Anonymizer rewrites any client/visitor contact to SUSPENDED with no source guard; no
+universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING labels coexist with
+UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
+
+## idp-client-actor-withdrawal
+
+Implementation: `Withdrawable / app/services/withdrawal_lifecycle.rb`. Storage: `clients` /
+`withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at`.
+
+Sources: `app/models/concerns/withdrawable.rb`, `app/services/withdrawal_lifecycle.rb`,
+`app/controllers/concerns/authentication_withdrawal_gate.rb`.
+
+Tests read: `test/services/withdrawal_lifecycle_test.rb`,
+`test/services/org/operator_lifecycle/execute_test.rb`,
+`test/integration/withdrawal_lifecycle_security_test.rb`.
+
+| Transition ID                    | Mutation kind         | From      | Event / Trigger                     | To         | Guard                                                                    | Side effect                                                                 | Source file                          | Confidence |
+| -------------------------------- | --------------------- | --------- | ----------------------------------- | ---------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------ | ---------- |
+| idp-client-actor-withdrawal:T001 | DOCUMENTED_TRANSITION | active    | start withdrawal request            | active     | Actor lock; create REQUESTED flow                                        | No actor withdrawal timestamps yet                                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T002 | DOCUMENTED_TRANSITION | active    | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T003 | DOCUMENTED_TRANSITION | closing   | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T004 | DOCUMENTED_TRANSITION | suspended | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T005 | DOCUMENTED_TRANSITION | suspended | recover!                            | active     | Can recover after1hour before purge; privacy request permits; actor lock | Recover flow; clear timestamps; Infinity retention                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T006 | OUT_OF_BAND           | suspended | terminate! after7days               | terminated | Early terminatable check before actor lock                               | Flow TERMINATED; set terminated_at; anonymize/purge children; revoke tokens | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T007 | DOCUMENTED_TRANSITION | suspended | clock reaches finite purge deadline | terminated | Finite purge_eligible_at <= now                                          | Derived predicate, no status write                                          | app/models/concerns/withdrawable.rb  | CONFIRMED  |
+
+Derived predicates overlap: withdrawn_at independent; terminated wins over suspended; active
+excludes all, while closing uses withdrawal_started_at. closing is declared but start! currently
+only writes REQUESTED flow, no actor withdrawal_started_at; incoming actor closing writer
+UNCONFIRMED. Client/visitor suspend public method has no source guard and can preserve expired purge
+facts, so a call can remain derived terminated rather than enter suspended; diagram applies
+resulting future-purge condition only. Operator restore can clear termination facts via approved
+action; no absorbing terminal assumed. Eligibility gates act separately from actor status_id and
+access_state. Flow/token/audit/child operations include separate DB owners; no distributed atomicity
+is inferred. Actor and Entra rows share org_zenith in the current consolidated checkout.
+
+## idp-visitor-email-credential
+
+The named Source writer `EmailContactBinding#finalize_registration_binding!` moves an original
+pending registration candidate to VERIFIED with its binding timestamp under its own row lock and DB
+clock. The independent Email and Telephone registration finalizers check current Action Policy,
+root, browser, original bounded verification proof and current credential under
+owner/root/Ticket/Contact locks. Replacement and both Source audit intents commit before the Ticket
+receipt; receipt recovery requires the original effective binding and Source audit operation.
+Settings HTTP adoption remains incomplete.
+
+Email signup Source-commit/Ticket-failure reconciliation preserves the binding timestamp and
+original anonymous intent under the guards described in the visitor signup section. No credential
+status transition or new proof is created by reconciliation.
+
+Implementation: `Identity contact final committer / sign-up controllers / withdrawal anonymizer`.
+Storage: `visitor_emails` / `visitor_email_status_id`.
+
+Sources: `app/models/visitor_email.rb`, `app/models/visitor_email_status.rb`,
+`app/operations/identity_email_ceremony_final_committer.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
+
+Tests read: `test/models/visitor_email_test.rb`,
+`test/operations/identity_email_ceremony_final_committer_test.rb`.
+
+| Transition ID                     | Mutation kind         | From                    | Event / Trigger                           | To                    | Guard                                                                                                                                                                | Side effect                                                                                                                                | Source file                                               | Confidence |
+| --------------------------------- | --------------------- | ----------------------- | ----------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ---------- |
+| idp-visitor-email-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED              | Base ceremony final commit                | VERIFIED              | Signed result bound to actor/session; pending contact under row lock                                                                                                 | Consume ceremony on ticket DB before principal status commit                                                                               | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED  |
+| idp-visitor-email-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED              | finalize_registration_binding!            | VERIFIED              | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt    | app/models/concerns/contact_binding.rb                    | CONFIRMED  |
+| idp-visitor-email-credential:T002 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_sign_up_binding!                 | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP requirement, exact browser/owner/candidate and historically consumed typed Email proof under locks                             | Source status and binding timestamp; no failure reset or new receipt                                                                       | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T101 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | mark_sign_up_verified!                    | VERIFIED_WITH_SIGN_UP | Original live signup Parent/browser/owner/candidate and consumed bounded keyed receipt; Source locks and owning clocks                                               | Verification status only; binding remains unfinalized and failures unchanged                                                               | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T102 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | finalize_sign_up_binding!                 | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP, browser/owner/candidate and historically consumed proof under locks                                                           | Binding fact only; existing verification status retained                                                                                   | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T003 | DOCUMENTED_TRANSITION | UNVERIFIED              | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T004 | DOCUMENTED_TRANSITION | VERIFIED                | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T005 | DOCUMENTED_TRANSITION | SUSPENDED               | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T006 | DOCUMENTED_TRANSITION | DELETED                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T007 | DOCUMENTED_TRANSITION | NOTHING                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T008 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T009 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb              | CONFIRMED  |
+| idp-visitor-email-credential:T010 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED               | Selected pending contact; current column exists; deleted reference ID resolves; lock                                                                                 | Schedule discard/purge and direct dynamic status-column update                                                                             | app/services/sign_up_artifact_cleanup.rb                  | CONFIRMED  |
+| idp-visitor-email-credential:T011 | DOCUMENTED_TRANSITION | VERIFIED                | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb   | CONFIRMED  |
+| idp-visitor-email-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb   | CONFIRMED  |
+| idp-visitor-email-credential:T013 | DOCUMENTED_TRANSITION | SUSPENDED               | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb   | CONFIRMED  |
+
+No independent transition map: controllers/operations directly write state FK. Fixed declarations
+with no incoming production state writer remain isolated intentionally; DELETED is a
+reference/uniqueness exclusion, not presumed destroy event. Base Contact removal retains the row,
+records one-way binding release and DELETED status together with its Source audit intent, and
+requires the owning authenticated Actor context plus usable session under the owner/contact/session
+locks. Terminal retries create no further intent; a Source rollback preserves the binding without
+restoring invalidated Ticket authority. OTP lock/expiry lives on separate columns and is diagrammed
+separately. Anonymizer rewrites any client/visitor contact to SUSPENDED with no source guard; no
+universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING labels coexist with
+UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
+
+## idp-visitor-telephone-credential
+
+The named Source writer `TelephoneContactBinding#finalize_registration_binding!` moves an original
+pending registration candidate to VERIFIED with its binding timestamp under its own row lock and DB
+clock. The independent Email and Telephone registration finalizers check current Action Policy,
+root, browser, original bounded verification proof and current credential under
+owner/root/Ticket/Contact locks. Replacement and both Source audit intents commit before the Ticket
+receipt; receipt recovery requires the original effective binding and Source audit operation.
+Settings HTTP adoption remains incomplete.
+
+Implementation: `Identity contact final committer / sign-up controllers / withdrawal anonymizer`.
+Storage: `visitor_telephones` / `visitor_telephone_status_id`.
+
+Sources: `app/models/visitor_telephone.rb`, `app/models/visitor_telephone_status.rb`,
+`app/operations/identity_telephone_ceremony_final_committer.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
+
+Tests read: `test/models/visitor_telephone_test.rb`,
+`test/operations/identity_telephone_ceremony_final_committer_test.rb`.
+
+| Transition ID                         | Mutation kind         | From                    | Event / Trigger                           | To                    | Guard                                                                                                                                                                | Side effect                                                                                                                                | Source file                                                    | Confidence |
+| ------------------------------------- | --------------------- | ----------------------- | ----------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | ---------- |
+| idp-visitor-telephone-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED              | Base ceremony final commit                | VERIFIED              | Signed result bound to actor/session; pending contact under row lock                                                                                                 | Consume ceremony on ticket DB before principal status commit                                                                               | app/operations/identity_telephone_ceremony_final_committer.rb  | CONFIRMED  |
+| idp-visitor-telephone-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED              | finalize_registration_binding!            | VERIFIED              | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt    | app/models/concerns/contact_binding.rb                         | CONFIRMED  |
+| idp-visitor-telephone-credential:T002 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | sign-up contact finalization              | VERIFIED_WITH_SIGN_UP | Bound signup candidate/OTP; owner then contact lock; finalizer/controller guards; explicit Actor context and flow operation reference                                | Contact status, binding fact, OTP clearing and Source audit intent in one transaction                                                      | app/operations/sign_com_up_telephone_registration_finalizer.rb | CONFIRMED  |
+| idp-visitor-telephone-credential:T003 | DOCUMENTED_TRANSITION | UNVERIFIED              | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T004 | DOCUMENTED_TRANSITION | VERIFIED                | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T005 | DOCUMENTED_TRANSITION | SUSPENDED               | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T006 | DOCUMENTED_TRANSITION | DELETED                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T007 | DOCUMENTED_TRANSITION | NOTHING                 | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T008 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T009 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | retire_for_withdrawal!                    | SUSPENDED             | Fresh terminated owner lock then Source lock; owning DB clock                                                                                                        | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb               | CONFIRMED  |
+| idp-visitor-telephone-credential:T010 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED               | Selected pending contact; current column exists; deleted reference ID resolves; lock                                                                                 | Schedule discard/purge and direct dynamic status-column update                                                                             | app/services/sign_up_artifact_cleanup.rb                       | CONFIRMED  |
+| idp-visitor-telephone-credential:T011 | DOCUMENTED_TRANSITION | VERIFIED                | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb        | CONFIRMED  |
+| idp-visitor-telephone-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP   | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb        | CONFIRMED  |
+| idp-visitor-telephone-credential:T013 | DOCUMENTED_TRANSITION | SUSPENDED               | Base binding release                      | DELETED               | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding                                                | One-way release and Source audit intent; invalidate unfinished Ticket authority                                                            | app/operations/identity_credential_removal_committer.rb        | CONFIRMED  |
+
+No independent transition map: controllers/operations directly write state FK. Fixed declarations
+with no incoming production state writer remain isolated intentionally; DELETED is a
+reference/uniqueness exclusion, not presumed destroy event. Base Contact removal retains the row,
+records one-way binding release and DELETED status together with its Source audit intent, and
+requires the owning authenticated Actor context plus usable session under the owner/contact/session
+locks. Terminal retries create no further intent; a Source rollback preserves the binding without
+restoring invalidated Ticket authority. OTP lock/expiry lives on separate columns and is diagrammed
+separately. Anonymizer rewrites any client/visitor contact to SUSPENDED with no source guard; no
+universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING labels coexist with
+UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
+
+## idp-visitor-actor-withdrawal
+
+Implementation: `Withdrawable / app/services/withdrawal_lifecycle.rb`. Storage: `visitors` /
+`withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at`.
+
+Sources: `app/models/concerns/withdrawable.rb`, `app/services/withdrawal_lifecycle.rb`,
+`app/controllers/concerns/authentication_withdrawal_gate.rb`.
+
+Tests read: `test/services/withdrawal_lifecycle_test.rb`,
+`test/services/org/operator_lifecycle/execute_test.rb`,
+`test/integration/withdrawal_lifecycle_security_test.rb`.
+
+| Transition ID                     | Mutation kind         | From      | Event / Trigger                     | To         | Guard                                                                    | Side effect                                                                 | Source file                          | Confidence |
+| --------------------------------- | --------------------- | --------- | ----------------------------------- | ---------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------ | ---------- |
+| idp-visitor-actor-withdrawal:T001 | DOCUMENTED_TRANSITION | active    | start withdrawal request            | active     | Actor lock; create REQUESTED flow                                        | No actor withdrawal timestamps yet                                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-visitor-actor-withdrawal:T002 | DOCUMENTED_TRANSITION | active    | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-visitor-actor-withdrawal:T003 | DOCUMENTED_TRANSITION | closing   | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-visitor-actor-withdrawal:T004 | DOCUMENTED_TRANSITION | suspended | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-visitor-actor-withdrawal:T005 | DOCUMENTED_TRANSITION | suspended | recover!                            | active     | Can recover after1hour before purge; privacy request permits; actor lock | Recover flow; clear timestamps; Infinity retention                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-visitor-actor-withdrawal:T006 | OUT_OF_BAND           | suspended | terminate! after7days               | terminated | Early terminatable check before actor lock                               | Flow TERMINATED; set terminated_at; anonymize/purge children; revoke tokens | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-visitor-actor-withdrawal:T007 | DOCUMENTED_TRANSITION | suspended | clock reaches finite purge deadline | terminated | Finite purge_eligible_at <= now                                          | Derived predicate, no status write                                          | app/models/concerns/withdrawable.rb  | CONFIRMED  |
+
+Derived predicates overlap: withdrawn_at independent; terminated wins over suspended; active
+excludes all, while closing uses withdrawal_started_at. closing is declared but start! currently
+only writes REQUESTED flow, no actor withdrawal_started_at; incoming actor closing writer
+UNCONFIRMED. Client/visitor suspend public method has no source guard and can preserve expired purge
+facts, so a call can remain derived terminated rather than enter suspended; diagram applies
+resulting future-purge condition only. Operator restore can clear termination facts via approved
+action; no absorbing terminal assumed. Eligibility gates act separately from actor status_id and
+access_state. Flow/token/audit/child operations include separate DB owners; no distributed atomicity
+is inferred. Actor and Entra rows share org_zenith in the current consolidated checkout.
+
+## idp-operator-email-credential
+
+Implementation: `OperatorEmailRegistrationOtpFinalizer` and the named OperatorEmail registration
+transition. Storage: `operator_emails` / `staff_identity_email_status_id`.
+
+Sources: `app/models/operator_email.rb`, `app/models/operator_email_status.rb`,
+`app/operations/operator_email_registration_otp_finalizer.rb`,
+`app/controllers/base/org/identity/emails/registrations_controller.rb`.
+
+Tests: `test/controllers/base/org/identity/emails/registrations_controller_test.rb`,
+`test/operations/email_credential_registration_otp_issuer_test.rb`,
+`test/operations/email_credential_registration_otp_delivery_guard_test.rb`.
+
+| Transition ID                      | Mutation kind          | From       | Event / Trigger              | To       | Guard                                                                                                                                                          | Side effect                                                                                                        | Source file                  | Confidence |
+| ---------------------------------- | ---------------------- | ---------- | ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ---------- |
+| idp-operator-email-credential:T001 | NAMED_MODEL_TRANSITION | UNVERIFIED | finalize_email_registration! | VERIFIED | Typed ORG ceremony, original Root/browser/actor/candidate/destination, bounded keyed receipt, current passkey-only requirement and live credential under locks | Commit Source status before original Ticket receipt; exact bounded retry does not rewrite status or reset failures | app/models/operator_email.rb | CONFIRMED  |
+
+The named model writer owns this transition; controllers and the finalizer do not write verified
+status directly. Legacy signed-permission writers await complete retirement. Reference declarations
+without an incoming production writer are not invented transitions. Physical irreversible removal is
+the history boundary; a locked registration candidate is retained rather than physically purged. OTP
+consumption/receipt is owned by the Email ceremony. Existing ACTIVE/INACTIVE/PENDING labels coexist
+with UNVERIFIED/VERIFIED; no new status, status-time expiry or ORG bootstrap was introduced.
+
+## idp-operator-telephone-credential
+
+Implementation: `Identity contact final committer / sign-up controllers / withdrawal anonymizer`.
+Storage: `operator_telephones` / `staff_identity_telephone_status_id`.
+
+Sources: `app/models/operator_telephone.rb`, `app/models/operator_telephone_status.rb`,
+`app/operations/identity_telephone_ceremony_final_committer.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
+
+Tests read: `test/models/operator_telephone_test.rb`,
+`test/operations/identity_telephone_ceremony_final_committer_test.rb`.
+
+| Transition ID                          | Mutation kind          | From       | Event / Trigger                          | To       | Guard                                                                                                                                                           | Side effect                                                                                                                    | Source file                                                       | Confidence |
+| -------------------------------------- | ---------------------- | ---------- | ---------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | ---------- |
+| idp-operator-telephone-credential:T001 | DOCUMENTED_TRANSITION  | UNVERIFIED | Base ceremony final commit               | VERIFIED | Signed result bound to actor/session; pending contact under row lock                                                                                            | Consume ceremony on ticket DB before principal status commit                                                                   | app/operations/identity_telephone_ceremony_final_committer.rb     | CONFIRMED  |
+| idp-operator-telephone-credential:T002 | NAMED_MODEL_TRANSITION | UNVERIFIED | Authenticated Telephone OTP registration | VERIFIED | Typed ORG ceremony, opaque public candidate/owner/Root/browser/destination binding, original bounded keyed evidence, current passkey-only policy and credential | Source model transition commits before Ticket receipt; exact retry preserves Source facts; no APP/COM audit outbox is invented | app/models/operator_telephone.rb:finalize_telephone_registration! | CONFIRMED  |
+
+There is no general transition map. The named OTP writer restricts registration to UNVERIFIED to
+VERIFIED and permits an exact already-VERIFIED retry without a write. The signed-result committer
+remains a separate implementation, not an OTP fallback. Other reference statuses have no inferred
+transition. Physical Contact removal preserves existing ownership/last-method guards; OTP proof
+lifecycle is a separate ceremony axis rather than an identifier status.
+
+## idp-operator-actor-withdrawal
+
+Implementation: `Withdrawable / app/services/org_operator_lifecycle_execute.rb`. Storage:
+`operators` /
+`withdrawal_started_at / deactivated_at / withdrawn_at / discard_at / purge_eligible_at`.
+
+Sources: `app/models/concerns/withdrawable.rb`, `app/services/org_operator_lifecycle_execute.rb`,
+`app/controllers/concerns/authentication_withdrawal_gate.rb`.
+
+Tests read: `test/services/withdrawal_lifecycle_test.rb`,
+`test/services/org/operator_lifecycle/execute_test.rb`,
+`test/integration/withdrawal_lifecycle_security_test.rb`.
+
+| Transition ID                      | Mutation kind         | From       | Event / Trigger                     | To         | Guard                                                                                 | Side effect                                                                                    | Source file                                    | Confidence |
+| ---------------------------------- | --------------------- | ---------- | ----------------------------------- | ---------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-operator-actor-withdrawal:T001 | OUT_OF_BAND           | active     | suspend / withdraw                  | suspended  | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T002 | OUT_OF_BAND           | active     | terminate                           | terminated | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T003 | OUT_OF_BAND           | active     | restore                             | active     | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T004 | OUT_OF_BAND           | closing    | suspend / withdraw                  | suspended  | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T005 | OUT_OF_BAND           | closing    | terminate                           | terminated | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T006 | OUT_OF_BAND           | closing    | restore                             | active     | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T007 | OUT_OF_BAND           | suspended  | suspend / withdraw                  | suspended  | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T008 | OUT_OF_BAND           | suspended  | terminate                           | terminated | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T009 | OUT_OF_BAND           | suspended  | restore                             | active     | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T010 | OUT_OF_BAND           | terminated | suspend / withdraw                  | suspended  | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T011 | OUT_OF_BAND           | terminated | terminate                           | terminated | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T012 | OUT_OF_BAND           | terminated | restore                             | active     | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T013 | OUT_OF_BAND           | withdrawn  | suspend / withdraw                  | suspended  | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T014 | OUT_OF_BAND           | withdrawn  | terminate                           | terminated | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T015 | OUT_OF_BAND           | withdrawn  | restore                             | active     | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-actor-withdrawal:T016 | DOCUMENTED_TRANSITION | suspended  | clock reaches finite purge deadline | terminated | Finite purge_eligible_at <= now                                                       | Derived predicate, no status write                                                             | app/models/concerns/withdrawable.rb            | CONFIRMED  |
+
+Derived predicates overlap: withdrawn_at independent; terminated wins over suspended; active
+excludes all, while closing uses withdrawal_started_at. closing is declared but start! currently
+only writes REQUESTED flow, no actor withdrawal_started_at; incoming actor closing writer
+UNCONFIRMED. Client/visitor suspend public method has no source guard and can preserve expired purge
+facts, so a call can remain derived terminated rather than enter suspended; diagram applies
+resulting future-purge condition only. Operator restore can clear termination facts via approved
+action; no absorbing terminal assumed. Eligibility gates act separately from actor status_id and
+access_state. Flow/token/audit/child operations include separate DB owners; no distributed atomicity
+is inferred. Actor and Entra rows share org_zenith in the current consolidated checkout.
+
+## idp-client-actor-provisioning
+
+Implementation: `ClientStatus / sign-up finalizers`. Storage: `clients` / `status_id`.
+
+Sources: `app/models/client_status.rb`, `app/operations/identity_email_ceremony_final_committer.rb`,
+`app/operations/sign_app_up_telephone_registration_finalizer.rb`,
+`app/controllers/concerns/sign_up_sequence_controller_support.rb`,
+`app/operations/social_auth_signup_finalizer.rb`.
+
+Tests read: `test/models/client_test.rb`,
+`test/operations/identity_email_ceremony_final_committer_test.rb`.
+
+| Transition ID                      | Mutation kind         | From                    | Event / Trigger             | To                    | Guard                                                                                                                                      | Side effect                                                                  | Source file                                               | Confidence |
+| ---------------------------------- | --------------------- | ----------------------- | --------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-client-actor-provisioning:T001 | OUT_OF_BAND           | UNVERIFIED_WITH_SIGN_UP | contact/signup final commit | VERIFIED_WITH_SIGN_UP | Pending Client signup status; verified bound contact/finalization                                                                          | Direct status_id write                                                       | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED  |
+| idp-client-actor-provisioning:T002 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_email_sign_up!     | VERIFIED_WITH_SIGN_UP | Original live Email checkpoint, cleared OTP and finalized owned signup Email; active accessible Client under owner lock and Source clock   | Owner promotion only; no session issuance, failure reset or new proof        | app/models/client.rb                                      | CONFIRMED  |
+| idp-client-actor-provisioning:T003 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_telephone_sign_up! | VERIFIED_WITH_SIGN_UP | Original live Telephone checkpoint, cleared OTP, finalized owned signup Telephone and active required passkey; owner lock and Source clock | Owner promotion only; Source audit belongs to original finalizer transaction | app/models/client.rb                                      | CONFIRMED  |
+
+All fixed reference IDs are preserved, but only current post-creation production transition 9->10
+confirmed. Social signup creates VERIFIED_WITH_SIGN_UP directly, not 9->10. Actor withdrawal now
+uses timestamp/flow authorities, not legacy WITHDRAWN/DELETED reference transitions; those
+transitions UNKNOWN. Client default NOTHING and explicit ordinary ACTIVE creation are distinct entry
+states, no inferred transition. Visitor/Operator ACTIVE/NOTHING/RESERVED are creation
+classifications with no production existing-row status mutation found, recorded as excluded lookup
+candidates in discovery.
+
+## idp-shared-acme-logout
+
+Implementation: `AcmeLogoutTransactionable / AcmeLogoutTransactionCoordinator`. Storage:
+`acme_logout_transactions` / `status / expected_step / completed_steps`.
+
+Sources: `app/models/concerns/acme_logout_transactionable.rb`,
+`app/models/acme_logout_transaction.rb`, and `app/services/acme_logout_transaction_coordinator.rb`.
+
+Tests read: `test/models/acme_logout_transaction_test.rb`,
+`test/models/acme_logout_race_branch_coverage_test.rb`, and
+`test/services/acme_logout_transaction_coordinator_test.rb`. D-33 RP-Initiated Logout is a separate
+OIDC path; current focused coverage is in `test/services/oidc/end_session_request_test.rb`,
+`test/controllers/base/app/oidc/logouts_controller_test.rb`, and
+`test/integration/oidc_rp_logout_registered_rp_matrix_test.rb`.
+
+| Transition ID               | Mutation kind         | From        | Event / Trigger              | To          | Guard                                                                                      | Side effect                                                            | Source file                                          | Confidence |
+| --------------------------- | --------------------- | ----------- | ---------------------------- | ----------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------- | ---------- |
+| idp-shared-acme-logout:T001 | DOCUMENTED_TRANSITION | initiated   | advance expected logout step | in_progress | Row lock; expected step; live TTL; failed/finalized refuse; completed step replay no-op    | Append completed_steps and move expected_step                          | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T002 | DOCUMENTED_TRANSITION | in_progress | advance expected logout step | in_progress | Row lock; expected step; live TTL; failed/finalized refuse; completed step replay no-op    | Append completed_steps and move expected_step                          | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T003 | DOCUMENTED_TRANSITION | expired     | advance expected logout step | in_progress | Row lock; expected step; live TTL; failed/finalized refuse; completed step replay no-op    | Append completed_steps and move expected_step                          | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T004 | DOCUMENTED_TRANSITION | initiated   | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T005 | DOCUMENTED_TRANSITION | in_progress | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T006 | DOCUMENTED_TRANSITION | failed      | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T007 | DOCUMENTED_TRANSITION | expired     | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T008 | DOCUMENTED_TRANSITION | initiated   | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T009 | DOCUMENTED_TRANSITION | in_progress | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+| idp-shared-acme-logout:T010 | DOCUMENTED_TRANSITION | expired     | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
+
+Legacy ordered step sequences: sign origin_cleared->acme_cleared; acme/base
+origin_cleared->sign_cleared; core/side/palm origin_cleared->acme_cleared->sign_cleared; then
+finalize. D-33 RP-Initiated Logout uses the OIDC end-session request, Visa confirmation, OP authority
+stop and one-use RP callback; it does not write or advance this transaction. Steps are exact runtime
+events, not target external_result. Status EXPIRED declared but no writer; clock expiry refuses calls
+without writing. Edges from declared expired require a future expires_at (public API tests/model-
+permitted only); no invented clock transition to stored expired.
+finalize! lacks failed guard and can finalize failed row when expected step ready/live; failed is
+therefore not absorbing. fail! not serialized. Duplicate completed step is no-op; locked
+advance/finalize recheck. TTL10m. SQL status, expected_step and completed_steps duplicate progress
+authority, and SQL/model constraints recorded.
+
+## idp-shared-webauthn-challenge
+
+Implementation: `Webauthn::ChallengeStore`. Storage: `None (Rails session)` /
+`passkey_challenges entry / expires_at`.
+
+Sources: `app/services/webauthn/challenge_store.rb`.
+
+Tests read: `test/unit/webauthn/challenge_store_test.rb`,
+`test/services/challenge_store_and_jump_gateway_refusals_test.rb`.
+
+| Transition ID                      | Mutation kind         | From   | Event / Trigger                    | To      | Guard                                                                       | Side effect                                       | Source file                              | Confidence |
+| ---------------------------------- | --------------------- | ------ | ---------------------------------- | ------- | --------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------- | ---------- |
+| idp-shared-webauthn-challenge:T001 | DOCUMENTED_TRANSITION | issued | consume! / consume_with_actor!     | removed | Entry deletion occurs before TTL/purpose/surface/RP/origin/actor validation | Burn even on rejection; return challenge or raise | app/services/webauthn/challenge_store.rb | CONFIRMED  |
+| idp-shared-webauthn-challenge:T002 | DOCUMENTED_TRANSITION | issued | discard                            | removed | Entry exists                                                                | Idempotent removal                                | app/services/webauthn/challenge_store.rb | CONFIRMED  |
+| idp-shared-webauthn-challenge:T003 | DOCUMENTED_TRANSITION | issued | issue! cleanup / capacity eviction | removed | TTL elapsed or oldest entry when capacity>=5                                | Delete old entry before creating another          | app/services/webauthn/challenge_store.rb | CONFIRMED  |
+
+Session-only same-browser challenges, distinct from durable PasskeyCeremonyTransaction. TTL10m,
+maximum5, purposes registration/authentication/emergency_sign_in/step_up. Missing, expired and
+mismatching outcome errors are not stored states; consumption deletes first. Cookie/session request
+concurrency has no DB lock or CAS in this class, so cross-request single-winner behavior is
+UNCONFIRMED. Browser-bound snapshot loss/multi-tab overwrite cannot be assumed prevented.
+
+## idp-client-enforcement-case
+
+Implementation: `EnforcementCaseApplyOperation / EndOperation / convergence jobs`. Storage:
+`app_enforcement_cases` / `state / ended_at`.
+
+Sources: `app/models/concerns/enforcement_case_applicable.rb`, `app/models/app_enforcement_case.rb`,
+`app/operations/enforcement_case_apply_operation.rb`,
+`app/operations/enforcement_case_end_operation.rb`, `app/jobs/enforcement_expiry_job.rb`,
+`app/jobs/enforcement_reconciliation_job.rb`,
+`app/controllers/base/org/support/enforcement_cases/approvals_controller.rb`.
+
+Tests read: `test/operations/enforcement_case_apply_failure_test.rb`,
+`test/models/enforcement_case_apply_ordering_test.rb`, `test/jobs/enforcement_expiry_job_test.rb`,
+`test/jobs/enforcement_reconciliation_job_test.rb`.
+
+| Transition ID                    | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
+| -------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| idp-client-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
+| idp-client-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-client-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-client-enforcement-case:T004 | OUT_OF_BAND           | active           | RecordInvalid / RecordNotUnique side-effect failure | failed           | Committed security decision; rescue narrow exceptions                                                      | update_column state failed; raise                                      | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-client-enforcement-case:T005 | DOCUMENTED_TRANSITION | draft            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-client-enforcement-case:T006 | DOCUMENTED_TRANSITION | pending_approval | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-client-enforcement-case:T007 | DOCUMENTED_TRANSITION | active           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-client-enforcement-case:T008 | DOCUMENTED_TRANSITION | failed           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-client-enforcement-case:T009 | DOCUMENTED_TRANSITION | ended            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-client-enforcement-case:T010 | DOCUMENTED_TRANSITION | active           | EnforcementExpiryJob                                | closed           | expires_at <=now; active and not yet ended                                                                 | End reason expired; refcount lock release                              | app/jobs/enforcement_expiry_job.rb                               | CONFIRMED  |
+| idp-client-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence timestamps; active not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
+| idp-client-enforcement-case:T012 | DOCUMENTED_TRANSITION | closed           | end reconcile / repeat                              | closed           | Recorded end reason wins; lock; no duplicate end timestamp                                                 | Retry release/audit                                                    | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+
+String CHECK; no state reference FK. Case governs authentication-method/principal/identifier effects
+through actual effect->case FKs; effects have effective/expiry/ended timestamps, not independent
+transition graphs. EndOperation does not write state=ended: it preserves stored state and writes
+ended_at; declared ended incoming writer UNKNOWN. Runtime in_force requires active, effective time
+reached, unexpired and no ended_at independently of jobs. Narrow side-effect failures write failed
+via update_column despite comments describing decision preserved active; pending_convergence and
+expiry select active only, so failed recovery path is UNKNOWN (hidden convergence dead end). Other
+exceptions retain active and may reconcile. Approval controller claims approver under lock;
+operation itself checks source outside transaction without lock. Superseding closes effect
+timestamps without necessarily ending old Case. Appeals and verification can end; cancel is not a
+distinct state. No distributed transaction with actor/token/Chronicle. Principal ref is logical
+cross-DB, not FK.
+
+## idp-client-enforcement-appeal
+
+Implementation: `EnforcementAppeal / EnforcementReconciliationJob`. Storage:
+`app_enforcement_appeals` / `state / resolution_code / reviewed_at`.
+
+Sources: `app/models/concerns/enforcement_appeal.rb`, `app/models/app_enforcement_appeal.rb`,
+`app/jobs/enforcement_reconciliation_job.rb`.
+
+Tests read: `test/models/enforcement_appeal_test.rb`,
+`test/jobs/enforcement_reconciliation_job_test.rb`.
+
+| Transition ID                      | Mutation kind         | From         | Event / Trigger   | To       | Guard                                                                                       | Side effect                                                   | Source file                               | Confidence |
+| ---------------------------------- | --------------------- | ------------ | ----------------- | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- | ---------- |
+| idp-client-enforcement-appeal:T001 | DOCUMENTED_TRANSITION | submitted    | resolve! approved | approved | Appeal row lock; reviewer differs apply/approve actors; associated Case locked and in_force | Commit decision then end Case / audit; reconciliation retries | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T002 | DOCUMENTED_TRANSITION | under_review | resolve! approved | approved | Appeal row lock; reviewer differs apply/approve actors; associated Case locked and in_force | Commit decision then end Case / audit; reconciliation retries | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T003 | DOCUMENTED_TRANSITION | submitted    | resolve! rejected | rejected | Appeal row lock; reviewer separation; unresolved                                            | Persist reviewed time/resolution and audit                    | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T004 | DOCUMENTED_TRANSITION | under_review | resolve! rejected | rejected | Appeal row lock; reviewer separation; unresolved                                            | Persist reviewed time/resolution and audit                    | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T005 | DOCUMENTED_TRANSITION | submitted    | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T006 | DOCUMENTED_TRANSITION | under_review | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T007 | DOCUMENTED_TRANSITION | approved     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T008 | DOCUMENTED_TRANSITION | rejected     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-client-enforcement-appeal:T009 | DOCUMENTED_TRANSITION | redacted     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+
+Appeal state is separate from parent enforcement Case. under_review declared but entry setter
+UNKNOWN; resolve accepts submitted/under_review only, including locked replay refusal. Approved
+requires still in-force Case and reviewer separation; rejection does not end Case. Decision commits
+before Case-end/audit; reconciliation explicitly rediscovers approved appeal. Redact can replace
+approved/rejected with redacted without resolution_code clearing; historical resolution and current
+state can differ, and job selects submitted/approved/rejected only. No cancel or expiry field. All
+effect/appeal FK directions point to Case; no state reference table.
+
+## idp-visitor-enforcement-case
+
+Implementation: `EnforcementCaseApplyOperation / EndOperation / convergence jobs`. Storage:
+`com_enforcement_cases` / `state / ended_at`.
+
+Sources: `app/models/concerns/enforcement_case_applicable.rb`, `app/models/com_enforcement_case.rb`,
+`app/operations/enforcement_case_apply_operation.rb`,
+`app/operations/enforcement_case_end_operation.rb`, `app/jobs/enforcement_expiry_job.rb`,
+`app/jobs/enforcement_reconciliation_job.rb`,
+`app/controllers/base/org/support/enforcement_cases/approvals_controller.rb`.
+
+Tests read: `test/operations/enforcement_case_apply_failure_test.rb`,
+`test/models/enforcement_case_apply_ordering_test.rb`, `test/jobs/enforcement_expiry_job_test.rb`,
+`test/jobs/enforcement_reconciliation_job_test.rb`.
+
+| Transition ID                     | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
+| --------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| idp-visitor-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
+| idp-visitor-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-visitor-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-visitor-enforcement-case:T004 | OUT_OF_BAND           | active           | RecordInvalid / RecordNotUnique side-effect failure | failed           | Committed security decision; rescue narrow exceptions                                                      | update_column state failed; raise                                      | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-visitor-enforcement-case:T005 | DOCUMENTED_TRANSITION | draft            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-visitor-enforcement-case:T006 | DOCUMENTED_TRANSITION | pending_approval | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-visitor-enforcement-case:T007 | DOCUMENTED_TRANSITION | active           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-visitor-enforcement-case:T008 | DOCUMENTED_TRANSITION | failed           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-visitor-enforcement-case:T009 | DOCUMENTED_TRANSITION | ended            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-visitor-enforcement-case:T010 | DOCUMENTED_TRANSITION | active           | EnforcementExpiryJob                                | closed           | expires_at <=now; active and not yet ended                                                                 | End reason expired; refcount lock release                              | app/jobs/enforcement_expiry_job.rb                               | CONFIRMED  |
+| idp-visitor-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence timestamps; active not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
+| idp-visitor-enforcement-case:T012 | DOCUMENTED_TRANSITION | closed           | end reconcile / repeat                              | closed           | Recorded end reason wins; lock; no duplicate end timestamp                                                 | Retry release/audit                                                    | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+
+String CHECK; no state reference FK. Case governs authentication-method/principal/identifier effects
+through actual effect->case FKs; effects have effective/expiry/ended timestamps, not independent
+transition graphs. EndOperation does not write state=ended: it preserves stored state and writes
+ended_at; declared ended incoming writer UNKNOWN. Runtime in_force requires active, effective time
+reached, unexpired and no ended_at independently of jobs. Narrow side-effect failures write failed
+via update_column despite comments describing decision preserved active; pending_convergence and
+expiry select active only, so failed recovery path is UNKNOWN (hidden convergence dead end). Other
+exceptions retain active and may reconcile. Approval controller claims approver under lock;
+operation itself checks source outside transaction without lock. Superseding closes effect
+timestamps without necessarily ending old Case. Appeals and verification can end; cancel is not a
+distinct state. No distributed transaction with actor/token/Chronicle. Principal ref is logical
+cross-DB, not FK.
+
+## idp-visitor-enforcement-appeal
+
+Implementation: `EnforcementAppeal / EnforcementReconciliationJob`. Storage:
+`com_enforcement_appeals` / `state / resolution_code / reviewed_at`.
+
+Sources: `app/models/concerns/enforcement_appeal.rb`, `app/models/com_enforcement_appeal.rb`,
+`app/jobs/enforcement_reconciliation_job.rb`.
+
+Tests read: `test/models/enforcement_appeal_test.rb`,
+`test/jobs/enforcement_reconciliation_job_test.rb`.
+
+| Transition ID                       | Mutation kind         | From         | Event / Trigger   | To       | Guard                                                                                       | Side effect                                                   | Source file                               | Confidence |
+| ----------------------------------- | --------------------- | ------------ | ----------------- | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- | ---------- |
+| idp-visitor-enforcement-appeal:T001 | DOCUMENTED_TRANSITION | submitted    | resolve! approved | approved | Appeal row lock; reviewer differs apply/approve actors; associated Case locked and in_force | Commit decision then end Case / audit; reconciliation retries | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T002 | DOCUMENTED_TRANSITION | under_review | resolve! approved | approved | Appeal row lock; reviewer differs apply/approve actors; associated Case locked and in_force | Commit decision then end Case / audit; reconciliation retries | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T003 | DOCUMENTED_TRANSITION | submitted    | resolve! rejected | rejected | Appeal row lock; reviewer separation; unresolved                                            | Persist reviewed time/resolution and audit                    | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T004 | DOCUMENTED_TRANSITION | under_review | resolve! rejected | rejected | Appeal row lock; reviewer separation; unresolved                                            | Persist reviewed time/resolution and audit                    | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T005 | DOCUMENTED_TRANSITION | submitted    | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T006 | DOCUMENTED_TRANSITION | under_review | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T007 | DOCUMENTED_TRANSITION | approved     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T008 | DOCUMENTED_TRANSITION | rejected     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-visitor-enforcement-appeal:T009 | DOCUMENTED_TRANSITION | redacted     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+
+Appeal state is separate from parent enforcement Case. under_review declared but entry setter
+UNKNOWN; resolve accepts submitted/under_review only, including locked replay refusal. Approved
+requires still in-force Case and reviewer separation; rejection does not end Case. Decision commits
+before Case-end/audit; reconciliation explicitly rediscovers approved appeal. Redact can replace
+approved/rejected with redacted without resolution_code clearing; historical resolution and current
+state can differ, and job selects submitted/approved/rejected only. No cancel or expiry field. All
+effect/appeal FK directions point to Case; no state reference table.
+
+## idp-operator-enforcement-case
+
+Implementation: `EnforcementCaseApplyOperation / EndOperation / convergence jobs`. Storage:
+`org_enforcement_cases` / `state / ended_at`.
+
+Sources: `app/models/concerns/enforcement_case_applicable.rb`, `app/models/org_enforcement_case.rb`,
+`app/operations/enforcement_case_apply_operation.rb`,
+`app/operations/enforcement_case_end_operation.rb`, `app/jobs/enforcement_expiry_job.rb`,
+`app/jobs/enforcement_reconciliation_job.rb`,
+`app/controllers/base/org/support/enforcement_cases/approvals_controller.rb`.
+
+Tests read: `test/operations/enforcement_case_apply_failure_test.rb`,
+`test/models/enforcement_case_apply_ordering_test.rb`, `test/jobs/enforcement_expiry_job_test.rb`,
+`test/jobs/enforcement_reconciliation_job_test.rb`.
+
+| Transition ID                      | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
+| ---------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| idp-operator-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
+| idp-operator-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-operator-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-operator-enforcement-case:T004 | OUT_OF_BAND           | active           | RecordInvalid / RecordNotUnique side-effect failure | failed           | Committed security decision; rescue narrow exceptions                                                      | update_column state failed; raise                                      | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-operator-enforcement-case:T005 | DOCUMENTED_TRANSITION | draft            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-operator-enforcement-case:T006 | DOCUMENTED_TRANSITION | pending_approval | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-operator-enforcement-case:T007 | DOCUMENTED_TRANSITION | active           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-operator-enforcement-case:T008 | DOCUMENTED_TRANSITION | failed           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-operator-enforcement-case:T009 | DOCUMENTED_TRANSITION | ended            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+| idp-operator-enforcement-case:T010 | DOCUMENTED_TRANSITION | active           | EnforcementExpiryJob                                | closed           | expires_at <=now; active and not yet ended                                                                 | End reason expired; refcount lock release                              | app/jobs/enforcement_expiry_job.rb                               | CONFIRMED  |
+| idp-operator-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence timestamps; active not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
+| idp-operator-enforcement-case:T012 | DOCUMENTED_TRANSITION | closed           | end reconcile / repeat                              | closed           | Recorded end reason wins; lock; no duplicate end timestamp                                                 | Retry release/audit                                                    | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
+
+String CHECK; no state reference FK. Case governs authentication-method/principal/identifier effects
+through actual effect->case FKs; effects have effective/expiry/ended timestamps, not independent
+transition graphs. EndOperation does not write state=ended: it preserves stored state and writes
+ended_at; declared ended incoming writer UNKNOWN. Runtime in_force requires active, effective time
+reached, unexpired and no ended_at independently of jobs. Narrow side-effect failures write failed
+via update_column despite comments describing decision preserved active; pending_convergence and
+expiry select active only, so failed recovery path is UNKNOWN (hidden convergence dead end). Other
+exceptions retain active and may reconcile. Approval controller claims approver under lock;
+operation itself checks source outside transaction without lock. Superseding closes effect
+timestamps without necessarily ending old Case. Appeals and verification can end; cancel is not a
+distinct state. No distributed transaction with actor/token/Chronicle. Principal ref is logical
+cross-DB, not FK.
+
+## idp-operator-enforcement-appeal
+
+Implementation: `EnforcementAppeal / EnforcementReconciliationJob`. Storage:
+`org_enforcement_appeals` / `state / resolution_code / reviewed_at`.
+
+Sources: `app/models/concerns/enforcement_appeal.rb`, `app/models/org_enforcement_appeal.rb`,
+`app/jobs/enforcement_reconciliation_job.rb`.
+
+Tests read: `test/models/enforcement_appeal_test.rb`,
+`test/jobs/enforcement_reconciliation_job_test.rb`.
+
+| Transition ID                        | Mutation kind         | From         | Event / Trigger   | To       | Guard                                                                                       | Side effect                                                   | Source file                               | Confidence |
+| ------------------------------------ | --------------------- | ------------ | ----------------- | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- | ---------- |
+| idp-operator-enforcement-appeal:T001 | DOCUMENTED_TRANSITION | submitted    | resolve! approved | approved | Appeal row lock; reviewer differs apply/approve actors; associated Case locked and in_force | Commit decision then end Case / audit; reconciliation retries | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T002 | DOCUMENTED_TRANSITION | under_review | resolve! approved | approved | Appeal row lock; reviewer differs apply/approve actors; associated Case locked and in_force | Commit decision then end Case / audit; reconciliation retries | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T003 | DOCUMENTED_TRANSITION | submitted    | resolve! rejected | rejected | Appeal row lock; reviewer separation; unresolved                                            | Persist reviewed time/resolution and audit                    | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T004 | DOCUMENTED_TRANSITION | under_review | resolve! rejected | rejected | Appeal row lock; reviewer separation; unresolved                                            | Persist reviewed time/resolution and audit                    | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T005 | DOCUMENTED_TRANSITION | submitted    | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T006 | DOCUMENTED_TRANSITION | under_review | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T007 | DOCUMENTED_TRANSITION | approved     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T008 | DOCUMENTED_TRANSITION | rejected     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+| idp-operator-enforcement-appeal:T009 | DOCUMENTED_TRANSITION | redacted     | redact!           | redacted | No source state guard or own row lock                                                       | Clear encrypted statement; state redacted and timestamp       | app/models/concerns/enforcement_appeal.rb | CONFIRMED  |
+
+Appeal state is separate from parent enforcement Case. under_review declared but entry setter
+UNKNOWN; resolve accepts submitted/under_review only, including locked replay refusal. Approved
+requires still in-force Case and reviewer separation; rejection does not end Case. Decision commits
+before Case-end/audit; reconciliation explicitly rediscovers approved appeal. Redact can replace
+approved/rejected with redacted without resolution_code clearing; historical resolution and current
+state can differ, and job selects submitted/approved/rejected only. No cancel or expiry field. All
+effect/appeal FK directions point to Case; no state reference table.
+
+## idp-shared-sign-out-notice
+
+Implementation: `Valkey::AuthState::SignOutNoticeStore`. Storage: `None (Valkey)` /
+`Key presence / payload expiry`.
+
+Sources: `app/services/valkey/auth_state/sign_out_notice_store.rb`,
+`app/controllers/concerns/authentication_logout_current_session.rb`.
+
+Tests read: `test/services/valkey/auth_state/sign_out_notice_store_test.rb`.
+
+| Transition ID                   | Mutation kind         | From   | Event / Trigger             | To     | Guard                                              | Side effect                                | Source file                                             | Confidence |
+| ------------------------------- | --------------------- | ------ | --------------------------- | ------ | -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------- | ---------- |
+| idp-shared-sign-out-notice:T001 | DOCUMENTED_TRANSITION | issued | consume / read(delete:true) | absent | Atomic GET+DEL Lua; payload checked after deletion | Burn before expiry/corrupt-payload refusal | app/services/valkey/auth_state/sign_out_notice_store.rb | CONFIRMED  |
+| idp-shared-sign-out-notice:T002 | DOCUMENTED_TRANSITION | issued | Redis wall-clock TTL        | absent | Default5m                                          | Automatic key eviction                     | app/services/valkey/auth_state/sign_out_notice_store.rb | CONFIRMED  |
+
+Notice is transport, not durable authority-stop progress. Payload state is opaque caller data, no
+lifecycle enum. Read without delete does not consume; consume atomically deletes first, then
+parses/checks logical expiry, so failure may burn. No tombstone: replay is missing. DefaultTTL5m;
+external browser response carries raw id while storage uses digest. No FK or SQL table.
+
+## idp-client-mfa-readiness
+
+Implementation: `MfaStatusTrackable / MfaStatusCredential`. Storage: `clients` / `mfa_status_id`.
+
+Sources: `app/models/concerns/mfa_status_trackable.rb`,
+`app/models/concerns/mfa_status_credential.rb`, `app/models/client.rb`,
+`app/models/client_mfa_status.rb`.
+
+Tests read: `test/models/client_mfa_status_test.rb`, `test/models/operator_mfa_status_test.rb`,
+`test/models/visitor_mfa_status_test.rb`, `test/models/concerns/mfa_status_trackable_test.rb`.
+
+| Transition ID                 | Mutation kind         | From         | Event / Trigger                  | To           | Guard                                                                           | Side effect                      | Source file                                 | Confidence |
+| ----------------------------- | --------------------- | ------------ | -------------------------------- | ------------ | ------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------- | ---------- |
+| idp-client-mfa-readiness:T001 | DOCUMENTED_TRANSITION | NOTHING      | refresh_mfa_status! configured   | ACTIVE       | Persisted actor; configured_mfa_level_methods.any?; status differs; no row lock | Validated actor save; updated_at | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-client-mfa-readiness:T002 | DOCUMENTED_TRANSITION | UNCONFIGURED | refresh_mfa_status! configured   | ACTIVE       | Persisted actor; configured_mfa_level_methods.any?; status differs; no row lock | Validated actor save; updated_at | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-client-mfa-readiness:T003 | DOCUMENTED_TRANSITION | NOTHING      | refresh_mfa_status! unconfigured | UNCONFIGURED | Persisted actor; no configured MFA-level methods; status differs; no row lock   | Actor save; updated_at           | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-client-mfa-readiness:T004 | DOCUMENTED_TRANSITION | ACTIVE       | refresh_mfa_status! unconfigured | UNCONFIGURED | Persisted actor; no configured MFA-level methods; status differs; no row lock   | Actor save; updated_at           | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+
+Reference IDs0/1/5; SQL default5. before_validation resolves NOTHING placeholder; after_create and
+credential after_commit refresh projected capability. Predicate raises on remaining NOTHING rather
+than silently normalizing. Calculation and save have no row lock/CAS; stale computation/concurrent
+credential changes are a potential projection boundary, not a demonstrated race. Same-status refresh
+is a no-op; no self transition is drawn. No lifecycle terminal/expiry/cancel; effective readiness is
+derived from credentials and duplicated as persisted projection. Does not mean MFA challenge has
+been passed; last_mfa_login_at is separate proof time.
+
+## idp-visitor-mfa-readiness
+
+Implementation: `MfaStatusTrackable / MfaStatusCredential`. Storage: `visitors` / `mfa_status_id`.
+
+Sources: `app/models/concerns/mfa_status_trackable.rb`,
+`app/models/concerns/mfa_status_credential.rb`, `app/models/visitor.rb`,
+`app/models/visitor_mfa_status.rb`.
+
+Tests read: `test/models/client_mfa_status_test.rb`, `test/models/operator_mfa_status_test.rb`,
+`test/models/visitor_mfa_status_test.rb`, `test/models/concerns/mfa_status_trackable_test.rb`.
+
+| Transition ID                  | Mutation kind         | From         | Event / Trigger                  | To           | Guard                                                                           | Side effect                      | Source file                                 | Confidence |
+| ------------------------------ | --------------------- | ------------ | -------------------------------- | ------------ | ------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------- | ---------- |
+| idp-visitor-mfa-readiness:T001 | DOCUMENTED_TRANSITION | NOTHING      | refresh_mfa_status! configured   | ACTIVE       | Persisted actor; configured_mfa_level_methods.any?; status differs; no row lock | Validated actor save; updated_at | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-visitor-mfa-readiness:T002 | DOCUMENTED_TRANSITION | UNCONFIGURED | refresh_mfa_status! configured   | ACTIVE       | Persisted actor; configured_mfa_level_methods.any?; status differs; no row lock | Validated actor save; updated_at | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-visitor-mfa-readiness:T003 | DOCUMENTED_TRANSITION | NOTHING      | refresh_mfa_status! unconfigured | UNCONFIGURED | Persisted actor; no configured MFA-level methods; status differs; no row lock   | Actor save; updated_at           | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-visitor-mfa-readiness:T004 | DOCUMENTED_TRANSITION | ACTIVE       | refresh_mfa_status! unconfigured | UNCONFIGURED | Persisted actor; no configured MFA-level methods; status differs; no row lock   | Actor save; updated_at           | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+
+Reference IDs0/1/5; SQL default5. before_validation resolves NOTHING placeholder; after_create and
+credential after_commit refresh projected capability. Predicate raises on remaining NOTHING rather
+than silently normalizing. Calculation and save have no row lock/CAS; stale computation/concurrent
+credential changes are a potential projection boundary, not a demonstrated race. Same-status refresh
+is a no-op; no self transition is drawn. No lifecycle terminal/expiry/cancel; effective readiness is
+derived from credentials and duplicated as persisted projection. Does not mean MFA challenge has
+been passed; last_mfa_login_at is separate proof time.
+
+## idp-operator-mfa-readiness
+
+Implementation: `MfaStatusTrackable / MfaStatusCredential`. Storage: `operators` / `mfa_status_id`.
+
+Sources: `app/models/concerns/mfa_status_trackable.rb`,
+`app/models/concerns/mfa_status_credential.rb`, `app/models/operator.rb`,
+`app/models/operator_mfa_status.rb`.
+
+Tests read: `test/models/client_mfa_status_test.rb`, `test/models/operator_mfa_status_test.rb`,
+`test/models/visitor_mfa_status_test.rb`, `test/models/concerns/mfa_status_trackable_test.rb`.
+
+| Transition ID                   | Mutation kind         | From         | Event / Trigger                  | To           | Guard                                                                           | Side effect                      | Source file                                 | Confidence |
+| ------------------------------- | --------------------- | ------------ | -------------------------------- | ------------ | ------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------- | ---------- |
+| idp-operator-mfa-readiness:T001 | DOCUMENTED_TRANSITION | NOTHING      | refresh_mfa_status! configured   | ACTIVE       | Persisted actor; configured_mfa_level_methods.any?; status differs; no row lock | Validated actor save; updated_at | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-operator-mfa-readiness:T002 | DOCUMENTED_TRANSITION | UNCONFIGURED | refresh_mfa_status! configured   | ACTIVE       | Persisted actor; configured_mfa_level_methods.any?; status differs; no row lock | Validated actor save; updated_at | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-operator-mfa-readiness:T003 | DOCUMENTED_TRANSITION | NOTHING      | refresh_mfa_status! unconfigured | UNCONFIGURED | Persisted actor; no configured MFA-level methods; status differs; no row lock   | Actor save; updated_at           | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+| idp-operator-mfa-readiness:T004 | DOCUMENTED_TRANSITION | ACTIVE       | refresh_mfa_status! unconfigured | UNCONFIGURED | Persisted actor; no configured MFA-level methods; status differs; no row lock   | Actor save; updated_at           | app/models/concerns/mfa_status_trackable.rb | CONFIRMED  |
+
+Reference IDs0/1/5; SQL default5. before_validation resolves NOTHING placeholder; after_create and
+credential after_commit refresh projected capability. Predicate raises on remaining NOTHING rather
+than silently normalizing. Calculation and save have no row lock/CAS; stale computation/concurrent
+credential changes are a potential projection boundary, not a demonstrated race. Same-status refresh
+is a no-op; no self transition is drawn. No lifecycle terminal/expiry/cancel; effective readiness is
+derived from credentials and duplicated as persisted projection. Does not mean MFA challenge has
+been passed; last_mfa_login_at is separate proof time.
+
+## idp-client-email-registration-session
+
+Implementation: `app/controllers/concerns/sign_email_registrable.rb`. Storage: Rails session key
+`sign_up_email_flow_state`; no SQL table, PK, FK, default or CHECK.
+
+Sources: `app/controllers/concerns/sign_email_registrable.rb`,
+`app/controllers/auth/app/sign/up/emails_controller.rb`,
+`app/controllers/auth/app/sign/up/check/email/otps_controller.rb`.
+
+Tests read: `test/controllers/concerns/sign/email_registrable_included_do_test.rb`,
+`test/controllers/concerns/sign/email_registration_flow_test.rb`,
+`test/controllers/auth/app/sign/up/check/email/otps_controller_test.rb`.
+
+| Transition ID                              | Mutation kind         | From           | Event / Trigger                                | To             | Guard                                                                                           | Side effect                                                   | Source file                                        | Confidence |
+| ------------------------------------------ | --------------------- | -------------- | ---------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------- | ---------- |
+| idp-client-email-registration-session:T001 | DOCUMENTED_TRANSITION | init           | progress_email_flow!(:create)                  | email_created  | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T002 | DOCUMENTED_TRANSITION | init           | progress_email_flow!(:update)                  | email_verified | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T003 | DOCUMENTED_TRANSITION | init           | reset_email_flow!                              | init           | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T004 | DOCUMENTED_TRANSITION | email_created  | progress_email_flow!(:create)                  | email_created  | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T005 | DOCUMENTED_TRANSITION | email_created  | progress_email_flow!(:update)                  | email_verified | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T006 | DOCUMENTED_TRANSITION | email_created  | reset_email_flow!                              | init           | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T007 | DOCUMENTED_TRANSITION | email_verified | progress_email_flow!(:create)                  | email_created  | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T008 | DOCUMENTED_TRANSITION | email_verified | progress_email_flow!(:update)                  | email_verified | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T009 | DOCUMENTED_TRANSITION | email_verified | reset_email_flow!                              | init           | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T010 | OUT_OF_BAND           | init           | progress_email_flow!(:destroy) declared helper | init           | Helper mapping exists; HTTP destroy caller UNCONFIRMED                                          | Write session state init                                      | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T011 | OUT_OF_BAND           | email_created  | progress_email_flow!(:destroy) declared helper | init           | Helper mapping exists; HTTP destroy caller UNCONFIRMED                                          | Write session state init                                      | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+| idp-client-email-registration-session:T012 | OUT_OF_BAND           | email_verified | progress_email_flow!(:destroy) declared helper | init           | Helper mapping exists; HTTP destroy caller UNCONFIRMED                                          | Write session state init                                      | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED  |
+
+No helper lock or generation check exists on this session key. Durable sign-up/OTP guards remain
+separate. Session storage concurrency guarantees are UNCONFIRMED. Source normalization writes init
+for absent or unrecognized values; unknown input values are not invented lifecycle nodes.
+Terminality is not absorbing: reset remains available. Client destroy progression is declared in
+FLOW_PROGRESSIONS but an HTTP destroy caller is UNCONFIRMED. Visitor OTP controller inherits the
+visitor helper and writes email_verified after verified OTP and before durable flow advancement.
+
+## idp-visitor-email-registration-session
+
+An entry create resets the session phase to init without clearing the durable flow locator; the
+action halts the predecessor before allocating its replacement. Ordinary reset callers retain their
+existing locator-clearing behavior. These are separate session and durable-flow transitions.
+
+| Transition ID                               | Mutation kind         | From           | Event / Trigger | To   | Guard                     | Side effect                                                          | Source file                                           | Confidence |
+| ------------------------------------------- | --------------------- | -------------- | --------------- | ---- | ------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-visitor-email-registration-session:T010 | DOCUMENTED_TRANSITION | email_created  | entry create    | init | Admitted email entry POST | Reset session phase; preserve locator until action halts predecessor | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T011 | DOCUMENTED_TRANSITION | email_verified | entry create    | init | Admitted email entry POST | Reset session phase; preserve locator until action halts predecessor | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+
+Implementation: `app/controllers/auth/com/sign/up/emails_controller.rb`. Storage: Rails session key
+`auth_com_up_email_flow_state`; no SQL table, PK, FK, default or CHECK.
+
+Sources: `app/controllers/auth/com/sign/up/emails_controller.rb`,
+`app/controllers/auth/com/sign/up/check/email/otps_controller.rb`.
+
+Tests read: `test/controllers/concerns/sign/email_registrable_included_do_test.rb`,
+`test/controllers/concerns/sign/email_registration_flow_test.rb`,
+`test/controllers/auth/com/sign/up/check/email/otps_controller_test.rb`.
+
+| Transition ID                               | Mutation kind         | From           | Event / Trigger               | To             | Guard                                                                                           | Side effect                                                   | Source file                                           | Confidence |
+| ------------------------------------------- | --------------------- | -------------- | ----------------------------- | -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| idp-visitor-email-registration-session:T001 | DOCUMENTED_TRANSITION | init           | progress_email_flow!(:create) | email_created  | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T002 | DOCUMENTED_TRANSITION | init           | progress_email_flow!(:update) | email_verified | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T003 | DOCUMENTED_TRANSITION | init           | reset_email_flow!             | init           | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T004 | DOCUMENTED_TRANSITION | email_created  | progress_email_flow!(:create) | email_created  | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T005 | DOCUMENTED_TRANSITION | email_created  | progress_email_flow!(:update) | email_verified | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T006 | DOCUMENTED_TRANSITION | email_created  | reset_email_flow!             | init           | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T007 | DOCUMENTED_TRANSITION | email_verified | progress_email_flow!(:create) | email_created  | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T008 | DOCUMENTED_TRANSITION | email_verified | progress_email_flow!(:update) | email_verified | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+| idp-visitor-email-registration-session:T009 | DOCUMENTED_TRANSITION | email_verified | reset_email_flow!             | init           | Private helper API has no source guard; real HTTP calls require the documented entry/OTP checks | Write session key; reset clears related continuity references | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED  |
+
+No helper lock or generation check exists on this session key. Durable sign-up/OTP guards remain
+separate. Session storage concurrency guarantees are UNCONFIRMED. Source normalization writes init
+for absent or unrecognized values; unknown input values are not invented lifecycle nodes.
+Terminality is not absorbing: reset remains available. Client destroy progression is declared in
+FLOW_PROGRESSIONS but an HTTP destroy caller is UNCONFIRMED. Visitor OTP controller inherits the
+visitor helper and writes email_verified after verified OTP and before durable flow advancement.
+
+App Secret OIDC Base readiness: `ClientSignInFlow#prepare_secret_oidc_issuance!` advances
+`DASHBOARD_PENDING` to `SESSION_ISSUANCE_PENDING` under the authorization transaction and flow
+locks. It requires matching authenticated OIDC actor, irreversible source claim, completed admitted
+Auth ceremony, normal authentication context, and all original deadlines. Completed Auth handoff is
+evidence transport completion, not root login completion.
+
+App Secret OIDC session-limit cancellation uses the existing `SESSION_LIMIT_PENDING` to `FAILED`
+transition. The limitation DELETE arbitrates with issuance under the Client and OIDC transaction
+locks, records the canceled resolution and failed flow on Ticket, then retires the source claim with
+verified `flow_canceled` audit.
+
+App OIDC physical transaction collection locks eligible authorization rows and excludes rows whose
+Secret flow is referenced by a Source claim or Ticket receipt, plus rows referenced by session-limit
+resolutions. This preserves terminal reconciliation proof. It does not add a status transition or
+modify com/org expiry collection. Dependency proof collection remains a separate unfinished
+lifecycle step.
+
+App Secret OIDC limitation selection now enters
+`ClientSessionLimitResolutionTransaction#with_secret_revocation_authority!` before selection or
+existing-session revocation. It locks Client, OIDC authorization, resolution and Secret flow in that
+order, reloads the persisted challenge/actor/open-state/deadline bindings, and permits the callback
+only while the flow is `SESSION_LIMIT_PENDING` without a token or issuance time. Cancellation shares
+that exclusion boundary. This guard restricts the Secret HTTP caller; the direct setter transitions
+inventoried above remain possible on other paths. Separate-connection cancellation/expiration
+barriers verify rejection at the public model boundary; complete concurrent HTTP callback/issuance
+coverage remains pending.
+
+App Secret withdrawal revocation: terminated Client proof under source Client lock authorizes
+revocation. Unclaimed credentials receive discard and retention facts with withdrawal audit in the
+same source transaction. Claimed credentials retain continuation/discard eligibility until the
+existing Ticket terminal reconciliation; withdrawal does not release a claim or physically delete
+its proof.
+
+App Secret issuance withdrawal cancellation: unconfirmed positive issuance enters canceled state
+under its terminated Client lock; encrypted payload is erased and reservation released with source
+cancellation audit. Confirmed and zero-count omitted results remain immutable.
+
+## idp-client-secret-audit-outbox
+
+Source delivery state is distinct from Chronicle commit and business authentication facts.
+
+| Transition ID                       | Classification        | From      | Trigger                                    | To        | Guards                                                                                                                                                         | Effects                                                               | Source                                              | Confidence |
+| ----------------------------------- | --------------------- | --------- | ------------------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------- | ---------- |
+| idp-client-secret-audit-outbox:T001 | DOCUMENTED_TRANSITION | pending   | periodic delivery scan                     | delivered | Matching immutable Chronicle event identity; source row lock                                                                                                   | delivered_at and finite retention timestamps                          | app/jobs/client_secret_audit_delivery_job.rb        | CONFIRMED  |
+| idp-client-secret-audit-outbox:T002 | DOCUMENTED_TRANSITION | delivered | lifecycle collection                       | deleted   | Deadline reached; no hold; no source credential/issuance or Ticket receipt dependency; Chronicle commit; issuance_purged replay barrier requires absent Client | Source DELETE; Chronicle remains; live-owner barriers remain retained | app/operations/client_secret_audit_outbox_purger.rb | CONFIRMED  |
+| idp-client-secret-audit-outbox:T003 | REJECTED_TRANSITION   | pending   | lifecycle collection                       | deleted   | No confirmed delivery                                                                                                                                          | Return undelivered; retain event                                      | app/operations/client_secret_audit_outbox_purger.rb | CONFIRMED  |
+| idp-client-secret-audit-outbox:T004 | DOCUMENTED_TRANSITION | delivered | bounded scan reaches held or dependent row | delivered | Current purger rejects deletion; fixed upper ID bound; recheck suspension on continuation                                                                      | Retain row; enqueue next cursor so later rows can be considered       | app/jobs/client_secret_audit_outbox_purge_job.rb    | CONFIRMED  |
+
+## idp-client-secret-sign-in-receipt
+
+Lifecycle receipt collection advances a bounded fixed-horizon cursor past retained receipts and
+queues continuation on the existing retention queue. A fresh periodic scan recovers lost enqueue.
+`test/integration/app_secret_receipt_collection_journey_test.rb` establishes two canonical root
+logins through HTTP, retains the first receipt under legal hold and collects the later receipt
+through the real lifecycle continuation. Both established root tokens remain usable. Cursor position
+conveys no purge authority.
+
+| Transition ID                          | Classification        | From      | Trigger                     | To        | Guards                                                                                                                                                                                              | Effects                                                                           | Source                                                                                          | Confidence |
+| -------------------------------------- | --------------------- | --------- | --------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- |
+| idp-client-secret-sign-in-receipt:T001 | DOCUMENTED_TRANSITION | absent    | canonical root login commit | committed | Matching durable claim, Client, flow, ceremony and root token                                                                                                                                       | Immutable receipt in the same Ticket transaction                                  | app/models/client_secret_sign_in_receipt.rb                                                     | CONFIRMED  |
+| idp-client-secret-sign-in-receipt:T002 | DOCUMENTED_TRANSITION | committed | lifecycle proof collection  | deleted   | Explicit proof retention after latest continuation deadline and terminal Chronicle time; no Source credential; consumed and purged audit match; no hold; Source Client then OIDC/flow/receipt locks | Receipt DELETE; root token remains; bounded continuation passes retained receipts | app/operations/client_secret_sign_in_receipt_purger.rb; app/jobs/client_secret_lifecycle_job.rb | CONFIRMED  |
+| idp-client-secret-sign-in-receipt:T003 | REJECTED_TRANSITION   | committed | generic flow collection     | absent    | Receipt still references flow                                                                                                                                                                       | Flow retained; no cascade receipt loss                                            | app/jobs/retention_purge_job.rb                                                                 | CONFIRMED  |
+
+## Independent Email and Telephone destination budget writers
+
+The six `idp-*-email-otp.mmd` / `idp-*-telephone-otp.mmd` axes use independently owned
+destination-budget implementations. EmailOtpVerificationFailureBudget and
+TelephoneOtpVerificationFailureBudget each atomically move their own realm/purpose/destination
+counter from absent to 1, from 1 through 4, then to exhausted 5. Exhausted correct/incorrect
+comparisons preserve the value and original TTL. Native expiry removes the budget; successful
+comparison neither creates nor resets it. Cross-channel input, corrupt counter and unavailable
+infrastructure refuse verification. Caller selection is orchestration, not a shared policy writer.
+
+## idp-email-dead-history / idp-telephone-dead-history
+
+| Transition ID                   | Classification        | From                                     | Trigger                                       | To              | Guards                                                                                                                                         | Effects                                                                                                                                                                             | Source                                                         | Confidence |
+| ------------------------------- | --------------------- | ---------------------------------------- | --------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---------- |
+| idp-email-dead-history:T001     | DOCUMENTED_TRANSITION | Source or purge-eligible retained Source | ordinary destroy or EmailIdentifierPurger     | dead history    | Fresh persisted owner/PII under owner then Source locks; no protected email, legal hold or blocking enforcement; scheduled retention matured   | Fingerprint INSERT and physical DELETE in one transaction; later callback failure rolls both back                                                                                   | EmailDeadIdentifierHistory / concrete Email models             | CONFIRMED  |
+| idp-telephone-dead-history:T001 | DOCUMENTED_TRANSITION | Source or purge-eligible retained Source | ordinary destroy or TelephoneIdentifierPurger | dead history    | Fresh persisted owner/PII under owner then Source locks; no legal hold or blocking enforcement; scheduled retention matured                    | Fingerprint INSERT and physical DELETE in one transaction                                                                                                                           | TelephoneDeadIdentifierHistory / concrete Telephone models     | CONFIRMED  |
+| idp-email-dead-history:T002     | REJECTED_TRANSITION   | retained Source                          | premature ordinary destruction                | dead history    | Future discard or purge deadline                                                                                                               | Source remains; no history inserted                                                                                                                                                 | EmailDeadIdentifierHistory                                     | CONFIRMED  |
+| idp-telephone-dead-history:T002 | REJECTED_TRANSITION   | retained Source                          | premature ordinary destruction                | dead history    | Future discard or purge deadline                                                                                                               | Source remains; no history inserted                                                                                                                                                 | TelephoneDeadIdentifierHistory                                 | CONFIRMED  |
+| idp-email-dead-history:T003     | DOCUMENTED_TRANSITION | ORG dead history                         | due whole-Operator physical erasure           | removed history | Fresh Operator lock, both retention deadlines reached, no blocking enforcement or protected Email                                              | Email purge, identity-scoped history DELETE and Operator DELETE in one Zenith transaction; idempotent cross-DB cleanup precedes local commit                                        | RetentionPurgeJob                                              | CONFIRMED  |
+| idp-telephone-dead-history:T003 | DOCUMENTED_TRANSITION | ORG dead history                         | due whole-Operator physical erasure           | removed history | Fresh Operator lock, both retention deadlines reached, no blocking enforcement or protected Email                                              | Telephone purge, identity-scoped history DELETE and Operator DELETE in one Zenith transaction; idempotent cross-DB cleanup precedes local commit                                    | RetentionPurgeJob                                              | CONFIRMED  |
+| idp-email-dead-history:T004     | DOCUMENTED_TRANSITION | APP/COM dead history                     | admitted whole-Identity destroy!              | removed history | Fresh owner lock; both retention deadlines reached; no active legal hold or blocking enforcement; every dependent Contact destruction admitted | Existing Email archive/delete and identity-scoped History DELETE precede parent DELETE in one Zenith transaction; remote child cleanup is idempotent and precedes local erasure     | Client / Visitor callbacks; identity_dead_history_erasure_test | CONFIRMED  |
+| idp-telephone-dead-history:T004 | DOCUMENTED_TRANSITION | APP/COM dead history                     | admitted whole-Identity destroy!              | removed history | Fresh owner lock; both retention deadlines reached; no active legal hold or blocking enforcement; every dependent Contact destruction admitted | Existing Telephone archive/delete and identity-scoped History DELETE precede parent DELETE in one Zenith transaction; remote child cleanup is idempotent and precedes local erasure | Client / Visitor callbacks; identity_dead_history_erasure_test | CONFIRMED  |
+
+APP/COM withdrawal retirement preserves original encrypted PII and lookup digests, creates no
+history, and schedules identifier collection without shortening a longer explicit retention
+deadline. The owner remains present when that identifier-only collection archives the original PII.
+Existing Client/Visitor model destruction checks fresh owner retention and legal/enforcement holds
+before dependent children, then removes that owner's histories after Source archive/delete callbacks
+and before parent DELETE in the same local transaction. Cross-database cleanup is idempotent and
+precedes local children; a failure keeps the owner/history for retry. Raw/bulk parent deletion is
+not an admitted erasure interface. This is not completion of all identifier lifecycle paths.
+
+## Canonical delivered reconciliation (2026-10-06)
+
+The discovery sections above preserve the pre-cycle transition inventory for auditability. The
+following rows are the canonical implementation index after Phases 2–24; they supersede any older
+row in this file that calls one of these axes partial because of a removed direct writer, duplicate
+state carrier or pre-rebuild Secret shape.
+
+| Axis                                      | Canonical state/reference contract                                                                                                                           | Terminal or refusal invariant                                                                                                                                                                                                                                                       | Diagram                                                                                                                                             | Evidence                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| client/visitor/operator sign-in           | One `state_id` reference and named transitions; issuance completes the flow                                                                                  | `EXPIRED`, `CANCELLED`, `HALTED` and `COMPLETED` are absorbing; parent never enters `SESSION_LIMIT_PENDING`                                                                                                                                                                         | `idp-client-sign-in.mmd`, `idp-visitor-sign-in.mmd`, `idp-operator-sign-in.mmd`                                                                     | Phase 2–7 transition tests   |
+| client/visitor/operator sign-up           | Contact/checkpoint completion enters ordinary sign-in admission                                                                                              | Failed, expired and cancelled flows retain terminal facts and clean only owned artifacts                                                                                                                                                                                            | `idp-client-sign-up.mmd`, `idp-visitor-sign-up.mmd`, `idp-operator-sign-up.mmd`                                                                     | Phase 2–7 and Phase 19 tests |
+| session-limit resolution ×3               | Durable child with `PENDING`, `SESSION_SELECTED`, `RESOLVED`, `EXPIRED`, `CANCELLED`                                                                         | Owner, parent flow, browser, realm and optional OIDC transaction are rechecked under lock                                                                                                                                                                                           | realm `idp-*-session-limit-resolution.mmd`                                                                                                          | Phase 4 and Phase 17 tests   |
+| admission binding ×3                      | D-82 binding references are server-issued and browser-bound; distinct pending parents may share an active Auth sid, including previously admitted continuity | GET checks nonce ownership without mutation; attachment grants no new purpose; invalid attachment creates no session or cookie; transitions use the Ticket DB clock; result acceptance rechecks the retained original Base nonce/root after admission expiry; no Auth login session | realm `idp-*-auth-admission-binding.mmd`                                                                                                            | Phase 16 tests               |
+| step-up ceremony                          | Explicit requirement through method choice, admission, Auth, result and Base mutation                                                                        | Stale, future, revoked, mixed, cancelled or conflicting evidence cannot grant freshness                                                                                                                                                                                             | realm `idp-*-step-up-ceremony.mmd`                                                                                                                  | Phase 15–18 tests            |
+| RP session/token ×3                       | RP session is parented by DeviceSession; refresh is independently validated                                                                                  | Credential failure clears RP cookies; dependency failure preserves them; sibling logout is not synchronous                                                                                                                                                                          | realm `idp-*-rp-session.mmd` and `idp-*-token.mmd`                                                                                                  | Phase 8–14 tests             |
+| Secret credential/issuance/receipt/outbox | Identity-first Client-owned Secret, source receipt and local outbox facts                                                                                    | Claim is irreversible; retries reconcile; holds and live proof block physical deletion                                                                                                                                                                                              | `idp-client-secret-credential.mmd`, `idp-client-secret-issuance.mmd`, `idp-client-secret-sign-in-receipt.mmd`, `idp-client-secret-audit-outbox.mmd` | Phase 21–23 tests            |
+| contact bindings                          | Effective email/telephone facts with owner-side and destination-side uniqueness                                                                              | Pending, released or competing evidence cannot occupy or reattach an effective binding                                                                                                                                                                                              | `idp-client-email-credential.mmd`, `idp-client-telephone-credential.mmd`                                                                            | Phase 19 tests               |
+| external identity                         | Active issuer/subject binding with release history                                                                                                           | Provider browser state, email, display name and stale callbacks never resolve an actor                                                                                                                                                                                              | `idp-client-external-identity.mmd`, `idp-client-social-ceremony.mmd`                                                                                | Phase 20 tests               |
+
+The old `sign-*` diagrams are archived link-preserving artifacts. They are not used to infer current
+writers or routes; the canonical diagram registry is `docs/mermaid/README.md`.
+
+## idp-op-client-activation
+
+R5-WU19, op_base_app / op_base_com / op_base_org `op_client_activations`, unique (`client_id`,
+`contract_epoch`).
+
+| From     | To                 | Writer                     | Guard                                                                                                 |
+| -------- | ------------------ | -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| no row   | enabled / disabled | `OpClientActivationWriter` | realm epoch row locked; client from `RpCellBinding`; actor, audit and 64-hex manifest digest required |
+| enabled  | disabled           | `OpClientActivationWriter` | same; used for a failed-cell rollback-to-disabled                                                     |
+| disabled | enabled            | `OpClientActivationWriter` | same                                                                                                  |
+
+`OpClientAdmissionQuery.admitted?` reads the writer for the current epoch only. It is consulted at
+the OP authorization and token endpoints in an `op-base-*` role process (`OpClientAdmissionGate`);
+the `shared` transitional role does not consult it.
+
+## idp-{client,visitor,operator}-security-mode (WU-30, 2026-10-23)
+
+Implementation: `SecurityModeConfigurable`, `{Client,Visitor,Operator}SecurityMode` (rows 3 and 7
+created by migration `20261023140001`). Storage: `{clients,visitors,operators}.security_mode_id` NOT
+NULL, FK, CHECK on the mode table `id IN (3, 7)`. Any other value permits neither sign-in nor
+authorization (`AuthenticationBase#pending_sign_in_result_after_primary!`).
+
+| Transition ID                   | From     | Event                              | To       | Guard                                             | Side effect                                             | Source                                                                            |
+| ------------------------------- | -------- | ---------------------------------- | -------- | ------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| idp-client-security-mode:T001   | —        | sign-up (email, telephone, social) | NORMAL   | creation sets the mode explicitly                 | —                                                       | `app/operations/*sign_up_candidate_creator.rb`, `social_auth_signup_finalizer.rb` |
+| idp-client-security-mode:T002   | NORMAL   | owner update                       | ADVANCED | two active Passkeys counted under the client lock | `CredentialSecurityTransition` `security_mode_advanced` | `app/controllers/base/app/identity/mfa/challenges_controller.rb`                  |
+| idp-client-security-mode:T003   | ADVANCED | owner update                       | NORMAL   | settings Step-Up                                  | every session revoked (`security_mode_normal`)          | same                                                                              |
+| idp-visitor-security-mode:T001  | —        | sign-up                            | NORMAL   | creation sets the mode explicitly                 | —                                                       | `app/operations/*sign_up_candidate_creator.rb`                                    |
+| idp-operator-security-mode:T001 | —        | migration backfill                 | ADVANCED | —                                                 | —                                                       | `db/org_zenith_migrate/20261023140001_backfill_operator_security_mode.rb`         |
+
+COM has no owner update page yet; ORG never leaves ADVANCED. An ADVANCED actor may not delete a
+Passkey below two (`AuthMethodGuard.can_remove_passkey?`); an ORG Operator with fewer than two is
+limited to Passkey registration and sign-out (`OrgSecondPasskeyGate`, D-132).

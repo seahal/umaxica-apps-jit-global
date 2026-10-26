@@ -13,8 +13,7 @@ module Palm
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
-        before_action :authenticate_oidc_rp_session!, only: :create,
-                                                      unless: -> { params[:logout_challenge].present? }
+        before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -23,8 +22,6 @@ module Palm
         public
 
         def show
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           complete_oidc_rp_logout!
         end
 
@@ -37,8 +34,6 @@ module Palm
         end
 
         def create
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           launch_oidc_rp_logout!(
             client_id: RpDeploymentBindingValue.client_id("palm-app"),
             issuer_resource_type: "client",

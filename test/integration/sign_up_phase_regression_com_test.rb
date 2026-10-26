@@ -27,23 +27,9 @@ class SignUpPhaseRegressionComTest < ActionDispatch::IntegrationTest
     issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
-    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-    get auth_com_sign_up_path(ri: "jp", entry_ref: issuance.reference)
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    post "/ceremony_bindings",
-         params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers
-
-    assert_response :see_other
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_com_sign_up_path(ri: "jp", entry_ref: issuance.reference)
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_sign_up_path(ri: "jp"),
-         params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers
+    admit_auth_ceremony_entry!(
+      auth_com_sign_up_path, reference: issuance.reference, params: { ri: "jp" },
+    )
 
     assert_response :see_other
   end
@@ -262,7 +248,7 @@ class SignUpPhaseRegressionComTest < ActionDispatch::IntegrationTest
     assert_not_includes audit.context.to_json, "phase-audit@example.com"
   end
 
-  test "starting again from the entry halts the earlier flow, and its stale page cannot halt the new flow" do
+  test "a second entry submit is refused while the first attempt is in progress" do
     post auth_com_sign_up_email_url(ri: "jp"),
          params: { :visitor_email => { raw_address: "phase-flow-a@example.com", confirm_policy: "1" },
                    "cf-turnstile-response" => "test", }
@@ -282,60 +268,32 @@ class SignUpPhaseRegressionComTest < ActionDispatch::IntegrationTest
     transaction = VisitorEmailCeremonyTransaction.find_by!(
       transaction_id: payload.fetch(:sign_up_email_transaction_ref),
     )
-    otp_data_a = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
 
     assert_equal candidate.public_id, transaction.email_candidate_ref
     assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
-    patch otp_url_a,
-          params: { visitor_email: { pass_code: otp_data_a } }
-    flow_a = VisitorSignUpFlow.order(:created_at).last
+    patch otp_url_a, params: { visitor_email: { pass_code: otp_data } }
+    flow = VisitorSignUpFlow.order(:created_at).last
+    flow_facts = flow.attributes
 
-    post auth_com_sign_up_email_url(ri: "jp"),
-         params: { :visitor_email => { raw_address: "phase-flow-b@example.com", confirm_policy: "1" },
-                   "cf-turnstile-response" => "test", }
-    otp_url_b = response.location
-    flow_b = VisitorSignUpFlow.order(:created_at).last
+    clear_enqueued_jobs
+    assert_no_difference ["VisitorSignUpFlow.count", "VisitorEmail.count"] do
+      post auth_com_sign_up_email_url(ri: "jp"),
+           params: { :visitor_email => { raw_address: "phase-flow-b@example.com", confirm_policy: "1" },
+                     "cf-turnstile-response" => "test", }
+    end
 
-    assert_not_equal flow_a.id, flow_b.id
-    assert_equal VisitorSignUpFlowStatus::HALTED, flow_a.reload.status_id
-    assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, flow_b.status_id
+    assert_response :unprocessable_content
+    assert_includes response.body, I18n.t("sign.com.registration.email.create.contact_held")
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob
+    assert_equal flow_facts, flow.reload.attributes
 
     patch auth_com_sign_up_check_email_birthdate_url(ri: "jp", fb: binding_a),
-          params: { requirement: "birthdate", checkpoint_version: flow_a.checkpoint_version, birthdate: "1990-01-15" }
+          params: { requirement: "birthdate", checkpoint_version: flow.checkpoint_version, birthdate: "1990-01-15" }
 
     assert_response :conflict
     assert_equal REFUSAL_BODY, response.body
-    assert_equal VisitorSignUpFlowStatus::HALTED, flow_a.reload.status_id
-    assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, flow_b.reload.status_id
-
-    candidate = VisitorEmail.order(:created_at).last
-    delivery =
-      enqueued_jobs.reverse.find do |entry|
-        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
-
-        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
-        payload.fetch(:public_id) == candidate.public_id
-      end
-
-    assert_not_nil delivery
-    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
-    transaction = VisitorEmailCeremonyTransaction.find_by!(
-      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
-    )
-    otp_data_b = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
-
-    assert_equal candidate.public_id, transaction.email_candidate_ref
-    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
-    patch otp_url_b,
-          params: { visitor_email: { pass_code: otp_data_b } }
-    birthdate_url_b = response.location
-    patch birthdate_url_b,
-          params: { requirement: "birthdate",
-                    checkpoint_version: flow_b.reload.checkpoint_version,
-                    birthdate: "1990-01-15", }
-
-    assert_response :redirect
-    assert_equal VisitorSignUpFlowStatus::COMPLETED, flow_b.reload.status_id
+    assert_equal flow_facts, flow.reload.attributes
   end
 
   test "a second tab that submits the otp after the first tab advanced the flow halts it before finalization" do

@@ -347,8 +347,10 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         end
         token.update!(restored)
       end
+      # Consolidation ADR 2.3: the window is the shorter of the requirement TTL and the mode maximum.
+      window = actor.security_mode_advanced? ? StepUpResolver::ADVANCED_MAXIMUM_TTL : StepUpRequirement::DEFAULT_TTL
       [0, 1].each do |microseconds|
-        parents.stub(:database_now, event + StepUpRequirement::DEFAULT_TTL + Rational(microseconds, 1_000_000)) do
+        parents.stub(:database_now, event + window + Rational(microseconds, 1_000_000)) do
           assert_no_difference(-> { parents.count }) do
             assert_raises(BaseAuthAdmissionCoordinator::Denied) do
               BaseStepUpAdmissionIssuer.call!(
@@ -360,7 +362,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         end
       end
       issuance =
-        parents.stub(:database_now, event + StepUpRequirement::DEFAULT_TTL - Rational(1, 1_000_000)) do
+        parents.stub(:database_now, event + window - Rational(1, 1_000_000)) do
           BaseStepUpAdmissionIssuer.call!(
             actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
             base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,

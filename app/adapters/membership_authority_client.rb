@@ -12,7 +12,8 @@ class MembershipAuthorityClient
 
   def initialize(surface:, access_token:, persona:)
     @client_id, resource_type = CLIENTS.fetch(surface.to_s)
-    @base = "#{OidcIssuer.for_resource_type(resource_type)}/api/v0/membership/#{surface}"
+    base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type(resource_type)
+    @base = "#{base_origin}/api/v0/membership/#{surface}"
     @access_token = access_token.to_s
     @persona = persona.to_s
   end

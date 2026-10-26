@@ -30,6 +30,21 @@ class IdentityPasskeyNameCommitterTest < ActiveSupport::TestCase
     end
   end
 
+  # adr/authentication-security-mode.md D3: one Step-Up authorizes one rename.
+  test "a second rename with the same Step-Up is refused on every surface" do
+    SURFACES.each do |actor_class, key_class, token_class, outbox_class, owner_key, surface|
+      actor, token, passkey = authorized_passkey(actor_class, key_class, token_class, owner_key, surface)
+
+      IdentityPasskeyNameCommitter.call!(actor:, token:, passkey:, description: "First name")
+
+      assert_raises(IdentityPasskeyNameCommitter::Denied, surface) do
+        IdentityPasskeyNameCommitter.call!(actor:, token: token.reload, passkey:, description: "Second name")
+      end
+      assert_equal "First name", passkey.reload.description, surface
+      assert_equal 1, outbox_class.where(external_id: passkey.external_id).count, surface
+    end
+  end
+
   test "an identical description writes no edit event on every surface" do
     SURFACES.each do |actor_class, key_class, token_class, outbox_class, owner_key, surface|
       actor, token, passkey = authorized_passkey(actor_class, key_class, token_class, owner_key, surface)

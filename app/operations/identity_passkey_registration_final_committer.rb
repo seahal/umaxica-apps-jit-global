@@ -162,6 +162,7 @@ class IdentityPasskeyRegistrationFinalCommitter
           ensure_current_registration_authority!(actor, token, transaction)
 
           credential = create_credential!(config, actor, transaction, candidate)
+          consume_registration_step_up!(actor, token, transaction)
           candidate.update!(consumed_at: now)
           transaction.commit_registration_consumption!(
             now: now, method: "passkey", registered_credential_ref: credential.public_id,
@@ -200,16 +201,29 @@ class IdentityPasskeyRegistrationFinalCommitter
       )
     end
 
+    # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent
+    # with it. A bootstrap registration carries no Step-Up.
+    def consume_registration_step_up!(actor, token, transaction)
+      return if transaction.purpose == "bootstrap"
+
+      token.consume_step_up_evidence!(requirement: registration_policy(actor).management_requirement(token: token))
+    rescue TokenStatusManagement::StepUpEvidenceUnavailable
+      refuse!("passkey registration requires current scoped Step-Up")
+    end
+
+    def registration_policy(actor)
+      case actor
+      when Client then ClientPasskeyPolicy.new(ClientPasskey, user: actor)
+      when Visitor then VisitorPasskeyPolicy.new(VisitorPasskey, user: actor)
+      when Operator then OperatorPasskeyPolicy.new(OperatorPasskey, user: actor)
+      else refuse!("unsupported passkey registration actor")
+      end
+    end
+
     def ensure_current_registration_authority!(actor, token, transaction)
       return if transaction.purpose == "bootstrap"
 
-      policy =
-        case actor
-        when Client then ClientPasskeyPolicy.new(ClientPasskey, user: actor)
-        when Visitor then VisitorPasskeyPolicy.new(VisitorPasskey, user: actor)
-        when Operator then OperatorPasskeyPolicy.new(OperatorPasskey, user: actor)
-        else refuse!("unsupported passkey registration actor")
-        end
+      policy = registration_policy(actor)
       evidence = policy.management_credential(token: token)
       refuse!("passkey registration evidence is unavailable") unless evidence
 

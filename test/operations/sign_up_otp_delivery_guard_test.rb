@@ -20,7 +20,7 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
       test "#{surface} #{channel} signup delivery checks its original #{state} generation under owning locks" do
         owner = owner_model.create!(
           security_mode_id: SecurityModeConfigurable::NORMAL,
-          status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+          status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
         )
         destination =
           if channel == :email
@@ -84,9 +84,8 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
 
         assert_equal state == "current", outcome
         assert_equal((state == "current") ? 1 : 0, sent)
-        expired = flow.reload.sign_up_expired?
-
-        assert_equal state == "expired", expired
+        # D-177: an undelivered expired generation leaves the Ticket for SignUpExpiryJob.
+        assert_not flow.reload.sign_up_terminal?
         assert_nil contact.reload.binding_finalized_at
         assert_equal owner.id, contact[owner_key]
       end

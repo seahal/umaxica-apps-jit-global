@@ -334,9 +334,16 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             assert_equal original_audits, audits.count
           end
 
+          # A finalized registration spends its Step-Up evidence (ADR authentication-security-mode D3);
+          # every other root fact is kept, and a refusal keeps the evidence too.
+          finalized = %i(success proof_before source_fault receipt_fault root_before).include?(scenario)
+          spent = finalized ? root_facts.keys.grep(/\Alast_step_up_/) + ["updated_at"] : []
           assert_withheld("Contact finalization must not replace root authority") {
-            root_facts == token.reload.attributes
+            root_facts.except(*spent) == token.reload.attributes.except(*spent)
           }
+          # A receipt fault rolls back the root-side consumption with the receipt; the exact retry then
+          # finalizes through the committed Source provenance without consuming again.
+          assert_nil token.last_step_up_at if finalized && scenario != :receipt_fault
         end
       end
     end

@@ -57,7 +57,10 @@ class BrowserRpParentStateFailClosedTest < ActionDispatch::IntegrationTest
 
       assert_response :success
 
-      AuthenticationLogoutCurrentSession.call(resource: @user, token: @root_token, reason: "user_logout")
+      AuthenticationLogoutCurrentSession.call(
+        cause: "browser_logout", resource: @user, token: @root_token,
+        reason: "user_logout",
+      )
       present_credentials
       get "/dashboard"
     end

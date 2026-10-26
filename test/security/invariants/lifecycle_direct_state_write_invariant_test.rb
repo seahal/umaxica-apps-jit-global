@@ -8,10 +8,9 @@ class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
   LIFECYCLE_CARRIERS = %w(
     ClientSignInFlow VisitorSignInFlow OperatorSignInFlow
     ClientSignUpFlow VisitorSignUpFlow OperatorSignUpFlow
-    ClientSignOutFlow VisitorSignOutFlow OperatorSignOutFlow
   ).freeze
   TRANSITION_CONCERNS = %r{
-    app/models/concerns/(flow_base|flow_sign_in|flow_sign_up|flow_sign_out|sign_flow|sign_out_flow|
+    app/models/concerns/(flow_base|flow_sign_in|flow_sign_up|sign_flow|
       sign_up_flow_ticket|session_limit_resolution_transactionable)\.rb\z
   }x
   NON_LIFECYCLE_WRITER_ALLOWLIST = %w(

@@ -253,7 +253,8 @@ Birthdate values use the exact `YYYY-MM-DD` text form: four-digit year, two-digi
 two-digit day, ten characters total. The format validator accepts only years `1900..9999`, months
 `01..12`, and days `01..31`. It does not reject calendar-impossible dates such as `1900-02-29`,
 `2000-02-31`, or `2000-04-31`. The relative-date validator separately requires the value to be
-before the registration date; the current date is not accepted.
+before the registration date; the current date is not accepted. For sign-up age eligibility such a
+date counts as the first day of the following month (`AgeEligibility`).
 
 UI collection may be stricter than the stored structural domain. Current sign-up checkpoint forms
 use native date inputs, which typically prevent users from entering calendar-impossible dates even

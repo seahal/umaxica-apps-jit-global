@@ -80,6 +80,8 @@ module Base
           render inertia: "base/org/identity/secret_credentials/new",
                  props: new_page_props,
                  status: :unprocessable_content
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
 
         def update
@@ -99,11 +101,16 @@ module Base
             actor: current_operator,
             secret_credential: @secret_credential,
             params: secret_credential_params,
+            step_up_token: current_session_token,
+            step_up_requirement: step_up_requirement(scope: "settings_secret_credential"),
+            request: request,
           )
           redirect_to(
             base_org_identity_secret_path(result.secret_credential.public_id, ri: params[:ri]),
             status: :see_other,
           )
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
 
         def destroy
@@ -115,8 +122,15 @@ module Base
             )
             return
           end
-          OperatorSecretCredentialsDestroy.call(actor: current_operator, secret_credential: @secret_credential)
+          OperatorSecretCredentialsDestroy.call(
+            actor: current_operator, secret_credential: @secret_credential,
+            step_up_token: current_session_token,
+            step_up_requirement: step_up_requirement(scope: "settings_secret_credential"),
+            request: request,
+          )
           redirect_to(base_org_identity_secrets_path(ri: params[:ri]), status: :see_other)
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
 
         private

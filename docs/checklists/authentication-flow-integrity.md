@@ -35,6 +35,19 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   purpose-constrained intent. Switch copies its original curfew across repeated switches. A
   re-verification Binding records `not_applicable`; NULL does not select an intent. The acceptance
   code's shorter lifetime remains independent of curfew storage.
+- APP/COM sign-up Flows have one immutable Admission owner. Concurrent creation admits at most
+  one in-progress Flow per Binding, while terminal history remains distinct. Binding collection
+  retains every child until it is terminal, physically purgeable and either cleanup completed or
+  registration completed; collection deletes the Flow rows before their restrictive Binding and
+  leaves the principal and Auth-session records to their own retention owners.
+- APP Social registration checks the retained Flow-to-Binding FK even when the result signature,
+  provider candidate and browser/Admission proof are valid. A foreign or missing owner is refused
+  before result/candidate consumption or principal creation. The same check protects committed
+  receipt reads and completion-reference writes; refusal preserves an already registered identity.
+- APP telephone Passkey saving locks the Flow before the principal and rechecks its state,
+  deadline and request gate after waiting. An ended or expired registration creates no credential
+  or Secret allocation; expiry uses the named termination operation. Concurrent verified saves
+  return the existing success without adding another pending Passkey or allocation.
 
 ## FLOW-2 — Safe reload and contradictory safe requests
 

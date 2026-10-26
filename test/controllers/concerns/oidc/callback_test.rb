@@ -95,8 +95,8 @@ class OidcCallbackTestController < ApplicationController
     self.class.use_rp_credentials == true
   end
 
-  def sign_in_url_with_pt(_return_to)
-    initiate_oidc_session!(pt: "/")
+  def sign_in_url_with_target(target_link_uri)
+    initiate_oidc_session!(target_link_uri: target_link_uri)
   end
 
   def oidc_visa_authority_host
@@ -197,6 +197,22 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_redirected_to "/after"
     assert_equal :rp_session, OidcCallbackTestController.last_login_kwargs.fetch(:establishment)
+  end
+
+  # D-80 / D-110 / WU-10: a silent (prompt=none) recovery answered login_required moves to exactly
+  # one interactive entry; the callback itself starts no new authorization and exchanges nothing.
+  test "login_required after a silent recovery goes once to the interactive sign entry without a retry" do
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("login_required exchanges no code") }) do
+      get "/oidc/callback",
+          params: { error: "login_required", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
+    end
+
+    assert_response :see_other
+    assert_equal "/sign", URI.parse(response.location).path
+    assert_not_includes response.location.to_s, "prompt"
   end
 
   test "show rejects scalar-only legacy state before token exchange" do

@@ -6,7 +6,11 @@ require "test_helper"
 class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  test "all thirteen canonical Jump issuers publish the exact RT signing key" do
+  test "all sixteen canonical Jump issuers publish the exact RT signing key" do
+    # Other tests intentionally reload the process-global registry with fixture keys. Rebuild it
+    # from the restored process environment so this cross-host contract is order-independent.
+    JitSecurityJwtRegistry.reload!
+
     issuers = {
       "AUTH_APP" => "https://auth.umaxica.app",
       "AUTH_COM" => "https://auth.umaxica.com",
@@ -14,6 +18,9 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       "BASE_APP" => "https://www.umaxica.app",
       "BASE_COM" => "https://www.umaxica.com",
       "BASE_ORG" => "https://www.umaxica.org",
+      "VISA_APP" => "https://visa.umaxica.app",
+      "VISA_COM" => "https://visa.umaxica.com",
+      "VISA_ORG" => "https://visa.umaxica.org",
       "CORE_APP" => "https://jp.umaxica.app",
       "CORE_COM" => "https://jp.umaxica.com",
       "CORE_ORG" => "https://jp.umaxica.org",
@@ -24,6 +31,7 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
     }
 
     assert_equal issuers.keys.sort, JumpRtSurface::ISSUER_NAMESPACES.sort
+    published_keys = {}
     issuers.each do |namespace, origin|
       tld = namespace.split("_").last.downcase
       peer = namespace.start_with?("BASE_") ? "auth" : "www"
@@ -54,6 +62,7 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       end
       assert_includes keys.pluck("kid"), header.fetch("kid"), namespace
       assert_empty keys.flat_map(&:keys) & JitSecurityJwtJwk::PRIVATE_FIELDS, namespace
+      published_keys[namespace] = keys
       verified, = JWT.decode(
         token, nil, true, algorithms: ["ES384"],
                           jwks: JWT::JWK::Set.new(response.parsed_body),
@@ -61,6 +70,15 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal claims, verified, namespace
+    end
+
+    %w(APP COM ORG).each do |realm|
+      base_keys = published_keys.fetch("BASE_#{realm}")
+      visa_keys = published_keys.fetch("VISA_#{realm}")
+      base_public_material = base_keys.map { |key| key.slice("kty", "crv", "x", "y") }
+      visa_public_material = visa_keys.map { |key| key.slice("kty", "crv", "x", "y") }
+
+      assert_empty base_public_material & visa_public_material, "BASE_#{realm} and VISA_#{realm} JWKS overlap"
     end
   end
 end

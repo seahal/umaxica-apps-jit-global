@@ -215,7 +215,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_predicate query["pt"], :present?
   end
 
-  test "MFA disable through controller retains current session and revokes other sessions and step-up grants" do
+  test "a Security Mode downgrade through the controller revokes every session including the current one" do
     @user.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     satisfy_user_verification(@token, scope: "settings_mfa")
     mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_mfa")
@@ -245,7 +245,8 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_equal before_audit_count + 1,
                  ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
-    assert_predicate @token.reload, :currently_usable?
+    # Consolidation ADR 2.5: after ADVANCED -> NORMAL every session is revoked; a new sign-in is required.
+    assert_not_predicate @token.reload, :currently_usable?
     assert_predicate other_token.reload, :revoked?
     assert_nil @token.last_step_up_at
     assert_nil other_token.last_step_up_at

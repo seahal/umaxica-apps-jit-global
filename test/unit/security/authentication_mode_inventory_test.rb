@@ -58,8 +58,8 @@ module Security
       assert_equal :deny_all, MixedController.authentication_mode_for(:show)
     end
 
-    test "Base com token refresh is fail-closed by default while create remains explicitly open" do
-      controller = Base::Com::Edge::V0::Token::RefreshesController
+    test "Visa com token refresh is fail-closed by default while create remains explicitly open" do
+      controller = Visa::Com::Edge::V0::Token::RefreshesController
 
       assert_equal :deny_all, controller.authentication_mode_for(:show)
       assert_equal :open, controller.authentication_mode_for(:create)

@@ -7,7 +7,7 @@ requires discoverable credentials (the ORG non-discoverable compatibility paragr
 superseded), the capacity is ten Passkeys per Identity (the four-slot capacity below is
 superseded), and the authenticator stores no identifying `user.name`. This records the adopted design only. Implementation, application
 audit, migration planning and runtime verification are outside this ADR-only change and remain
-unverified. Acceptance does not certify that the current sign-in paths satisfy this contract.
+unverified. The four-slot and non-discoverable alternatives below are historical only.
 
 ## Context
 
@@ -63,11 +63,11 @@ implementation verification; padding alone does not establish non-disclosure.
 
 ## Passkey Credential Ownership
 
-*(Capacity superseded 2026-10-23: ten per Identity, see the Status amendment.)* An Identity may retain multiple Passkeys, with a maximum of **four slots per Identity** on APP,
-COM and ORG. This expressly replaces the ten-credential capacity accepted on 2026-10-19; it does
-not imply that four-slot enforcement already exists. Slot persistence and safe handling of an
-existing owner above four require later investigation; this decision authorizes no deletion,
-renumbering or destructive migration.
+An Identity may retain multiple Passkeys, with a maximum of **ten retained Passkeys per Identity**
+on APP, COM and ORG. Every retained row counts regardless of its active or terminal status, as
+specified by [Passkey Current State, Registration Limit, and Chronicle Delivery](passkey-current-state-limit-and-chronicle-outbox.md).
+The limit is owner-serialized; this decision authorizes no deletion, renumbering or destructive
+migration of existing rows above the limit.
 
 Any one active, valid credential of the selected Identity may satisfy the Passkey authentication
 requirement. Slot number and registration order MUST NOT select the only usable credential.
@@ -117,19 +117,20 @@ against models, database definitions and existing contracts. These guarantees ha
 audited in this change**. A missing guarantee blocks dependent implementation until its smallest
 necessary contract decision is accepted.
 
+**Amendment (owner, 2026-10-26).** The Employee Number is the Operator's `public_id`. No separate
+employee-number column or external source exists or is introduced; Standby selection normalizes the
+input with `Operator.normalize_public_id` and looks up `Operator.public_id`. Its uniqueness,
+normalization and immutability follow [identifier contract](identifier-contract.md) for public ids.
+
 Standby MUST preserve `standby` authentication context, existing eligibility policy and permission
 restrictions, shared WebAuthn verification, and the existing Operator credential store. Step-Up and
 automatic promotion to Normal remain forbidden. Standby creates no separate Passkey type or
 registration path. Historical Emergency names in routes and challenge purposes are not renamed
 by this ADR.
 
-*(Superseded 2026-10-23: ORG requires discoverable credentials; no existing credentials remain after the database reset.)* ORG non-discoverable credentials MUST retain compatibility. Their existing `allowCredentials`
-behavior requires investigation before any change. A response carrying real account-specific
-credential IDs may enable enumeration even when padded. Pre-authentication Identity and credential
-non-disclosure remains required; the implementation MUST demonstrate compatibility and
-non-disclosure together. If it cannot, that portion is **Blocked pending an additional design
-decision**. Neither exposing descriptors nor silently requiring discoverable ORG credentials is
-an approved resolution. The APP/COM empty-list rule is not automatically imposed on ORG.
+ORG registration requires discoverable credentials. ORG authentication options therefore preserve
+the discoverable-credential contract and do not introduce an account-specific `allowCredentials`
+compatibility path. Pre-authentication Identity and credential non-disclosure remain required.
 
 ## Security Requirements
 
@@ -198,8 +199,8 @@ No ADR is fully superseded. Historical decisions and their rationale remain inta
 | --- | --- | --- |
 | [Discoverable direct sign-in](webauthn-discoverable-direct-sign-in.md) | Partially Superseded | Replace usernameless account selection in decision 1 and actor-unbound issuance in decision 3; decision 4 gains mandatory equality with the selected Identity. Preserve descriptor non-disclosure, cryptographic checks, discoverable registration, UV, RP/Origin, replay protection and existing APP/COM compatibility exclusions. Its rejection of identifier-first is limited to the old real-descriptor design. |
 | [User handle](webauthn-user-handle.md) | Amended | Usernameless wording is historical; server-fixed selection now precedes verification. Preserve opaque immutable handles, decoded comparison and prohibition on client-handle authority. |
-| [Identity resolution and credential binding](identity-resolution-and-credential-binding.md) | Amended | Apply effective Contact Binding resolution to APP/COM Passkey selection and require transaction-fixed ownership equality. Preserve its four-slot target, binding lifecycle and other credential contracts. |
-| [Passkey lifecycle and limit](passkey-current-state-limit-and-chronicle-outbox.md) | Partially Superseded | Replace ten-per-owner capacity and refusal of the eleventh with four-slot capacity. Do not infer a new database mechanism: enforcement design and existing-data transition require investigation. Preserve owner serialization, physical lifecycle, uniqueness and Chronicle/outbox contracts. |
+| [Identity resolution and credential binding](identity-resolution-and-credential-binding.md) | Amended | Apply effective Contact Binding resolution to APP/COM Passkey selection and require transaction-fixed ownership equality. Preserve the ten-per-Identity capacity, binding lifecycle and other credential contracts. |
+| [Passkey lifecycle and limit](passkey-current-state-limit-and-chronicle-outbox.md) | Amended | Preserve the ten-per-owner capacity, owner serialization, physical lifecycle, uniqueness and Chronicle/outbox contracts. The earlier four-slot partial supersession is withdrawn. |
 | [Security Mode](authentication-security-mode.md) and [Security Cycle](authentication-security-cycle-consolidation-2026-10-15.md) | Preserved | Keep their existing precedence, two-active-Passkey holding minimum, mode gates, one-Passkey evidence, Step-Up and Pending recovery/lifetime decisions. |
 | [Passkey UV](passkey-uv-policy.md) and [identifier contract](identifier-contract.md) | Preserved | No UV relaxation, handle reformatting or speculative Employee Number schema. |
 | [Base/Secret/Core precedence](base-secret-core-contract-precedence.md) and [Base/Auth boundary](base-auth-ceremony-and-seven-rp-boundary.md) | Preserved | Keep admission, ceremony, session and authorization ownership, including subsequent accepted amendments. |
@@ -221,7 +222,7 @@ Step-Up proof semantics. Evaluate lifecycle changes between issuance and complet
 existing ownership and concurrency boundaries.
 
 Pending implementation work includes the Employee Number authority audit, ORG descriptor privacy
-and compatibility decision where necessary, four-slot enforcement/transition investigation, and
+verification, ten-slot enforcement/transition verification, and
 response/timing non-disclosure verification. These are not claims of discovered code defects.
 No application, schema, migration, configuration, test or UI changes are authorized by this record.
 
@@ -246,6 +247,6 @@ and appropriate integration/concurrency checks. None were executed by this ADR-o
    credentials, and demonstrates non-disclosure or remains blocked. Standby cannot Step-Up or
    become Normal through completion, refresh or renewal.
 6. Base/Auth admission, establishment, session limits, cooldown, Security Mode gates, the
-   `ADVANCED` two-credential minimum and audit continuity remain intact. Four-slot capacity covers
+   `ADVANCED` two-credential minimum and audit continuity remain intact. Ten-slot capacity covers
    the nearest reachable below/at/above-limit cases and concurrent last-slot registration without
    silently deleting existing credentials.

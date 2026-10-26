@@ -64,7 +64,13 @@ module Tech
               device_session_id: usage.device_session_id,
             )
 
-            usage.revoke!(status: "failed") unless usage.revoked?
+            # A rejected callback ends only the exact RP grant it just authenticated.
+            unless usage.revoked?
+              OpAuthorityStopCommitter.stop_grant(
+                grant: usage, cause: "token_revocation", principal_public_id: operator.public_id.to_s,
+                authority_evidence_ref: "tech_callback_refused",
+              )
+            end
           end
         end
       end

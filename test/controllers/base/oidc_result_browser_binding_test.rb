@@ -3,17 +3,18 @@
 require "test_helper"
 
 class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
-  test "an authenticated OIDC result cannot establish a root in a different Base browser in any realm" do
+  test "a Visa result binds attachment confirmation redemption and root issuance to their owning browsers" do
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     [
-      ["app", "core-app-jp", "client", ENV.fetch("PUBLIC_VISA_SERVICE_URL"),
-       ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), Client, ClientToken,],
-      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"),
-       ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), Visitor, VisitorToken,],
-      ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_VISA_STAFF_URL"),
-       ENV.fetch("PUBLIC_AUTH_STAFF_URL"), Operator, OperatorToken,],
-    ].each do |surface, client_id, realm, base_host, auth_host, actor_model, token_model|
+      ["app", "core-app-jp", "client", ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+       Client, ClientToken, :user_id, ClientStatus::ACTIVE,],
+      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+       Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE,],
+      ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+       Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE,],
+    ].each do |surface, client_id, realm, visa_host, auth_host, actor_model, token_model, owner_key, active_status|
+      navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site" }
       parameters = {
         response_type: "code",
         client_id:,
@@ -26,49 +27,11 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
         ri: "jp",
       }
       owner = open_session
-      owner.host!(base_host)
+      owner.host!(visa_host)
       owner.https!
-      owner.get("/oauth/authorize", params: parameters)
-      form = owner.response.parsed_body.at_css("form")
-      csrf = form.at_css('input[name="authenticity_token"]')["value"]
-      headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-      owner.post(
-        "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                            headers:,
-      )
-      begin
-        fv5006 = owner
-        fv5008 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-        fv5007 = fv5006.response.cookies[fv5008]
-        if fv5007.nil?
-          fv5011 = fv5006.response.headers["Set-Cookie"] || fv5006.response.headers["set-cookie"]
-          fv5010 =
-            if fv5011.is_a?(String) && fv5011.start_with?("[")
-              JSON.parse(fv5011)
-            else
-              Array(fv5011)
-            end
-          fv5009 =
-            fv5010.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-              entry.split(";", 2).first.to_s.start_with?("#{fv5008}=")
-            end
-          if fv5009
+      owner.get("/oauth/authorize", params: parameters, headers: navigation)
 
-            _, fv5007 = fv5009.split(";", 2).first.to_s.split("=", 2)
-            fv5007 = Rack::Utils.unescape(fv5007.to_s)
-          end
-        end
-
-        unless fv5007.nil?
-          fv5006.cookies.delete(fv5008)
-          # Rack::Test's []= uses its default host. The current request may target a
-          # different surface, so install the cookie against the browser's active host.
-          fv5006.cookies.merge(
-            "#{fv5008}=#{Rack::Utils.escape(fv5007)}",
-            URI.parse("https://#{fv5006.host}/"),
-          )
-        end
-      end
+      assert_equal 303, owner.response.status
       parent = OidcAuthorizationTransactionCoordinator.model_for(surface).find_by!(state: parameters.fetch(:state))
       binding = BaseAuthAdmissionCoordinator.admission_binding_model(surface).find_by!(
         authorization_transaction_id: parent.id,
@@ -76,141 +39,110 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
       auth = open_session
       auth.host!(auth_host)
       auth.https!
-      auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
-      auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-      csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      current_browser = owner
+      current_host = visa_host
+      confirmation = nil
+      jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      12.times do
+        target = URI.parse(current_browser.response.location.to_s)
+        target = URI.parse("https://#{current_host}#{target}") unless target.host
+        if target.host == jump_host
+          namespace = (current_host == visa_host) ? "VISA_#{surface.upcase}" : "AUTH_#{surface.upcase}"
+          issuer = JitSecurityJwtRegistry.surface(namespace)
+          payload, = JWT.decode(
+            Rack::Utils.parse_query(target.query).fetch("rt"),
+            JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{current_host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          target = URI.parse(payload.fetch("url"))
+        end
+
+        assert_includes [visa_host, auth_host], target.host
+        if target.host == visa_host
+          confirmation = target
+          break
+        end
+        auth.get(target.request_uri, headers: navigation)
+
+        assert_equal 303, auth.response.status
+        current_browser = auth
+        current_host = auth_host
+      end
+
+      assert confirmation
+      assert_predicate binding.reload, :attached?
+
+      attached_session = binding.auth_ceremony_session_id
       other_auth = open_session
       other_auth.host!(auth_host)
       other_auth.https!
-      other_auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-      other_csrf = other_auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      auth.post(
-        "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                              headers: auth_headers,
-      )
-      attached_session_id = binding.reload.auth_ceremony_session_id
-      other_auth.post(
-        "/ceremony_bindings",
-        params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: other_csrf },
-        headers: auth_headers,
-      )
+      other_auth.get("/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp" }, headers: navigation)
 
-      assert_equal [400, nil, attached_session_id],
-                   [other_auth.response.status, other_auth.response.location,
-                    binding.reload.auth_ceremony_session_id,]
-      confirmation = URI.parse(auth.response.location)
-      other_base = open_session
-      other_base.host!(base_host)
-      other_base.https!
-      other_base.get("/oauth/authorize", params: parameters)
-      other_base_csrf = other_base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      other_base.post(confirmation.request_uri, params: { authenticity_token: other_base_csrf }, headers:)
+      assert_equal 400, other_auth.response.status
+      assert_equal attached_session, binding.reload.auth_ceremony_session_id
 
-      assert_equal [400, nil, nil],
-                   [other_base.response.status, other_base.response.location, binding.reload.base_confirmed_at]
-      owner.get(confirmation.request_uri)
-      csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      owner.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers:)
-      entry = URI.parse(owner.response.location)
-      other_auth.post(
-        "/sign/in",
-        params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: other_csrf },
-        headers: auth_headers,
-      )
+      foreign = open_session
+      foreign.host!(visa_host)
+      foreign.https!
+      foreign.get(confirmation.request_uri, headers: navigation)
 
-      assert_equal [400, nil, nil],
-                   [other_auth.response.status, other_auth.response.location, binding.reload.redeemed_at]
-      auth.get(entry.request_uri)
-      csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      auth.post(
-        "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                    headers: auth_headers,
-      )
+      assert_equal 400, foreign.response.status
+      assert_nil binding.reload.base_confirmed_at
 
+      owner.get(confirmation.request_uri, headers: navigation)
+
+      assert_equal 303, owner.response.status
+      entry_uri = URI.parse(owner.response.location)
+      other_auth.get(entry_uri.request_uri, headers: navigation)
+
+      assert_equal 400, other_auth.response.status
+      assert_nil binding.reload.redeemed_at
+      assert_predicate binding.reload, :confirmed?
+      auth.get(URI.parse(owner.response.location).request_uri, headers: navigation)
+
+      assert_equal 303, auth.response.status
       assert_predicate binding.reload, :redeemed?
+      auth.get(URI.parse(auth.response.location).request_uri, headers: navigation)
 
-      # Public Auth proof issuance isolates result-receiver browser binding from credential verification.
-      actor = actor_model.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_model))
+      assert_equal 200, auth.response.status
+
+      # Public Auth proof issuance isolates the OP receiver from credential verification.
+      actor = actor_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: active_status)
       result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface:, login_challenge: parent.login_challenge, actor:, session_ref: "ceremony-result",
         auth_method: "passkey", authentication_event_at: parent.class.database_now,
         ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
       )
-      foreign = open_session
-      foreign.host!(base_host)
-      foreign.https!
-      foreign.get("/oauth/authorize", params: parameters)
-      csrf = foreign.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      foreign.post(
-        "/oauth/authorize", params: { result_ref: result.reference,
-                                      transaction_ref: parent.transaction_id,
-                                      authenticity_token: csrf,
-                                      ri: "jp", }, headers:,
-      )
+      submission = { result_ref: result.reference, transaction_ref: parent.transaction_id, ri: "jp" }
+      before_parent = parent.reload.attributes
+      before_binding = binding.reload.attributes
+      tokens_before = token_model.where(owner_key => actor.id).count
 
-      assert_equal [400, nil, nil],
-                   [foreign.response.status, foreign.response.location, parent.reload.base_finalized_at]
-      assert_equal 0, token_model.where(
-        { "app" => :user_id, "com" => :visitor_id, "org" => :staff_id }.fetch(surface) => actor.id,
-      ).count
-      owner.get(
-        "/oauth/authorize",
-        params: { result_ref: result.reference, transaction_ref: parent.transaction_id, ri: "jp" },
-      )
-      csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      submission = { result_ref: result.reference,
-                     transaction_ref: parent.transaction_id,
-                     ri: "jp",
-                     authenticity_token: csrf, }
-      owner.post("/oauth/authorize", params: submission, headers:)
+      foreign.get("/oidc/result", params: submission, headers: navigation)
+
+      assert_equal 400, foreign.response.status
+      assert_nil foreign.response.location
+      parent_unchanged = before_parent == parent.reload.attributes
+
+      assert parent_unchanged, "foreign result changed the parent"
+      binding_unchanged = before_binding == binding.reload.attributes
+
+      assert binding_unchanged, "foreign result changed the binding"
+      assert_equal tokens_before, token_model.where(owner_key => actor.id).count
+
+      owner.get("/oidc/result", params: submission, headers: navigation)
 
       assert_equal 303, owner.response.status
       assert_predicate parent.reload.base_finalized_at, :present?
+      assert_equal tokens_before + 1, token_model.where(owner_key => actor.id).count
       finalized_root = parent.browser_session_ref
-      begin
-        fv5000 = owner
-        fv5002 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-        fv5001 = fv5000.response.cookies[fv5002]
-        if fv5001.nil?
-          fv5005 = fv5000.response.headers["Set-Cookie"] || fv5000.response.headers["set-cookie"]
-          fv5004 =
-            if fv5005.is_a?(String) && fv5005.start_with?("[")
-              JSON.parse(fv5005)
-            else
-              Array(fv5005)
-            end
-          fv5003 =
-            fv5004.flat_map { |cookie_entry| cookie_entry.to_s.split("\n") }.find do |cookie_entry|
-              cookie_entry.split(";", 2).first.to_s.start_with?("#{fv5002}=")
-            end
-          if fv5003
+      owner.get("/oidc/result", params: submission, headers: navigation)
 
-            _, fv5001 = fv5003.split(";", 2).first.to_s.split("=", 2)
-            fv5001 = Rack::Utils.unescape(fv5001.to_s)
-          end
-        end
-
-        unless fv5001.nil?
-          fv5000.cookies.delete(fv5002)
-          # Rack::Test's []= uses its default host. The current request may target a
-          # different surface, so install the cookie against the browser's active host.
-          fv5000.cookies.merge(
-            "#{fv5002}=#{Rack::Utils.escape(fv5001)}",
-            URI.parse("https://#{fv5000.host}/"),
-          )
-        end
-      end
-      owner.get(
-        "/oauth/authorize",
-        params: parameters.merge(state: SecureRandom.urlsafe_base64(32), nonce: SecureRandom.urlsafe_base64(32)),
-      )
-      csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers:)
-
-      # WU-27/D-104: a finalized result is terminal; a browser replay cannot
-      # obtain another redirect or Root Session.
       assert_equal 400, owner.response.status
+      assert_nil owner.response.location
       assert_equal finalized_root, parent.reload.browser_session_ref
+      assert_equal tokens_before + 1, token_model.where(owner_key => actor.id).count
     end
   ensure
     ActionController::Base.allow_forgery_protection = protection

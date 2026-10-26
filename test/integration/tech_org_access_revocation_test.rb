@@ -79,7 +79,10 @@ class TechOrgAccessRevocationTest < ActionDispatch::IntegrationTest
     sign_in_tech
     access_cookie = cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
     refresh_cookie = cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE]
-    AuthenticationLogoutCurrentSession.call(resource: @operator, token: @root_token, reason: "user_logout")
+    AuthenticationLogoutCurrentSession.call(
+      cause: "browser_logout", resource: @operator, token: @root_token,
+      reason: "user_logout",
+    )
 
     get tech_org_dashboard_path(ri: "jp")
 

@@ -213,46 +213,6 @@ ALTER SEQUENCE public.rp_principals_id_seq OWNED BY public.rp_principals.id;
 
 
 --
--- Name: rp_refresh_attempts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.rp_refresh_attempts (
-    id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    session_id bigint NOT NULL,
-    input_hmac bytea NOT NULL,
-    expected_installed_generation bigint NOT NULL,
-    dispatched_at timestamp(6) with time zone,
-    uncertain_at timestamp(6) with time zone,
-    installed_at timestamp(6) with time zone,
-    expires_at timestamp(6) with time zone NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_rp_core_app_refresh_attempts_shape CHECK ((expected_installed_generation >= 0)),
-    CONSTRAINT chk_rp_refresh_attempts_pid CHECK ((char_length((public_id)::text) = 21))
-);
-
-
---
--- Name: rp_refresh_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.rp_refresh_attempts_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: rp_refresh_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.rp_refresh_attempts_id_seq OWNED BY public.rp_refresh_attempts.id;
-
-
---
 -- Name: rp_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -336,13 +296,6 @@ ALTER TABLE ONLY public.rp_principals ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
--- Name: rp_refresh_attempts id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.rp_refresh_attempts ALTER COLUMN id SET DEFAULT nextval('public.rp_refresh_attempts_id_seq'::regclass);
-
-
---
 -- Name: rp_sessions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -395,14 +348,6 @@ ALTER TABLE ONLY public.rp_op_session_bindings
 
 ALTER TABLE ONLY public.rp_principals
     ADD CONSTRAINT rp_principals_pkey PRIMARY KEY (id);
-
-
---
--- Name: rp_refresh_attempts rp_refresh_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.rp_refresh_attempts
-    ADD CONSTRAINT rp_refresh_attempts_pkey PRIMARY KEY (id);
 
 
 --
@@ -464,20 +409,6 @@ CREATE UNIQUE INDEX idx_rp_core_app_principals_public_id ON public.rp_principals
 
 
 --
--- Name: idx_rp_core_app_refresh_attempts_expiry; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_rp_core_app_refresh_attempts_expiry ON public.rp_refresh_attempts USING btree (expires_at);
-
-
---
--- Name: idx_rp_core_app_refresh_attempts_public_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_rp_core_app_refresh_attempts_public_id ON public.rp_refresh_attempts USING btree (public_id);
-
-
---
 -- Name: idx_rp_core_app_sessions_live_binding; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -513,13 +444,6 @@ CREATE INDEX index_rp_op_session_bindings_on_identity_binding_id ON public.rp_op
 
 
 --
--- Name: index_rp_refresh_attempts_on_session_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rp_refresh_attempts_on_session_id ON public.rp_refresh_attempts USING btree (session_id);
-
-
---
 -- Name: rp_event_receipts fk_rp_core_app_event_receipts_op_binding; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -544,14 +468,6 @@ ALTER TABLE ONLY public.rp_op_session_bindings
 
 
 --
--- Name: rp_refresh_attempts fk_rp_core_app_refresh_attempts_session; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.rp_refresh_attempts
-    ADD CONSTRAINT fk_rp_core_app_refresh_attempts_session FOREIGN KEY (session_id) REFERENCES public.rp_sessions(id);
-
-
---
 -- Name: rp_sessions fk_rp_core_app_sessions_op_binding; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -566,6 +482,7 @@ ALTER TABLE ONLY public.rp_sessions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261025100000'),
 ('20261023130001'),
 ('20261023130000'),
 ('20261020130001'),

@@ -14,21 +14,16 @@ module Tech
 
         AUTHENTICATION_MODE = :open
         helper_method :sign_out_completed_description, :sign_out_confirmation_form_path
-        before_action :authenticate_oidc_rp_session!, only: :create,
-                                                      unless: -> { params[:logout_challenge].present? }
+        before_action :authenticate_oidc_rp_session!, only: :create
         after_action :sign_out_notice_cache_headers!, only: :show
 
         public
 
         def show
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           complete_oidc_rp_logout!
         end
 
         def create
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           launch_oidc_rp_logout!(
             client_id: "tech-org-ww",
             issuer_resource_type: "operator",

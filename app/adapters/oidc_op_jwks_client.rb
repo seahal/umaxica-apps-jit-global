@@ -14,6 +14,8 @@ class OidcOpJwksClient
 
   CACHE_TTL = 1.hour
   MAX_STALE_TTL = 5.minutes
+  # D-174: after a failed self-fetch this process does not refetch the same kid for this long.
+  SELF_FETCH_FAILURE_TTL = 30.seconds
   MAXIMUM_RESPONSE_BYTES = 65_536
   MAXIMUM_KEYS = 4
   MAXIMUM_KID_LENGTH = 128
@@ -53,6 +55,7 @@ class OidcOpJwksClient
     @limiter = limiter
     @mutex = Mutex.new
     @cache_entry = nil
+    @self_fetch_failures = {}
   end
 
   public
@@ -86,10 +89,33 @@ class OidcOpJwksClient
     return stale_or(current, kid, invalid("unknown_kid")) unless decision.kids.include?(kid)
 
     # A recent fetch saw this kid, so it is genuine; this process fetches once for itself.
-    entry = fetch_and_store
+    return stale_or(current, kid, unavailable("recent_self_fetch_failed")) if recent_self_fetch_failure?(kid)
+
+    entry = fetch_and_store(cached_kid: kid)
+    record_self_fetch(kid, failed: entry.nil?)
     return stale_or(current, kid, unavailable("fetch_failed")) unless entry
 
     entry.keys.key?(kid) ? found(entry.keys.fetch(kid)) : invalid("unknown_kid")
+  end
+
+  # Bounded: only kids from the coordinator's recent successful fetch reach here (at most MAXIMUM_KEYS
+  # per window), and a success removes the entry.
+  def recent_self_fetch_failure?(kid)
+    failed_at = @mutex.synchronize { @self_fetch_failures[kid] }
+    return false unless failed_at
+
+    age = clock.call - failed_at
+    age >= 0 && age < SELF_FETCH_FAILURE_TTL
+  end
+
+  def record_self_fetch(kid, failed:)
+    @mutex.synchronize do
+      if failed
+        @self_fetch_failures[kid] = clock.call
+      else
+        @self_fetch_failures.delete(kid)
+      end
+    end
   end
 
   # A known kid inside the stale window keeps verifying while refresh is refused or failing.
@@ -105,8 +131,13 @@ class OidcOpJwksClient
 
   def unavailable(reason) = Lookup.new(status: :unavailable, key: nil, reason:)
 
-  def fetch_and_store
+  def fetch_and_store(cached_kid: nil)
     @mutex.synchronize do
+      # Another request may have populated this process while we waited for the fetch lock.
+      if cached_kid && @cache_entry && fresh?(@cache_entry) && @cache_entry.keys.key?(cached_kid)
+        return @cache_entry
+      end
+
       document = fetch_document
       @cache_entry = CacheEntry.new(keys: document, fetched_at: clock.call).freeze
     rescue FetchError, JSON::ParserError, URI::InvalidURIError, TypeError,

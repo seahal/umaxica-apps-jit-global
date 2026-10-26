@@ -499,63 +499,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
   end
 
-  test "app MFA TOTP challenge answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-    end
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_challenge_totp_url(ri: "jp", host: host),
-           params: { totp_challenge_form: { token: "000000" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
   test "app email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
@@ -1238,73 +1181,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   # spreads the guesses across enough source addresses that neither IP rule fires.
   # It is stricter than the sustained IP rule, so it is what answers first.
   ACCOUNT_ALLOWANCE = 10
-
-  test "app MFA TOTP challenge answers 429 once the per-account allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-    end
-
-    (ACCOUNT_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times do
-          post auth_app_sign_in_challenge_totp_url(ri: "jp", host: host),
-               params: { totp_challenge_form: { token: "000000" } }
-        end
-      end
-    end
-
-    travel((ACCOUNT_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_challenge_totp_url(ri: "jp", host: host),
-           params: { totp_challenge_form: { token: "000000" } }
-    end
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
 
   # Submitting the sign-in code is a separate action from requesting it, and
   # carries its own limiter pair; only the request side was exercised.

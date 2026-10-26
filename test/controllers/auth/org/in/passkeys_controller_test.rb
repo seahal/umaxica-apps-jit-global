@@ -82,17 +82,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -143,17 +137,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -170,8 +158,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     options_uri = URI.parse(panel.fetch("options_url"))
     verification_uri = URI.parse(panel.fetch("verification_url"))
 
-    assert_equal "/sign/in/passkey/options", options_uri.path
-    assert_equal "/sign/in/passkey/verification", verification_uri.path
+    assert_equal ["/sign/in/passkey/options", "/sign/in/passkey/verification"],
+                 [options_uri.path, verification_uri.path]
     assert_equal "jp", Rack::Utils.parse_nested_query(options_uri.query).fetch("ri")
     assert_equal "jp", Rack::Utils.parse_nested_query(verification_uri.query).fetch("ri")
     assert_equal "org", OrgNormalSignInBindingCodec.decode(
@@ -307,17 +295,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -371,17 +353,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -427,17 +403,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -483,17 +453,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -556,17 +520,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -638,17 +596,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -702,17 +654,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -772,17 +718,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -832,17 +772,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -901,17 +835,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end
@@ -958,17 +886,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
 
         assert_response :see_other
+        follow_redirect!
+
+        assert_response :success
       end
       complete_org_entra_first_stage!(@staff)
     end

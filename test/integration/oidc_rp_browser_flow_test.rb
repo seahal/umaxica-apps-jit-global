@@ -31,8 +31,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   ].freeze
 
   setup do
-    ClientSignOutFlowKind.ensure_defaults!
-    ClientSignOutFlowStatus.ensure_defaults!
     ClientSessionLimitResolutionState::DEFAULTS.each do |id|
       ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
         state.created_at = Time.current
@@ -320,6 +318,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       auth_token_count_before_handoff =
         ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+
       assert_response :see_other
       handoff_uri = URI.parse(response.location)
 

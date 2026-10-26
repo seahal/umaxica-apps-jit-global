@@ -4,7 +4,8 @@
 
 Accepted (2026-10-06) as the target architecture for the `two.md` implementation cycle.
 
-Amended (2026-10-21) by [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md):
+Amended (2026-10-21) by [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md),
+with the capacity amendment D-116 recorded 2026-10-24:
 APP/COM Passkey sign-in selects an Identity through its effective Email or Telephone binding before
 challenge issuance and verifies credential ownership against that server-fixed Identity. Contact
 lifecycle, immutable ownership and handle contracts remain accepted. The successor also expressly

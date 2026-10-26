@@ -14,6 +14,7 @@ module Security
           security_mode_id: SecurityModeConfigurable::ADVANCED,
           status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
         )
+        OperatorPasskeyTestSupport.give_two_active_passkeys!(operator)
         token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
 
         headers = as_staff_headers(

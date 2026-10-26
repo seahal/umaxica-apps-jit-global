@@ -19,7 +19,7 @@ class SignOtpCeremonyMalformedCodeTest < ActiveSupport::TestCase
     test "#{surface} #{channel} malformed code partitions refuse without consuming or changing proof" do
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       destination =
         (channel == :email) ? "malformed-#{SecureRandom.hex(8)}@example.test" :

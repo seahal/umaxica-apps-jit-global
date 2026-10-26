@@ -19,7 +19,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
         when "com"
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::ACTIVE,]
+           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -68,7 +68,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
         when "com"
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::ACTIVE,]
+           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -117,7 +117,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
         when "com"
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::ACTIVE,]
+           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       namespace = "telephone-signup-receipt:#{SecureRandom.hex(12)}"
       connection = Umaxica::Valkey::Connection.new(namespace: namespace)
@@ -179,7 +179,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -220,7 +220,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -261,7 +261,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
         owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
@@ -298,7 +298,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       issued = nil
       telephone = nil
@@ -349,7 +349,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
         when "com"
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::ACTIVE,]
+           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -400,7 +400,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -449,7 +449,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
         when "com"
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction, :visitor_id,
-           VisitorStatus::ACTIVE,]
+           VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -521,10 +521,13 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
                    "The original signup deadline is rechecked after Source lock acquisition"
       assert_equal original_sent_at, telephone.reload.otp_last_sent_at
       assert_equal 1, telephone.otp_attempts_count
-      assert_predicate flow.reload, :sign_up_expired?
+      # D-177: the refusal writes nothing; only SignUpExpiryJob moves the Ticket to EXPIRED.
+      assert_not_predicate flow.reload, :sign_up_terminal?
       denied_after_expiry = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
 
-      assert_equal :inactive_flow, denied_after_expiry.status, "An earlier clock cannot reopen terminal signup"
+      # The deadline above was simulated; at the real clock the Flow is still live, so only the resend
+      # throttle refuses here and no new proof is issued.
+      assert_not_predicate denied_after_expiry, :success?
       assert_nil denied_after_expiry.code
       assert_nil denied_after_expiry.transaction
     end
@@ -537,7 +540,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
         when "com"
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction, :visitor_id,
-           VisitorStatus::ACTIVE,]
+           VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(

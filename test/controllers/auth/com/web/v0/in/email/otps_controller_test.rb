@@ -20,20 +20,7 @@ class Auth::Com::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    get "/sign/in", params: { entry_ref: admission.reference, ri: "jp" }, headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" },
-                               headers: { "Host" => @host }
-
-    assert_response :see_other
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get "/sign/in", params: { entry_ref: admission.reference, ri: "jp" }, headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/sign/in", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" },
-                     headers: { "Host" => @host }
-
-    assert_response :see_other
+    admit_auth_ceremony_entry!("/sign/in", reference: admission.reference, params: { ri: "jp" })
     @primary_sign_in_binding = nil
   end
 
@@ -106,16 +93,7 @@ class Auth::Com::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    other.get("/sign/in", params: { entry_ref: admission.reference, ri: "jp" })
-    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    other.post("/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
-
-    assert_equal 303, other.response.status
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    other.get("/sign/in", params: { entry_ref: admission.reference, ri: "jp" })
-    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    other.post("/sign/in", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+    admit_auth_ceremony_entry!("/sign/in", reference: admission.reference, params: { ri: "jp" }, browser: other)
 
     assert_equal 303, other.response.status
     assert_no_difference "EmailOccurrence.count" do

@@ -12,6 +12,7 @@ module SignSettingsSecretCredentialRegistration
 
   def finish_secret_credential_ceremony!(surface:, actor:, session_ref:, record_class:, name:, enabled:,
                                          raw_secret_credential:, _operation: "enrollment")
+    step_up_bootstrap = step_up_bootstrap_unconfigured?(actor)
     create_settings_secret_credential!(
       surface: surface,
       actor: actor,
@@ -19,10 +20,15 @@ module SignSettingsSecretCredentialRegistration
       name: name,
       enabled: enabled,
       raw_secret_credential: raw_secret_credential,
+      step_up_token: current_session_token,
+      step_up_requirement: step_up_bootstrap ? nil :
+        step_up_requirement(scope: "settings_secret_credential"),
+      step_up_bootstrap: step_up_bootstrap,
     )
   end
 
-  def create_settings_secret_credential!(surface:, actor:, record_class:, name:, enabled:, raw_secret_credential:)
+  def create_settings_secret_credential!(surface:, actor:, record_class:, name:, enabled:, raw_secret_credential:,
+                                         step_up_token:, step_up_requirement:, step_up_bootstrap:)
     params = { name: name, enabled: enabled }
     case surface.to_s
     when "com"
@@ -31,6 +37,9 @@ module SignSettingsSecretCredentialRegistration
         visitor: actor,
         params: params,
         raw_secret_credential: raw_secret_credential,
+        step_up_token: step_up_token,
+        step_up_requirement: step_up_requirement,
+        step_up_bootstrap: step_up_bootstrap,
       )
     when "org"
       OperatorSecretCredentialsCreate.call(
@@ -38,6 +47,9 @@ module SignSettingsSecretCredentialRegistration
         staff: actor,
         params: params,
         raw_secret_credential: raw_secret_credential,
+        step_up_token: step_up_token,
+        step_up_requirement: step_up_requirement,
+        step_up_bootstrap: step_up_bootstrap,
       )
     else
       raise IdentitySecretCredentialCeremonyContract::Error, "surface is invalid"

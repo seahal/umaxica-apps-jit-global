@@ -10,6 +10,44 @@ module AvatarOwnershipTransfers
 
     private
 
+    def validate_step_up_context!(actor:, surface:, scope:, token:, requirement:)
+      return if token.nil? && requirement.nil?
+      return if valid_step_up_context?(actor:, surface:, scope:, token:, requirement:)
+
+      raise InvalidTransfer, "Avatar transfer Step-Up binding is invalid"
+    end
+
+    def valid_step_up_context?(actor:, surface:, scope:, token:, requirement:)
+      token_belongs_to_actor?(actor, token) &&
+        valid_step_up_requirement?(actor:, surface:, scope:, token:, requirement:)
+    end
+
+    def token_belongs_to_actor?(actor, token)
+      return false unless token&.persisted?
+
+      case [actor, token]
+      in [Client, ClientToken] then token.user_id == actor.id
+      in [Operator, OperatorToken] then token.staff_id == actor.id
+      else false
+      end
+    end
+
+    def valid_step_up_requirement?(actor:, surface:, scope:, token:, requirement:)
+      requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
+        requirement.scope == scope && requirement.purpose == "step_up" &&
+        requirement.audience == "step_up:#{surface}" && requirement.actor_ref == actor&.public_id &&
+        requirement.session_binding == token.public_id && requirement.token_binding == token.public_id &&
+        requirement.require_session_binding
+    end
+
+    def consume_step_up!(token, requirement)
+      return unless token
+
+      token.consume_step_up_evidence!(requirement: requirement)
+    rescue TokenStatusManagement::StepUpEvidenceUnavailable => e
+      raise InvalidTransfer, e.message
+    end
+
     def with_authorized_owner_membership(surface:, actor:, subject_public_id:, owner_collective_public_id:, permission:)
       AvatarOwnerMembershipLockService.call(
         actor: actor,

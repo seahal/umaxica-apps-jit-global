@@ -8,14 +8,14 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "sign org sign-out ceremony routes are retired" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")}/sign/out/confirmation",
+        "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}/sign/out/confirmation",
         method: :get,
       )
     end
   end
 
   test "get sign out renders confirmation and post redirects to Base without an Auth RP logout" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
     staff = operators(:one)
     token = OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
@@ -36,7 +36,7 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert inertia_props.fetch("active_context")
     assert_equal auth_org_sign_out_path(ri: "jp"), inertia_props.fetch("form").fetch("action")
     # Cancelling the pending logout stays a DELETE to the sign-out route.
-    assert_equal auth_org_sign_out_path(ri: "jp"), inertia_props.fetch("cancel").fetch("action")
+    assert_nil inertia_props.fetch("cancel")
 
     post auth_org_sign_out_url(ri: "jp", host: host), headers: {
       "X-TEST-CURRENT-STAFF" => staff.id.to_s,
@@ -61,7 +61,7 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "delete sign out cancels the pending logout and keeps the current session" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     staff = operators(:one)
     token = OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     satisfy_staff_verification(token)
@@ -107,7 +107,7 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "show and new send the operator on to the confirmation and Base sign-out pages" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
     host! host
 
@@ -129,9 +129,8 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [acme_host, "/sign/out"], [location.host, location.path]
   end
 
-  test "post with a coordinated challenge clears this host and hands off to Base end-session" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
-    acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
+  test "post with a coordinated challenge clears this host and hands off to Visa end-session" do
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
@@ -151,12 +150,13 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(response.location)
 
-    assert_equal [acme_host, "/oidc/logout"], [location.host, location.path]
+    assert_equal [Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host, "/oidc/logout"],
+                 [location.host, location.path]
     assert_equal transaction.logout_challenge, Rack::Utils.parse_query(location.query).fetch("logout_challenge")
   end
 
   test "post with a challenge that has not reached this step renders the unavailable page" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
@@ -176,7 +176,7 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "post with an unknown challenge is not found" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
 
     post auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: "no-such-challenge")

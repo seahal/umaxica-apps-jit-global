@@ -110,13 +110,13 @@ class Auth::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
       method: :get,
     )
     oidc_logout = Rails.application.routes.recognize_path(
-      "https://#{ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")}/oidc/logout",
+      "https://#{Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host}/oidc/logout",
       method: :get,
     )
 
     assert_equal "base/app/sign_outs", sign_out.fetch(:controller)
     assert_equal "new", sign_out.fetch(:action)
-    assert_equal "base/app/oidc/logouts", oidc_logout.fetch(:controller)
+    assert_equal "visa/app/oidc/logouts", oidc_logout.fetch(:controller)
     assert_equal "show", oidc_logout.fetch(:action)
 
     assert_raises(ActionController::RoutingError) do

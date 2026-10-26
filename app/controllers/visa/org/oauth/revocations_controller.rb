@@ -27,6 +27,8 @@ module Visa
           },
         )
 
+        public
+
         def create
           result = ::OidcTokenRevoker.call(
             token: params[:token],

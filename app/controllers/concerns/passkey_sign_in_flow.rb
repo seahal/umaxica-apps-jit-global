@@ -119,6 +119,7 @@ module PasskeySignInFlow
             public_key: passkey.public_key,
             sign_count: passkey.sign_count,
             purpose: passkey_assertion_uv_purpose,
+            expected_user_handle: actor.webauthn_user_handle,
           )
 
           attrs = { sign_count: context.sign_count }

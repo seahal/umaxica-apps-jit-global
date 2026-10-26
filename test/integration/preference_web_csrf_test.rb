@@ -513,9 +513,9 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
   test "protocol exception endpoints remain tokenless but protected by protocol-specific guards" do
     ActionController::Base.allow_forgery_protection = true
 
-    host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
+    host!(visa_host_for_test_surface(:app))
     post(
-      base_app_oauth_token_path,
+      visa_app_oauth_token_path,
       params: { grant_type: "client_credentials" },
       headers: { "Accept" => "application/json", "Sec-Fetch-Site" => "cross-site" },
       as: :json,

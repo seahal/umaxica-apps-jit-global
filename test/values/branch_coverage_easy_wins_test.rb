@@ -13,36 +13,6 @@ class BranchCoverageEasyWinsTest < ActiveSupport::TestCase
     assert_equal :linked, result.status
   end
 
-  test "identity ceremony results reject future verified_at timestamps" do
-    now = Time.zone.parse("2026-06-24 12:00:00 UTC")
-    future = now + IdentitySocialCeremonyContract::LEEWAY + 60
-    payload = {
-      "typ" => IdentitySocialCeremonyResult::TOKEN_TYPE,
-      "iss" => IdentitySocialCeremonyContract.sign_issuer("app"),
-      "aud" => IdentitySocialCeremonyContract.acme_audience("app"),
-      "purpose" => IdentitySocialCeremonyResult::PURPOSE,
-      "surface" => "app",
-      "actor_ref" => "a",
-      "session_ref" => "s",
-      "transaction_id" => "t",
-      "grant_jti" => "g",
-      "result_jti" => "r",
-      "operation" => "signup",
-      "provider" => "google",
-      "proof_method" => IdentitySocialCeremonyResult::PROOF_METHOD,
-      "provider_subject_ref" => "subj",
-      "provider_subject_digest" => "digest",
-      "verified_at" => future.to_i,
-      "challenge_id" => "c",
-      "expires_at" => (now + 5.minutes).to_i,
-      "iat" => now.to_i,
-      "exp" => (now + 5.minutes).to_i,
-    }
-    assert_raises(IdentitySocialCeremonyContract::Error) do
-      IdentitySocialCeremonyResult.new(payload, now: now)
-    end
-  end
-
   test "Webauthn::UvPolicy.for accepts an already constructed policy" do
     policy = Webauthn::UvPolicy::REGISTRY.fetch(:registration)
 

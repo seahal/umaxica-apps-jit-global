@@ -3,7 +3,7 @@
 
 require "test_helper"
 
-# The OAuth authorization endpoint exists on all three base surfaces and each
+# The OAuth authorization endpoint exists on all three Visa surfaces and each
 # one owns its own realm, validator resource type, and error mapping. The app
 # surface is covered by BaseOauthOidcAuthorityTest; these pin the spec-defined
 # error responses of the corporate and staff surfaces.
@@ -125,8 +125,8 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_request", response.parsed_body.fetch("error")
   end
 
-  # Capacity (specs/sign-fqdn-integrated-plan/plan.md section 5): 2048 bytes per parameter and
-  # 8192 bytes per query, refused with 400 before any transaction is allocated. Values use only
+  # Capacity (specs/sign-fqdn-integrated-plan/plan.md section 5): the valid ceiling starts one
+  # admission; the next byte is refused before a transaction is allocated. Values use only
   # unreserved characters so the byte counts are exact on the wire.
   test "authorize accepts a 2048-byte parameter and refuses 2049 bytes before allocating state" do
     host = visa_host_for_test_surface(:app)
@@ -137,8 +137,14 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       get "/oauth/authorize?#{base}&state=#{"a" * bytes}", headers: { "Host" => host }
 
       if accepted
-        assert_response :success, "#{bytes} bytes"
-        assert_equal count, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+        assert_response :see_other, "#{bytes} bytes"
+        assert_equal count + 1, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+        target = URI.parse(jump_target_url(response.location))
+        entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+
+        assert_equal "a" * bytes,
+                     ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).state
       else
         assert_response :bad_request, "#{bytes} bytes"
         assert_equal "invalid_request", response.parsed_body.fetch("error")
@@ -160,8 +166,12 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       get "/oauth/authorize?#{query}", headers: { "Host" => host }
 
       if accepted
-        assert_response :success, "#{bytes} bytes"
-        assert_equal count, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+        assert_response :see_other, "#{bytes} bytes"
+        assert_equal count + 1, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+        target = URI.parse(jump_target_url(response.location))
+        entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
+
+        assert BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
       else
         assert_response :bad_request, "#{bytes} bytes"
         assert_equal count, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
@@ -425,11 +435,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers)
 
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
-
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
         entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
@@ -649,7 +654,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "com", login_challenge: transaction.login_challenge,
@@ -662,9 +679,13 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     Valkey::AuthState::OpaqueAdmissionStore.stub(:new, unavailable_store) do
       unavailable_store.stub(:read_reference!, unavailable) do
-        post visa_com_oauth_authorization_url(host: host),
-             params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
-             headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+        get "/oidc/result",
+            params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id, ri: "jp" },
+            headers: {
+              "Sec-Fetch-Mode" => "navigate",
+              "Sec-Fetch-Dest" => "document",
+              "Sec-Fetch-Site" => "cross-site",
+            }
       end
     end
 
@@ -695,11 +716,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -920,7 +936,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "com", login_challenge: transaction.login_challenge,
@@ -929,9 +957,13 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
 
-    post visa_com_oauth_authorization_url(host: host),
-         params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
-         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+    get "/oidc/result",
+        params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id, ri: "jp" },
+        headers: {
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
+        }
 
     assert_response :redirect
     assert_predicate transaction.reload, :consumed?
@@ -940,9 +972,13 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_predicate browser_session_ref, :present?
     assert_equal token_count_before + 1, VisitorToken.where(visitor_id: visitor.id).count
 
-    post visa_com_oauth_authorization_url(host: host),
-         params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
-         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+    get "/oidc/result",
+        params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id, ri: "jp" },
+        headers: {
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
+        }
 
     # WU-27/D-104: a finalized result is terminal. SSO recovery starts from the RP;
     # the result itself is never reissued.
@@ -962,11 +998,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "operator").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -1187,7 +1218,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "org", login_challenge: transaction.login_challenge,
@@ -1197,9 +1240,13 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     )
 
     assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
-      post visa_org_oauth_authorization_url(host: host),
-           params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
-           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
+      get "/oidc/result",
+          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id, ri: "jp" },
+          headers: {
+            "Sec-Fetch-Mode" => "navigate",
+            "Sec-Fetch-Dest" => "document",
+            "Sec-Fetch-Site" => "cross-site",
+          }
     end
 
     assert_response :see_other
@@ -1220,11 +1267,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "operator").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -1445,7 +1487,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "org", login_challenge: transaction.login_challenge,
@@ -1454,9 +1508,13 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
 
-    post visa_org_oauth_authorization_url(host: host),
-         params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
-         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
+    get "/oidc/result",
+        params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id, ri: "jp" },
+        headers: {
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
+        }
 
     assert_response :redirect
     assert_predicate transaction.reload, :consumed?
@@ -1465,9 +1523,13 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_predicate browser_session_ref, :present?
     assert_equal token_count_before + 1, OperatorToken.where(staff_id: operator.id).count
 
-    post visa_org_oauth_authorization_url(host: host),
-         params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
-         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
+    get "/oidc/result",
+        params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id, ri: "jp" },
+        headers: {
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
+        }
 
     # WU-27/D-104: a finalized result is terminal. SSO recovery starts from the RP;
     # the result itself is never reissued.
@@ -1484,11 +1546,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -1709,7 +1766,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result_code = Valkey::AuthState::OpaqueAdmissionStore.new.issue!(
       purpose: "authentication_result",
@@ -1747,11 +1816,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "operator").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -1972,7 +2036,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result_code = Valkey::AuthState::OpaqueAdmissionStore.new.issue!(
       purpose: "authentication_result",
@@ -2010,11 +2086,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -2235,7 +2306,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "com", login_challenge: transaction.login_challenge,
@@ -2274,11 +2357,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "operator").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -2499,7 +2577,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "org", login_challenge: transaction.login_challenge,
@@ -2538,11 +2628,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -2763,7 +2848,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     first_binding = binding
     second =
@@ -2775,11 +2872,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
           "/oauth/authorize", params: authorize_params(realm: "visitor").merge(state: "second").merge(ri: "jp"),
                               headers: start_headers,
         )
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -3000,7 +3092,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "com", login_challenge: first.login_challenge,
@@ -3036,11 +3140,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         get(
           "/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers,
         )
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -3261,7 +3360,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     # A valid start cannot stand in for receiver-time registry validation.
     transaction.update!(redirect_uri: "https://attacker.example/callback")
@@ -3301,11 +3412,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         host!(host)
         start_headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         get("/oauth/authorize", params: authorize_params(realm: "visitor").merge(ri: "jp"), headers: start_headers)
-
-        assert_response :success
-        start_form = response.parsed_body.at_css("form")
-        start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(start_form["action"], params: start_fields, headers: start_headers)
 
         assert_response :see_other
         target = URI.parse(jump_target_url(response.location))
@@ -3526,7 +3632,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, auth.response.status
-        authorization_transaction_for_test(binding.reload)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
+        auth.get(auth.response.location)
+
+        assert_equal 303, auth.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+
+        assert_equal 303, auth.response.status
+        assert_predicate binding.reload, :redeemed?
+        binding.class.includes(:authorization_transaction).find(binding.id).authorization_transaction
       end
     store = Valkey::AuthState::OpaqueAdmissionStore.new
     result_code = store.issue!(

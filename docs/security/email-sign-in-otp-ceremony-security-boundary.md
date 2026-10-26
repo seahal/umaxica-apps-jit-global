@@ -52,7 +52,7 @@ The new target covers the two Email Sign-In families; preserve existing Sign-Up/
 
 ## Historical Auth/Base boundary observations
 
-1. Base alone owns Browser Sessions, OIDC and RP-session authority. Auth performs credential
+1. Visa alone owns Root/Browser Sessions and OIDC authority; Base owns its RP session. Auth performs credential
    ceremonies and records authentication evidence.
 2. Protected sign-in paths call `require_sign_in_ceremony_admission!`. `AuthCeremonyContext`
    resolves an admitted active server-side ceremony from its cookie; email/OTP input alone cannot
@@ -116,7 +116,7 @@ achieved AAL `none`. This is neither NIST AAL2 nor phishing-resistant proof for 
    Preserve failed-attempt budgets.
 6. Fail closed before evidence or Base sessions. Keep cookies, OTPs, issuance references and
    binding secrets out of email, query parameters, Inertia props and logs; avoid enumeration.
-7. Preserve Auth/Base handoff authority and APP/COM data isolation; introduce no token authority.
+7. Preserve Auth/Visa handoff authority and APP/COM data isolation; introduce no token authority.
 
 Binding owner, independent Rails nonce, admission/rotation continuity, credential-global versus
 per-ceremony active-code policy and cross-database consistency remain TBC. Existing controls are

@@ -84,10 +84,12 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
       end
     record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_org_verification_path(ri: "jp"), params: {
-      entry_ref: issuance.reference, authenticity_token: csrf,
-    }
+
+    assert_response :see_other
+    follow_redirect!
+
+    assert_response :success
+
     get new_auth_org_verification_passkey_path(ri: "jp")
 
     assert_response :success
@@ -96,16 +98,14 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     panel = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("panel")
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
-    post panel.fetch("options_url"), params: { "cf-turnstile-response" => "test-only" },
-                                     headers: { "X-CSRF-Token" => csrf }, as: :json
+    post panel.fetch("options_url"), params: { "cf-turnstile-response" => "test-only" }, as: :json
 
     assert_response :success
     assert_equal "required", response.parsed_body.fetch("options").fetch("userVerification")
 
     assertion = fake.get(challenge: record.reload.passkey_challenge, user_verified: true, sign_count: 2)
     post panel.fetch("verification_url"),
-         params: { credential: assertion, challenge_id: record.passkey_challenge_ref },
-         headers: { "X-CSRF-Token" => csrf }, as: :json
+         params: { credential: assertion, challenge_id: record.passkey_challenge_ref }, as: :json
 
     assert_response :success
     assert_equal "verified", issuance.transaction.reload.status
@@ -322,14 +322,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
       end
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
 
-    assert_response :success
-
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_org_verification_path(ri: "jp"), params: {
-      entry_ref: issuance.reference, authenticity_token: csrf,
-    }
-
-    assert_response :redirect
+    assert_response :see_other
     follow_redirect!
 
     assert_response :success
@@ -382,12 +375,11 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
         admission_issuance
       end
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_org_verification_path(ri: "jp"), params: {
-      entry_ref: issuance.reference, authenticity_token: csrf,
-    }
 
-    assert_response :redirect
+    assert_response :see_other
+    follow_redirect!
+
+    assert_response :success
 
     @token.update!(authentication_context: "standby")
     get new_auth_org_verification_passkey_path(ri: "jp")

@@ -44,6 +44,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
   setup do
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    visa_host = visa_host_for_test_surface(:app)
     @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     @identifier = "parallel-secret-#{SecureRandom.hex(4)}@example.com"
     @actor.client_emails.create!(
@@ -106,18 +107,16 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
                 [fv5074["name"], fv5074["value"]]
               },
               headers: {
-                "Origin" => "https://#{fv5069}",
+                "Origin" => "https://#{visa_host}",
                 "Sec-Fetch-Site" => "same-origin",
               },
             )
             fv5072 = URI.parse(fv5073.response.location)
             fv5071 = Rack::Utils.parse_query(fv5072.query).fetch("rt")
+            fv5067 = JitSecurityJwtRegistry.surface("VISA_APP")
             fv5068, = JWT.decode(
-              fv5071, JitSecurityJwtRegistry.public_key_for(
-                fv5070.id,
-                fv5070.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5069}",
+              fv5071, JitSecurityJwtRegistry.public_key_for(fv5067.id, fv5067.current_kid), true,
+              algorithms: ["ES384"], verify_iss: true, iss: "https://#{visa_host}",
               verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
             )
             URI.parse(fv5068.fetch("url"))
@@ -191,9 +190,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
                   begin
                     fv5047 = fv5043
                     {
-                      ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
-                      ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
-                      ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                     }.fetch(fv5047)
                   end
                 fv5019 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -393,9 +392,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, auth.response.status
     result_target = URI.parse(auth.response.location)
-    base.host!(base_host)
+    base.host!(result_target.host)
     base.https!
-    base.get(result_target.request_uri, headers: { "Host" => base_host })
+    base.get(result_target.request_uri, headers: { "Host" => result_target.host })
 
     assert_equal 200, base.response.status
     result_form = Nokogiri::HTML(base.response.body).at_css("form#oidc-authorization-result-form")
@@ -404,7 +403,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     @result_ref = result_form.at_css('input[name="result_ref"]')["value"]
     @transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
     @authenticity_token = result_form.at_css('input[name="authenticity_token"]')["value"]
-    @base_host, @auth_host, @issuance, @raw = base_host, auth_host, issuance, raw
+    @base_host, @auth_host, @issuance, @raw = visa_host_for_test_surface(:app), auth_host, issuance, raw
   ensure
     2.times { release << true } if release
     futures&.each { |future| future.wait(10) }
@@ -454,7 +453,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     ActiveRecord::Base.clear_query_caches_for_current_thread
 
     assert_equal 2, pids.uniq.length
-    assert_equal [303, 303], statuses.sort
+    # WU-27/D-104: one concurrent result commits; the other sees the finalized
+    # terminal and cannot issue a second Root Session.
+    assert_equal [303, 400], statuses.sort
     assert_equal 2, ClientToken.where(user_id: @actor.id).count
     credential = ClientSecretCredential.find_by!(issuance_id: @issuance.id)
     receipt = ClientSecretSignInReceipt.find_by!(credential_ref: credential.public_id)
@@ -500,7 +501,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
 
     assert_nil credential.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
-    @base.get(base_app_sign_in_limitation_path(ri: "jp"))
+    @base.get(visa_app_sign_in_limitation_path(ri: "jp"))
 
     assert_equal 200, @base.response.status
     JSON.parse(Nokogiri::HTML(@base.response.body).at_css("script[data-page='app']").text)
@@ -510,7 +511,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     stale_browser.https!
     @base.cookies.to_hash.each { |key, value| stale_browser.cookies[key] = value }
     @base.delete(
-      base_app_sign_in_limitation_path(ri: "jp"), params: { authenticity_token: csrf }, headers: {
+      visa_app_sign_in_limitation_path(ri: "jp"), params: { authenticity_token: csrf }, headers: {
         "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin",
       },
     )
@@ -602,13 +603,13 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
 
     assert_nil credential.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
-    @base.get(base_app_sign_in_limitation_path(ri: "jp"))
+    @base.get(visa_app_sign_in_limitation_path(ri: "jp"))
 
     assert_equal 200, @base.response.status
     page = JSON.parse(Nokogiri::HTML(@base.response.body).at_css("script[data-page='app']").text)
     csrf = Nokogiri::HTML(@base.response.body).at_css('meta[name="csrf-token"]')["content"]
     @base.patch(
-      base_app_sign_in_limitation_path(ri: "jp"), params: {
+      visa_app_sign_in_limitation_path(ri: "jp"), params: {
         authenticity_token: csrf, session_ref: page.fetch("props").fetch("sessions").first.fetch("session_ref"),
       }, headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
     )

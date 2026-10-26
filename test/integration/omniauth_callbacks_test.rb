@@ -77,7 +77,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow0_index|
             flow0_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -260,7 +260,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow2_index|
               flow2_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -406,7 +406,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow3_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow3_index|
             flow3_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -583,7 +583,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow4_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow4_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow4_index|
             flow4_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -783,7 +783,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow6_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow6_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow6_index|
               flow6_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -978,7 +978,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow8_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow8_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow8_index|
               flow8_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1187,7 +1187,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow9_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow9_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow9_callback_uri.host == flow9_base_host
@@ -1341,7 +1341,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow11_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow11_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow11_index|
               flow11_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1524,7 +1524,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow13_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow13_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow13_index|
               flow13_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1698,7 +1698,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow15_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow15_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow15_index|
               flow15_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1881,7 +1881,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow17_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow17_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow17_index|
               flow17_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.

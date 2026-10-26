@@ -30,7 +30,8 @@ class OrgAdminAuthorityClient
 
   def initialize(access_token:, browser_request:, surface: "org")
     @client_id, resource_type = CLIENTS.fetch(surface.to_s)
-    @base = "#{OidcIssuer.for_resource_type(resource_type)}/api/v0"
+    base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type(resource_type)
+    @base = "#{base_origin}/api/v0"
     @access_token = access_token.to_s
     @browser_request = browser_request
   end

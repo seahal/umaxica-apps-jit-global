@@ -9,7 +9,7 @@ class BranchCoverageBatch12OtpAndZerosTest < ActionDispatch::IntegrationTest
         if surface == :app
           [Client, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
         else
-          [Visitor, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+          [Visitor, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       contact =
@@ -79,13 +79,13 @@ class BranchCoverageBatch12OtpAndZerosTest < ActionDispatch::IntegrationTest
     transaction_count = VisitorPasskeyCeremonyTransaction.count
     get "/sign/up/check/telephone/passkey", params: { ri: "jp" }
 
-    assert_response :not_found
+    assert_response :bad_request
     post "/sign/up/check/telephone/passkey", params: { ri: "jp" }
 
-    assert_response :not_found
+    assert_response :bad_request
     patch "/sign/up/check/telephone/passkey", params: { ri: "jp" }
 
-    assert_response :not_found
+    assert_response :bad_request
     assert_equal token_count, VisitorToken.count
     assert_equal transaction_count, VisitorPasskeyCeremonyTransaction.count
   end

@@ -8,58 +8,38 @@ class EmailSignUpOtpDeliveryGuard
       raise ArgumentError, "Email signup delivery requires a transport block" unless block_given?
 
       owner, pending_status = components(flow, email, transaction)
-      delivered =
-        flow.with_lock do
-          owner.with_lock do
-            email.with_lock do
-              next false unless current_parent_and_source?(flow, email, owner, pending_status)
+      flow.with_lock do
+        owner.with_lock do
+          email.with_lock do
+            next false unless current_parent_and_source?(flow, email, owner, pending_status)
 
-              session_ref = Digest::SHA256.hexdigest(
-                JSON.generate(
-                  ["email_sign_up", flow.public_id,
-                   flow.nonce_digest,],
-                ),
-              )
-              transaction.with_lock do
-                next false unless transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
-                  transaction.session_ref == session_ref && transaction.actor_ref == owner.public_id &&
-                  transaction.email_candidate_ref == email.public_id &&
-                  transaction.normalized_email_digest == email.address_digest
-                next false unless destination.is_a?(String) && destination.encoding.ascii_compatible? &&
-                  destination.valid_encoding? &&
-                  IdentifierBlindIndex.bidx_for_email(
-                    destination,
-                    realm: transaction.surface,
-                  ) == email.address_digest
+            session_ref = Digest::SHA256.hexdigest(
+              JSON.generate(
+                ["email_sign_up", flow.public_id,
+                 flow.nonce_digest,],
+              ),
+            )
+            transaction.with_lock do
+              next false unless transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
+                transaction.session_ref == session_ref && transaction.actor_ref == owner.public_id &&
+                transaction.email_candidate_ref == email.public_id &&
+                transaction.normalized_email_digest == email.address_digest
+              next false unless destination.is_a?(String) && destination.encoding.ascii_compatible? &&
+                destination.valid_encoding? &&
+                IdentifierBlindIndex.bidx_for_email(
+                  destination,
+                  realm: transaction.surface,
+                ) == email.address_digest
 
-                transaction.deliver_email_otp!(generation: generation, code: code) { yield }
-              end
+              transaction.deliver_email_otp!(generation: generation, code: code) { yield }
             end
           end
         end
-      terminate_expired_parent(flow, email, owner, transaction, generation) unless delivered
-      delivered
+      end
+
     end
 
     private
-
-    def terminate_expired_parent(flow, email, owner, transaction, generation)
-      flow.with_lock do
-        next if flow.sign_up_terminal? || flow.expires_at > flow.class.database_now
-
-        session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
-        original_generation =
-          transaction.with_lock do
-            transaction.session_ref == session_ref && transaction.actor_ref == owner.public_id &&
-              transaction.email_candidate_ref == email.public_id &&
-              transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
-              transaction.otp_generation == generation
-          end
-        next unless original_generation
-
-        SignUpTermination.call(cycle: flow, event: :expire)
-      end
-    end
 
     def components(flow, email, transaction)
       case flow
@@ -74,7 +54,7 @@ class EmailSignUpOtpDeliveryGuard
           raise ArgumentError, "COM signup delivery requires its own Email ceremony"
         end
 
-        [Visitor.find(email.visitor_id), VisitorStatus::ACTIVE]
+        [Visitor.find(email.visitor_id), VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Email signup delivery realm"
       end
     end

@@ -37,6 +37,17 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "/oidc/logout", visa_app_oidc_logout_path
   end
 
+  test "the user's logout confirmation is a separate POST resource" do
+    route = Rails.application.routes.recognize_path(
+      "https://#{@host}/oidc/logout/confirmation",
+      method: :post,
+    )
+
+    assert_equal "visa/app/oidc/logouts/confirmations", route[:controller]
+    assert_equal "create", route[:action]
+    assert_equal "/oidc/logout/confirmation", visa_app_oidc_logout_confirmation_path
+  end
+
   test "get without params renders confirmation without mutation" do
     http_headers_30 =
       begin
@@ -203,9 +214,9 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx1_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get visa_app_oidc_logout_url(host: @host),
-        params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "xyz", ri: "jp" },
-        headers: http_headers_29
+    post visa_app_oidc_logout_url(host: @host),
+         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "xyz", ri: "jp" },
+         headers: http_headers_29
 
     assert_response :see_other
     assert_equal "/oidc/logout", URI.parse(jump_rt_url_from_location(response.location)).path
@@ -213,6 +224,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
 
     assert_response :ok
+    assert_equal visa_app_oidc_logout_confirmation_path(ri: "jp"), inertia_props.dig("form", "action")
 
     http_headers_28 =
       begin
@@ -291,10 +303,20 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx2_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_28
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_28
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
+
+    stop_target = OpAppAuthorityStopRootTarget.find_by!(root: @token)
+    stop = OpAppAuthorityStop.find(stop_target.stop_id)
+    browser_receipt = OpAppAuthorityStopBrowserLogout.find_by!(stop:)
+    stored_receipt = session.fetch(OpLogoutReceiptSession::KEY)
+
+    assert_equal "app", stored_receipt.fetch("realm")
+    assert_equal stop.public_id, stored_receipt.fetch("stop")
+    assert_equal Digest::SHA256.digest(stored_receipt.fetch("nonce")), browser_receipt.receipt_nonce_digest
+    assert_equal Digest::SHA256.digest(stored_receipt.fetch("browser_binding")), browser_receipt.browser_binding_digest
 
     location = URI.parse(jump_rt_url_from_location(response.location))
     query = Rack::Utils.parse_nested_query(location.query.to_s)
@@ -304,177 +326,25 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "xyz", query["state"]
   end
 
-  test "an unknown logout challenge is rejected rather than acted on" do
-    http_headers_27 =
-      begin
-        fx3_harness =
-          begin
-            f3_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f3_host = f3_headers["Host"]
-            f3_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f3_host}/") if f3_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f3_family, f3_surface = f3_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f3_family) && f3_surface == "app"
-              f3_client_id =
-                case f3_family
-                when "base" then "base-#{f3_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f3_family}-#{f3_surface}"
-                end
-              f3_token = ClientToken.includes(
-                :user,
-                :device_session,
-              ).find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-              f3_client = OidcClientRegistry.find!(f3_client_id)
-              f3_key = [f3_client.client_id, f3_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f3_key] && f3_token.currently_usable? &&
-                  !(f3_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f3_token.device_session_id,
-                    oidc_client_id: f3_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
-                f3_now = Time.current
-                f3_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
-                  refresh_token_expires_at: f3_now + 10.minutes,
-                )
-                f3_access = AuthenticationTokenService.encode(
-                  f3_token.actor_record, host: f3_host, resource_type: "client",
-                                         session_public_id: f3_token.public_id,
-                                         base_session_public_id: f3_token.public_id,
-                                         oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
-                                         expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
-                                         issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
-                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
-                                         subject: OidcSubject.for(
-                                           f3_token.actor_record,
-                                           resource_type: "client",
-                                         ), client_id: f3_client.client_id,
-                )
-                @base_browser_rp_credentials[f3_key] =
-                  [f3_access, f3_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f3_key]
-                f3_access, f3_refresh = @base_browser_rp_credentials.fetch(f3_key)
-                f3_cookie = [
-                  f3_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f3_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f3_refresh)}",
-                ].join("; ")
-                f3_headers = f3_headers.merge(
-                  "Cookie" => f3_cookie,
-                  "HTTP_COOKIE" => f3_cookie,
-                )
-              end
-            end
-            f3_headers
-          end
-        fx3_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx3_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end
-    post visa_app_oidc_logout_url(host: @host),
-         params: { logout_challenge: "no-such-logout-challenge", ri: "jp" },
-         headers: http_headers_27
+  test "D-33 refuses an unknown RP-facing logout_challenge on POST" do
+    stops_before = OpAppAuthorityStop.count
+    post visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+         headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    assert_response :unprocessable_content
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
   end
 
-  test "a GET carrying a logout challenge is refused because the handoff is retired" do
-    http_headers_26 =
-      begin
-        fx4_harness =
-          begin
-            f4_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f4_host = f4_headers["Host"]
-            f4_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f4_host}/") if f4_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f4_family, f4_surface = f4_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f4_family) && f4_surface == "app"
-              f4_client_id =
-                case f4_family
-                when "base" then "base-#{f4_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f4_family}-#{f4_surface}"
-                end
-              f4_token = ClientToken.includes(
-                :user,
-                :device_session,
-              ).find_by!(public_id: f4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-              f4_client = OidcClientRegistry.find!(f4_client_id)
-              f4_key = [f4_client.client_id, f4_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f4_key] && f4_token.currently_usable? &&
-                  !(f4_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f4_token.device_session_id,
-                    oidc_client_id: f4_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
-                f4_now = Time.current
-                f4_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
-                  refresh_token_expires_at: f4_now + 10.minutes,
-                )
-                f4_access = AuthenticationTokenService.encode(
-                  f4_token.actor_record, host: f4_host, resource_type: "client",
-                                         session_public_id: f4_token.public_id,
-                                         base_session_public_id: f4_token.public_id,
-                                         oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
-                                         expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
-                                         issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
-                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
-                                         subject: OidcSubject.for(
-                                           f4_token.actor_record,
-                                           resource_type: "client",
-                                         ), client_id: f4_client.client_id,
-                )
-                @base_browser_rp_credentials[f4_key] =
-                  [f4_access, f4_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f4_key]
-                f4_access, f4_refresh = @base_browser_rp_credentials.fetch(f4_key)
-                f4_cookie = [
-                  f4_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f4_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f4_refresh)}",
-                ].join("; ")
-                f4_headers = f4_headers.merge(
-                  "Cookie" => f4_cookie,
-                  "HTTP_COOKIE" => f4_cookie,
-                )
-              end
-            end
-            f4_headers
-          end
-        fx4_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx4_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end
-    get visa_app_oidc_logout_url(host: @host),
-        params: { logout_challenge: "no-such-logout-challenge", ri: "jp" },
-        headers: http_headers_26
+  test "D-33 refuses logout_challenge on GET" do
+    stops_before = OpAppAuthorityStop.count
+    get visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    assert_response :unprocessable_content
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
   end
 
@@ -749,618 +619,70 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "xyz"
   end
 
-  test "logout_challenge for an unknown transaction is rejected as not found" do
-    http_headers_22 =
-      begin
-        fx8_harness =
-          begin
-            f8_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f8_host = f8_headers["Host"]
-            f8_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f8_host}/") if f8_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f8_family, f8_surface = f8_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f8_family) && f8_surface == "app"
-              f8_client_id =
-                case f8_family
-                when "base" then "base-#{f8_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f8_family}-#{f8_surface}"
-                end
-              f8_token = ClientToken.includes(
-                :user,
-                :device_session,
-              ).find_by!(public_id: f8_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-              f8_client = OidcClientRegistry.find!(f8_client_id)
-              f8_key = [f8_client.client_id, f8_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f8_key] && f8_token.currently_usable? &&
-                  !(f8_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f8_token.device_session_id,
-                    oidc_client_id: f8_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
-                f8_now = Time.current
-                f8_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
-                  refresh_token_expires_at: f8_now + 10.minutes,
-                )
-                f8_access = AuthenticationTokenService.encode(
-                  f8_token.actor_record, host: f8_host, resource_type: "client",
-                                         session_public_id: f8_token.public_id,
-                                         base_session_public_id: f8_token.public_id,
-                                         oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
-                                         expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
-                                         issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
-                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
-                                         subject: OidcSubject.for(
-                                           f8_token.actor_record,
-                                           resource_type: "client",
-                                         ), client_id: f8_client.client_id,
-                )
-                @base_browser_rp_credentials[f8_key] =
-                  [f8_access, f8_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f8_key]
-                f8_access, f8_refresh = @base_browser_rp_credentials.fetch(f8_key)
-                f8_cookie = [
-                  f8_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f8_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f8_refresh)}",
-                ].join("; ")
-                f8_headers = f8_headers.merge(
-                  "Cookie" => f8_cookie,
-                  "HTTP_COOKIE" => f8_cookie,
-                )
-              end
-            end
-            f8_headers
-          end
-        fx8_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx8_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end
-    get visa_app_oidc_logout_url(host: @host),
-        params: { logout_challenge: "does-not-exist", ri: "jp" },
-        headers: http_headers_22
+  test "D-33 refuses an unknown logout_challenge without OP state changes" do
+    stops_before = OpAppAuthorityStop.count
+    get visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    assert_response :unprocessable_content
-  end
-
-  test "expired logout_challenge transaction is rejected as expired" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-        expires_in: -1.second,
-      ).transaction
-
-    http_headers_21 =
-      begin
-        fx9_harness =
-          begin
-            f9_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f9_host = f9_headers["Host"]
-            f9_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f9_host}/") if f9_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f9_family, f9_surface = f9_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f9_family) && f9_surface == "app"
-              f9_client_id =
-                case f9_family
-                when "base" then "base-#{f9_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f9_family}-#{f9_surface}"
-                end
-              f9_token = ClientToken.includes(
-                :user,
-                :device_session,
-              ).find_by!(public_id: f9_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-              f9_client = OidcClientRegistry.find!(f9_client_id)
-              f9_key = [f9_client.client_id, f9_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f9_key] && f9_token.currently_usable? &&
-                  !(f9_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f9_token.device_session_id,
-                    oidc_client_id: f9_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
-                f9_now = Time.current
-                f9_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f9_now,
-                  refresh_token_expires_at: f9_now + 10.minutes,
-                )
-                f9_access = AuthenticationTokenService.encode(
-                  f9_token.actor_record, host: f9_host, resource_type: "client",
-                                         session_public_id: f9_token.public_id,
-                                         base_session_public_id: f9_token.public_id,
-                                         oidc_sid: f9_session.public_id, oidc_jti: f9_session.oidc_jti,
-                                         expires_at: f9_now + 10.minutes, scopes: %w(openid profile),
-                                         issuer: OidcIssuer.for_client(f9_client), audiences: [f9_client.aud],
-                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f9_client),
-                                         subject: OidcSubject.for(
-                                           f9_token.actor_record,
-                                           resource_type: "client",
-                                         ), client_id: f9_client.client_id,
-                )
-                @base_browser_rp_credentials[f9_key] =
-                  [f9_access, f9_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f9_key]
-                f9_access, f9_refresh = @base_browser_rp_credentials.fetch(f9_key)
-                f9_cookie = [
-                  f9_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f9_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f9_refresh)}",
-                ].join("; ")
-                f9_headers = f9_headers.merge(
-                  "Cookie" => f9_cookie,
-                  "HTTP_COOKIE" => f9_cookie,
-                )
-              end
-            end
-            f9_headers
-          end
-        fx9_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx9_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end
-    get visa_app_oidc_logout_url(host: @host),
-        params: { logout_challenge: transaction.logout_challenge, ri: "jp" },
-        headers: http_headers_21
-
-    assert_response :unprocessable_content
-  end
-
-  test "GET request with a valid logout_challenge renders receiver-local confirmation without cleanup" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-
-    http_headers_20 =
-      begin
-        fx10_harness =
-          begin
-            f10_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f10_host = f10_headers["Host"]
-            f10_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f10_host}/") if f10_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f10_family, f10_surface = f10_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f10_family) && f10_surface == "app"
-              f10_client_id =
-                case f10_family
-                when "base" then "base-#{f10_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f10_family}-#{f10_surface}"
-                end
-              f10_token = ClientToken.includes(
-                :user,
-                :device_session,
-              ).find_by!(public_id: f10_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-              f10_client = OidcClientRegistry.find!(f10_client_id)
-              f10_key = [f10_client.client_id, f10_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f10_key] && f10_token.currently_usable? &&
-                  !(f10_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f10_token.device_session_id,
-                    oidc_client_id: f10_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f10_token.rotate_refresh_token! unless f10_token.device_session_record.current_refresh_token_id
-                f10_now = Time.current
-                f10_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f10_now,
-                  refresh_token_expires_at: f10_now + 10.minutes,
-                )
-                f10_access = AuthenticationTokenService.encode(
-                  f10_token.actor_record, host: f10_host, resource_type: "client",
-                                          session_public_id: f10_token.public_id,
-                                          base_session_public_id: f10_token.public_id,
-                                          oidc_sid: f10_session.public_id, oidc_jti: f10_session.oidc_jti,
-                                          expires_at: f10_now + 10.minutes, scopes: %w(openid profile),
-                                          issuer: OidcIssuer.for_client(f10_client), audiences: [f10_client.aud],
-                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f10_client),
-                                          subject: OidcSubject.for(
-                                            f10_token.actor_record,
-                                            resource_type: "client",
-                                          ), client_id: f10_client.client_id,
-                )
-                @base_browser_rp_credentials[f10_key] =
-                  [f10_access, f10_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f10_key]
-                f10_access, f10_refresh = @base_browser_rp_credentials.fetch(f10_key)
-                f10_cookie = [
-                  f10_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f10_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f10_refresh)}",
-                ].join("; ")
-                f10_headers = f10_headers.merge(
-                  "Cookie" => f10_cookie,
-                  "HTTP_COOKIE" => f10_cookie,
-                )
-              end
-            end
-            f10_headers
-          end
-        fx10_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx10_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end
-    get visa_app_oidc_logout_url(host: @host),
-        params: { logout_challenge: transaction.logout_challenge, ri: "jp" },
-        headers: http_headers_20
-
-    assert_response :success
-    page = response.parsed_body.at_css("script[data-page='app'][type='application/json']")
-    props = JSON.parse(page.text).fetch("props")
-
-    assert_equal visa_app_oidc_logout_path, props.fetch("form").fetch("action")
-    assert_equal transaction.logout_challenge, props.fetch("form").fetch("logout_challenge")
-    assert_not_predicate @token.reload, :revoked?
-    assert_not_predicate transaction.reload, :finalized?
-  end
-
-  test "POST with a sign-origin challenge cleans up this host and finalizes back to sign" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
-
-    post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: begin
-           fx11_harness =
-             begin
-               f11_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-               f11_host = f11_headers["Host"]
-               f11_route =
-                 begin
-                   Rails.application.routes.recognize_path("https://#{f11_host}/") if f11_host.present?
-                 rescue ActionController::RoutingError
-                   nil
-                 end
-               f11_family, f11_surface = f11_route&.fetch(:controller)&.split("/")
-               if %w(base warp core edit).include?(f11_family) && f11_surface == "app"
-                 f11_client_id =
-                   case f11_family
-                   when "base" then "base-#{f11_surface}-ww"
-                   when "edit" then "edit-org-ww"
-                   else "#{f11_family}-#{f11_surface}"
-                   end
-                 f11_token = ClientToken.includes(
-                   :user,
-                   :device_session,
-                 ).find_by!(public_id: f11_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                 f11_client = OidcClientRegistry.find!(f11_client_id)
-                 f11_key = [f11_client.client_id, f11_token.public_id]
-                 @base_browser_rp_credentials ||= {}
-                 if !@base_browser_rp_credentials[f11_key] && f11_token.currently_usable? &&
-                     !(f11_token.device_session_id && OpAppGrant.exists?(
-                       device_session_id: f11_token.device_session_id,
-                       oidc_client_id: f11_client.client_id,
-                       revoked_at: nil,
-                     ))
-                   f11_token.rotate_refresh_token! unless f11_token.device_session_record.current_refresh_token_id
-                   f11_now = Time.current
-                   f11_session = OpAppGrant.create!(
-                     authentication_epoch: 0,
-                     client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
-                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f11_now,
-                     refresh_token_expires_at: f11_now + 10.minutes,
-                   )
-                   f11_access = AuthenticationTokenService.encode(
-                     f11_token.actor_record,
-                     host: f11_host,
-                     resource_type: "client",
-                     session_public_id: f11_token.public_id,
-                     base_session_public_id: f11_token.public_id,
-                     oidc_sid: f11_session.public_id,
-                     oidc_jti: f11_session.oidc_jti,
-                     expires_at: f11_now + 10.minutes,
-                     scopes: %w(openid profile),
-                     issuer: OidcIssuer.for_client(f11_client),
-                     audiences: [f11_client.aud],
-                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f11_client),
-                     subject: OidcSubject.for(
-                       f11_token.actor_record,
-                       resource_type: "client",
-                     ),
-                     client_id: f11_client.client_id,
-                   )
-                   @base_browser_rp_credentials[f11_key] =
-                     [f11_access, f11_session.issue_refresh_token!]
-                 end
-                 if @base_browser_rp_credentials[f11_key]
-                   f11_access, f11_refresh = @base_browser_rp_credentials.fetch(f11_key)
-                   f11_cookie = [
-                     f11_headers.fetch("Cookie"),
-                     "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f11_access)}",
-                     "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f11_refresh)}",
-                   ].join("; ")
-                   f11_headers = f11_headers.merge(
-                     "Cookie" => f11_cookie,
-                     "HTTP_COOKIE" => f11_cookie,
-                   )
-                 end
-               end
-               f11_headers
-             end
-           fx11_harness.fetch("Cookie").split("; ").each do |pair|
-             name, value = pair.split("=", 2)
-             cookies[name] = Rack::Utils.unescape(value)
-           end
-           browser_headers.merge(fx11_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-         end.merge("Sec-Fetch-Site" => "same-origin")
-
-    assert_response :see_other
-    location = URI.parse(jump_rt_url_from_location(response.location))
-
-    assert_equal "/sign/out", location.path
-    assert_predicate transaction.reload, :finalized?
-  end
-
-  test "POST with a challenge already ready to finalize redirects immediately without cleanup" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "acme_cleared")
-
-    post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: begin
-           fx12_harness =
-             begin
-               f12_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-               f12_host = f12_headers["Host"]
-               f12_route =
-                 begin
-                   Rails.application.routes.recognize_path("https://#{f12_host}/") if f12_host.present?
-                 rescue ActionController::RoutingError
-                   nil
-                 end
-               f12_family, f12_surface = f12_route&.fetch(:controller)&.split("/")
-               if %w(base warp core edit).include?(f12_family) && f12_surface == "app"
-                 f12_client_id =
-                   case f12_family
-                   when "base" then "base-#{f12_surface}-ww"
-                   when "edit" then "edit-org-ww"
-                   else "#{f12_family}-#{f12_surface}"
-                   end
-                 f12_token = ClientToken.includes(
-                   :user,
-                   :device_session,
-                 ).find_by!(public_id: f12_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                 f12_client = OidcClientRegistry.find!(f12_client_id)
-                 f12_key = [f12_client.client_id, f12_token.public_id]
-                 @base_browser_rp_credentials ||= {}
-                 if !@base_browser_rp_credentials[f12_key] && f12_token.currently_usable? &&
-                     !(f12_token.device_session_id && OpAppGrant.exists?(
-                       device_session_id: f12_token.device_session_id,
-                       oidc_client_id: f12_client.client_id,
-                       revoked_at: nil,
-                     ))
-                   f12_token.rotate_refresh_token! unless f12_token.device_session_record.current_refresh_token_id
-                   f12_now = Time.current
-                   f12_session = OpAppGrant.create!(
-                     authentication_epoch: 0,
-                     client_token: f12_token, oidc_client_id: f12_client.client_id, oidc_scope: "openid profile",
-                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f12_now,
-                     refresh_token_expires_at: f12_now + 10.minutes,
-                   )
-                   f12_access = AuthenticationTokenService.encode(
-                     f12_token.actor_record,
-                     host: f12_host,
-                     resource_type: "client",
-                     session_public_id: f12_token.public_id,
-                     base_session_public_id: f12_token.public_id,
-                     oidc_sid: f12_session.public_id,
-                     oidc_jti: f12_session.oidc_jti,
-                     expires_at: f12_now + 10.minutes,
-                     scopes: %w(openid profile),
-                     issuer: OidcIssuer.for_client(f12_client),
-                     audiences: [f12_client.aud],
-                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f12_client),
-                     subject: OidcSubject.for(
-                       f12_token.actor_record,
-                       resource_type: "client",
-                     ),
-                     client_id: f12_client.client_id,
-                   )
-                   @base_browser_rp_credentials[f12_key] =
-                     [f12_access, f12_session.issue_refresh_token!]
-                 end
-                 if @base_browser_rp_credentials[f12_key]
-                   f12_access, f12_refresh = @base_browser_rp_credentials.fetch(f12_key)
-                   f12_cookie = [
-                     f12_headers.fetch("Cookie"),
-                     "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f12_access)}",
-                     "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f12_refresh)}",
-                   ].join("; ")
-                   f12_headers = f12_headers.merge(
-                     "Cookie" => f12_cookie,
-                     "HTTP_COOKIE" => f12_cookie,
-                   )
-                 end
-               end
-               f12_headers
-             end
-           fx12_harness.fetch("Cookie").split("; ").each do |pair|
-             name, value = pair.split("=", 2)
-             cookies[name] = Rack::Utils.unescape(value)
-           end
-           browser_headers.merge(fx12_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-         end.merge("Sec-Fetch-Site" => "same-origin")
-
-    assert_response :see_other
-    assert_predicate transaction.reload, :finalized?
-    # The direct-to-finalize path skips local cleanup entirely, so the still-current session
-    # token is left untouched (unlike the cleanup-then-finalize path exercised above).
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
   end
 
-  test "POST with a palm-origin challenge ready to finalize preserves callback state in the redirect" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "palm",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "palm", ri: "jp",
-          surface: "app",
-        ),
-        callback_state: "cb-state-xyz",
-        surface: "app",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "acme_cleared")
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "sign_cleared")
+  test "D-33 refuses an expired RP logout_challenge without OP state changes" do
+    stops_before = OpAppAuthorityStop.count
+    get visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: begin
-           fx13_harness =
-             begin
-               f13_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-               f13_host = f13_headers["Host"]
-               f13_route =
-                 begin
-                   Rails.application.routes.recognize_path("https://#{f13_host}/") if f13_host.present?
-                 rescue ActionController::RoutingError
-                   nil
-                 end
-               f13_family, f13_surface = f13_route&.fetch(:controller)&.split("/")
-               if %w(base warp core edit).include?(f13_family) && f13_surface == "app"
-                 f13_client_id =
-                   case f13_family
-                   when "base" then "base-#{f13_surface}-ww"
-                   when "edit" then "edit-org-ww"
-                   else "#{f13_family}-#{f13_surface}"
-                   end
-                 f13_token = ClientToken.includes(
-                   :user,
-                   :device_session,
-                 ).find_by!(public_id: f13_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                 f13_client = OidcClientRegistry.find!(f13_client_id)
-                 f13_key = [f13_client.client_id, f13_token.public_id]
-                 @base_browser_rp_credentials ||= {}
-                 if !@base_browser_rp_credentials[f13_key] && f13_token.currently_usable? &&
-                     !(f13_token.device_session_id && OpAppGrant.exists?(
-                       device_session_id: f13_token.device_session_id,
-                       oidc_client_id: f13_client.client_id,
-                       revoked_at: nil,
-                     ))
-                   f13_token.rotate_refresh_token! unless f13_token.device_session_record.current_refresh_token_id
-                   f13_now = Time.current
-                   f13_session = OpAppGrant.create!(
-                     authentication_epoch: 0,
-                     client_token: f13_token, oidc_client_id: f13_client.client_id, oidc_scope: "openid profile",
-                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f13_now,
-                     refresh_token_expires_at: f13_now + 10.minutes,
-                   )
-                   f13_access = AuthenticationTokenService.encode(
-                     f13_token.actor_record,
-                     host: f13_host,
-                     resource_type: "client",
-                     session_public_id: f13_token.public_id,
-                     base_session_public_id: f13_token.public_id,
-                     oidc_sid: f13_session.public_id,
-                     oidc_jti: f13_session.oidc_jti,
-                     expires_at: f13_now + 10.minutes,
-                     scopes: %w(openid profile),
-                     issuer: OidcIssuer.for_client(f13_client),
-                     audiences: [f13_client.aud],
-                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f13_client),
-                     subject: OidcSubject.for(
-                       f13_token.actor_record,
-                       resource_type: "client",
-                     ),
-                     client_id: f13_client.client_id,
-                   )
-                   @base_browser_rp_credentials[f13_key] =
-                     [f13_access, f13_session.issue_refresh_token!]
-                 end
-                 if @base_browser_rp_credentials[f13_key]
-                   f13_access, f13_refresh = @base_browser_rp_credentials.fetch(f13_key)
-                   f13_cookie = [
-                     f13_headers.fetch("Cookie"),
-                     "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f13_access)}",
-                     "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f13_refresh)}",
-                   ].join("; ")
-                   f13_headers = f13_headers.merge(
-                     "Cookie" => f13_cookie,
-                     "HTTP_COOKIE" => f13_cookie,
-                   )
-                 end
-               end
-               f13_headers
-             end
-           fx13_harness.fetch("Cookie").split("; ").each do |pair|
-             name, value = pair.split("=", 2)
-             cookies[name] = Rack::Utils.unescape(value)
-           end
-           browser_headers.merge(fx13_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-         end.merge("Sec-Fetch-Site" => "same-origin")
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
+  end
 
-    assert_response :see_other
-    location = URI.parse(jump_rt_url_from_location(response.location))
-    query = Rack::Utils.parse_nested_query(location.query.to_s)
+  test "D-33 refuses a previously issued RP logout_challenge" do
+    stops_before = OpAppAuthorityStop.count
+    get visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    assert_equal "/sign/out/completion", location.path
-    assert_equal transaction.logout_challenge, query["logout_challenge"]
-    assert_equal "cb-state-xyz", query["state"]
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D-33 refuses the retired sign-origin logout challenge on POST" do
+    stops_before = OpAppAuthorityStop.count
+    post visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+         headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D-33 refuses the retired ready logout challenge on POST" do
+    stops_before = OpAppAuthorityStop.count
+    post visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+         headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D-33 refuses the retired Palm logout challenge on POST" do
+    stops_before = OpAppAuthorityStop.count
+    post visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+         headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
   end
 
   test "invalid end-session request returns a json error for json format" do
@@ -1462,7 +784,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_request", body["error"]
   end
 
-  test "unresolvable logout completion returns a json failure for json format" do
+  test "a missing staged confirmation returns a json failure for json format" do
     http_headers_18 =
       begin
         fx15_harness =
@@ -1547,8 +869,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx15_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host, format: :json),
-         params: { id_token_hint: id_token, ri: "jp" },
+    post visa_app_oidc_logout_confirmation_path(host: @host, format: :json, ri: "jp"),
          headers: http_headers_18
 
     assert_response :unprocessable_content
@@ -1893,7 +1214,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           end
           browser_headers.merge(fx19_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
         end
-      post visa_app_oidc_logout_url(host: @host), headers: http_headers_14
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_14
 
       assert_response :ok
       assert_not_predicate @token.reload, :revoked?
@@ -1975,7 +1296,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           headers: unauthenticated_headers
       follow_redirect!(headers: unauthenticated_headers) if response.redirect?
 
-      post visa_app_oidc_logout_url(host: @host), headers: unauthenticated_headers
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: unauthenticated_headers
     end
 
     assert_not_predicate other_token.reload, :revoked?
@@ -2178,7 +1499,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_not_predicate @token.reload, :revoked?
   end
 
-  test "D1 authenticated browser presenting its own subject's hint for another sid ends neither session" do
+  test "D-33 uses the authenticated OP Root Session when the RP hint carries another sid" do
     sibling_token = ClientToken.create!(
       authentication_epoch: 0,
       user: @user,
@@ -2186,181 +1507,28 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     redirect_uri = @client.post_logout_redirect_uris.first
+    headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id).except("Cookie", "HTTP_COOKIE")
 
-    with_forgery_protection do
-      get visa_app_oidc_logout_url(host: @host),
-          params: {
-            id_token_hint: id_token(sid: sibling_token.public_id), post_logout_redirect_uri: redirect_uri, ri: "jp",
-          },
-          headers: begin
-            fx22_harness =
-              begin
-                f22_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-                f22_host = f22_headers["Host"]
-                f22_route =
-                  begin
-                    Rails.application.routes.recognize_path("https://#{f22_host}/") if f22_host.present?
-                  rescue ActionController::RoutingError
-                    nil
-                  end
-                f22_family, f22_surface = f22_route&.fetch(:controller)&.split("/")
-                if %w(base warp core edit).include?(f22_family) && f22_surface == "app"
-                  f22_client_id =
-                    case f22_family
-                    when "base" then "base-#{f22_surface}-ww"
-                    when "edit" then "edit-org-ww"
-                    else "#{f22_family}-#{f22_surface}"
-                    end
-                  f22_token = ClientToken.includes(
-                    :user,
-                    :device_session,
-                  ).find_by!(public_id: f22_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                  f22_client = OidcClientRegistry.find!(f22_client_id)
-                  f22_key = [f22_client.client_id, f22_token.public_id]
-                  @base_browser_rp_credentials ||= {}
-                  if !@base_browser_rp_credentials[f22_key] && f22_token.currently_usable? &&
-                      !(f22_token.device_session_id && OpAppGrant.exists?(
-                        device_session_id: f22_token.device_session_id,
-                        oidc_client_id: f22_client.client_id,
-                        revoked_at: nil,
-                      ))
-                    f22_token.rotate_refresh_token! unless f22_token.device_session_record.current_refresh_token_id
-                    f22_now = Time.current
-                    f22_session = OpAppGrant.create!(
-                      authentication_epoch: 0,
-                      client_token: f22_token, oidc_client_id: f22_client.client_id, oidc_scope: "openid profile",
-                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f22_now,
-                      refresh_token_expires_at: f22_now + 10.minutes,
-                    )
-                    f22_access = AuthenticationTokenService.encode(
-                      f22_token.actor_record,
-                      host: f22_host,
-                      resource_type: "client",
-                      session_public_id: f22_token.public_id,
-                      base_session_public_id: f22_token.public_id,
-                      oidc_sid: f22_session.public_id,
-                      oidc_jti: f22_session.oidc_jti,
-                      expires_at: f22_now + 10.minutes,
-                      scopes: %w(openid profile),
-                      issuer: OidcIssuer.for_client(f22_client),
-                      audiences: [f22_client.aud],
-                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f22_client),
-                      subject: OidcSubject.for(
-                        f22_token.actor_record,
-                        resource_type: "client",
-                      ),
-                      client_id: f22_client.client_id,
-                    )
-                    @base_browser_rp_credentials[f22_key] =
-                      [f22_access, f22_session.issue_refresh_token!]
-                  end
-                  if @base_browser_rp_credentials[f22_key]
-                    f22_access, f22_refresh = @base_browser_rp_credentials.fetch(f22_key)
-                    f22_cookie = [
-                      f22_headers.fetch("Cookie"),
-                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f22_access)}",
-                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f22_refresh)}",
-                    ].join("; ")
-                    f22_headers = f22_headers.merge(
-                      "Cookie" => f22_cookie,
-                      "HTTP_COOKIE" => f22_cookie,
-                    )
-                  end
-                end
-                f22_headers
-              end
-            fx22_harness.fetch("Cookie").split("; ").each do |pair|
-              name, value = pair.split("=", 2)
-              cookies[name] = Rack::Utils.unescape(value)
-            end
-            browser_headers.merge(fx22_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-          end.merge("Sec-Fetch-Site" => "same-origin")
+    get visa_app_oidc_logout_url(host: @host),
+        params: {
+          id_token_hint: id_token(sid: sibling_token.public_id),
+          post_logout_redirect_uri: redirect_uri,
+          state: "same-subject-rp-hint",
+          ri: "jp",
+        },
+        headers: headers
 
-      assert_response :bad_request
-      assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
-      assert_nil response.location
-      assert_includes response.headers["Cache-Control"].to_s, "no-store"
-
-      post visa_app_oidc_logout_url(host: @host), headers: begin
-        fx23_harness =
-          begin
-            f23_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f23_host = f23_headers["Host"]
-            f23_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f23_host}/") if f23_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f23_family, f23_surface = f23_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f23_family) && f23_surface == "app"
-              f23_client_id =
-                case f23_family
-                when "base" then "base-#{f23_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f23_family}-#{f23_surface}"
-                end
-              f23_token =
-                ClientToken.includes(:user, :device_session).find_by!(
-                  public_id: f23_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
-                )
-              f23_client = OidcClientRegistry.find!(f23_client_id)
-              f23_key = [f23_client.client_id, f23_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f23_key] && f23_token.currently_usable? &&
-                  !(f23_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f23_token.device_session_id,
-                    oidc_client_id: f23_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f23_token.rotate_refresh_token! unless f23_token.device_session_record.current_refresh_token_id
-                f23_now = Time.current
-                f23_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f23_token, oidc_client_id: f23_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f23_now,
-                  refresh_token_expires_at: f23_now + 10.minutes,
-                )
-                f23_access = AuthenticationTokenService.encode(
-                  f23_token.actor_record, host: f23_host, resource_type: "client",
-                                          session_public_id: f23_token.public_id,
-                                          base_session_public_id: f23_token.public_id,
-                                          oidc_sid: f23_session.public_id, oidc_jti: f23_session.oidc_jti,
-                                          expires_at: f23_now + 10.minutes, scopes: %w(openid profile),
-                                          issuer: OidcIssuer.for_client(f23_client), audiences: [f23_client.aud],
-                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f23_client),
-                                          subject: OidcSubject.for(
-                                            f23_token.actor_record,
-                                            resource_type: "client",
-                                          ), client_id: f23_client.client_id,
-                )
-                @base_browser_rp_credentials[f23_key] = [f23_access, f23_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f23_key]
-                f23_access, f23_refresh = @base_browser_rp_credentials.fetch(f23_key)
-                f23_cookie = [
-                  f23_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f23_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f23_refresh)}",
-                ].join("; ")
-                f23_headers = f23_headers.merge(
-                  "Cookie" => f23_cookie,
-                  "HTTP_COOKIE" => f23_cookie,
-                )
-              end
-            end
-            f23_headers
-          end
-        fx23_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx23_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end.merge("Sec-Fetch-Site" => "same-origin")
-    end
-
-    assert_not_predicate sibling_token.reload, :revoked?
+    assert_response :see_other
     assert_not_predicate @token.reload, :revoked?
+    assert_equal @session_public_id, session.dig(SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY, "sid")
+    assert_not_predicate sibling_token.reload, :revoked?
+    assert_equal redirect_uri, session.dig(SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY, "post_logout_redirect_uri")
+
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: headers
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+    assert_not_predicate sibling_token.reload, :revoked?
   end
 
   test "D1 access token without sid cannot use its own subject's hint to end a sibling session" do
@@ -2386,7 +1554,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_response :bad_request
       assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
       assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
-      post visa_app_oidc_logout_url(host: @host), headers: headers
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: headers
     end
 
     assert_not_predicate sibling_token.reload, :revoked?
@@ -2748,7 +1916,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx27_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_12
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_12
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
@@ -2918,7 +2086,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx29_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_10
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_10
 
     assert_response :ok
     assert_not_predicate @token.reload, :revoked?
@@ -3084,7 +2252,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx31_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_8
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_8
 
     assert_predicate @token.reload, :revoked?
 
@@ -3172,7 +2340,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx32_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_7
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_7
 
     assert_response :ok
     assert_not_predicate new_token.reload, :revoked?
@@ -3184,8 +2352,6 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
     valid = id_token
     [
-      { post_logout_redirect_uri: redirect_uri, ri: "jp" },
-      { id_token_hint: "", post_logout_redirect_uri: redirect_uri, ri: "jp" },
       { id_token_hint: [valid], post_logout_redirect_uri: redirect_uri, ri: "jp" },
       { id_token_hint: { "a" => valid }, post_logout_redirect_uri: redirect_uri, ri: "jp" },
       { id_token_hint: "#{valid}\u0000", post_logout_redirect_uri: redirect_uri, ri: "jp" },
@@ -3345,7 +2511,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           end
           browser_headers.merge(fx34_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
         end
-      post visa_app_oidc_logout_url(host: @host), headers: http_headers_5
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_5
 
       assert_not_predicate @token.reload, :revoked?, "revoked for #{params[:id_token_hint].inspect}"
     end
@@ -3595,7 +2761,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx37_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_2
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_2
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
@@ -3776,7 +2942,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx39_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post visa_app_oidc_logout_url(host: @host), headers: http_headers_0
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_0
 
     assert_not_predicate @token.reload, :revoked?
   end
@@ -3969,82 +3135,83 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
       csrf_token = response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content")
       assert_withheld("logout confirmation must include a CSRF token") { csrf_token.present? }
-      post visa_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
-        fx42_harness =
-          begin
-            f42_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f42_host = f42_headers["Host"]
-            f42_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f42_host}/") if f42_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f42_family, f42_surface = f42_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f42_family) && f42_surface == "app"
-              f42_client_id =
-                case f42_family
-                when "base" then "base-#{f42_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f42_family}-#{f42_surface}"
-                end
-              f42_token =
-                ClientToken.includes(:user, :device_session).find_by!(
-                  public_id: f42_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
-                )
-              f42_client = OidcClientRegistry.find!(f42_client_id)
-              f42_key = [f42_client.client_id, f42_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f42_key] && f42_token.currently_usable? &&
-                  !(f42_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f42_token.device_session_id,
-                    oidc_client_id: f42_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f42_token.rotate_refresh_token! unless f42_token.device_session_record.current_refresh_token_id
-                f42_now = Time.current
-                f42_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f42_token, oidc_client_id: f42_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f42_now,
-                  refresh_token_expires_at: f42_now + 10.minutes,
-                )
-                f42_access = AuthenticationTokenService.encode(
-                  f42_token.actor_record, host: f42_host, resource_type: "client",
-                                          session_public_id: f42_token.public_id,
-                                          base_session_public_id: f42_token.public_id,
-                                          oidc_sid: f42_session.public_id, oidc_jti: f42_session.oidc_jti,
-                                          expires_at: f42_now + 10.minutes, scopes: %w(openid profile),
-                                          issuer: OidcIssuer.for_client(f42_client), audiences: [f42_client.aud],
-                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f42_client),
-                                          subject: OidcSubject.for(
-                                            f42_token.actor_record,
-                                            resource_type: "client",
-                                          ), client_id: f42_client.client_id,
-                )
-                @base_browser_rp_credentials[f42_key] = [f42_access, f42_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f42_key]
-                f42_access, f42_refresh = @base_browser_rp_credentials.fetch(f42_key)
-                f42_cookie = [
-                  f42_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f42_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f42_refresh)}",
-                ].join("; ")
-                f42_headers = f42_headers.merge(
-                  "Cookie" => f42_cookie,
-                  "HTTP_COOKIE" => f42_cookie,
-                )
-              end
-            end
-            f42_headers
-          end
-        fx42_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx42_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end.merge("Sec-Fetch-Site" => "same-origin")
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"),
+           params: { authenticity_token: csrf_token }, headers: begin
+             fx42_harness =
+               begin
+                 f42_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+                 f42_host = f42_headers["Host"]
+                 f42_route =
+                   begin
+                     Rails.application.routes.recognize_path("https://#{f42_host}/") if f42_host.present?
+                   rescue ActionController::RoutingError
+                     nil
+                   end
+                 f42_family, f42_surface = f42_route&.fetch(:controller)&.split("/")
+                 if %w(base warp core edit).include?(f42_family) && f42_surface == "app"
+                   f42_client_id =
+                     case f42_family
+                     when "base" then "base-#{f42_surface}-ww"
+                     when "edit" then "edit-org-ww"
+                     else "#{f42_family}-#{f42_surface}"
+                     end
+                   f42_token =
+                     ClientToken.includes(:user, :device_session).find_by!(
+                       public_id: f42_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
+                     )
+                   f42_client = OidcClientRegistry.find!(f42_client_id)
+                   f42_key = [f42_client.client_id, f42_token.public_id]
+                   @base_browser_rp_credentials ||= {}
+                   if !@base_browser_rp_credentials[f42_key] && f42_token.currently_usable? &&
+                       !(f42_token.device_session_id && OpAppGrant.exists?(
+                         device_session_id: f42_token.device_session_id,
+                         oidc_client_id: f42_client.client_id,
+                         revoked_at: nil,
+                       ))
+                     f42_token.rotate_refresh_token! unless f42_token.device_session_record.current_refresh_token_id
+                     f42_now = Time.current
+                     f42_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
+                       client_token: f42_token, oidc_client_id: f42_client.client_id, oidc_scope: "openid profile",
+                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f42_now,
+                       refresh_token_expires_at: f42_now + 10.minutes,
+                     )
+                     f42_access = AuthenticationTokenService.encode(
+                       f42_token.actor_record, host: f42_host, resource_type: "client",
+                                               session_public_id: f42_token.public_id,
+                                               base_session_public_id: f42_token.public_id,
+                                               oidc_sid: f42_session.public_id, oidc_jti: f42_session.oidc_jti,
+                                               expires_at: f42_now + 10.minutes, scopes: %w(openid profile),
+                                               issuer: OidcIssuer.for_client(f42_client), audiences: [f42_client.aud],
+                                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f42_client),
+                                               subject: OidcSubject.for(
+                                                 f42_token.actor_record,
+                                                 resource_type: "client",
+                                               ), client_id: f42_client.client_id,
+                     )
+                     @base_browser_rp_credentials[f42_key] = [f42_access, f42_session.issue_refresh_token!]
+                   end
+                   if @base_browser_rp_credentials[f42_key]
+                     f42_access, f42_refresh = @base_browser_rp_credentials.fetch(f42_key)
+                     f42_cookie = [
+                       f42_headers.fetch("Cookie"),
+                       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f42_access)}",
+                       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f42_refresh)}",
+                     ].join("; ")
+                     f42_headers = f42_headers.merge(
+                       "Cookie" => f42_cookie,
+                       "HTTP_COOKIE" => f42_cookie,
+                     )
+                   end
+                 end
+                 f42_headers
+               end
+             fx42_harness.fetch("Cookie").split("; ").each do |pair|
+               name, value = pair.split("=", 2)
+               cookies[name] = Rack::Utils.unescape(value)
+             end
+             browser_headers.merge(fx42_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+           end.merge("Sec-Fetch-Site" => "same-origin")
     end
 
     assert_response :see_other
@@ -4055,307 +3222,25 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   # D2: the coordinated-logout CSRF declaration used to replace the inherited check, so an ordinary
   # POST without logout_challenge ran no CSRF verification at all.
-  test "D2 Auth navigation with a live challenge completes through a receiver-local protected POST" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+  test "D-33 refuses an Auth-origin logout challenge at the OP" do
+    stops_before = OpAppAuthorityStop.count
+    get visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    with_forgery_protection do
-      get visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-          headers: begin
-            fx43_harness =
-              begin
-                f43_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-                f43_host = f43_headers["Host"]
-                f43_route =
-                  begin
-                    Rails.application.routes.recognize_path("https://#{f43_host}/") if f43_host.present?
-                  rescue ActionController::RoutingError
-                    nil
-                  end
-                f43_family, f43_surface = f43_route&.fetch(:controller)&.split("/")
-                if %w(base warp core edit).include?(f43_family) && f43_surface == "app"
-                  f43_client_id =
-                    case f43_family
-                    when "base" then "base-#{f43_surface}-ww"
-                    when "edit" then "edit-org-ww"
-                    else "#{f43_family}-#{f43_surface}"
-                    end
-                  f43_token = ClientToken.includes(
-                    :user,
-                    :device_session,
-                  ).find_by!(public_id: f43_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                  f43_client = OidcClientRegistry.find!(f43_client_id)
-                  f43_key = [f43_client.client_id, f43_token.public_id]
-                  @base_browser_rp_credentials ||= {}
-                  if !@base_browser_rp_credentials[f43_key] && f43_token.currently_usable? &&
-                      !(f43_token.device_session_id && OpAppGrant.exists?(
-                        device_session_id: f43_token.device_session_id,
-                        oidc_client_id: f43_client.client_id,
-                        revoked_at: nil,
-                      ))
-                    f43_token.rotate_refresh_token! unless f43_token.device_session_record.current_refresh_token_id
-                    f43_now = Time.current
-                    f43_session = OpAppGrant.create!(
-                      authentication_epoch: 0,
-                      client_token: f43_token, oidc_client_id: f43_client.client_id, oidc_scope: "openid profile",
-                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f43_now,
-                      refresh_token_expires_at: f43_now + 10.minutes,
-                    )
-                    f43_access = AuthenticationTokenService.encode(
-                      f43_token.actor_record,
-                      host: f43_host,
-                      resource_type: "client",
-                      session_public_id: f43_token.public_id,
-                      base_session_public_id: f43_token.public_id,
-                      oidc_sid: f43_session.public_id,
-                      oidc_jti: f43_session.oidc_jti,
-                      expires_at: f43_now + 10.minutes,
-                      scopes: %w(openid profile),
-                      issuer: OidcIssuer.for_client(f43_client),
-                      audiences: [f43_client.aud],
-                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f43_client),
-                      subject: OidcSubject.for(
-                        f43_token.actor_record,
-                        resource_type: "client",
-                      ),
-                      client_id: f43_client.client_id,
-                    )
-                    @base_browser_rp_credentials[f43_key] =
-                      [f43_access, f43_session.issue_refresh_token!]
-                  end
-                  if @base_browser_rp_credentials[f43_key]
-                    f43_access, f43_refresh = @base_browser_rp_credentials.fetch(f43_key)
-                    f43_cookie = [
-                      f43_headers.fetch("Cookie"),
-                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f43_access)}",
-                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f43_refresh)}",
-                    ].join("; ")
-                    f43_headers = f43_headers.merge(
-                      "Cookie" => f43_cookie,
-                      "HTTP_COOKIE" => f43_cookie,
-                    )
-                  end
-                end
-                f43_headers
-              end
-            fx43_harness.fetch("Cookie").split("; ").each do |pair|
-              name, value = pair.split("=", 2)
-              cookies[name] = Rack::Utils.unescape(value)
-            end
-            browser_headers.merge(fx43_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-          end.merge("Sec-Fetch-Site" => "same-site")
-
-      assert_response :success
-      assert_not_predicate @token.reload, :revoked?
-      assert_not_predicate transaction.reload, :finalized?
-      csrf = response.parsed_body.at_css("meta[name='csrf-token']")["content"]
-      post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-           params: { authenticity_token: csrf },
-           headers: begin
-             fx44_harness =
-               begin
-                 f44_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-                 f44_host = f44_headers["Host"]
-                 f44_route =
-                   begin
-                     Rails.application.routes.recognize_path("https://#{f44_host}/") if f44_host.present?
-                   rescue ActionController::RoutingError
-                     nil
-                   end
-                 f44_family, f44_surface = f44_route&.fetch(:controller)&.split("/")
-                 if %w(base warp core edit).include?(f44_family) && f44_surface == "app"
-                   f44_client_id =
-                     case f44_family
-                     when "base" then "base-#{f44_surface}-ww"
-                     when "edit" then "edit-org-ww"
-                     else "#{f44_family}-#{f44_surface}"
-                     end
-                   f44_token = ClientToken.includes(
-                     :user,
-                     :device_session,
-                   ).find_by!(public_id: f44_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                   f44_client = OidcClientRegistry.find!(f44_client_id)
-                   f44_key = [f44_client.client_id, f44_token.public_id]
-                   @base_browser_rp_credentials ||= {}
-                   if !@base_browser_rp_credentials[f44_key] && f44_token.currently_usable? &&
-                       !(f44_token.device_session_id && OpAppGrant.exists?(
-                         device_session_id: f44_token.device_session_id,
-                         oidc_client_id: f44_client.client_id,
-                         revoked_at: nil,
-                       ))
-                     f44_token.rotate_refresh_token! unless f44_token.device_session_record.current_refresh_token_id
-                     f44_now = Time.current
-                     f44_session = OpAppGrant.create!(
-                       authentication_epoch: 0,
-                       client_token: f44_token, oidc_client_id: f44_client.client_id, oidc_scope: "openid profile",
-                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f44_now,
-                       refresh_token_expires_at: f44_now + 10.minutes,
-                     )
-                     f44_access = AuthenticationTokenService.encode(
-                       f44_token.actor_record,
-                       host: f44_host,
-                       resource_type: "client",
-                       session_public_id: f44_token.public_id,
-                       base_session_public_id: f44_token.public_id,
-                       oidc_sid: f44_session.public_id,
-                       oidc_jti: f44_session.oidc_jti,
-                       expires_at: f44_now + 10.minutes,
-                       scopes: %w(openid profile),
-                       issuer: OidcIssuer.for_client(f44_client),
-                       audiences: [f44_client.aud],
-                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f44_client),
-                       subject: OidcSubject.for(
-                         f44_token.actor_record,
-                         resource_type: "client",
-                       ),
-                       client_id: f44_client.client_id,
-                     )
-                     @base_browser_rp_credentials[f44_key] =
-                       [f44_access, f44_session.issue_refresh_token!]
-                   end
-                   if @base_browser_rp_credentials[f44_key]
-                     f44_access, f44_refresh = @base_browser_rp_credentials.fetch(f44_key)
-                     f44_cookie = [
-                       f44_headers.fetch("Cookie"),
-                       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f44_access)}",
-                       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f44_refresh)}",
-                     ].join("; ")
-                     f44_headers = f44_headers.merge(
-                       "Cookie" => f44_cookie,
-                       "HTTP_COOKIE" => f44_cookie,
-                     )
-                   end
-                 end
-                 f44_headers
-               end
-             fx44_harness.fetch("Cookie").split("; ").each do |pair|
-               name, value = pair.split("=", 2)
-               cookies[name] = Rack::Utils.unescape(value)
-             end
-             browser_headers.merge(fx44_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-           end.except("X-CSRF-Token").merge(
-             "Sec-Fetch-Site" => "same-origin", "Origin" => "https://#{@host}",
-           )
-    end
-
-    assert_response :see_other
-    assert_predicate transaction.reload, :finalized?
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
   end
 
-  test "D2 coordinated POST with a live challenge is refused cross-site" do
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+  test "D-33 refuses coordinated RP logout challenges on POST" do
+    stops_before = OpAppAuthorityStop.count
+    post visa_app_oidc_logout_path(logout_challenge: "retired-rp-challenge", ri: "jp"),
+         headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
 
-    with_forgery_protection do
-      post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-           headers: begin
-             fx45_harness =
-               begin
-                 f45_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-                 f45_host = f45_headers["Host"]
-                 f45_route =
-                   begin
-                     Rails.application.routes.recognize_path("https://#{f45_host}/") if f45_host.present?
-                   rescue ActionController::RoutingError
-                     nil
-                   end
-                 f45_family, f45_surface = f45_route&.fetch(:controller)&.split("/")
-                 if %w(base warp core edit).include?(f45_family) && f45_surface == "app"
-                   f45_client_id =
-                     case f45_family
-                     when "base" then "base-#{f45_surface}-ww"
-                     when "edit" then "edit-org-ww"
-                     else "#{f45_family}-#{f45_surface}"
-                     end
-                   f45_token = ClientToken.includes(
-                     :user,
-                     :device_session,
-                   ).find_by!(public_id: f45_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                   f45_client = OidcClientRegistry.find!(f45_client_id)
-                   f45_key = [f45_client.client_id, f45_token.public_id]
-                   @base_browser_rp_credentials ||= {}
-                   if !@base_browser_rp_credentials[f45_key] && f45_token.currently_usable? &&
-                       !(f45_token.device_session_id && OpAppGrant.exists?(
-                         device_session_id: f45_token.device_session_id,
-                         oidc_client_id: f45_client.client_id,
-                         revoked_at: nil,
-                       ))
-                     f45_token.rotate_refresh_token! unless f45_token.device_session_record.current_refresh_token_id
-                     f45_now = Time.current
-                     f45_session = OpAppGrant.create!(
-                       authentication_epoch: 0,
-                       client_token: f45_token, oidc_client_id: f45_client.client_id, oidc_scope: "openid profile",
-                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f45_now,
-                       refresh_token_expires_at: f45_now + 10.minutes,
-                     )
-                     f45_access = AuthenticationTokenService.encode(
-                       f45_token.actor_record,
-                       host: f45_host,
-                       resource_type: "client",
-                       session_public_id: f45_token.public_id,
-                       base_session_public_id: f45_token.public_id,
-                       oidc_sid: f45_session.public_id,
-                       oidc_jti: f45_session.oidc_jti,
-                       expires_at: f45_now + 10.minutes,
-                       scopes: %w(openid profile),
-                       issuer: OidcIssuer.for_client(f45_client),
-                       audiences: [f45_client.aud],
-                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f45_client),
-                       subject: OidcSubject.for(
-                         f45_token.actor_record,
-                         resource_type: "client",
-                       ),
-                       client_id: f45_client.client_id,
-                     )
-                     @base_browser_rp_credentials[f45_key] =
-                       [f45_access, f45_session.issue_refresh_token!]
-                   end
-                   if @base_browser_rp_credentials[f45_key]
-                     f45_access, f45_refresh = @base_browser_rp_credentials.fetch(f45_key)
-                     f45_cookie = [
-                       f45_headers.fetch("Cookie"),
-                       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f45_access)}",
-                       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f45_refresh)}",
-                     ].join("; ")
-                     f45_headers = f45_headers.merge(
-                       "Cookie" => f45_cookie,
-                       "HTTP_COOKIE" => f45_cookie,
-                     )
-                   end
-                 end
-                 f45_headers
-               end
-             fx45_harness.fetch("Cookie").split("; ").each do |pair|
-               name, value = pair.split("=", 2)
-               cookies[name] = Rack::Utils.unescape(value)
-             end
-             browser_headers.merge(fx45_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-           end.except("X-CSRF-Token").merge(
-             "Sec-Fetch-Site" => "cross-site", "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
-           )
-    end
-
-    assert_not_predicate transaction.reload, :finalized?
+    assert_response :bad_request
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
   end
 
@@ -4448,7 +3333,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             end
             browser_headers.merge(fx46_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
-      post visa_app_oidc_logout_url(host: @host),
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"),
            headers: begin
              fx47_harness =
                begin
@@ -4631,82 +3516,83 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_response :success
       csrf_token = response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content")
       assert_withheld("logout confirmation must include a CSRF token") { csrf_token.present? }
-      post visa_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
-        fx49_harness =
-          begin
-            f49_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-            f49_host = f49_headers["Host"]
-            f49_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{f49_host}/") if f49_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            f49_family, f49_surface = f49_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(f49_family) && f49_surface == "app"
-              f49_client_id =
-                case f49_family
-                when "base" then "base-#{f49_surface}-ww"
-                when "edit" then "edit-org-ww"
-                else "#{f49_family}-#{f49_surface}"
-                end
-              f49_token =
-                ClientToken.includes(:user, :device_session).find_by!(
-                  public_id: f49_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
-                )
-              f49_client = OidcClientRegistry.find!(f49_client_id)
-              f49_key = [f49_client.client_id, f49_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[f49_key] && f49_token.currently_usable? &&
-                  !(f49_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: f49_token.device_session_id,
-                    oidc_client_id: f49_client.client_id,
-                    revoked_at: nil,
-                  ))
-                f49_token.rotate_refresh_token! unless f49_token.device_session_record.current_refresh_token_id
-                f49_now = Time.current
-                f49_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: f49_token, oidc_client_id: f49_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f49_now,
-                  refresh_token_expires_at: f49_now + 10.minutes,
-                )
-                f49_access = AuthenticationTokenService.encode(
-                  f49_token.actor_record, host: f49_host, resource_type: "client",
-                                          session_public_id: f49_token.public_id,
-                                          base_session_public_id: f49_token.public_id,
-                                          oidc_sid: f49_session.public_id, oidc_jti: f49_session.oidc_jti,
-                                          expires_at: f49_now + 10.minutes, scopes: %w(openid profile),
-                                          issuer: OidcIssuer.for_client(f49_client), audiences: [f49_client.aud],
-                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f49_client),
-                                          subject: OidcSubject.for(
-                                            f49_token.actor_record,
-                                            resource_type: "client",
-                                          ), client_id: f49_client.client_id,
-                )
-                @base_browser_rp_credentials[f49_key] = [f49_access, f49_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[f49_key]
-                f49_access, f49_refresh = @base_browser_rp_credentials.fetch(f49_key)
-                f49_cookie = [
-                  f49_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f49_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f49_refresh)}",
-                ].join("; ")
-                f49_headers = f49_headers.merge(
-                  "Cookie" => f49_cookie,
-                  "HTTP_COOKIE" => f49_cookie,
-                )
-              end
-            end
-            f49_headers
-          end
-        fx49_harness.fetch("Cookie").split("; ").each do |pair|
-          name, value = pair.split("=", 2)
-          cookies[name] = Rack::Utils.unescape(value)
-        end
-        browser_headers.merge(fx49_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-      end.merge("Sec-Fetch-Site" => "same-origin")
+      post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"),
+           params: { authenticity_token: csrf_token }, headers: begin
+             fx49_harness =
+               begin
+                 f49_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+                 f49_host = f49_headers["Host"]
+                 f49_route =
+                   begin
+                     Rails.application.routes.recognize_path("https://#{f49_host}/") if f49_host.present?
+                   rescue ActionController::RoutingError
+                     nil
+                   end
+                 f49_family, f49_surface = f49_route&.fetch(:controller)&.split("/")
+                 if %w(base warp core edit).include?(f49_family) && f49_surface == "app"
+                   f49_client_id =
+                     case f49_family
+                     when "base" then "base-#{f49_surface}-ww"
+                     when "edit" then "edit-org-ww"
+                     else "#{f49_family}-#{f49_surface}"
+                     end
+                   f49_token =
+                     ClientToken.includes(:user, :device_session).find_by!(
+                       public_id: f49_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
+                     )
+                   f49_client = OidcClientRegistry.find!(f49_client_id)
+                   f49_key = [f49_client.client_id, f49_token.public_id]
+                   @base_browser_rp_credentials ||= {}
+                   if !@base_browser_rp_credentials[f49_key] && f49_token.currently_usable? &&
+                       !(f49_token.device_session_id && OpAppGrant.exists?(
+                         device_session_id: f49_token.device_session_id,
+                         oidc_client_id: f49_client.client_id,
+                         revoked_at: nil,
+                       ))
+                     f49_token.rotate_refresh_token! unless f49_token.device_session_record.current_refresh_token_id
+                     f49_now = Time.current
+                     f49_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
+                       client_token: f49_token, oidc_client_id: f49_client.client_id, oidc_scope: "openid profile",
+                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f49_now,
+                       refresh_token_expires_at: f49_now + 10.minutes,
+                     )
+                     f49_access = AuthenticationTokenService.encode(
+                       f49_token.actor_record, host: f49_host, resource_type: "client",
+                                               session_public_id: f49_token.public_id,
+                                               base_session_public_id: f49_token.public_id,
+                                               oidc_sid: f49_session.public_id, oidc_jti: f49_session.oidc_jti,
+                                               expires_at: f49_now + 10.minutes, scopes: %w(openid profile),
+                                               issuer: OidcIssuer.for_client(f49_client), audiences: [f49_client.aud],
+                                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f49_client),
+                                               subject: OidcSubject.for(
+                                                 f49_token.actor_record,
+                                                 resource_type: "client",
+                                               ), client_id: f49_client.client_id,
+                     )
+                     @base_browser_rp_credentials[f49_key] = [f49_access, f49_session.issue_refresh_token!]
+                   end
+                   if @base_browser_rp_credentials[f49_key]
+                     f49_access, f49_refresh = @base_browser_rp_credentials.fetch(f49_key)
+                     f49_cookie = [
+                       f49_headers.fetch("Cookie"),
+                       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f49_access)}",
+                       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f49_refresh)}",
+                     ].join("; ")
+                     f49_headers = f49_headers.merge(
+                       "Cookie" => f49_cookie,
+                       "HTTP_COOKIE" => f49_cookie,
+                     )
+                   end
+                 end
+                 f49_headers
+               end
+             fx49_harness.fetch("Cookie").split("; ").each do |pair|
+               name, value = pair.split("=", 2)
+               cookies[name] = Rack::Utils.unescape(value)
+             end
+             browser_headers.merge(fx49_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+           end.merge("Sec-Fetch-Site" => "same-origin")
     end
 
     assert_response :see_other

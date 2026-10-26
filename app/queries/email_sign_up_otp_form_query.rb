@@ -33,7 +33,7 @@ class EmailSignUpOtpFormQuery
       when VisitorSignUpFlow
         raise ArgumentError, "COM signup requires its own Email" unless email.is_a?(VisitorEmail)
 
-        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::ACTIVE]
+        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Email signup realm"
       end
     end

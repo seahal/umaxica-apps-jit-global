@@ -7,9 +7,9 @@ require "test_helper"
 module Sign
   class WithdrawalErrorTest < ActiveSupport::TestCase
     test "WithdrawalError initializes with i18n key and status code" do
-      error = WithdrawalError.new("sign.withdrawal.test", :bad_request)
+      error = WithdrawalError.new("sign.withdrawal.errors.deletion_failed", :bad_request)
 
-      assert_equal "sign.withdrawal.test", error.i18n_key
+      assert_equal "sign.withdrawal.errors.deletion_failed", error.i18n_key
       assert_equal :bad_request, error.status_code
     end
 
@@ -59,7 +59,7 @@ module Sign
 
     test "WithdrawalError can be raised and caught" do
       assert_raises(WithdrawalError) do
-        raise WithdrawalError.new("sign.withdrawal.test", :bad_request)
+        raise WithdrawalError.new("sign.withdrawal.errors.deletion_failed", :bad_request)
       end
     end
 

@@ -117,4 +117,40 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
     assert_predicate identity.last_authenticated_at, :present?
     assert_equal 1, @client.client_external_identities.count
   end
+
+  test "banned Google and Apple subjects are refused before identity lookup or mutation" do
+    %w(google apple).each do |provider|
+      issuer = (provider == "google") ? "https://accounts.google.com" : "https://appleid.apple.com"
+      principal = ExternalAuthentication::VerifiedPrincipal.new(
+        provider:, issuer:, subject: "banned-link-#{SecureRandom.hex(12)}",
+        audience: "#{provider}-test-client-id", verified_at: ClientExternalIdentity.database_now,
+        verification_authority: "provider-fixture",
+      )
+      enforcement_case = AppEnforcementCase.create!(
+        kind: "permanent_ban", duration_mode: "permanent", visibility: "visible", release_mode: "break_glass_only",
+        effective_at: 1.minute.ago, reason_code: "abuse", principal_public_id: @client.public_id,
+        applied_by_operator_public_id: operators(:one).public_id,
+      )
+      digest = EnforcementIdentifierDigest.for_social_subject(
+        realm: "app", identifier_kind: "#{provider}_subject", issuer:, subject: principal.subject,
+      )
+      AppEnforcementIdentifierEffect.create!(
+        **digest, enforcement_case:, effective_at: 1.minute.ago,
+      )
+      repository = ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider:)
+
+      assert_no_difference(["ClientExternalIdentity.count", "ClientSocialAuditOutbox.count", "ClientToken.count"]) do
+        repository.stub(:find_for_user_for_link, ->(*) { flunk("a banned subject reached identity lookup") }) do
+          error =
+            assert_raises(SocialAuth::UnauthorizedError) do
+              SocialAuthLinkHandler.call(
+                principal:, credential_candidate: nil, current_client: @client, repository:,
+                provider:, uid: principal.subject, ceremony_started_at: 1.minute.ago,
+              )
+            end
+          assert_equal "errors.social_auth.unauthorized", error.i18n_key
+        end
+      end
+    end
+  end
 end

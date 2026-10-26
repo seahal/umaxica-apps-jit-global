@@ -11,7 +11,7 @@ module OrgSecondPasskeyGate
   ALLOWED_CONTROLLER_PREFIXES = %w(
     base/org/identity/passkeys base/org/verification base/org/verifications base/org/sign_outs
     visa/org/sign_byes visa/org/sign/ visa/org/oauth/ visa/org/oidc/ visa/org/well_known
-    base/org/edge/ base/org/health visa/org/ceremony_binding_confirmations
+    visa/org/edge/ visa/org/health visa/org/ceremony_binding_confirmations
   ).freeze
   MINIMUM_ACTIVE_PASSKEYS = 2
 

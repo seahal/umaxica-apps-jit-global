@@ -47,7 +47,7 @@ class SignUpArtifactCleanupAtomicityTest < ActiveSupport::TestCase
     contact_time = Time.current.change(usec: 0)
     actor = Visitor.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::ACTIVE, created_at: contact_time + 2.hours,
+      status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP, created_at: contact_time + 2.hours,
     )
     contact = VisitorTelephone.create!(
       visitor: actor, raw_number: "+12345678902", confirm_policy: true,
@@ -107,7 +107,7 @@ class SignUpArtifactCleanupAtomicityTest < ActiveSupport::TestCase
   end
 
   test "COM verified contact survives terminal flow cleanup" do
-    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP)
     contact = VisitorTelephone.create!(
       visitor: actor, raw_number: "+12345678904", confirm_policy: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
@@ -153,7 +153,7 @@ class SignUpArtifactCleanupAtomicityTest < ActiveSupport::TestCase
   end
 
   test "COM cleanup cannot retire artifacts of an in-progress flow" do
-    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP)
     contact = VisitorTelephone.create!(
       visitor: actor, raw_number: "+12345678906", confirm_policy: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,

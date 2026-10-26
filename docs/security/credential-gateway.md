@@ -2,9 +2,9 @@
 
 > **Legacy Sign/Acme vocabulary:** The `sign/id` and `acme/www` names in this document are retained
 > for historical placement and responsibility context. The current Rails implementation uses Auth
-> as the ceremony service and Base as the sole OIDC/Browser Session/RP Session authority. The
-> current handoff is the opaque, generation-bound Base/Auth contract documented in
-> `docs/security/ceremony-grant-result.md`.
+> as the ceremony service, Visa as the OIDC/Root Session authority, and Base as the browser RP. The
+> current handoff is the opaque, generation-bound Auth/Visa contract documented in
+> `docs/security/ceremony-grant-result.md` and `adr/visa-op-host.md`.
 
 ## Purpose
 
@@ -13,8 +13,9 @@ browser-origin, and credential-specific flows.
 
 This document is the stable docs companion to `docs/identity/authority-boundary.md`.
 
-In the current Rails route vocabulary, apply this boundary to Auth versus Base: Auth is the
-credential gateway / ceremony host, and Base owns identity-management settings.
+In the current Rails route vocabulary, apply this boundary to Auth versus Visa/Base: Auth is the
+credential gateway / ceremony host, Visa owns OIDC authority, and Base owns RP identity-management
+settings.
 
 ## Allowed Sign/ID Responsibilities
 

@@ -4,7 +4,7 @@ require "test_helper"
 
 class ProtocolControllerCsrfBoundaryTest < ActiveSupport::TestCase
   PROTOCOL_CONTROLLERS = [
-    Base::App::Oauth::TokensController,
+    Visa::App::Oauth::TokensController,
     Auth::App::Apple::NotificationsController,
   ].freeze
 

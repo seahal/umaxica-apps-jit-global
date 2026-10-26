@@ -70,8 +70,10 @@ module BaseCeremonyBindingConfirmation
 
   def validate_binding_base_context!(binding)
     unless self.class.ceremony_binding_allowed_purposes.include?(binding.purpose)
-      raise BaseAuthAdmissionCoordinator::Denied.new("binding purpose is not accepted on this surface",
-                                                      code: "invalid_admission")
+      raise BaseAuthAdmissionCoordinator::Denied.new(
+        "binding purpose is not accepted on this surface",
+        code: "invalid_admission",
+      )
     end
 
     raise BaseAuthAdmissionCoordinator::Denied.new("binding is unavailable", code: "invalid_admission") unless

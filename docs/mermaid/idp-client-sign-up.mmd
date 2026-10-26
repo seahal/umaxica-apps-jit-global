@@ -59,6 +59,9 @@ stateDiagram-v2
     FINALIZING --> HALTED: halt
     CHECKPOINT_PENDING --> CHECKPOINT_PENDING: clear_requirement
     note right of CHECKPOINT_PENDING
+        Telephone Passkey saving locks Flow before principal and rechecks
+        state, expiry and gate after waiting. Ended work is refused;
+        expiry uses SignUpTermination. A pending saved Passkey is idempotent.
         Email finalization locks Source owner before contact.
         Binding, principal promotion and audit intent commit together.
         Signup policies compare expiry against the owning Ticket database clock.

@@ -24,7 +24,8 @@ module OutboundHttp
     # at each call site rather than assumed here.
     #
     # `write_timeout` is genuinely optional: only the Google JWKS fetch pins one.
-    def self.build(url:, open_timeout:, read_timeout:, require_https:, write_timeout: nil)
+    def self.build(url:, open_timeout:, read_timeout:, require_https:, write_timeout: nil,
+                   require_public_address: false)
       # Faraday mutates the URI it is handed (Faraday::Connection#url_prefix=
       # assigns #path on it). Call sites legitimately pass a shared class
       # constant -- JitSecurityTurnstileVerifier::VERIFY_URI is frozen, others
@@ -38,7 +39,11 @@ module OutboundHttp
         builder.request(:url_encoded)
         # No follow_redirects: callers reach fixed endpoints, and following a
         # redirect elsewhere would reintroduce SSRF.
-        builder.adapter(default_adapter)
+        if require_public_address
+          builder.adapter(ConnectionAdapterPort, require_public_address: true)
+        else
+          builder.adapter(default_adapter)
+        end
         builder.options.open_timeout = open_timeout
         builder.options.timeout = read_timeout
         builder.options.write_timeout = write_timeout if write_timeout

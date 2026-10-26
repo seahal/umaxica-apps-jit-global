@@ -51,6 +51,8 @@ class SignComUpTelephoneRegistrationFinalizer
 
             ceremony_for(visitor, telephone).with_lock do
               finalize_source(visitor, telephone)
+              # D-128 / D-131: the registered status commits with the telephone binding.
+              visitor.promote_finished_registration!
             end
           end
         end

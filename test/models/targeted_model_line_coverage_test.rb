@@ -143,7 +143,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     assert_equal ActiveRecord::Base, AbstractStepUpCeremony.connection_owner
   end
 
-  test "flow sign in and sign out delegate their remaining public transitions" do
+  test "sign-in flow delegates its remaining public transitions" do
     sign_in = ClientSignInFlow.new
     assert_raises(FlowInvalidTransition) { sign_in.advance_sign_in_to_selector! }
     discard_calls = []
@@ -152,10 +152,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     end
 
     assert_equal sign_in.purge_eligible_at, discard_calls.last.fetch(:purge_eligible_at)
-
-    sign_out = ClientSignOutFlow.new(status_id: ClientSignOutFlow.status_id_for("NOTHING"))
-
-    assert_predicate sign_out, :sign_out_nothing?
   end
 
   test "unknown oidc and step up stores use the base connection owner" do

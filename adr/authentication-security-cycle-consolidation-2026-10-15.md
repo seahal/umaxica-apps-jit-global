@@ -108,17 +108,19 @@ from 3 to 9; they are never tracked as two items. This ADR uses `WU-N`.
 
 ### 2.6 Pending under WU-2
 
-Undecided; none of these may be implemented from earlier drafts:
+The following remain undecided; none may be inferred from an earlier draft:
 
 - Leaving `ADVANCED` and returning to `NORMAL` after losing every passkey.
 - Recovery conditions depending on Secret, Recovery Key and Email OTP availability.
 - The boundary between Operator approval and owner-held Identity management.
-- Handling of an `ADVANCED` actor found with fewer than two active passkeys. *(Decided 2026-10-23 for
-  ORG, D-92/D-132: every Operator becomes `ADVANCED`; one with a single active passkey keeps signing
-  in and is restricted to registering a second passkey and signing out until it exists; zero
-  passkeys cannot complete ordinary sign-in. APP/COM all start at `NORMAL` and enter `ADVANCED` only
-  by the owner's action.)*
 - ORG sign-up: state machine, invitation acceptance, Recovery Key, and Entra completion conditions.
+
+**D-92/D-132 amendment (2026-10-23).** The previously pending handling of an `ADVANCED` actor
+with fewer than two active passkeys is decided for ORG: every Operator is `ADVANCED`; one active
+passkey may continue ordinary sign-in but is restricted to registering a second passkey and signing
+out until it exists; zero active passkeys cannot complete ordinary sign-in. APP/COM start in
+`NORMAL` and enter `ADVANCED` only by the owner's action. This decision does not decide the recovery
+workflow after every passkey is lost.
 
 Recovery proposals discussed earlier (24 hours with a Recovery Key, 72 hours without one) are not
 final. The 72 hour MFA reset accepted in `adr/mfa-reset-account-recovery.md` is not applied

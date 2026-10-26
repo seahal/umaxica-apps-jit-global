@@ -66,7 +66,7 @@ module IdentitySocialCeremonyContract
   def visa_issuer_id(surface) = "surface:VISA_#{surface.to_s.upcase}"
 
   def issuer_for_id(surface, issuer_id)
-    issuer_id.to_s == visa_issuer_id(surface) ? visa_issuer(surface) : acme_issuer(surface)
+    (issuer_id.to_s == visa_issuer_id(surface)) ? visa_issuer(surface) : acme_issuer(surface)
   end
 
   def provider_subject_digest(provider:, subject:)

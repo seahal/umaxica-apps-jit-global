@@ -64,10 +64,9 @@ class TechRouteContractTest < ActionDispatch::IntegrationTest
       { controller: "tech/org/sign/out/completions", action: "show" },
       { path: "http://#{TECH_HOST}/sign/out/completion", method: :get },
     )
-    assert_recognizes(
-      { controller: "tech/org/sign/out/completions", action: "create" },
-      { path: "http://#{TECH_HOST}/sign/out/completion", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{TECH_HOST}/sign/out/completion", method: :post)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{TECH_HOST}/api/v0/profile", method: :get)

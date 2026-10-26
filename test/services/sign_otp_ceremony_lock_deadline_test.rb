@@ -21,7 +21,7 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
         test "#{surface} #{channel} signup #{operation} commits overdue Ticket expiry at #{lock_point}" do
           owner = owner_model.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
-            status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+            status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
           )
           destination =
             if channel == :email
@@ -79,9 +79,8 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
           end
 
           assert_not result.success?, "a correct code cannot authorize an overdue Ticket"
-          expired = flow.reload.sign_up_expired?
-
-          assert expired, "overdue Ticket must durably enter EXPIRED before refusal"
+          # D-177: the refusal writes nothing; only SignUpExpiryJob moves the Ticket to EXPIRED.
+          assert_not flow.reload.sign_up_terminal?, "an overdue Ticket is refused without an inline expiry"
           assert_nil contact.reload.binding_finalized_at
           assert_equal owner.id, contact[owner_key]
         end

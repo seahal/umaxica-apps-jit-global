@@ -26,28 +26,8 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
-    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
-    post(
-      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
-                            headers: admission_headers,
-    )
-
-    assert_response :see_other
-    # Public confirmation isolates this leaf's setup; separate HTTP tests exercise the Base receiver.
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
-                                       headers: admission_headers,
-    )
+    VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    admit_auth_ceremony_entry!(auth_com_sign_up_path(ri: "jp"), reference: issuance.reference)
 
     assert_response :see_other
     Prosopite.pause do
@@ -409,33 +389,32 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_withheld("protected record facts remain unchanged") { original_owner_facts == visitor.reload.attributes }
   end
 
-  test "replacement email signup retains the halted candidate and Identity until retention purge" do
-    destination = "com-replacement-#{SecureRandom.hex(8)}@example.test"
-    submission = {
-      visitor_email: { raw_address: destination, confirm_policy: "1" }, "cf-turnstile-response": "test",
-    }
-    post auth_com_sign_up_email_url(ri: "jp"), params: submission, headers: default_headers
+  test "a second entry submit while this browser's earlier attempt is unfinished is refused and changes nothing" do
+    destination = "com-held-#{SecureRandom.hex(8)}@example.test"
+    post auth_com_sign_up_email_url(ri: "jp"),
+         params: { visitor_email: { raw_address: destination, confirm_policy: "1" }, "cf-turnstile-response": "test" },
+         headers: default_headers
 
     assert_response :redirect
-    first = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
-    candidate = VisitorEmail.find(first.pending_contact_id)
-    owner_id = candidate.visitor_id
+    original_locator = session[:com_sign_up_flow_locator].dup
+    first = VisitorSignUpFlow.find_by!(public_id: original_locator.fetch("public_id"))
+    first_facts = first.attributes
+    candidate_facts = VisitorEmail.find(first.pending_contact_id).attributes
 
-    travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      assert_difference("VisitorEmail.count", 1) do
-        assert_difference("Visitor.count", 1) do
-          post auth_com_sign_up_email_url(ri: "jp"), params: submission, headers: default_headers
-        end
+    [destination, "com-other-#{SecureRandom.hex(8)}@example.test"].each do |address|
+      assert_no_difference(["Visitor.count", "VisitorEmail.count", "VisitorSignUpFlow.count", "enqueued_jobs.size"]) do
+        post auth_com_sign_up_email_url(ri: "jp"),
+             params: { visitor_email: { raw_address: address, confirm_policy: "1" }, "cf-turnstile-response": "test" },
+             headers: default_headers
       end
+
+      assert_response :unprocessable_content
+      assert_includes response.body, I18n.t("sign.com.registration.email.create.contact_held", locale: :ja)
     end
 
-    assert_response :redirect
-    assert VisitorEmail.exists?(candidate.id)
-    assert Visitor.exists?(owner_id)
-    assert_predicate first.reload, :sign_up_halted?
-    assert_predicate first, :cleanup_completed?
-    assert_operator candidate.reload.purge_eligible_at, :>, candidate.discard_at
-    assert_empty VisitorEmailHistory.where(visitor_id: owner_id)
+    assert_equal original_locator, session[:com_sign_up_flow_locator]
+    assert_equal first_facts, first.reload.attributes
+    assert_equal candidate_facts, VisitorEmail.find(first.pending_contact_id).attributes
   end
 
   test "fresh sessions cannot distinguish pending and registered email sign-up" do
@@ -451,39 +430,39 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     existing_facts = existing.reload.attributes
     existing_owner_facts = visitor.reload.attributes
     responses = []
+    refusals = []
     candidates = []
     browsers = []
     targets = []
 
     [existing.address, "com-fresh-session-pending-signup@example.com"].each do |destination|
-      2.times do
+      2.times do |attempt|
         browser = open_session
         browser.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"))
         browser.https!
         issuance = OidcTestEntry.issue!(
           surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
         )
-        binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-        browser.get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-        assert_equal 200, browser.response.status
-        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+        admit_auth_ceremony_entry!(auth_com_sign_up_path(ri: "jp"), reference: issuance.reference, browser: browser)
         headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}", "Sec-Fetch-Site" => "same-origin" }
-        browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
-        )
 
         assert_equal 303, browser.response.status
-        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-        browser.get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        browser.post(
-          auth_com_sign_up_path(ri: "jp"),
-          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
-        )
+        if attempt == 1
+          # D-135: the first browser's unfinished registration now holds the destination,
+          # registered or not, so the second browser is refused the same way for both.
+          assert_no_difference("VisitorEmail.count") do
+            browser.post(
+              auth_com_sign_up_email_url(ri: "jp"),
+              params: { visitor_email: { raw_address: destination, confirm_policy: "1" },
+                        "cf-turnstile-response": "test", }, headers: headers,
+            )
+          end
 
-        assert_equal 303, browser.response.status
+          refusals << browser.response.status
+          next
+        end
+
         assert_difference("VisitorEmail.count", 1) do
           browser.post(
             auth_com_sign_up_email_url(ri: "jp"),
@@ -510,8 +489,9 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_equal 1, responses.uniq.length
-    assert_equal 4, candidates.map(&:id).uniq.length
-    assert_equal 4, candidates.map(&:visitor_id).uniq.length
+    assert_equal [422, 422], refusals
+    assert_equal 2, candidates.map(&:id).uniq.length
+    assert_equal 2, candidates.map(&:visitor_id).uniq.length
     assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
     assert_withheld("protected record facts remain unchanged") { existing_owner_facts == visitor.reload.attributes }
     own_candidate_facts = candidates.last.attributes
@@ -639,111 +619,6 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :unprocessable_content
     assert_equal "turnstile@example.com", inertia_props.fetch("field").fetch("value")
-  end
-
-  test "create keeps re-registration inside overwrite window non-disclosing" do
-    email_address = "cooldown-up@example.com"
-    headers = { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
-
-    post auth_com_sign_up_email_url(ri: "jp"),
-         params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
-                   "cf-turnstile-response": "test", },
-         headers: headers
-
-    assert_response :redirect
-    first_target = URI.parse(response.location)
-    first_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
-
-    first_candidate = VisitorEmail.find(first_flow.pending_contact_id)
-    original_candidate_facts = first_candidate.reload.attributes.slice(
-      "visitor_id", "address_digest",
-      "binding_finalized_at", "binding_released_at",
-    )
-    original_owner = contact_owner_for_test(first_candidate)
-    # A new entry starts its own flow; the previous screen must never act on that replacement.
-    post auth_com_sign_up_email_url(ri: "jp"),
-         params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
-                   "cf-turnstile-response": "test", },
-         headers: headers
-
-    assert_response :redirect
-    second_target = URI.parse(response.location)
-    second_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
-
-    assert_equal [ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "/sign/up/check/email/otp"],
-                 [second_target.host, second_target.path]
-    assert_equal %w(fb ri), Rack::Utils.parse_query(second_target.query).keys.sort
-    assert_not_equal first_flow.public_id, second_flow.public_id
-    assert_predicate first_flow.reload, :sign_up_halted?
-    assert_not_predicate second_flow, :sign_up_terminal?
-    second_candidate = VisitorEmail.find(second_flow.pending_contact_id)
-
-    assert_not_equal first_candidate.id, second_candidate.id
-    assert_not_equal first_candidate.visitor_id, second_candidate.visitor_id
-    assert_equal first_candidate.address_digest, second_candidate.address_digest
-    assert_withheld("owned supersession preserves binding facts") {
-      original_candidate_facts == first_candidate.reload.attributes.slice(
-        "visitor_id", "address_digest",
-        "binding_finalized_at", "binding_released_at",
-      )
-    }
-    assert_predicate first_flow, :cleanup_completed?
-    assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
-    assert_operator original_owner.reload.discard_at, :<=, first_flow.cleanup_completed_at
-    assert_operator original_owner.purge_eligible_at, :>, original_owner.discard_at
-    replacement_facts = second_flow.attributes
-    get first_target.request_uri
-
-    assert_response :conflict
-    assert_withheld("protected record facts remain unchanged") { replacement_facts == second_flow.reload.attributes }
-  end
-
-  test "a new email registration after the old window preserves the original candidate and owner" do
-    destination = "overwrite-window-com@example.com"
-    post auth_com_sign_up_email_url(ri: "jp"),
-         params: { visitor_email: { raw_address: destination, confirm_policy: "1" },
-                   "cf-turnstile-response": "test", },
-         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
-
-    assert_response :redirect
-    first_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
-    first_candidate = VisitorEmail.find(first_flow.pending_contact_id)
-    first_facts = first_candidate.reload.attributes.slice(
-      "visitor_id", "address_digest", "binding_finalized_at",
-      "binding_released_at",
-    )
-    first_owner = contact_owner_for_test(first_candidate)
-
-    travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      assert_difference("VisitorEmail.count", 1) do
-        assert_difference("Visitor.count", 1) do
-          post auth_com_sign_up_email_url(ri: "jp"),
-               params: { visitor_email: { raw_address: destination, confirm_policy: "1" },
-                         "cf-turnstile-response": "test", },
-               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
-        end
-      end
-    end
-
-    assert_response :redirect
-    current = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
-    replacement = VisitorEmail.find(current.pending_contact_id)
-
-    assert_not_equal first_candidate.id, replacement.id
-    assert_not_equal first_candidate.visitor_id, replacement.visitor_id
-    assert_equal first_candidate.address_digest, replacement.address_digest
-    assert_withheld("owned supersession preserves binding facts") {
-      first_facts == first_candidate.reload.attributes.slice(
-        "visitor_id", "address_digest", "binding_finalized_at",
-        "binding_released_at",
-      )
-    }
-    assert_predicate first_flow.reload, :sign_up_halted?
-    assert_predicate first_flow, :cleanup_completed?
-    assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
-    assert_operator first_owner.reload.discard_at, :<=, first_flow.cleanup_completed_at
-    assert_operator first_owner.purge_eligible_at, :>, first_owner.discard_at
-    assert_nil replacement.binding_finalized_at
   end
 
   test "create rejects signup for an email blocked by an in-force registration_blocked Identifier Effect, " \

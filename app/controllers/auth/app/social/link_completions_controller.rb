@@ -73,11 +73,16 @@ module Auth
             user: current_client,
             ceremony_started_at: grant.created_at,
           )
+          token.consume_step_up_evidence!(
+            requirement: social_auth_step_up_requirement(token, ttl: STEP_UP_TTL), now: now,
+          )
           record.consume!(
             now: now, error_class: IdentitySocialCeremonyContract::Error,
             not_found_message: "social link candidate unavailable", expired_message: "social link candidate expired",
           )
           grant.expire!
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          raise SocialAuth::StepUpRequiredError.new("errors.social_auth.step_up_required")
         end
 
         def validate_link_grant!(grant, candidate, device_session, now)

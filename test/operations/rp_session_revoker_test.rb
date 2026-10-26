@@ -23,7 +23,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   end
 
   test "rp_session scope revokes only the targeted child" do
-    result = RpSessionRevoker.call(scope: :rp_session, record: @session_a)
+    result = RpSessionRevoker.call(
+      scope: :rp_session, record: @session_a, cause: "token_revocation",
+      authority_evidence_ref: "test",
+    )
 
     assert_predicate result, :success?
     assert_equal 1, result.revoked_count
@@ -33,7 +36,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   end
 
   test "browser_session scope revokes every active child for the parent" do
-    result = RpSessionRevoker.call(scope: :browser_session, record: @root)
+    result = RpSessionRevoker.call(
+      scope: :browser_session, record: @root, cause: "browser_logout",
+      authority_evidence_ref: "test",
+    )
 
     assert_predicate result, :success?
     assert_equal 2, result.revoked_count
@@ -45,17 +51,20 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     expired_session = OpAppGrant.create!(
       authentication_epoch: 0,
       client_token: @root,
-      oidc_client_id: "edit-app",
+      oidc_client_id: "palm-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.minute.ago,
     )
 
-    result = RpSessionRevoker.call(scope: :browser_session, record: @root)
+    result = RpSessionRevoker.call(
+      scope: :browser_session, record: @root, cause: "browser_logout",
+      authority_evidence_ref: "test",
+    )
 
     assert_predicate result, :success?
     assert_equal 3, result.revoked_count
     assert_predicate expired_session.reload, :revoked?
-    assert_equal "failed", expired_session.reload.last_logout_status
+    assert_equal "success", expired_session.reload.last_logout_status
   end
 
   test "browser_session scope locks the parent before any RP Session" do
@@ -75,7 +84,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
       end
 
     ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
-      RpSessionRevoker.call(scope: :browser_session, record: @root)
+      RpSessionRevoker.call(
+        scope: :browser_session, record: @root, cause: "browser_logout",
+        authority_evidence_ref: "test",
+      )
     end
 
     assert_equal :parent, lock_tables.first,
@@ -100,7 +112,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
       end
 
     ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
-      RpSessionRevoker.call(scope: :rp_session, record: @session_a)
+      RpSessionRevoker.call(
+        scope: :rp_session, record: @session_a, cause: "token_revocation",
+        authority_evidence_ref: "test",
+      )
     end
 
     assert_equal :parent, lock_tables.first,
@@ -118,7 +133,9 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
       refresh_token_expires_at: 1.hour.from_now,
     )
 
-    result = RpSessionRevoker.call(scope: :identity, record: [@root, other_root])
+    result = RpSessionRevoker.call(
+      scope: :identity, record: [@root, other_root], cause: "browser_logout", authority_evidence_ref: "test",
+    )
 
     assert_predicate result, :success?
     assert_operator result.revoked_count, :>=, 3
@@ -142,7 +159,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
       refresh_token_expires_at: 1.hour.from_now,
     )
 
-    result = RpSessionRevoker.call(scope: :browser_session, record: visitor_root)
+    result = RpSessionRevoker.call(
+      scope: :browser_session, record: visitor_root, cause: "browser_logout",
+      authority_evidence_ref: "test",
+    )
 
     assert_equal 1, result.revoked_count
     assert_predicate visitor_session.reload, :revoked?
@@ -164,7 +184,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
       refresh_token_expires_at: 1.hour.from_now,
     )
 
-    result = RpSessionRevoker.call(scope: :browser_session, record: operator_root)
+    result = RpSessionRevoker.call(
+      scope: :browser_session, record: operator_root, cause: "browser_logout",
+      authority_evidence_ref: "test",
+    )
 
     assert_equal 1, result.revoked_count
     assert_predicate operator_session.reload, :revoked?
@@ -174,7 +197,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   test "browser_session scope rejects a record that is not a Base Browser Session" do
     error =
       assert_raises(ArgumentError) do
-        RpSessionRevoker.call(scope: :browser_session, record: @session_a)
+        RpSessionRevoker.call(
+          scope: :browser_session, record: @session_a, cause: "browser_logout",
+          authority_evidence_ref: "test",
+        )
       end
 
     assert_includes error.message, "OpAppGrant"
@@ -183,7 +209,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
   test "identity scope rejects a record that is not enumerable" do
     assert_raises(ArgumentError) do
-      RpSessionRevoker.call(scope: :identity, record: @root)
+      RpSessionRevoker.call(scope: :identity, record: @root, cause: "browser_logout", authority_evidence_ref: "test")
     end
 
     assert_not @session_a.reload.revoked?
@@ -192,7 +218,10 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   test "rejects an unsupported revoke scope" do
     error =
       assert_raises(ArgumentError) do
-        RpSessionRevoker.call(scope: :organization, record: @root)
+        RpSessionRevoker.call(
+          scope: :organization, record: @root, cause: "browser_logout",
+          authority_evidence_ref: "test",
+        )
       end
 
     assert_includes error.message, ":organization"

@@ -5,21 +5,27 @@ require "test_helper"
 require "concurrent/executor/simple_executor_service"
 
 class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
+  include AuthorityStopCleanup
+
   self.use_transactional_tests = false
 
-  # Session revocation commits sign-out flows, and no fixture clears those tables. A leftover
-  # flow references a token that the next fixture load deletes, and PostgreSQL 18 re-validates
-  # foreign keys when fixture loading re-enforces them, so every later fixture load fails.
-  # Resolution writers also commit chronicle rows, which later owner-scoped history tests would read.
-  SIGN_OUT_FLOW_CLASSES = [ClientSignOutFlow, VisitorSignOutFlow, OperatorSignOutFlow,
-                           ClientChronicle, OperatorChronicle,].freeze
+  # Resolution writers commit chronicle rows, which later owner-scoped history tests would read.
+  CHRONICLE_CLASSES = [ClientChronicle, OperatorChronicle].freeze
+  AUTHORITY_STOP_CLASSES = [OpAppAuthorityStop, OpComAuthorityStop, OpOrgAuthorityStop].freeze
 
   setup do
-    @sign_out_flow_watermarks = SIGN_OUT_FLOW_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
+    @chronicle_watermarks = CHRONICLE_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
+    @authority_stop_watermarks = AUTHORITY_STOP_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
   end
 
   teardown do
-    @sign_out_flow_watermarks&.each { |klass, last_id| klass.where(id: (last_id + 1)..).delete_all }
+    @chronicle_watermarks&.each { |klass, last_id| klass.where(id: (last_id + 1)..).delete_all }
+    @authority_stop_watermarks&.each do |stop_class, last_id|
+      delete_authority_stops_for!(
+        realm: OpAuthorityStopCommitter::REALMS.find { |_realm, config| config.fetch(:stop) == stop_class }.first,
+        stop_ids: stop_class.where(id: (last_id + 1)..).pluck(:id),
+      )
+    end
   end
 
   test "client resolution binds the parent and revokes only an owned selected session" do
@@ -670,7 +676,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           )
         end
 
-      token_class.where(owner_key => actor.id).delete_all
+      delete_actor_tokens!(token_class, owner_key, actor)
       limit.times do
         token = token_class.new(:authentication_epoch => 0, owner_key => actor.id)
         token.skip_session_limit_check = true if token.respond_to?(:skip_session_limit_check=)
@@ -719,7 +725,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       if actor
         resolution_class.where(sign_in_flow_id: flows.map(&:id)).delete_all
         flow_class.where(id: flows.map(&:id)).delete_all
-        token_class.where(owner_key => actor.id).delete_all
+        delete_actor_tokens!(token_class, owner_key, actor)
       end
     end
   end
@@ -796,7 +802,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       # an earlier interrupted run can carry this actor's or a future token's id. Remove only
       # those leftovers: sessions under the recycled actor id, and flows bound to a token that no
       # longer exists.
-      token_class.where(owner_key => actor.id).delete_all
+      delete_actor_tokens!(token_class, owner_key, actor)
       stale_flows = flows.first.class.where.not(token_id: nil).where.not(token_id: token_class.select(:id))
       resolution_class.where(sign_in_flow_id: stale_flows.select(:id)).delete_all
       stale_flows.delete_all
@@ -840,10 +846,17 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       if actor
         resolution_class.where(sign_in_flow_id: flows.map(&:id)).delete_all
         flows.first.class.where(id: flows.map(&:id)).delete_all
-        token_class.where(owner_key => actor.id).delete_all
+        delete_actor_tokens!(token_class, owner_key, actor)
       end
     end
   end
 
   private
+
+  # Revoking a selected session commits an OP authority stop that references the token.
+  def delete_actor_tokens!(token_class, owner_key, actor)
+    realm = { ClientToken => "app", VisitorToken => "com", OperatorToken => "org" }.fetch(token_class)
+    delete_authority_stops_for!(realm:, root_ids: token_class.where(owner_key => actor.id).pluck(:id))
+    token_class.where(owner_key => actor.id).delete_all
+  end
 end

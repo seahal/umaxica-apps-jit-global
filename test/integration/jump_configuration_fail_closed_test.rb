@@ -16,26 +16,21 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     host! "www.umaxica.app"
     https!
     post base_app_sign_show_path(ri: "jp")
-    get URI.parse(response.location).request_uri
-    start_form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-
-    post start_form["action"], params: start_fields
 
     assert_response :redirect
-    assert_equal "jump.umaxica.net", URI.parse(response.location).host
+    location = URI.parse(response.location)
+    rt = Rack::Utils.parse_query(location.query).fetch("rt")
+
+    assert_equal "jump.umaxica.net", location.host
+    assert_equal "https://www.umaxica.app", JWT.decode(rt, nil, false).first.fetch("iss")
   end
 
   test "a missing Jump signing key raises instead of downgrading to a same-host redirect" do
     host! "www.umaxica.app"
     https!
-    post base_app_sign_show_path(ri: "jp")
-    get URI.parse(response.location).request_uri
-    start_form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
 
     JumpRtKeyring.stub(:private_key, nil) do
-      assert_raises(JumpRtConfigurationError) { post start_form["action"], params: start_fields }
+      assert_raises(JumpRtConfigurationError) { post base_app_sign_show_path(ri: "jp") }
     end
   end
 
@@ -44,11 +39,7 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     https!
 
     ENV["PUBLIC_BASE_SERVICE_URL"] = "base.app.localhost"
-    post(base_app_sign_show_path(ri: "jp"))
-
-    assert_response :unprocessable_content
-    assert_nil response.location
-    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_raises(JumpRtConfigurationError) { post(base_app_sign_show_path(ri: "jp")) }
   ensure
     ENV["PUBLIC_BASE_SERVICE_URL"] = @original_base_service_url
   end
@@ -57,13 +48,6 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     host! "www.umaxica.app"
     https!
     post base_app_sign_show_path(ri: "jp")
-    get URI.parse(response.location).request_uri
-    start_form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-
-    Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("development")) do
-      post start_form["action"], params: start_fields
-    end
 
     assert_response :redirect
     location = URI.parse(response.location)

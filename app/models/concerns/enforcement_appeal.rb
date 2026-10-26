@@ -37,8 +37,12 @@ module EnforcementAppeal
     enforcement_case.write_audit_event_once!("appeal_submitted", actor_operator_public_id: nil)
   end
 
-  def resolve!(reviewer_operator_public_id:, resolution_code:)
+  def resolve!(reviewer_operator_public_id:, resolution_code:, step_up_token: nil, step_up_requirement: nil)
     raise InvalidResolutionError, "unsupported appeal resolution" unless RESOLUTION_CODES.include?(resolution_code.to_s)
+
+    validate_step_up_pair!(
+      reviewer_operator_public_id, step_up_token, step_up_requirement,
+    )
 
     transaction do
       lock!
@@ -57,6 +61,7 @@ module EnforcementAppeal
         state: resolution_code,
         reviewed_at: Time.current,
       )
+      step_up_token&.consume_step_up_evidence!(requirement: step_up_requirement)
     end
 
     EnforcementCaseEndOperation.call(
@@ -71,6 +76,17 @@ module EnforcementAppeal
   def redacted? = state == "redacted"
 
   private
+
+  def validate_step_up_pair!(reviewer_public_id, token, requirement)
+    return if token.nil? && requirement.nil?
+    return if token.is_a?(OperatorToken) && requirement.is_a?(StepUpRequirement) &&
+      requirement.scope == "enforcement_case_review_appeal" &&
+      requirement.actor_ref == reviewer_public_id &&
+      Operator.exists?(id: token.staff_id, public_id: reviewer_public_id) &&
+      requirement.token_binding == token.public_id && requirement.audience == "step_up:org"
+
+    raise ArgumentError, "enforcement appeal Step-Up token and requirement must be supplied together"
+  end
 
   def reviewer_is_separate_from_case_operators
     return if reviewer_operator_public_id.blank?

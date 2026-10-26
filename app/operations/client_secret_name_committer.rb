@@ -48,7 +48,7 @@ class ClientSecretNameCommitter
       actor = actor_context.subject
       raise Denied, "Secret rename actor is unavailable" unless actor.login_allowed?
 
-      verify_session!(actor, token)
+      session, requirement = verify_session!(actor, token)
 
       owned = ClientSecretCredential.lock.find_by(
         id: credential.id, client_id: actor.id, public_id: credential.public_id,
@@ -64,7 +64,11 @@ class ClientSecretNameCommitter
         operation_ref: SecureRandom.uuid, occurred_at: ClientSecretCredential.database_now,
         event_name: "secret.renamed",
       )
+      # adr/authentication-security-mode.md D3: the Step-Up is spent with the rename it authorized.
+      session.consume_step_up_evidence!(requirement: requirement)
       owned
+    rescue TokenStatusManagement::StepUpEvidenceUnavailable => e
+      raise Denied, e.message
     end
 
     def verify_session!(actor, token)
@@ -84,6 +88,8 @@ class ClientSecretNameCommitter
           StepUpResolver.call(token: locked_token, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret rename requires current scoped Step-Up"
       end
+
+      [locked_token, requirement]
 
     end
   end

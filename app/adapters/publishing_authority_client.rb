@@ -27,7 +27,8 @@ class PublishingAuthorityClient
   }.freeze
 
   def initialize(surface:, audience:, access_token:)
-    @base = "#{OidcIssuer.for_resource_type("operator")}/api/v0/publishing/#{surface}/#{audience}"
+    base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type("operator")
+    @base = "#{base_origin}/api/v0/publishing/#{surface}/#{audience}"
     @access_token = access_token.to_s
   end
 

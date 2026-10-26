@@ -5,7 +5,7 @@ require "test_helper"
 class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_tokens
 
-  test "an admitted bootstrap shows the passkey registration method and cancellation, never a back link" do
+  test "an admitted bootstrap opens registration for the signed-in Identity" do
     # An operator that holds no passkey: bootstrap is first registration only. Fixture operators hold
     # two (D-132), so this one is created here.
     actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::NOTHING)
@@ -57,24 +57,37 @@ class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::Integratio
         )
         admission_issuance
       end
-    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    get new_auth_org_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_org_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    host!(ENV.fetch("PUBLIC_AUTH_STAFF_URL"))
+    get(new_auth_org_verification_setup_path(ri: "jp", entry_ref: issuance.reference))
 
     assert_response :see_other
+    assert_equal new_auth_org_verification_registration_passkey_path(ri: "jp"), URI.parse(response.location).request_uri
 
-    get new_auth_org_verification_setup_path(ri: "jp")
+    get(new_auth_org_verification_registration_passkey_path(ri: "jp"))
 
     assert_response :success
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
-    assert_equal [new_auth_org_verification_registration_passkey_path(ri: "jp")],
-                 props.fetch("methods").map { |method| method.fetch("href") }
-    assert_not props.key?("back_link")
+    assert_not props.key?("back")
     assert_equal auth_org_verification_cancellation_path(ri: "jp"), props.fetch("cancel").fetch("action")
     assert_equal "pending", issuance.transaction.reload.status
     assert_nil token.reload.last_step_up_at
+
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    post(
+      auth_org_verification_registration_passkey_options_path(ri: "jp"),
+      params: { "cf-turnstile-response" => "test-only" }, as: :json,
+    )
+
+    assert_response :ok
+    options = response.parsed_body.fetch("options")
+
+    assert_equal %w(umaxica.org umaxica.org), [options.dig("user", "name"), options.dig("user", "displayName")]
+    assert_equal "required", options.dig("authenticatorSelection", "residentKey")
+  ensure
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
   end
 
   test "the setup page is refused without an admitted bootstrap and never redirects to sign-in" do

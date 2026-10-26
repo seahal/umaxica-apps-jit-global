@@ -299,6 +299,7 @@ module SessionLimitResolutionTransactionable
           resource: actor,
           token: token,
           reason: "session_limit_selected_revoke",
+          cause: "revoke_others", # D-173
         )
       end
 
@@ -511,6 +512,7 @@ module SessionLimitResolutionTransactionable
       resource: actor,
       token: token,
       reason: "session_limit_selected_revoke",
+      cause: "revoke_others", # D-173
     )
   end
 

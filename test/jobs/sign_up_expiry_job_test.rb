@@ -18,7 +18,10 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
     expired_visitor = create_flow(VisitorSignUpFlow, now: now, expires_at: now - 1.second)
 
     travel_to now do
-      SignUpExpiryJob.perform_now(batch_size: 1)
+      # Admission setup can exceed one second; freeze the owning database clocks as well.
+      ClientSignUpFlow.stub(:database_now, now) do
+        VisitorSignUpFlow.stub(:database_now, now) { SignUpExpiryJob.perform_now(batch_size: 1) }
+      end
     end
 
     assert_equal ClientSignUpFlowStatus::EXPIRED, expired_client.reload.status_id

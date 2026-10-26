@@ -9,7 +9,8 @@ require "timeout"
 # private_key_jwt assertion to the OP's registered token endpoint, exactly like an external client.
 # Results are classified so callers can tell a definitive refusal (clear credentials) from a
 # dependency failure (keep cookies, retry later) and from an indeterminate commit (the OP may have
-# rotated a Refresh family; recovery is the delivery-receipt query of R5-WU08, never a blind retry).
+# rotated the Refresh credential; D-25 has no replay of a lost response, so the RP recovers through a
+# new Authorization Code flow, never a blind retry).
 class OidcOpTokenClient
   # success        - 200 with a JSON token response.
   # refused        - definitive OAuth refusal (400/401 with an OAuth error, e.g. invalid_grant).
@@ -28,7 +29,6 @@ class OidcOpTokenClient
     end
 
   INITIAL_REQUEST_BUDGET = 2.0
-  DELIVERY_QUERY_BUDGET = 1.0
   class RequestDeadlineExceeded < StandardError; end
 
   class << self
@@ -41,20 +41,10 @@ class OidcOpTokenClient
       )
     end
 
-    # attempt_ref names the RP's reserved refresh attempt; the OP binds it into the delivery receipt
-    # so a later delivery query can recover exactly this rotation (R5-WU08).
-    def refresh(client_id:, token_url:, refresh_token:, attempt_ref: nil, require_https: true, deadline: nil)
-      params = { grant_type: "refresh_token", refresh_token: }
-      params[:attempt_ref] = attempt_ref if attempt_ref
-      new(client_id:, token_url:, require_https:, deadline:, request_budget: INITIAL_REQUEST_BUDGET).call(**params)
-    end
-
-    # Read-only recovery of an indeterminate rotation through the OP delivery query endpoint. It never
-    # rotates; outside the original five-second receipt window it is refused.
-    def query_delivery(client_id:, query_url:, refresh_token:, attempt_ref:, require_https: true, deadline: nil)
-      new(
-        client_id:, token_url: query_url, require_https:, deadline:, request_budget: DELIVERY_QUERY_BUDGET,
-      ).call(refresh_token:, attempt_ref:)
+    def refresh(client_id:, token_url:, refresh_token:, require_https: true, deadline: nil)
+      new(client_id:, token_url:, require_https:, deadline:, request_budget: INITIAL_REQUEST_BUDGET).call(
+        grant_type: "refresh_token", refresh_token:,
+      )
     end
   end
 
@@ -91,14 +81,14 @@ class OidcOpTokenClient
     return result(:indeterminate, error: "timeout") unless remaining.positive?
 
     # Interrupt only the disposable HTTP connection, never a caller's DB transaction or locks.
-    # Per-phase socket timeouts alone allow a trickling response to outlive the receipt window.
+    # Per-phase socket timeouts alone allow a trickling response to outlive the request budget.
     response = Timeout.timeout(remaining, RequestDeadlineExceeded) { connection.post(uri, params) }
     classified = classify(response)
     return result(:indeterminate, error: "timeout") if monotonic_now >= deadline
 
     classified
   rescue Faraday::TimeoutError, RequestDeadlineExceeded
-    # Transmission may have started; recovery must query the exact attempt, never rotate again.
+    # Transmission may have started; the credential may already be rotated, so it is never resent.
     result(:indeterminate, error: "timeout")
   rescue Faraday::Error
     result(:dependency, error: "transport_failure")

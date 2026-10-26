@@ -19,6 +19,8 @@ module Visa
 
           before_action :refuse_unless_machine_json_acceptable
 
+          public
+
           def show
             render_revision_json
           end

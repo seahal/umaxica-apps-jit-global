@@ -43,7 +43,8 @@ class AuthEmailOtpLockDeadlineTest < ActiveSupport::TestCase
         source = contact.reload.attributes
         deadline =
           if deadline_kind.start_with?("parent")
-            [issuance.transaction.expires_at, issuance.transaction.login_challenge_expires_at].min
+            parent = issuance.transaction.reload
+            [parent.expires_at, parent.login_challenge_expires_at].min
           else
             Time.iso8601(context.fetch("expires_at"))
           end

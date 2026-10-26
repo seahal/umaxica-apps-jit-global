@@ -153,6 +153,14 @@ module Auth
 
         private
 
+        def handle_social_auth_error(error)
+          return super unless error.is_a?(SocialAuth::IdentityInvariantError)
+
+          # The resolver already emitted the FATAL event. A broken identity must remain a
+          # server failure in HTML as well as JSON, without clearing the browser's continuity.
+          head :internal_server_error
+        end
+
         def reject_social_sign_in_callback_while_authenticated!
           return if current_social_auth_intent.to_s == "link"
 
@@ -320,7 +328,8 @@ module Auth
             operation: "signup",
             provider: provider,
             callback_result: callback_result,
-            expires_at: cycle.expires_at,
+            # C1: never beyond the attempt's curfew or the Flow.
+            expires_at: [cycle.expires_at, binding.curfew_at].min,
           )
 
           # `social_signup` is ceremony evidence, not a checkpoint requirement.

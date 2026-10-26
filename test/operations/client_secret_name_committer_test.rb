@@ -124,6 +124,14 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     [254, 255].each do |length|
+      # Each rename spends its Step-Up (ADR D3), so each boundary case gets fresh evidence.
+      token.reload.update!(
+        last_step_up_at: Client.database_now, last_step_up_scope: "settings_secret_credential",
+        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      )
       assert_difference("ClientSecretAuditOutbox.count", 1) do
         ClientSecretNameCommitter.call!(
           actor_context: context, token: token, credential: credential, name: "n" * length,
@@ -140,6 +148,30 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       end
       assert_equal "n" * 255, credential.reload.name
     end
+  end
+
+  # adr/authentication-security-mode.md D3: one Step-Up authorizes one rename.
+  test "a second rename with the same Step-Up is refused" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    credential = client_secret_credentials(:one)
+
+    ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "First")
+
+    assert_no_difference("ClientSecretAuditOutbox.count") do
+      assert_raises(ClientSecretNameCommitter::Denied) do
+        ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "Second")
+      end
+    end
+    assert_equal "First", credential.reload.name
   end
 
   test "wrong scope method session purpose audience and expired freshness refuse rename" do

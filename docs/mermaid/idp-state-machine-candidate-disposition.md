@@ -1,6 +1,6 @@
-# State/status SQL candidate disposition
+# Historical state/status SQL candidate disposition (before D-179)
 
-Discovery across all checked-in structures; current data, actual reference rows and runtime wiring
+Discovery across the pre-D-179 checked-in structure snapshot; current data, actual reference rows and runtime wiring
 are UNCONFIRMED. Indexed machines are linked in README. Unindexed columns are retained here as
 domain/lookup/event candidates rather than omitted. Table-name classification alone never creates a
 transition. Timestamp-only authentication candidates were independently searched in Ruby and are

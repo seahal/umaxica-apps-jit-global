@@ -16,8 +16,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
            :client_token_binding_methods, :client_token_dbsc_statuses
 
   setup do
-    ClientSignOutFlowKind.ensure_defaults!
-    ClientSignOutFlowStatus.ensure_defaults!
     ClientSessionLimitResolutionState::DEFAULTS.each do |id|
       ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
         state.created_at = Time.current
@@ -67,6 +65,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
 
     token_count = ClientToken.where(user_id: @user.id).count
@@ -89,6 +88,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal credential.id, ClientSecretLookupQuery.call(client: @user, secret: "a" * 32).id
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     deadline = ClientOidcAuthorizationTransaction.database_now + 10.seconds
     @transaction.update!(expires_at: deadline, login_challenge_expires_at: deadline)
@@ -122,7 +122,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
                  [ceremony.reload.completed?, ceremony.revoked_at, ceremony.cancelled_at, ceremony.admission_purpose]
     assert_equal ["normal", @user.id, @transaction.transaction_id],
                  [flow.authentication_context, flow.principal_id, ceremony.authorization_transaction_ref]
-    action = @oidc_result_action
     assert_difference("ClientToken.count", 1) do
       get_oidc_result!
 
@@ -216,6 +215,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
@@ -226,7 +226,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :see_other
-    action = @oidc_result_action
     flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     flow.update!(expires_at: ClientSignInFlow.database_now)
     operation_id = credential.reload.claim_operation_id
@@ -306,6 +305,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
@@ -316,7 +316,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :see_other
-    action = @oidc_result_action
     flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     flow.halt_sign_in!
 
@@ -337,6 +336,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     client_secret_credentials(:one)
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
@@ -347,7 +347,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :see_other
-    action = @oidc_result_action
     Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     get_oidc_result!
 
@@ -376,6 +375,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
@@ -386,7 +386,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :see_other
-    action = @oidc_result_action
     Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     get_oidc_result!
 
@@ -420,6 +419,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
@@ -430,7 +430,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :see_other
-    action = @oidc_result_action
     existing_tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     assert_no_difference "ClientToken.count" do
       get_oidc_result!
@@ -465,6 +464,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   test "the local handoff POST binds the signed-in actor to the authorization transaction" do
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     submit_email_otp!
     follow_redirect_to_oidc_handoff!
@@ -481,6 +481,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   test "the local handoff POST hands the browser to the Base authorization endpoint" do
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     submit_email_otp!
 
@@ -489,15 +490,17 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     result_uri = URI.parse(@oidc_result_action)
+
     assert_equal "/oidc/result", result_uri.path
     assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), result_uri.host
-    assert @oidc_result_ref.present?
+    assert_predicate @oidc_result_ref, :present?
     assert_equal @transaction.transaction_id, @oidc_result_transaction_ref
   end
 
   test "the checkpoint clears the login challenge from the session" do
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
+
     assert_response :success
     submit_email_otp!
 
@@ -600,7 +603,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       target = URI.parse(current_browser.response.location.to_s)
       target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
       if target.host == jump_host
-        namespace = current_host == base_host ? "VISA_APP" : "AUTH_APP"
+        namespace = (current_host == base_host) ? "VISA_APP" : "AUTH_APP"
         target, = decode_oidc_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
       end
 

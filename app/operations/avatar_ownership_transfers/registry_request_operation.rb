@@ -5,7 +5,7 @@ module AvatarOwnershipTransfers
   class RegistryRequestOperation < Operation
     def initialize(actor:, surface:, subject_public_id:, avatar_public_id:, target_surface:,
                    target_collective_public_id:, idempotency_key:, request_fingerprint:,
-                   requested_at: Avatar.database_now)
+                   requested_at: Avatar.database_now, step_up_token: nil, step_up_requirement: nil)
       super()
       @actor = actor
       @surface = surface.to_s
@@ -16,11 +16,17 @@ module AvatarOwnershipTransfers
       @idempotency_key = idempotency_key.to_s
       @request_fingerprint = request_fingerprint.to_s
       @requested_at = requested_at
+      @step_up_token = step_up_token
+      @step_up_requirement = step_up_requirement
     end
 
     public
 
     def call
+      validate_step_up_context!(
+        actor: actor, surface: surface, scope: "avatar_transfer_request",
+        token: step_up_token, requirement: step_up_requirement,
+      )
       validate_idempotency_key!
       validate_request_fingerprint!
       replay = replay_existing_reservation
@@ -35,7 +41,18 @@ module AvatarOwnershipTransfers
       end
 
       assert_concrete_owner_matches!(observed_owner, observed_concrete_owner)
+      create_reservation!(
+        avatar: avatar, observed_owner: observed_owner, observed_concrete_owner: observed_concrete_owner,
+      )
+    end
 
+    private
+
+    attr_reader :actor, :surface, :subject_public_id, :avatar_public_id,
+                :target_surface, :target_collective_public_id, :idempotency_key,
+                :request_fingerprint, :requested_at, :step_up_token, :step_up_requirement
+
+    def create_reservation!(avatar:, observed_owner:, observed_concrete_owner:)
       result = nil
       with_authorized_owner_membership(
         surface: surface,
@@ -67,16 +84,11 @@ module AvatarOwnershipTransfers
             source_ownership_period_id: concrete_owner.id,
             requested_at: requested_at,
           )
+          consume_step_up!(step_up_token, step_up_requirement) if result.previously_new_record?
         end
       end
       result
     end
-
-    private
-
-    attr_reader :actor, :surface, :subject_public_id, :avatar_public_id,
-                :target_surface, :target_collective_public_id, :idempotency_key,
-                :request_fingerprint, :requested_at
 
     def authorized_initiator_public_id
       public_id = actor.respond_to?(:public_id) ? actor.public_id.to_s : ""

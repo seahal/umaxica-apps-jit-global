@@ -28,7 +28,8 @@ module Webauthn
       )
     end
 
-    def self.verify!(credential_params:, challenge:, config:, public_key:, sign_count:, purpose:)
+    def self.verify!(credential_params:, challenge:, config:, public_key:, sign_count:, purpose:,
+                     expected_user_handle: nil)
       policy = UvPolicy.for(purpose)
       credential =
         begin
@@ -43,6 +44,8 @@ module Webauthn
         user_verification: policy.enforce_server_side?,
       )
 
+      verify_user_handle!(credential, expected_user_handle) if expected_user_handle
+
       authenticator_data = credential.response.authenticator_data
       if policy.enforce_server_side? && !authenticator_data.user_verified?
         raise UserVerificationRequiredError, "assertion is not user-verified"
@@ -53,5 +56,16 @@ module Webauthn
     rescue OpenSSL::PKey::PKeyError
       raise VerificationError, "assertion signature verification failed"
     end
+
+    def self.verify_user_handle!(credential, expected_user_handle)
+      user_handle = credential.response.user_handle
+      return if user_handle.nil?
+
+      expected = expected_user_handle.to_s.b
+      actual = user_handle.to_s.b
+      matches = expected.bytesize == actual.bytesize && ActiveSupport::SecurityUtils.secure_compare(expected, actual)
+      raise VerificationError, "returned user handle does not match the credential owner" unless matches
+    end
+    private_class_method :verify_user_handle!
   end
 end

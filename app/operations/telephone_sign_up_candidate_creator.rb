@@ -27,6 +27,11 @@ class TelephoneSignUpCandidateCreator
         telephone_model.transaction { create_candidate(telephone) }
       else
         SignUpEmailPendingGuard.with_lock(number_digest: telephone.number_digest, model_class: telephone_model) do
+          # D-135: a number still held by an unfinished registration waits for its cleanup.
+          if SignUpContactHoldQuery.call(contact: telephone)
+            next TelephoneSignUpCandidateResult.new(status: :contact_held, telephone:, session_payload: nil)
+          end
+
           create_candidate(telephone)
         end
       end
@@ -41,7 +46,7 @@ class TelephoneSignUpCandidateCreator
         telephone.user_telephone_status_id = ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
       when VisitorTelephone
         telephone.visitor = Visitor.create!(
-          status_id: VisitorStatus::ACTIVE,
+          status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
           security_mode_id: VisitorSecurityMode::NORMAL, visibility_id: VisitorVisibility::VISITOR,
         )
         telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP

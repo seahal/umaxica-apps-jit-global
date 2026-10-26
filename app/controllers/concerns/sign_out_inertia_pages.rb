@@ -31,8 +31,6 @@ module SignOutInertiaPages
   end
 
   def sign_out_confirmation_props
-    browser_rp_flow = respond_to?(:browser_rp_logout_flow?, true) && browser_rp_logout_flow?
-
     {
       title: t("sign.shared.sign_out.title"),
       heading: t("sign.shared.sign_out.title"),
@@ -42,16 +40,8 @@ module SignOutInertiaPages
       submit_label: t("sign.shared.sign_out.button"),
       form: {
         action: sign_out_confirmation_form_path,
-        logout_challenge: params[:logout_challenge].presence,
-        logout_intent_proof: if params[:logout_challenge].present? &&
-            respond_to?(:browser_rp_logout_intent_proof_for, true)
-                               browser_rp_logout_intent_proof_for(@logout_transaction)
-                             end,
       },
-      cancel: browser_rp_flow ? nil : {
-        label: t("actions.cancel"),
-        action: sign_out_post_path,
-      },
+      cancel: nil,
       home_link: sign_out_home_link,
     }
   end
@@ -84,10 +74,6 @@ module SignOutInertiaPages
 
   def render_sign_out_confirmation_page
     render inertia: sign_out_page_component("edit"), props: sign_out_confirmation_props
-  end
-
-  def render_browser_rp_logout_continuation!
-    render_sign_out_confirmation_page
   end
 
   # `clear_history` is what actually ends the signed-in session's presence in the browser.
@@ -124,14 +110,5 @@ module SignOutInertiaPages
              home_link: sign_out_home_link,
            },
            status: :service_unavailable
-  end
-
-  # The parent COMMIT happened but this origin's own cleanup did not finish (DEC-046).
-  def render_oidc_rp_logout_cleanup_incomplete
-    @sign_out_cleanup_incomplete = true
-    render inertia: sign_out_page_component("complete"),
-           props: sign_out_completion_props,
-           status: :ok,
-           clear_history: true
   end
 end

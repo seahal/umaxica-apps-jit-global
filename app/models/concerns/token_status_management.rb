@@ -11,6 +11,28 @@ module TokenStatusManagement
 
   VALID_STATUSES = [STATUS_ACTIVE, STATUS_EXPIRED, STATUS_RESTRICTED, STATUS_REVOKED].freeze
 
+  # The token carries at most one Step-Up evidence record. Revocation and one-time consumption
+  # both clear it to these values.
+  CLEARED_STEP_UP_EVIDENCE = {
+    last_step_up_at: nil,
+    last_step_up_scope: nil,
+    # @deprecated `last_step_up_aal` is a historical label and never an authority input.
+    last_step_up_aal: nil,
+    last_step_up_method: nil,
+    last_step_up_purpose: nil,
+    last_step_up_audience: nil,
+    last_step_up_session_public_id: nil,
+    last_step_up_phishing_resistant: false,
+    # FIXME: Remediation D6 retains nullable cleared evidence; NOT NULL would break revocation.
+    last_step_up_user_verified: nil,
+    last_step_up_credential_ref: nil,
+    last_step_up_full_reauthentication: nil,
+    last_step_up_resource_ref: nil,
+    last_step_up_tenant_ref: nil,
+  }.freeze
+
+  class StepUpEvidenceUnavailable < StandardError; end
+
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :session_inventory, ->(now = Time.current) { currently_usable_at(now) }
@@ -68,6 +90,26 @@ module TokenStatusManagement
 
   public
 
+  # adr/authentication-security-mode.md D3: Step-Up evidence authorizes one operation. The caller
+  # invokes this inside the transaction that commits the protected operation, so a rollback of
+  # that operation also restores the evidence. The row lock serializes a concurrent second
+  # operation, which then finds no evidence.
+  def consume_step_up_evidence!(requirement:, now: nil)
+    raise ArgumentError, "Step-Up consumption requires a Step-Up requirement" unless requirement.step_up_required?
+
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      with_lock do
+        decision_time = now || self.class.database_now
+        unless step_up_requirement_names_owner?(requirement) &&
+            StepUpResolver.call(token: self, requirement: requirement, now: decision_time).satisfied?
+          raise StepUpEvidenceUnavailable, "Step-Up evidence is unavailable for this operation"
+        end
+
+        update!(CLEARED_STEP_UP_EVIDENCE)
+      end
+    end
+  end
+
   # Concrete token models provide step_up_authority_binding. Only explicit lifecycle changes
   # touch these rows; normal requests do not acquire additional credential or ceremony locks.
   def revoke_step_up_authority!(now: nil, except_transaction_ref: nil)
@@ -75,17 +117,7 @@ module TokenStatusManagement
     self.class.connection_class_for_self.connected_to(role: :writing) do
       with_lock do
         decision_time = now || self.class.database_now
-        update!(
-          last_step_up_at: nil, last_step_up_scope: nil,
-          # @deprecated `last_step_up_aal` is a historical label and never an authority input.
-          last_step_up_aal: nil,
-          last_step_up_method: nil, last_step_up_purpose: nil, last_step_up_audience: nil,
-          last_step_up_session_public_id: nil, last_step_up_phishing_resistant: false,
-          # FIXME: Remediation D6 retains nullable cleared evidence; NOT NULL would break revocation.
-          last_step_up_user_verified: nil, last_step_up_credential_ref: nil,
-          last_step_up_full_reauthentication: nil, last_step_up_resource_ref: nil,
-          last_step_up_tenant_ref: nil,
-        )
+        update!(CLEARED_STEP_UP_EVIDENCE)
         session_model.revoke_for_token!(token: self)
         transactions = transaction_model.where(session_ref: public_id, status: %w(pending verified))
         transactions = transactions.where.not(transaction_id: except_transaction_ref) if except_transaction_ref.present?
@@ -183,6 +215,14 @@ module TokenStatusManagement
   end
 
   private
+
+  # The evidence lives on this token, so it is bound to the token's owner. A requirement naming
+  # another actor is refused rather than consumed.
+  def step_up_requirement_names_owner?(requirement)
+    owner_ref = actor_record&.public_id
+    owner_ref.present? && requirement.actor_ref.present? &&
+      ActiveSupport::SecurityUtils.secure_compare(requirement.actor_ref.to_s, owner_ref.to_s)
+  end
 
   def token_status_id
     public_send(self.class.token_status_foreign_key)

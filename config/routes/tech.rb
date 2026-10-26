@@ -46,7 +46,7 @@ scope module: :tech, as: :tech do
 
       namespace :sign do
         resource :out, only: %i(show create), controller: :outs
-        resource :out_completion, only: %i(show create), path: "out/completion",
+        resource :out_completion, only: :show, path: "out/completion",
                                   controller: "out/completions"
       end
     end

@@ -9,19 +9,19 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
 
   SURFACES = [
     {
-      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+      host: Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host,
       build_token: ->(test_case) { ClientToken.create!(authentication_epoch: 0, user: test_case.clients(:one)) },
       resource: ->(test_case) { test_case.clients(:one) },
     },
     {
-      host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+      host: Rails.configuration.x.boot_config.fetch(:hosts).visa_corporate.host,
       build_token: ->(test_case) {
         VisitorToken.create!(authentication_epoch: 0, visitor: test_case.visitors(:reserved_visitor))
       },
       resource: ->(test_case) { test_case.visitors(:reserved_visitor) },
     },
     {
-      host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+      host: Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host,
       build_token: ->(test_case) { OperatorToken.create!(authentication_epoch: 0, staff: test_case.operators(:one)) },
       resource: ->(test_case) { test_case.operators(:one) },
     },

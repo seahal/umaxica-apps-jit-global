@@ -51,7 +51,12 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     assert_not credential.available_at?(at: Client.database_now)
     assert_nil ClientSecretLookupQuery.call(client: actor, secret: "a" * 32)
     assert_equal before - 1, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
-    assert_equal original_token, token.reload.attributes
+    # The session is preserved; only its Step-Up evidence is consumed (ADR D3).
+    step_up_columns = original_token.keys.grep(/\Alast_step_up_/)
+
+    assert_equal original_token.except(*step_up_columns, "updated_at"),
+                 token.reload.attributes.except(*step_up_columns, "updated_at")
+    assert_nil token.last_step_up_at
     assert_equal original_digest, credential.password_digest
     events = ClientSecretAuditOutbox.where(credential_ref: credential.public_id)
 
@@ -61,6 +66,14 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     assert_equal 1, events.distinct.count(:operation_ref)
     assert_equal [nil], events.distinct.pluck(:delivered_at)
     first_deadline = credential.purge_eligible_at
+    # A replay is a new operation and needs its own Step-Up (ADR D3).
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
     assert_no_difference("ClientSecretAuditOutbox.count") do
       ClientSecretRevocationCommitter.call!(
         actor_context: context, token: token, credential: credential, purge_after: 2.days,

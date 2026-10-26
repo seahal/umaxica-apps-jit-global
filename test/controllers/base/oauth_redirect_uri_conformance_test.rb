@@ -11,7 +11,7 @@ class BaseOauthRedirectUriConformanceTest < ActionDispatch::IntegrationTest
   CLIENT_ID = "core-app-jp"
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     host!(@host)
     @registered = OidcClientRegistry.find!(CLIENT_ID).redirect_uris_by_realm.fetch("client").first
   end

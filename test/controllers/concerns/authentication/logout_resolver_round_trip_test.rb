@@ -39,6 +39,7 @@ class AuthenticationLogoutResolverRoundTripTest < ActiveSupport::TestCase
     assert_equal user.id, resolve.call.resource&.id, "should be signed in before logout"
 
     AuthenticationLogoutCurrentSession.call(
+      cause: "browser_logout",
       resource: user,
       token_class: ClientToken,
       session_public_id: session_public_id,
@@ -60,6 +61,7 @@ class AuthenticationLogoutResolverRoundTripTest < ActiveSupport::TestCase
     assert_nil device_session.current_refresh_token_id
 
     AuthenticationLogoutCurrentSession.call(
+      cause: "browser_logout",
       resource: user,
       token_class: ClientToken,
       session_public_id: token.public_id,

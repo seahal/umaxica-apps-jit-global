@@ -854,6 +854,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_equal "active", body.fetch("state")
     assert_equal client.public_id, body.fetch("principal_public_id")
     assert_equal @operator.public_id, body.fetch("applied_by_operator_public_id")
+    assert_nil @operator_token.reload.last_step_up_at
   end
 
   test "a case naming no existing principal, or a principal of another realm, is not found" do
@@ -1258,6 +1259,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
 
     assert_equal "active", the_case.state
     assert_equal @approver.public_id, the_case.approved_by_operator_public_id
+    assert_nil @approver_token.reload.last_step_up_at
     assert_predicate client.reload, :admin_locked?
     approved = EnforcementEvent.find_by!(case_public_id: the_case.public_id, event_type: "approved")
 
@@ -1360,6 +1362,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     )
 
     assert_response :ok
+    assert_nil @approver_token.reload.last_step_up_at
 
     post(
       base_org_support_app_enforcement_case_approval_url(the_case.public_id, host: @host),
@@ -1368,7 +1371,19 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       as: :json,
     )
 
+    assert_response :unprocessable_content
+    assert_equal "active", the_case.reload.state
+
+    mark_token_step_up_satisfied_for_test(@approver_token, scope: "enforcement_case_approve")
+    post(
+      base_org_support_app_enforcement_case_approval_url(the_case.public_id, host: @host),
+      params: { principal_effect: { access_blocking: true } },
+      headers: headers,
+      as: :json,
+    )
+
     assert_response :conflict
+    assert_predicate @approver_token.reload.last_step_up_at, :present?
     assert_equal 1, EnforcementEvent.where(case_public_id: the_case.public_id, event_type: "applied").count
   end
 
@@ -1681,7 +1696,18 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_response :ok
     assert_predicate first.reload.ended_at, :present?
     assert_predicate client.reload, :admin_locked?
+    assert_nil @operator_token.reload.last_step_up_at
 
+    post(
+      base_org_support_app_enforcement_case_release_url(second.public_id, host: @host),
+      params: { reason: "revoked" },
+      headers: headers,
+      as: :json,
+    )
+
+    assert_response :unprocessable_content
+
+    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_release")
     post(
       base_org_support_app_enforcement_case_release_url(second.public_id, host: @host),
       params: { reason: "revoked" },
@@ -1691,6 +1717,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
 
     assert_response :ok
     assert_not_predicate client.reload, :admin_locked?
+    assert_nil @operator_token.reload.last_step_up_at
     ended = EnforcementEvent.find_by!(case_public_id: second.public_id, event_type: "ended")
 
     assert_equal @operator.public_id, ended.operator_public_id
@@ -2017,6 +2044,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_response :ok
     assert_equal "rejected", appeal.reload.state
     assert_equal @approver.public_id, appeal.reviewer_operator_public_id
+    assert_nil @approver_token.reload.last_step_up_at
     event = EnforcementEvent.find_by!(case_public_id: the_case.public_id, event_type: "appeal_rejected")
 
     assert_equal @approver.public_id, event.operator_public_id

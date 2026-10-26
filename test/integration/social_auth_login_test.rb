@@ -34,7 +34,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
       },
     )
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    JitSecurityJwtRegistry.surface("BASE_APP")
     2.times do |index|
       target = URI.parse(@base_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -42,7 +42,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       end
       if index.zero?
-        raise RuntimeError, "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
+        raise RuntimeError,
+              "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
 
         @base_browser.host!(target.host)
         @base_browser.get(target.request_uri)
@@ -411,7 +412,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow0_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow0_callback_uri.host == flow0_base_host
@@ -867,7 +868,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow1_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow1_callback_uri.host == flow1_base_host
@@ -1308,7 +1309,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           URI.parse(response.location).host ==
             URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-        flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+        JitSecurityJwtRegistry.surface("BASE_APP")
         flow2_callback_uri = URI.parse(response.location)
         # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
         unless flow2_callback_uri.host == flow2_base_host
@@ -2027,7 +2028,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow3_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow3_callback_uri.host == flow3_base_host
@@ -2441,7 +2442,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow4_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow4_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow4_callback_uri.host == flow4_base_host
@@ -5480,7 +5481,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow11_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow11_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow11_callback_uri.host == flow11_base_host
@@ -5946,7 +5947,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     URI.parse(response.location).host ==
                       URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-                  flow12_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+                  JitSecurityJwtRegistry.surface("BASE_APP")
                   flow12_callback_uri = URI.parse(response.location)
                   # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
                   unless flow12_callback_uri.host == flow12_base_host
@@ -6437,7 +6438,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow13_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow13_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow13_callback_uri.host == flow13_base_host
@@ -7304,7 +7305,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow14_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow14_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow14_callback_uri.host == flow14_base_host
@@ -7762,7 +7763,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         URI.parse(response.location).host ==
           URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-      flow15_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      JitSecurityJwtRegistry.surface("BASE_APP")
       flow15_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow15_callback_uri.host == flow15_base_host

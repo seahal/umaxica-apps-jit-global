@@ -2,17 +2,26 @@
 
 ## Status
 
-**Accepted (2026-10-21).** Decision only. The new Flow-to-Admission association, its
-constraints, and retirement of the duplicate Ceremony reference are **Not Implemented**.
-Runtime, schema, migrations, data, and tests are unchanged by this ADR. Acceptance does not
-certify existing runtime conformity or completion of acceptance criteria.
+**Accepted (2026-10-21); partially implemented (2026-10-24).** APP/COM Flow ownership now has a
+required restrictive FK, immutable assignment, one-in-progress index, admitted-owner lookup and
+child-first collection. The duplicate Ceremony reference was removed by WU-01. This does not
+certify the whole authentication cycle or its remaining acceptance gates.
 
 Implementation tracking (2026-10-23): WU-24b/c/d/e now implement effective intent, required immutable
 Binding curfew/intent storage and principal-atomic cleanup. The WU-01 migrations already removed
 the duplicate `local_sign_up_flow_ref` covered by WU-24g. The Flow-to-Binding association and
-cardinality in this ADR still require WU-24h; curfew consumers still require WU-06. See the open
+cardinality in this ADR now have WU-24h implementation and focused verification (H8P2); global
+schema verification and remaining cycle acceptance stay open. WU-24e now also verifies the actual
+HTTP Passkey-save/termination race and post-wait deadline fence (P4R1). Curfew consumers still
+require WU-06. See the open
 [cycle completion spec](../specs/authentication-cycle-completion/spec.md); partial storage does not
 certify E1 or a 30-minute end-to-end workflow.
+
+Legacy Base social-completion readers now also enforce explicit agreement between their signed
+result's Flow and its stored Binding FK (S2E1). Initial commit, committed-receipt reads and
+completion-reference access all retain the existing signature, candidate and browser checks;
+these proofs do not independently authorize a different Binding's Flow. WU-05 still replaces the
+legacy transport with shared Finalization and canonical Sign In First.
 
 The acceptance date is the decision date explicitly supplied by the owner. Local source review
 was performed on 2026-10-20 at `febec3225cc9a0cfa53b9cbe817d20d366aba5a2` with unrelated
@@ -195,17 +204,17 @@ The following are source observations, not executed tests or a deployed-database
 | Restart after authentication evidence | Conditions for a new Admission and treatment of old evidence |
 | OIDC / Local restart | Exact route back through Base |
 | Admission / Ceremony expiry | Exact continuation and restart eligibility |
-| FK immutability | Concrete database and Rails enforcement mechanisms |
-| Legacy backfill | Migration of existing Flows without sufficient proof |
-| `ON DELETE` | `RESTRICT`, `CASCADE`, or another policy |
-| Purger | Binding and Flow deletion order |
-| Retention | Physical deletion deadlines and dependencies |
+| FK immutability | Resolved by D-125: `attr_readonly` and a production bulk-write/SQL guard; no trigger or database privilege redesign |
+| Legacy backfill | Resolved by D-159: rebuilt development/test databases; no guessed ownership or backfill |
+| `ON DELETE` | Resolved by D-125: `RESTRICT` |
+| Purger | Resolved by D-125: retained Flow rows before their Binding, then the parent |
+| Retention | Flow terminal state and its physical-retention deadline; artifact cleanup completed or registration completed; no shortening of infinite retention |
 | D14 | Distributed Cancel / Switch / Supersession / Late Result coordination |
 
-“Always acquire a new Admission after OTP issuance” is not Accepted. `ON DELETE RESTRICT` is a
-candidate only, not Accepted. Existing retention constants or old FK deletion actions do not settle
-these new relationship decisions. The accepted target of eventual mandatory binding does not
-select an unsafe backfill or authorize destructive data repair.
+“Always acquire a new Admission after OTP issuance” is not Accepted. D-125 and D-159 settle the
+storage and collection decisions above; they do not authorize guessing historical ownership.
+Collection retains the whole child set when one Flow is still progressing, retained or awaiting
+cleanup. It deletes neither registered principals nor the referenced Auth continuity.
 
 ## Relationships and tradeoffs
 

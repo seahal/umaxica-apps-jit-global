@@ -69,6 +69,8 @@ class Operator < OrgPrincipalRecord
   include AdministrativeAccessLockable
 
   LOGIN_BLOCKED_STATUS_IDS = [OperatorStatus::RESERVED].freeze
+  # ORG has no public registration; no Operator status is an unfinished registration.
+  UNFINISHED_REGISTRATION_STATUS_IDS = [].freeze
   PUBLIC_ID_LENGTH = 16
   PUBLIC_ID_ALPHABET = SecureRandom::BASE32_ALPHABET.join.freeze
   PUBLIC_ID_FORMAT = /\A[0-9A-FGHJKMNPQRSTVWXYZ]{16}\z/

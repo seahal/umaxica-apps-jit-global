@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../../../../support/oidc_auth_admission_test_helper"
 
 class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispatch::IntegrationTest
   # Rate-limit counters are a NullStore by default in test so unrelated tests
@@ -10,6 +11,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   rate_limit_counters!
 
   include ActiveJob::TestHelper
+  include OidcAuthAdmissionTestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
@@ -23,67 +25,9 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     browser = self
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     auth_host = @host
-    browser.host!(base_host)
-    browser.https!
-    browser.get("/sign", params: { ri: "jp" })
-    csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    browser.post(
-      "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-      },
-    )
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    2.times do |index|
-      target = URI.parse(browser.response.location)
-      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless target.host == base_host
-        rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
-      end
-
-      assert_includes [base_host, auth_host], target.host
-      browser.host!(target.host)
-      browser.get(target.request_uri, params: { ri: "jp" })
-      next if index == 1
-
-      form = browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      browser.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{target.host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-    end
-    # Redeem through Auth POST, Base confirmation POST, then Auth POST.
-    # No admission, browser marker or signed flow locator is installed directly.
-    3.times do |index|
-      form = browser.response.parsed_body.at_css("form")
-
-      assert_not_nil form, "admission step #{index}, HTTP #{browser.response.status}"
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      browser.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-      break if index == 2
-
-      target = URI.parse(browser.response.location)
-
-      assert_includes [base_host, auth_host], target.host
-      browser.host!(target.host)
-      browser.get(target.request_uri, params: { ri: "jp" })
-    end
-
-    assert_equal 303, browser.response.status
-    switch_browser_to_sign_up!(browser, surface: "app")
+    bootstrap_auth_sign_in_admission!(surface: "app")
+    switch_browser_to_sign_up!(integration_session, surface: "app", base_browser: @base_browser)
     browser.get("/sign/up/email/new", params: { ri: "jp" })
 
     assert_equal 200, browser.response.status
@@ -318,19 +262,31 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_equal email.id, flow.pending_contact_id
                 assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
-                patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding),
-                      params: {
-                        requirement: "birthdate",
-                        checkpoint_version: flow.checkpoint_version,
-                        birthdate: "2010-06-26",
-                      },
-                      headers: @headers
+                principal_id = flow.principal_id
+                birthdate_writes = []
+                record_write =
+                  lambda do |*, payload|
+                    birthdate_writes << payload[:sql] if payload[:sql].match?(/\AUPDATE "clients" SET .*"birthdate"/)
+                  end
+                ActiveSupport::Notifications.subscribed(record_write, "sql.active_record") do
+                  patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding),
+                        params: {
+                          requirement: "birthdate",
+                          checkpoint_version: flow.checkpoint_version,
+                          birthdate: "2010-06-26",
+                        },
+                        headers: @headers
+                end
 
                 assert_response :success
                 assert_includes response.body, "16歳の誕生日"
                 assert_not_includes response.body, "13歳の誕生日"
                 assert_equal ClientSignUpFlowStatus::HALTED, flow.reload.status_id
                 assert_not flow.requirement_cleared?(:birthdate)
+                # D-178: the underage birthdate is never written, and the refusal removes the artifacts.
+                assert_empty birthdate_writes
+                assert_predicate flow, :cleanup_completed?
+                assert_not Client.where(id: principal_id).where.not(birthdate: nil).exists?
               end
             end
           end
@@ -841,8 +797,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   # The state machine's own classification (here `invalid_transition`) stays server-side; the body
   # is a fixed public message with no redirect and no markup.
   # The superseded and replacement flows must be observed in the same browser.
-  # rubocop:disable Minitest/MultipleAssertions
-  test "a rejected OTP after Email resubmission keeps its coarse public message and independent proof" do
+  test "an Email resubmission during an in-progress attempt is refused and keeps the earlier proof" do
     clear_enqueued_jobs
     post auth_app_sign_up_email_url(ri: "jp"),
          params: { :client_email => { raw_address: "transition-a-#{SecureRandom.hex(3)}@example.com",
@@ -893,105 +848,24 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     old_flow = cycle
     old_binding = @flow_binding
     old_transaction = transaction
+    # D-177: a second entry submit while this attempt is in progress is refused and changes nothing.
     clear_enqueued_jobs
-    post auth_app_sign_up_email_url(ri: "jp"),
-         params: { :client_email => { raw_address: "transition-b-#{SecureRandom.hex(3)}@example.com",
-                                      confirm_policy: "1", },
-                   "cf-turnstile-response" => "test", },
-         headers: @headers
-
-    assert_response :redirect
-    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
-    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
-    user_email = ClientEmail.find(cycle.pending_contact_id)
-    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
-
-    assert_not_nil job
-    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
-    delivery = notification.fetch(:params).symbolize_keys
-    transaction = ClientEmailCeremonyTransaction.find_by!(
-      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
-    )
-    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
-
-    # Boolean assertions keep ceremony binding material out of failure output.
-    assert_withheld("Delivery must address this flow's Email candidate") {
-      notification.fetch(:recipient).public_id == user_email.public_id
-    }
-    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
-    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
-    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
-    assert_withheld { transaction.purpose == "sign_up" }
-    assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
-    assert_withheld {
-      transaction.session_ref ==
-        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    }
-    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
-
-    assert_equal ClientSignUpFlowStatus::HALTED, old_flow.reload.status_id
-    assert_not_equal old_flow.id, cycle.id
-    assert_not_equal old_flow.principal_id, cycle.principal_id
-    assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, cycle.status_id
-    assert_nil transaction.otp_consumed_at
-    assert_nil transaction.otp_receipt_verifier
-    proof_before = transaction.attributes
-    candidate_before = user_email.attributes.except("otp_attempts_count", "updated_at", "lock_version")
-    roots_before = ClientToken.order(:id).map(&:attributes)
-    wrong_code = (otp_code == "000000") ? "000001" : "000000"
-
-    # Resubmission deliberately starts a new flow; a correct new code must not be classified as a transition failure.
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
-          params: { :client_email => { pass_code: wrong_code }, "cf-turnstile-response" => "test" },
-          headers: @headers
+    assert_no_difference(["ClientSignUpFlow.count", "ClientEmail.count"]) do
+      post auth_app_sign_up_email_url(ri: "jp"),
+           params: { :client_email => { raw_address: "transition-b-#{SecureRandom.hex(3)}@example.com",
+                                        confirm_policy: "1", },
+                     "cf-turnstile-response" => "test", },
+           headers: @headers
+    end
 
     assert_response :unprocessable_content
-    assert_equal "text/html", response.media_type
-    page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
-    errors = page.fetch("props").fetch("errors")
-
-    assert_equal "auth/app/sign/up/emails/edit", page.fetch("component")
-    expected_error = ActiveModel::Error.new(
-      user_email, :pass_code, I18n.t("sign.app.registration.email.update.invalid_code"),
-    ).full_message
-
-    assert_equal [expected_error], errors
-    assert_nil response.location
-    assert_not_includes errors.join, "invalid_transition"
-    assert_not_includes errors.join, "<"
-    assert_not response.body.include?(otp_code), "Public validation must not reveal the delivered code"
-    assert_equal 1, user_email.reload.otp_attempts_count
-    assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, user_email.user_email_status_id
-    assert_nil user_email.binding_finalized_at
-    assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, cycle.reload.status_id
-    assert_nil cycle.completed_requirements["otp"]
-    assert_nil transaction.reload.otp_consumed_at
-    assert_nil transaction.otp_receipt_verifier
-    assert_nil transaction.otp_result_expires_at
-    assert_withheld { proof_before == transaction.attributes }
-    assert_withheld {
-      candidate_before == user_email.attributes.except("otp_attempts_count", "updated_at", "lock_version")
-    }
-    assert_withheld { roots_before == ClientToken.order(:id).map(&:attributes) }
-    # Inequality diagnostics must not print either delivery capability.
-    assert_withheld { old_transaction.transaction_id != transaction.transaction_id }
-    assert_withheld { old_transaction.otp_generation != transaction.otp_generation }
-    # An original-flow form cannot spend or halt the replacement flow.
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: old_binding),
-          params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
-          headers: @headers
-
-    assert_response :conflict
-    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
-    assert_nil response.location
-    assert_equal ClientSignUpFlowStatus::HALTED, old_flow.reload.status_id
-    assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, cycle.reload.status_id
-    assert_equal 1, user_email.reload.otp_attempts_count
-    assert_withheld { proof_before == transaction.reload.attributes }
-    assert_withheld { roots_before == ClientToken.order(:id).map(&:attributes) }
+    assert_includes response.body, I18n.t("sign.app.registration.email.create.contact_held")
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob
+    assert_not_predicate old_flow.reload, :sign_up_terminal?
+    assert_not_nil old_transaction.reload.otp_receipt_verifier
+    assert_equal old_flow.public_id, session.fetch(:auth_app_up_sequence_id)
+    assert old_binding
   end
-  # rubocop:enable Minitest/MultipleAssertions
 end
 
 # DAMP auth header helpers for this test class.

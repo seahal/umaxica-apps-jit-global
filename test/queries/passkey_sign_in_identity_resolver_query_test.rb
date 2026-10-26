@@ -30,6 +30,18 @@ class PasskeySignInIdentityResolverQueryTest < ActiveSupport::TestCase
     assert_nil PasskeySignInIdentityResolverQuery.call(surface: :app, identifier: @email.address)
   end
 
+  test "an unverified or expired effective contact selects nobody" do
+    @email.finalize_binding!
+    @email.update!(user_email_status_id: ClientEmailStatus::UNVERIFIED)
+
+    assert_nil PasskeySignInIdentityResolverQuery.call(surface: :app, identifier: @email.address)
+
+    @email.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email.update!(discard_at: @email.created_at, purge_eligible_at: @email.created_at + 1.day)
+
+    assert_nil PasskeySignInIdentityResolverQuery.call(surface: :app, identifier: @email.address)
+  end
+
   [nil, "", " ", "not-an-identifier", "a\0b", "\xFF".dup.force_encoding("UTF-8"), 42].each do |identifier|
     test "a missing, empty or malformed identifier #{identifier.inspect} selects nobody" do
       assert_nil PasskeySignInIdentityResolverQuery.call(surface: :app, identifier: identifier)

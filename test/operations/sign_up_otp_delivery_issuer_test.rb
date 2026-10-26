@@ -21,7 +21,7 @@ class SignUpOtpDeliveryIssuerTest < ActiveSupport::TestCase
     test "#{surface} #{channel} issuer refuses replacement of a committed proof without claiming delivery" do
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       destination =
         (channel == :email) ? "issuer-#{SecureRandom.hex(8)}@example.test" :

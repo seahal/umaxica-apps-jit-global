@@ -192,6 +192,9 @@ Documentation MAY guide investigation, but it is not evidence of current behavio
 a behavioral claim to the user, confirm it against the implementing code, the relevant docs, and the
 tests; when they disagree, report the discrepancy instead of choosing one silently.
 
+When documentation conflicts with existing code, agents **MUST** follow the implementation patterns
+in the existing code and list every discrepancy found in the final response.
+
 Report only claims supported by results from the current session. State failed, skipped, blocked,
 and unverified checks plainly. Lead with the outcome; keep responses proportional to the task. Do
 not add a separate verifier pass; delegate only independent, substantial work whose parallel

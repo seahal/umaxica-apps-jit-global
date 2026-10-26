@@ -100,6 +100,18 @@ module Security
       assert_empty wrongly_public, "Private routes must not match public categories:\n#{wrongly_public.join("\n")}"
     end
 
+    test "Auth admission attachment is GET-only on all three surfaces" do
+      entries =
+        application_route_entries.select do |entry|
+          entry.controller_path.match?(%r{\Aauth/(app|com|org)/ceremony_bindings\z})
+        end
+
+      assert_equal 3, entries.size
+      assert_equal ["GET"], entries.map(&:verb).uniq
+      assert_equal ["show"], entries.map(&:action).uniq
+      assert_equal ["/ceremony_bindings"], entries.map(&:path).uniq
+    end
+
     test "PUBLIC_PWA_OFFLINE covers exactly the two Rails PWA endpoints" do
       # Rails::PwaController is a framework controller, so these routes are outside
       # application_route_entries by construction. They are still public entrypoints, so the category
@@ -244,7 +256,7 @@ module Security
     def public_local_auth_admission?(entry)
       case entry.controller_path
       when %r{\Aauth/(app|com|org)/ceremony_bindings\z}
-        post?(entry) && entry.path == "/ceremony_bindings" && entry.action == "create"
+        get?(entry) && entry.path == "/ceremony_bindings" && entry.action == "show"
       when %r{\Abase/(app|com|org)/ceremony_binding_confirmations\z}
         entry.path == "/ceremony_bindings/:binding_ref/confirmation" &&
           { "show" => "GET", "create" => "POST" }[entry.action] == entry.verb

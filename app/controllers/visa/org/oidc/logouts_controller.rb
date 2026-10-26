@@ -9,37 +9,26 @@ module Visa
         include ::AuthenticationLogoutable
         include SignOutNotice
         include SignOidcLogout
-        include ::OidcRpLogoutAuthority
         include ::SurfaceInertiaPage
 
         AUTHENTICATION_MODE = :open
-        # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
-        # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
-        # response body.
         layout -> { @render_surface_erb_layout ? "visa/org/application" : "visa/org/inertia" }
 
         declare_authentication_mode! :open
 
-        def show
-          return show_browser_rp_logout_authority! if browser_rp_logout_challenge?
+        public
 
+        def show
           handle_oidc_end_session_request
         end
 
         def create
-          return create_browser_rp_logout_authority! if browser_rp_logout_challenge?
-
           handle_oidc_end_session_request
         end
 
         public :create
 
         private
-
-        def reject_oidc_logout_challenge!(reason)
-          @render_surface_erb_layout = true
-          super
-        end
 
         def oidc_logout_completed_path(ri:, _sot: nil)
           visa_org_sign_bye_path(ri: ri)
@@ -69,16 +58,6 @@ module Visa
                  props: sign_out_edit_page_props,
                  status: :ok,
                  clear_history: true
-        end
-
-        # A failure after the parent COMMIT still ends the signed-in session, so it ends on an
-        # Inertia page that clears history. An HTML page cannot: inertia_rails drops the session
-        # clear flag on any non-redirect response, before the next Inertia page could read it.
-        def render_oidc_rp_logout_cleanup_incomplete
-          @sign_out_cleanup_incomplete = true
-          render_oidc_logout_result_page(
-            title: t("sign.shared.sign_out.completed_title"), description: sign_out_completed_description, status: :ok,
-          )
         end
 
         def render_oidc_rp_logout_indeterminate
@@ -117,9 +96,8 @@ module Visa
 
         def sign_out_confirmation_form
           {
-            action: request.path,
+            action: sign_out_confirmation_form_path,
             submit: t("sign.shared.sign_out.button"),
-            logout_challenge: params[:logout_challenge].presence,
             ri: params[:ri].presence,
             confirm_description: t("sign.shared.sign_out.confirm_description"),
           }

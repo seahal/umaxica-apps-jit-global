@@ -74,6 +74,8 @@ class Visitor < ComPrincipalRecord
   include AdministrativeAccessLockable
 
   LOGIN_BLOCKED_STATUS_IDS = [VisitorStatus::RESERVED].freeze
+  # D-106 / D-128: a COM registration before its Finalization.
+  UNFINISHED_REGISTRATION_STATUS_IDS = [VisitorStatus::UNVERIFIED_WITH_SIGN_UP].freeze
   VERIFIED_RECOVERY_EMAIL_STATUS_IDS = [
     VisitorEmailStatus::VERIFIED,
     VisitorEmailStatus::VERIFIED_WITH_SIGN_UP,
@@ -260,6 +262,14 @@ class Visitor < ComPrincipalRecord
 
   def configured_mfa_level_methods
     step_up_methods
+  end
+
+  public
+
+  # D-128 / D-131: the decisive commit of a COM Finalization promotes the unfinished registration.
+  # A Visitor already past it is left as it is.
+  def promote_finished_registration!
+    update!(status_id: VisitorStatus::ACTIVE) if status_id == VisitorStatus::UNVERIFIED_WITH_SIGN_UP
   end
 end
 # rubocop:enable Rails/HasManyOrHasOneDependent

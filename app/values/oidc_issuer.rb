@@ -26,11 +26,6 @@ module OidcIssuer
     "#{for_resource_type(resource_type)}/oauth/token"
   end
 
-  # R5-WU08 read-only Refresh delivery recovery endpoint of the realm OP.
-  def refresh_delivery_query_endpoint(resource_type)
-    "#{for_resource_type(resource_type)}/oauth/refresh-deliveries/query"
-  end
-
   def userinfo_endpoint(resource_type)
     "#{for_resource_type(resource_type)}/oauth/userinfo"
   end

@@ -78,6 +78,8 @@ class TelephoneCredentialRegistrationOtpFinalizer
     end
     telephone.finalize_registration_binding!(transaction: transaction, code: code, session_ref: session_ref)
     record_audit!(telephone, "finalized")
+    # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it.
+    token.consume_step_up_evidence!(requirement: requirement)
     true
   end
 

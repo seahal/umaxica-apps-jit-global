@@ -157,6 +157,8 @@ class SignUpStepGate
   # E1 (WU-24h): the Flow is the one bound to the admitted ceremony's Binding; a session locator or a
   # sequence id never selects one on its own.
   def current_ticket
+    return unless controller.respond_to?(:current_sign_up_flow_ticket, true)
+
     controller.send(:current_sign_up_flow_ticket)
   end
 

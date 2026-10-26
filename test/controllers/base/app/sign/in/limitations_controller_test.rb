@@ -17,8 +17,6 @@ class Visa::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
         state.updated_at = reference_now
       end
     end
-    ClientSignOutFlowKind.ensure_defaults!
-    ClientSignOutFlowStatus.ensure_defaults!
     @request.host = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
     @actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,

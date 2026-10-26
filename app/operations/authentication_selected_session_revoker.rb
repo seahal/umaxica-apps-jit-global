@@ -22,6 +22,7 @@ class AuthenticationSelectedSessionRevoker
       resource: owner,
       token: token,
       reason: reason,
+      cause: "revoke_others", # D-173
     )
     LogoutResult.success(token: token, revoked_tokens: [token], message: :session_revoked)
   end

@@ -147,8 +147,14 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
     ]
 
     assert_equal 20, edges.size
+    legacy_edges =
+      JumpRtReturnPolicy::ALLOWED_EDGES.reject { |source, destination|
+        source.start_with?("VISA_") ||
+          destination.start_with?("VISA_")
+      }
+
     assert_equal edges.map { |source, destination| [namespaces.fetch(source), namespaces.fetch(destination)] }.sort,
-                 JumpRtReturnPolicy::ALLOWED_EDGES.sort
+                 legacy_edges.sort
     pairs = origins.keys.product(origins.keys)
 
     assert_equal 169, pairs.size
@@ -185,7 +191,13 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
 
     assert_equal 13, origins.size
     assert_equal 20, edges.size
-    assert_equal expected_edges.sort, JumpRtReturnPolicy::ALLOWED_EDGES.sort
+    legacy_edges =
+      JumpRtReturnPolicy::ALLOWED_EDGES.reject { |source, destination|
+        source.start_with?("VISA_") ||
+          destination.start_with?("VISA_")
+      }
+
+    assert_equal expected_edges.sort, legacy_edges.sort
 
     pairs = origins.to_a.product(origins.to_a)
 
@@ -197,6 +209,42 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
                      source: source_origin,
                    ),
                    "#{source} -> #{destination}"
+    end
+  end
+
+  test "the Jump edge catalog is the source of the allowed graph and names Visa origins" do
+    projected =
+      JumpRtReturnPolicy::EDGE_CATALOG.map do |edge|
+        [edge.fetch(:issuer_namespace), edge.fetch(:destination_namespace)]
+      end
+
+    assert_equal projected.sort, JumpRtReturnPolicy::ALLOWED_EDGES.sort
+    visa_edge_count =
+      JumpRtReturnPolicy::EDGE_CATALOG.count do |edge|
+        edge.fetch(:issuer_namespace).start_with?("VISA_") || edge.fetch(:destination_namespace).start_with?("VISA_")
+      end
+
+    assert_equal 26, visa_edge_count
+
+    JumpRtReturnPolicy::EDGE_CATALOG.select do |edge|
+      edge.fetch(:issuer_namespace).start_with?("VISA_") || edge.fetch(:destination_namespace).start_with?("VISA_")
+    end.each do |edge|
+      issuer = edge.fetch(:issuer_namespace)
+      destination = edge.fetch(:destination_namespace)
+      issuer_origin = JumpRtSurface.issuer_origin(issuer)
+      destination_origin = JumpRtSurface.issuer_origin(destination)
+      token = JumpRtIssuer.call(
+        namespace: issuer, url: "https://jump-contract.example/oauth/authorize",
+        dst: "internal",
+      )
+      payload, = JWT.decode(token, nil, false)
+
+      assert_equal issuer_origin, payload.fetch("iss")
+      assert_equal "https://jump-contract.example/oauth/authorize", payload.fetch("url")
+      assert JumpRtReturnPolicy.allowed_source?(
+        destination_origin: destination_origin,
+        source: issuer_origin,
+      ), "#{issuer} -> #{destination} (#{edge.fetch(:purpose)})"
     end
   end
 

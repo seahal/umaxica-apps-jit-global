@@ -16,14 +16,14 @@ Source snapshots at intake (SHA-256):
 | G-9 | 29:59 / 30:00 / 30:01 for every consumer, Switch near the deadline (inherits it, D-74), lock wait spanning the deadline, Finalization whose deadline check under the lock runs at 29:59 → registered (kept even if the principal commit lands after 30:00, D-131) with the Sign-in handoff judged on its own, and whose check runs at 30:00 / 30:01 → nothing registered, fail closed (D-105 read by D-131), Auth-side in time but OP-side receipt late; after the curfew the owner's own attempt returns to the RP as `access_denied`, a foreign request ends nothing (D-160 (3)). The RP `state` deadline is a separate check on the Rails clock (D-160 (1)), accepted in A43-6 / A43-20, not here | Unverified |
 | G-10 | R23-INV-1 … 4: resend adds no expiry, authority, single-use reference or consumption; no re-minting of a consumed next reference; lost response after COMMIT yields nothing new | Unverified |
 | G-15 | `prompt=none` → `login_required` and one new interactive transaction (no loop); `access_denied` Cancel return after `state`/`iss`; revocation with the registered method; RP-Initiated Logout GET/POST; expired `id_token_hint` accepted for logout only, never for authentication | Unverified |
-| G-16 | For every unit touching logout (WU-02 V9, WU-14, WU-15, WU-16, WU-22): Sign-up/Sign-in intact; APP/COM/ORG separate; RP never takes OP authority; `id_token_hint` only a hint; unauthenticated viewing ≠ revocation; GET changes no authority; POST verifies CSRF; BCL outcome ≠ OP sign-out outcome; an old logout's after-work never breaks a new login; completion `GET /sign/out/completion` read-only and `POST` CSRF-protected | Unverified |
+| G-16 | For every unit touching logout (WU-02 V9, WU-14, WU-15, WU-16, WU-22): Sign-up/Sign-in intact; APP/COM/ORG separate; RP never takes OP authority; `id_token_hint` only a hint; unauthenticated viewing ≠ revocation; GET changes no authority; POST verifies CSRF; BCL outcome ≠ OP sign-out outcome; an old logout's after-work never breaks a new login; completion `GET /sign/out/completion` read-only and `POST` CSRF-protected | Unverified. Local APP/COM/ORG sign-out controller tests, registered-RP logout matrix, sibling-scope and BCL receiver tests passed; this does not cover every G-16 clause. See `evidence/2026-10-25-wu15-16-22-suite-check-C7M4.md`; full suite remains red. |
 | G-17 | For WU-29 and every unit touching a Sign-in path entry or POST: unset flag and flag-store error refuse; no Sign-in path entry, POST or callback reaches evidence, registration or root login while BLOCKED; Re-verification path, Refresh, Sign Out and `prompt=none` unaffected | Unverified |
 | G-18 | For every Design D continuation endpoint: Fetch Metadata required, HEAD refused, binding checked before consumption, CAS, same-browser repeat only within issuance + 10 s, `no-store` + `no-referrer`, clean final URL | Unverified |
 | G-19 | Every stop writes one outbox row per participant in its transaction; every row reaches a final state or the BX-10 deadline through Solid Queue and the sweep | Unverified |
 | G-20 | Every stop record has principal and cause NOT NULL; token references in the OP database `ON DELETE RESTRICT`, the principal referenced by public id and protected by the purge order (cross-DB); a re-run is answered from the stored record. **Authority per cause** (corrected 2026-10-22 per seven.md #5; D-123's "no valid OP session → no authoritative stop" applies to **browser sign-out only**): browser sign-out — a valid OP session and the person's own request; identity stop — a committed identity-stop event; refresh reuse — a verified used token and its grant; token revocation — the authenticated client per D-79; administrative or risk stop — the operator's authorization and scope. A stop without its cause's authority is refused | Unverified |
 | G-21 | Only `3`/`7` admit authentication; `0`, unknown and `NULL` refuse both authentication and authorization | Unverified |
 | G-22 | No cookie set with `Domain` or `Partitioned` by any unit | Unverified |
-| G-1 | Before the first unit starts, a fresh full `bin/rails test` baseline is taken at the starting commit **including the uncommitted worktree**, and its failure list recorded; the 2026-10-21 TR numbers (59/1) are history, not the baseline. A unit passes only when it adds no failure **and** every baseline failure in the unit's own area is fixed or explicitly reassigned with a reason ("no new failures" alone is not completion; seven.md) | Unverified |
+| G-1 | Before the first unit starts, a fresh full `bin/rails test` baseline is taken at the starting commit **including the uncommitted worktree**, and its failure list recorded; the 2026-10-21 TR numbers (59/1) are history, not the baseline. A unit passes only when it adds no failure **and** every baseline failure in the unit's own area is fixed or explicitly reassigned with a reason ("no new failures" alone is not completion; seven.md) | Unverified. The current worktree's final run was 18,309 runs, 152,258 assertions, 190 failures, 298 errors, 0 skips. The terminal output did not retain the complete per-file list, so the baseline comparison and failure dispositions are incomplete; see `evidence/2026-10-25-wu15-16-22-suite-check-C7M4.md`. |
 | G-2 | Static invariant guards pass (`project/static-invariant-guards.mdc`), including `test/security/invariants/auth_surface_translation_namespace_invariant_test.rb` | Unverified |
 | G-3 | No test deleted or weakened to pass; every rewritten test has a stated reason; no compatibility route, alias or fallback added | Unverified |
 | G-4 | RuboCop clean on changed Ruby; oxfmt/oxlint/`tsc --build` clean on changed TypeScript | Unverified |
@@ -100,18 +100,18 @@ Source snapshots at intake (SHA-256):
 | A07-2 | After a refusal, per D-73 class | Unverified |
 | A07-3 | Log event per refusal | Unverified |
 | A07-4 | Re-verification path and BCL receiver | Unverified |
-| A08-1 | Intent × L1–L8 × provider | Unverified |
-| A08-2 | L8 ban present together with any other state | Unverified |
-| A08-3 | L4 (identity without Client) | Unverified |
-| A08-4 | Any refusal | Unverified |
+| A08-1 | Intent × L1–L8 × provider | Verified locally: service and HTTP state matrices; WU08 evidence M8C4 |
+| A08-2 | L8 ban present together with any other state | Verified locally: all identity partitions and both intents/providers, plus link pre-lookup refusal; M8C4 |
+| A08-3 | L4 (identity without Client) | Verified locally: both providers/intents, HTML and JSON 500, one FATAL, Auth SID preserved; orphan repository boundary substituted because the FK prohibits storage; M8C4 |
+| A08-4 | Any refusal | Verified locally: HTTP callback counts preserve Flow, Client, external identity and Root; no authentication evidence on refusal; M8C4 |
 | A09-1 | Outdated browser UA on a browser page | Unverified |
 | A09-2 | BCL receiver, token endpoint, health | Unverified |
-| A10-1 | Refresh | Unverified |
-| A10-2 | Reuse of a consumed token | Unverified |
-| A10-3 | Unknown token | Unverified |
-| A10-4 | Receipt endpoint and recovery code | Unverified |
-| A10-5 | RP recovery | Unverified |
-| A10-6 | `rp_refresh_attempts` removal migration | Unverified |
+| A10-1 | Refresh | Verified locally: rotation on every use (`token_exchange_service_test.rb` D-25 cases); evidence/2026-10-25-wu10-standard-refresh-R7K2.md |
+| A10-2 | Reuse of a consumed token | Verified locally: `invalid_grant`, grant family revoked, successor refused, Root Session active; evidence/2026-10-25-wu10-standard-refresh-R7K2.md |
+| A10-3 | Unknown token | Verified locally: wrong verifier and garbage revoke nothing; evidence/2026-10-25-wu10-standard-refresh-R7K2.md |
+| A10-4 | Receipt endpoint and recovery code | Verified locally: routes, query, receipt value, coordination adapter and grant receipt columns removed; evidence/2026-10-25-wu10-standard-refresh-R7K2.md |
+| A10-5 | RP recovery | Verified locally: refused/indeterminate refresh on a navigation → one `prompt=none` flow; `login_required` → `/sign`; JSON → 401 (`rp_refresh_recovery_test.rb`, `callback_test.rb`); evidence/2026-10-25-wu10-standard-refresh-R7K2.md |
+| A10-6 | `rp_refresh_attempts` removal migration | Verified locally: 12 RP cells migrated, rollback/re-migrate exercised on `rp_base_app` and `op_base_app`; evidence/2026-10-25-wu10-standard-refresh-R7K2.md |
 | A11-1 | Repeated verification, including the BCL receiver | Unverified |
 | A11-2 | Unknown `kid`, fetch succeeds with / without it | Unverified |
 | A11-3 | Unknown `kid`, fetch fails | Unverified |
@@ -139,8 +139,8 @@ Source snapshots at intake (SHA-256):
 | A24-0 | WU-24a classification | Not applicable: D-159 removes existing-data classification |
 | A24-1 | `authentication` Admission on a sign-up page or action | Passed: APP/COM wrong-intent GET/POST, preserved valid redemption; evidence I4B6 |
 | A24-2 | Binding issuance | Passed for storage: OP clock bounds, immutable facts, repeated Switch inheritance; C7D4 |
-| A24-3 | Flow ↔ Binding | Unverified |
-| A24-4 | Stale tab with another attempt's locator | Unverified |
+| A24-3 | Flow ↔ Binding | Passed scoped ownership/DB/insert-race verification (H8P2) |
+| A24-4 | Stale tab with another attempt's locator | Passed APP/COM HTTP hint/URL/nonce refusals, four verbs, CSRF enabled (H8P2) |
 | A24-5 | Migrations WU-24c/d | Passed on empty development tables: rollback and reapplication; C7D4. Global drift gate still failed |
 | A24-5a | Before WU-24f | Not applicable: D-159/D-168 remove settlement approval/data work |
 | A24-5b | Before WU-24g | Not applicable: D-159/D-168 remove row-count/backup approval gate |
@@ -149,7 +149,7 @@ Source snapshots at intake (SHA-256):
 | A24-7 | Cleanup decision (WU-24e) | Passed: APP/COM real lock races; evidence A6C4 |
 | A24-8 | After WU-24f | Not applicable: D-159 removes existing-row settlement |
 | A24-9 | After WU-24g | Passed: existing WU-01 retirement, matching live OP schemas and admission HTTP matrix; C7D4 |
-| A24-10 | Binding purge with a Flow present | Unverified |
+| A24-10 | Binding purge with a Flow present | Passed restrictive FK and child-first collection, retention/cleanup gates, principal preservation (H8P2) |
 | A25-1 | Registered method per client (app, com, org) | Unverified |
 | A25-2 | Wrong client / realm / audience / replayed assertion | Unverified |
 | A25-3 | Discovery `revocation_endpoint_auth_methods_supported` | Unverified |
@@ -233,7 +233,7 @@ Source snapshots at intake (SHA-256):
 | A32-4 | Record content | Unverified |
 | A33-1 | Failure convergence table | Unverified |
 | A35-1 | Lock inventory | Unverified |
-| A35-2 | F-1 (if approved): replayed termination vs cleanup job on one Flow; APP telephone passkey save vs termination | Partial: Flow waiter and HTTP tests pass; request race remains; evidence A6C4 |
+| A35-2 | F-1 (if approved): replayed termination vs cleanup job on one Flow; APP telephone passkey save vs termination | Partial: A6C4 plus real HTTP save/termination, expiry boundaries and concurrent-save cases pass (P4R1); reconcile exact cleanup-job/replayed-termination coverage |
 | A35-3 | F-2 (WU-24e): cleanup fails after deleting the contact, then retries | Passed: APP/COM real retention failure, rollback and retry; evidence A6C4 |
 | A34-1 | AX26-1 / AX26-2 after the change | Unverified |
 | A34-2 | Each method (OTP, Passkey, Secret, social, TOTP) for a pre-Finalization Client/Visitor | Unverified |
@@ -248,6 +248,8 @@ Source snapshots at intake (SHA-256):
 | A38-2 | Same after the deadline and the cleanup run | Unverified |
 | A38-3 | Flow past its deadline without Finalization | Unverified |
 | A38-4 | Finalized Identity with the same contact | Unverified |
+| A38-5 | Same browser resubmits entry while its attempt is in progress or past its deadline before the job | Verified 2026-10-25 (F7C1) |
+| A38-6 | Underage birthdate (APP and COM, one day before the minimum age): birthdate never written, attempt HALTED, artifacts cleaned in the request | Verified 2026-10-25 (D8B2) |
 | A42-1 | Authorize with the registered `redirect_uri` per realm | Unverified |
 | A42-2 | Unregistered URI; differing scheme / host / port (`:443` written explicitly, `:3001`) / path (trailing slash, case) / added query / fragment; URI of another realm; missing | Unverified |
 | A42-3 | Invalid `redirect_uri` together with another error (bad scope, missing `state`) | Unverified |
@@ -288,7 +290,7 @@ Source snapshots at intake (SHA-256):
 | A43-21 | Auth's own `pt` lane after the RP `pt` removal (D-162 (3)) | Unverified |
 | A43-14 | Protected page with a query string | Unverified |
 | A44-1 | Connection 1: `log_in` passes the early checks and is held before the actor lock; connection 2 commits an administrative lock (then a withdrawal suspend, then an operator stop); connection 1 continues | Unverified |
-| A44-2 | Same, but the stop commits after the root insert | Unverified |
+| A44-2 | Same, but the stop commits after the root insert | Verified locally (deterministic form): `root_issuance_recheck_test.rb`; root no longer current, then revoked by `OpIdentityEventInvalidator`; evidence/2026-10-25-wu16-authority-stop-gate-K3P8.md |
 | A44-3 | Root and Access JWT issued; stop committed with the OP apply failing (queued); account restored before the apply | Unverified |
 | A44-4 | Epoch read on the authentication boundary while the reading replica lags (constructed: replica shows the old epoch) | Unverified |
 | A44-5 | Writer unavailable during the epoch read | Unverified |

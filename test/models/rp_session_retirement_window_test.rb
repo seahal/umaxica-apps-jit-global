@@ -8,9 +8,10 @@ require "test_helper"
 # bookkeeping of the longest Access JWT expiry that feeds it.
 class RpSessionRetirementWindowTest < ActiveSupport::TestCase
   setup do
+    @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     @session = OpAppGrant.create!(
       authentication_epoch: 0,
-      client_token: ClientToken.create!(authentication_epoch: 0, user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)),
+      client_token: ClientToken.create!(authentication_epoch: 0, user: @client),
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
@@ -24,7 +25,10 @@ class RpSessionRetirementWindowTest < ActiveSupport::TestCase
   end
 
   test "a revoked session with no recorded Access JWT expiry stays pending because nothing proves retirement" do
-    @session.revoke!(status: "success")
+    OpAuthorityStopCommitter.stop_grant(
+      grant: @session, cause: "token_revocation", principal_public_id: @client.public_id,
+      authority_evidence_ref: "rp_session_retirement_window",
+    )
 
     assert_nil @session.reload.oidc_access_token_max_expires_at
     assert @session.retirement_pending?(@access_expires_at + 1.year)
@@ -32,23 +36,35 @@ class RpSessionRetirementWindowTest < ActiveSupport::TestCase
 
   test "a revoked session is pending one second before the leeway after its last Access JWT expiry" do
     @session.record_access_token_expiry!(@access_expires_at)
-    @session.revoke!(status: "success")
+    OpAuthorityStopCommitter.stop_grant(
+      grant: @session, cause: "token_revocation", principal_public_id: @client.public_id,
+      authority_evidence_ref: "rp_session_retirement_window",
+    )
+    last_expiry = @session.reload.oidc_access_token_max_expires_at
 
-    assert @session.retirement_pending?(@access_expires_at + @leeway - 1.second)
+    assert @session.retirement_pending?(last_expiry + @leeway - 1.second)
   end
 
   test "a revoked session is retired exactly at the leeway after its last Access JWT expiry" do
     @session.record_access_token_expiry!(@access_expires_at)
-    @session.revoke!(status: "success")
+    OpAuthorityStopCommitter.stop_grant(
+      grant: @session, cause: "token_revocation", principal_public_id: @client.public_id,
+      authority_evidence_ref: "rp_session_retirement_window",
+    )
+    last_expiry = @session.reload.oidc_access_token_max_expires_at
 
-    assert_not @session.retirement_pending?(@access_expires_at + @leeway)
+    assert_not @session.retirement_pending?(last_expiry + @leeway)
   end
 
   test "a revoked session is retired one second after the leeway after its last Access JWT expiry" do
     @session.record_access_token_expiry!(@access_expires_at)
-    @session.revoke!(status: "success")
+    OpAuthorityStopCommitter.stop_grant(
+      grant: @session, cause: "token_revocation", principal_public_id: @client.public_id,
+      authority_evidence_ref: "rp_session_retirement_window",
+    )
+    last_expiry = @session.reload.oidc_access_token_max_expires_at
 
-    assert_not @session.retirement_pending?(@access_expires_at + @leeway + 1.second)
+    assert_not @session.retirement_pending?(last_expiry + @leeway + 1.second)
   end
 
   test "recording a shorter Access JWT expiry cannot shorten the retirement window" do

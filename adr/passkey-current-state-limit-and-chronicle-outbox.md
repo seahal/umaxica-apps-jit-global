@@ -2,9 +2,10 @@
 
 ## Status
 
-**Accepted (2026-10-19).** This decision applies to the APP, COM, and ORG Passkey credential records
-and their lifecycle audit delivery. It records the intended contract and the implemented schema
-direction; deployment and production queue operation still require the evidence listed below.
+**Accepted (2026-10-19); capacity amendment recorded 2026-10-24 (D-116).** This decision applies
+to the APP, COM, and ORG Passkey credential records and their lifecycle audit delivery. It records
+the intended contract and the implemented schema direction; deployment and production queue
+operation still require the evidence listed below.
 
 ## Decision
 
@@ -14,14 +15,12 @@ direction; deployment and production queue operation still require the evidence 
 (owner decision, 2026-10-22); the 2026-10-21 four-slot partial supersession below is itself
 superseded. Enforcement remains unverified.
 
-### Partial supersession (2026-10-21, superseded for capacity on 2026-10-23)
+### Historical four-slot proposal (2026-10-21, withdrawn 2026-10-23)
 
-[Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) replaces the ten-per-owner
-capacity below with a four-slot target on APP, COM and ORG. The original ten-credential decision
-and rationale remain historical. Four-slot enforcement and safe handling of existing counts above
-four require later investigation; no deletion, migration or new database mechanism is approved
-here. Owner serialization, credential uniqueness, lifecycle deletion and Chronicle/outbox contracts
-remain accepted. The successor records a design target, not delivery.
+[Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) briefly proposed a four-slot
+target on APP, COM and ORG. The account-label decision restores this ADR's ten-per-Identity
+capacity; the four-slot wording is historical and has no current effect. Owner serialization,
+credential uniqueness, lifecycle deletion and Chronicle/outbox contracts remain accepted.
 
 Passkey tables represent credentials that are currently retained and usable or are retained for an
 explicit lifecycle reason. Chronicle is the historical audit authority. A terminal Passkey row is

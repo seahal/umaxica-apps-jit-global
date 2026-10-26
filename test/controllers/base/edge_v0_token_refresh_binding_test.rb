@@ -11,7 +11,8 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   fixtures :clients, :operators
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    # WU-02 V4: the token lifecycle endpoints live on the Visa (OP) host.
+    @host = visa_host_for_test_surface(:app)
     host! @host
   end
 
@@ -48,7 +49,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "an operator session is held to the tighter operator idle window" do
-    org_host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    org_host = visa_host_for_test_surface(:org)
     host! org_host
     token = OperatorToken.create!(authentication_epoch: 0, staff: operators(:one))
     refresh_plain = token.rotate_refresh_token!

@@ -9,6 +9,7 @@ class AuthenticationSessionRevoker
         resource: resource,
         token: token,
         reason: "session_revoke_all",
+        cause: "revoke_others", # D-173
       )
     end
   end

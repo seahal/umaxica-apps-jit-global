@@ -29,6 +29,7 @@ class IdentityPasskeyNameCommitter
                   next if passkey.description == description
 
                   passkey.update!(description: description)
+                  consume_step_up!(policy, token)
                   PasskeyAuditOutbox.record_for!(
                     passkey: passkey,
                     event_type: "passkey.description_changed",
@@ -58,6 +59,13 @@ class IdentityPasskeyNameCommitter
         OperatorPasskeyPolicy.new(passkey, user: actor)
       else raise Denied, "Passkey rename binding mismatch"
       end
+    end
+
+    # adr/authentication-security-mode.md D3: the Step-Up that authorized this rename is spent with it.
+    def consume_step_up!(policy, token)
+      token.consume_step_up_evidence!(requirement: policy.management_requirement(token: token))
+    rescue TokenStatusManagement::StepUpEvidenceUnavailable => e
+      raise Denied, e.message
     end
 
     def active_passkey?(passkey)

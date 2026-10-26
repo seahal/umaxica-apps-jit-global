@@ -28,30 +28,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     issuance = OidcTestEntry.issue!(
       surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
-    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-    get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
-    post(
-      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
-                            headers: admission_headers,
-    )
-
-    assert_response :see_other
-    # Public confirmation isolates this leaf's setup; separate HTTP tests exercise the Base receiver.
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
-                                       headers: admission_headers,
-    )
-
-    assert_response :see_other
+    admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference)
   end
 
   ["confirm_policy"].each do |consent_field|
@@ -346,52 +323,37 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_nil I18n.t(update_key, default: nil)
   end
 
-  test "can re-register same email if previous registration was unverified" do
+  test "a new entry submit proceeds once the earlier attempt is terminal and its cleanup completed" do
     email = "test_re_reg@example.com"
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { user_email: { raw_address: email, confirm_policy: "1" }, "cf-turnstile-response": "test" },
+         headers: default_headers
 
-    # First registration attempt
+    assert_response :redirect
+    first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    first_email = ClientEmail.find(first_flow.pending_contact_id)
+    # Stands in for the background cleanup outcome: terminal with completed artifact cleanup.
+    SignUpTermination.call(cycle: first_flow, event: :cancel)
+
+    assert_predicate first_flow.reload, :cleanup_completed?
+
+    # The ended attempt consumed its admission; a new attempt starts from a new Base admission.
+    issuance = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference)
     post auth_app_sign_up_email_url(ri: "jp"),
          params: {
-           user_email: {
-             raw_address: email,
-             confirm_policy: "1",
-           },
+           user_email: { raw_address: "TEST_RE_REG@EXAMPLE.COM", confirm_policy: "1" },
            "cf-turnstile-response": "test",
          },
          headers: default_headers
 
     assert_response :redirect
+    replacement_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
 
-    # Verify first record created - extract ID from redirect location
-    first_email_id = ClientEmail.order(:created_at).last.public_id
-    first_email = ClientEmail.find_by(public_id: first_email_id)
-
-    assert_not_nil first_email
-    assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, first_email.user_email_status_id
-
-    assert_not_nil first_email.address_digest
-
-    # Second registration attempt after the independent overwrite window expires (case-variant)
-    # This should delete the previous unverified record and create a new one
-    travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: "TEST_RE_REG@EXAMPLE.COM",
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
-
-      # Should succeed because old unverified record is deleted
-      assert_response :redirect
-
-      # Verify old record was deleted and new record was created
-      new_email_id = ClientEmail.order(:created_at).last.public_id
-
-      assert_not_equal first_email.id, new_email_id # Check IDs from URL differ
-    end
+    assert_not_equal first_flow.id, replacement_flow.id
+    assert_not_equal first_email.id, replacement_flow.pending_contact_id
   end
 
   test "create redirects to edit and allows edit page" do
@@ -625,39 +587,39 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     existing_facts = existing.reload.attributes
     existing_owner_facts = user.reload.attributes
     responses = []
+    refusals = []
     candidates = []
     browsers = []
     targets = []
 
     [existing.address, "app-fresh-session-pending-signup@example.com"].each do |destination|
-      2.times do
+      2.times do |attempt|
         browser = open_session
         browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
         browser.https!
         issuance = OidcTestEntry.issue!(
           surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
         )
-        binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-        browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-        assert_equal 200, browser.response.status
-        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
         headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" }
-        browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
-        )
+        admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference, browser: browser)
 
         assert_equal 303, browser.response.status
-        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-        browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        browser.post(
-          auth_app_sign_up_path(ri: "jp"),
-          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
-        )
+        if attempt == 1
+          # D-135: the first browser's unfinished registration now holds the destination,
+          # registered or not, so the second browser is refused the same way for both.
+          assert_no_difference("ClientEmail.count") do
+            browser.post(
+              auth_app_sign_up_email_url(ri: "jp"),
+              params: { user_email: { raw_address: destination, confirm_policy: "1" },
+                        "cf-turnstile-response": "test", }, headers: headers,
+            )
+          end
 
-        assert_equal 303, browser.response.status
+          refusals << browser.response.status
+          next
+        end
+
         assert_difference("ClientEmail.count", 1) do
           browser.post(
             auth_app_sign_up_email_url(ri: "jp"),
@@ -684,8 +646,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_equal 1, responses.uniq.length
-    assert_equal 4, candidates.map(&:id).uniq.length
-    assert_equal 4, candidates.map(&:user_id).uniq.length
+    assert_equal [422, 422], refusals
+    assert_equal 2, candidates.map(&:id).uniq.length
+    assert_equal 2, candidates.map(&:user_id).uniq.length
     assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
     assert_withheld("protected record facts remain unchanged") { existing_owner_facts == user.reload.attributes }
     own_candidate_facts = candidates.last.attributes
@@ -1849,213 +1812,64 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert Client.exists?(id: user_email.user_id), "Client record should exist for user_id"
   end
 
-  test "replacing an owned pending email retains the halted flow and schedules its artifacts for purge" do
-    email = "replace_pending_test@example.com"
-
-    # First registration attempt
+  test "a second entry submit while this browser's earlier attempt is unfinished is refused and changes nothing" do
     post auth_app_sign_up_email_url(ri: "jp"),
          params: {
-           user_email: {
-             raw_address: email,
-             confirm_policy: "1",
-           },
+           user_email: { raw_address: "first_held@example.com", confirm_policy: "1" },
            "cf-turnstile-response": "test",
          },
          headers: default_headers
 
     assert_response :redirect
+    first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    first_flow_facts = first_flow.attributes
+    first_email_facts = ClientEmail.find(first_flow.pending_contact_id).attributes
 
-    # Get first pending user
-    first_email_id = ClientEmail.order(:created_at).last.public_id
-    first_email = ClientEmail.find_by(public_id: first_email_id)
-    first_user_id = first_email.user_id
+    ["first_held@example.com", "second_attempt@example.com"].each do |address|
+      assert_no_difference -> { Client.count } do
+        assert_no_difference -> { ClientEmail.count } do
+          assert_no_difference -> { ClientSignUpFlow.count } do
+            assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+              post auth_app_sign_up_email_url(ri: "jp"),
+                   params: { user_email: { raw_address: address, confirm_policy: "1" },
+                             "cf-turnstile-response": "test", },
+                   headers: default_headers
+            end
+          end
+        end
+      end
+
+      assert_response :unprocessable_content
+      assert_includes response.body, I18n.t("sign.app.registration.email.create.contact_held", locale: :ja)
+    end
+
+    assert_equal first_flow_facts, first_flow.reload.attributes
+    assert_equal first_email_facts, ClientEmail.find(first_flow.pending_contact_id).attributes
+  end
+
+  test "a second entry submit stays refused when the earlier attempt passed its deadline before the expiry job ran" do
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: {
+           user_email: { raw_address: "expired_held@example.com", confirm_policy: "1" },
+           "cf-turnstile-response": "test",
+         },
+         headers: default_headers
     first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
 
-    # Count users before second attempt
-    user_count_before_second = Client.count
-
-    # Second registration attempt after cooldown (should delete first pending user)
-    decision_time = first_email.otp_last_sent_at + EmailOtpPolicy::SEND_COOLDOWN + 1.second
-    ClientEmail.stub(:database_now, decision_time) do
-      travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
+    travel_to(first_flow.expires_at + 1.second) do
+      assert_no_difference -> { ClientSignUpFlow.count } do
         post auth_app_sign_up_email_url(ri: "jp"),
              params: {
-               user_email: {
-                 raw_address: email,
-                 confirm_policy: "1",
-               },
+               user_email: { raw_address: "after_deadline@example.com", confirm_policy: "1" },
                "cf-turnstile-response": "test",
              },
              headers: default_headers
       end
-
-      assert_response :redirect
-
-      retained_owner = Client.find(first_user_id)
-
-      assert_equal ClientSignUpFlowStatus::HALTED, first_flow.reload.status_id
-      assert_predicate first_flow, :cleanup_completed?
-      assert_operator retained_owner.discard_at, :<=, first_flow.cleanup_completed_at
-      assert_operator retained_owner.purge_eligible_at, :>, retained_owner.discard_at
-      assert_operator first_email.reload.discard_at, :<=, first_flow.cleanup_completed_at
-      assert_equal first_user_id, first_email.user_id
-      assert_equal user_count_before_second + 1, Client.count
-
-      # Verify new email has a different user
-      second_email_id = ClientEmail.order(:created_at).last.public_id
-      second_email = ClientEmail.find_by(public_id: second_email_id)
-
-      assert_not_equal first_user_id, second_email.user_id
-      assert_predicate second_email.user_id, :present?
-    end
-  end
-
-  test "can abandon first email and register with a different email without error" do
-    first_email = "first_abandoned@example.com"
-    second_email = "second_attempt@example.com"
-
-    # First registration attempt with email A
-    post auth_app_sign_up_email_url(ri: "jp"),
-         params: {
-           user_email: {
-             raw_address: first_email,
-             confirm_policy: "1",
-           },
-           "cf-turnstile-response": "test",
-         },
-         headers: default_headers
-
-    assert_response :redirect
-
-    # Get first pending user info
-    first_email_id = ClientEmail.order(:created_at).last.public_id
-    first_record = ClientEmail.find_by(public_id: first_email_id)
-    first_user_id = first_record.user_id
-
-    assert_not_nil first_record
-    assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, first_record.user_email_status_id
-
-    # Client abandons: navigates back to "new" page
-    # This should succeed without redirect loop or error
-    get new_auth_app_sign_up_email_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-
-    # Client submits a different email B
-    post auth_app_sign_up_email_url(ri: "jp"),
-         params: {
-           user_email: {
-             raw_address: second_email,
-             confirm_policy: "1",
-           },
-           "cf-turnstile-response": "test",
-         },
-         headers: default_headers
-
-    assert_response :redirect
-
-    # Verify second registration created a new pending user
-    second_email_id = ClientEmail.order(:created_at).last.public_id
-    second_record = ClientEmail.find_by(public_id: second_email_id)
-
-    assert_not_nil second_record
-    assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, second_record.user_email_status_id
-    assert_not_equal first_user_id, second_record.user_id
-
-    retained_owner = Client.find(first_user_id)
-
-    assert_operator retained_owner.discard_at, :<=, Time.current
-    assert_operator retained_owner.purge_eligible_at, :>, retained_owner.discard_at
-    assert_operator first_record.reload.discard_at, :<=, Time.current
-    assert_equal first_user_id, first_record.user_id
-  end
-
-  # OTP Resend Cooldown Tests
-  test "create keeps re-registration inside overwrite window non-disclosing" do
-    email = "cooldown_test@example.com"
-
-    # First registration attempt
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: email,
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
     end
 
-    assert_response :redirect
-
-    first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-    first_candidate = ClientEmail.find(first_flow.pending_contact_id)
-
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: email,
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
-    end
-
-    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
-    replacement_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-    replacement = ClientEmail.find(replacement_flow.pending_contact_id)
-
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding)
-    assert_equal replacement_flow.public_id, SignFlowBindingCodec.decode(flow_binding).flow_public_id
-    assert_not_equal first_candidate.id, replacement.id
-    assert_not_equal first_candidate.user_id, replacement.user_id
-    assert_equal ClientSignUpFlowStatus::HALTED, first_flow.reload.status_id
-    assert_predicate first_flow, :cleanup_completed?
-    assert_equal email, replacement.address
-    assert_nil replacement.binding_finalized_at
-  end
-
-  test "create allows re-registration after overwrite window expires for new signup" do
-    email = "cooldown_expire_test@example.com"
-
-    # First registration attempt
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: email,
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
-    end
-
-    assert_response :redirect
-
-    # After the overwrite window expires, even though OTP resend cooldown is longer.
-    first_email = ClientEmail.order(:created_at).last
-    decision_time = first_email.otp_last_sent_at + EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
-    ClientEmail.stub(:database_now, decision_time) do
-      travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-        assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-          post auth_app_sign_up_email_url(ri: "jp"),
-               params: {
-                 user_email: {
-                   raw_address: email,
-                   confirm_policy: "1",
-                 },
-                 "cf-turnstile-response": "test",
-               },
-               headers: default_headers
-        end
-
-        assert_response :redirect
-      end
-    end
+    # Past the deadline the admission's curfew refuses first; either way nothing is created or reset.
+    assert_response :bad_request
+    assert_not_predicate first_flow.reload, :sign_up_terminal?
   end
 
   test "existing registered emails show otp page instead of entering cooldown" do
@@ -2086,24 +1900,6 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     first_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: first_binding)
-
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: "registered_cooldown@example.com",
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
-    end
-
-    assert_response :redirect
-    second_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
-
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: second_binding)
-    assert_not_equal first_binding, second_binding
     assert_withheld("effective contact facts remain unchanged") {
       original_contact_facts == existing_email.reload.attributes
     }

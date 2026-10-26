@@ -212,7 +212,8 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
     decision = StepUpResolver.call(token: @token, requirement: requirement)
 
     assert_predicate decision, :satisfied?
-    assert_equal @token.last_step_up_at + requirement.ttl, decision.expires_at
+    # Operators are ADVANCED: the 5 minute maximum caps the requirement TTL.
+    assert_equal @token.last_step_up_at + StepUpResolver::ADVANCED_MAXIMUM_TTL, decision.expires_at
     get(base_org_identity_withdrawal_url(ri: "jp", host: @base_host), headers: @base_headers)
 
     assert_response :success

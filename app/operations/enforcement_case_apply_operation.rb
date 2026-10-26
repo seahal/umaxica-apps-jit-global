@@ -19,9 +19,12 @@ class EnforcementCaseApplyOperation
 
   # `actor_operator_public_id` is the operator running this apply (the opener on the direct path,
   # the approver on the approval path); it is recorded on the `applied` event.
-  def initialize(enforcement_case:, actor_operator_public_id:)
+  def initialize(enforcement_case:, actor_operator_public_id:, step_up_token: nil, step_up_requirement: nil)
     @enforcement_case = enforcement_case
     @actor_operator_public_id = actor_operator_public_id
+    @step_up_token = step_up_token
+    @step_up_requirement = step_up_requirement
+    validate_step_up_pair!
   end
 
   def call
@@ -40,6 +43,7 @@ class EnforcementCaseApplyOperation
       enforcement_case.close_superseded_effects!
       enforcement_case.state = "active"
       enforcement_case.save!
+      step_up_token&.consume_step_up_evidence!(requirement: step_up_requirement)
     end
 
     perform_committed_side_effects!
@@ -61,7 +65,19 @@ class EnforcementCaseApplyOperation
     raise e
   end
 
-  attr_reader :enforcement_case, :actor_operator_public_id
+  attr_reader :enforcement_case, :actor_operator_public_id, :step_up_token, :step_up_requirement
+
+  def validate_step_up_pair!
+    return if step_up_token.nil? && step_up_requirement.nil?
+    return if step_up_token.is_a?(OperatorToken) && step_up_requirement.is_a?(StepUpRequirement) &&
+      %w(enforcement_case_apply enforcement_case_approve).include?(step_up_requirement.scope) &&
+      step_up_requirement.actor_ref == actor_operator_public_id &&
+      Operator.exists?(id: step_up_token.staff_id, public_id: actor_operator_public_id) &&
+      step_up_requirement.token_binding == step_up_token.public_id &&
+      step_up_requirement.audience == "step_up:org"
+
+    raise ArgumentError, "enforcement apply Step-Up token and requirement must be supplied together"
+  end
 
   # An approved Case records who approved it before it records the apply. Both writes are
   # write-once, so EnforcementReconciliationJob can repeat them after an audit delivery failure.

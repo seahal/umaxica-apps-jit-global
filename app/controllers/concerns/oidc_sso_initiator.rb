@@ -26,7 +26,7 @@ module OidcSsoInitiator
       path: request&.fullpath,
       method: request&.request_method,
     )
-    redirect_to_oidc_authorization_url(sign_in_url_with_pt(encoded_pt(request.fullpath)))
+    redirect_to_oidc_authorization_url(sign_in_url_with_target(encoded_pt(request.fullpath)))
   end
 
   # A protected page, a failed callback, or an expired session is not a Sign entry of its own: the
@@ -34,9 +34,8 @@ module OidcSsoInitiator
   # OIDC flow (specs/sign-fqdn-integrated-plan/plan.md section 5).
   # Every first-party browser RP serves its neutral entry at GET /sign on its own host
   # (test/integration/routes/neutral_rp_entry_contract_test.rb).
-  # D-151: the RP target travels as a path-only `target_link_uri` (no query); the method name is the
-  # shared AuthenticationBase contract, which Auth also implements for its own signed `pt` lane.
-  def sign_in_url_with_pt(pt)
+  # D-151: the RP target travels as a path-only `target_link_uri` (no query).
+  def sign_in_url_with_target(pt)
     target = RpTargetLinkUri.normalize(pt.present? ? URI.parse(decode_pt(pt)).path : nil)
     query = { ri: RequestContextContract.normalize_region(params[:ri]), target_link_uri: target }
     "/sign?#{query.compact.to_query}"

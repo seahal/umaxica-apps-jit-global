@@ -244,6 +244,9 @@ class SignUpArtifactCleanup
   end
 
   def visitor_dependent_records(actor)
+    # D-128: a Visitor past its decisive commit is registered and never removed as sign-up cleanup.
+    return [] unless actor&.status_id == VisitorStatus::UNVERIFIED_WITH_SIGN_UP
+
     contact = visitor_pending_contact(actor)
     return [] unless visitor_pending_contact?(contact)
 

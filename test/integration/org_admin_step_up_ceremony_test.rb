@@ -583,7 +583,8 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
       )
       event = @token.reload.last_step_up_at
-      travel_to(event + requirement.ttl + Rational(microseconds, 1_000_000), with_usec: true) do
+      # Operators are ADVANCED: the window is the 5 minute maximum, not the requirement TTL.
+      travel_to(event + StepUpResolver::ADVANCED_MAXIMUM_TTL + Rational(microseconds, 1_000_000), with_usec: true) do
         access = AuthenticationToken.encode(
           @operator, host: @base_host, session_public_id: @token.public_id,
                      resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",

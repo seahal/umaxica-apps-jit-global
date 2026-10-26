@@ -2,7 +2,7 @@
 
 # Reissues the initiating Base self-RP credentials after a committed ceremony. The root token is
 # intentionally outside this operation for ordinary step-up: only the RP Session's OIDC claims
-# change, and the shared OIDC token authority performs rotation and delivery coalescing.
+# change, and the shared OIDC token authority performs the rotation (D-25).
 class BaseSelfRpCredentialIssuer
   class CredentialUnavailable < StandardError; end
 
@@ -79,8 +79,7 @@ class BaseSelfRpCredentialIssuer
           root_token&.active_status? && actor_current?(root_token:, resource:)
         raise CredentialUnavailable, "Base self-RP authority is unavailable"
       end
-      unless current_refresh_credential?(usage:, verifier: resolved.verifier) ||
-          delivery_replay_credential?(usage:, verifier: resolved.verifier)
+      unless current_refresh_credential?(usage:, verifier: resolved.verifier)
         raise CredentialUnavailable, "Base self-RP refresh credential is stale"
       end
 
@@ -89,10 +88,6 @@ class BaseSelfRpCredentialIssuer
 
     def current_refresh_credential?(usage:, verifier:)
       usage.refresh_token_digest_matches?(verifier)
-    end
-
-    def delivery_replay_credential?(usage:, verifier:)
-      usage.previous_refresh_token_digest_matches?(verifier) && usage.refresh_delivery_receipt_present?
     end
 
     def update_claims!(resource:, usage:, verifier:, authentication_event_at:, acr:, amr:)

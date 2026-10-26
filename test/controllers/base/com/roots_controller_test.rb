@@ -30,18 +30,26 @@ class Base::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
 
-  test "renders Home for an unknown region without redirect" do
+  test "renders Home for an unknown region after region canonicalization" do
     host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     get base_com_root_url(ri: "xx")
+
+    assert_response :found
+    assert_redirected_to base_com_root_url(ri: "jp")
+    follow_redirect!
 
     assert_response :success
     assert_nil response.location
     assert_equal "base/com/roots/index", inertia_component
   end
 
-  test "renders Home for a missing region without redirect" do
+  test "renders Home for a missing region after region canonicalization" do
     host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     get "/"
+
+    assert_response :found
+    assert_redirected_to base_com_root_url(ri: "jp")
+    follow_redirect!
 
     assert_response :success
     assert_nil response.location

@@ -92,6 +92,7 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/base/app/identity/emails/registrations_controller.rb#create",
     "app/controllers/base/app/identity/emails/registrations_controller.rb#update",
     "app/controllers/base/app/identity/mfa/challenges_controller.rb#update",
+    "app/controllers/base/com/identity/mfa/challenges_controller.rb#update",
     "app/controllers/base/app/identity/telephones/registrations_controller.rb#create",
     "app/controllers/base/app/identity/telephones/registrations_controller.rb#update",
     "app/controllers/base/app/identity/telephones_controller.rb#create",

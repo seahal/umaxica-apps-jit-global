@@ -8,6 +8,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
   test "Base creates the confirmed credential once and retries return the same active credential without freshness" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
+    grant_settings_totp_step_up!(actor, token)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -123,6 +124,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
   test "a principal write failure retains the unconsumed proof and candidate for a safe retry" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
+    grant_settings_totp_step_up!(actor, token)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -164,6 +166,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       assert_nil candidate.reload.consumed_at
       assert_not_predicate ceremony.reload, :completed?
       assert_equal 0, actor.client_totp_credentials.count
+      assert_not_nil token.reload.last_step_up_at
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
         actor: actor, token: token, transaction: transaction, raw_result: result.code,
       )
@@ -260,5 +263,17 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       assert_equal "step_up", token.last_step_up_purpose
       assert_predicate StepUpResolver.call(token: token, requirement: requirement, now: next_window), :satisfied?
     end
+  end
+
+  private
+
+  def grant_settings_totp_step_up!(_actor, token)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
   end
 end

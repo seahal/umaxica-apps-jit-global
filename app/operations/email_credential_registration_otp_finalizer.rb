@@ -116,6 +116,9 @@ class EmailCredentialRegistrationOtpFinalizer
     end
     email.finalize_registration_binding!(transaction: transaction, code: code, session_ref: transaction.session_ref)
     record_audit!(email, "finalized")
+    # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it; a
+    # bootstrap registration carries no Step-Up.
+    token.consume_step_up_evidence!(requirement: requirement) unless bootstrap_transaction
     true
   end
 

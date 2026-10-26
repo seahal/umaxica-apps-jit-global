@@ -52,7 +52,10 @@ module Security
         Help::App::BareController,
         Help::Com::BareController,
         Help::Org::BareController,
-        Base::App::Oauth::TokensController,
+        Visa::App::BareController,
+        Visa::Com::BareController,
+        Visa::Org::BareController,
+        Visa::App::Oauth::TokensController,
         Auth::App::Apple::NotificationsController,
         Base::Com::Oidc::ClosuresController,
         Base::Com::Api::V0::Avatar::DashboardIdentitiesController,
@@ -94,9 +97,6 @@ module Security
         Base::Org::Api::V0::Identity::SelectionsController,
         Edit::Org::Oidc::ClosuresController,
         Tech::Org::Oidc::ClosuresController,
-        Base::App::Oauth::RefreshDeliveryQueriesController,
-        Base::Com::Oauth::RefreshDeliveryQueriesController,
-        Base::Org::Oauth::RefreshDeliveryQueriesController,
       ].freeze
 
       EXCLUDED_ROOTS = [

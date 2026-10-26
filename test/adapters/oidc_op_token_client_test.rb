@@ -75,44 +75,34 @@ class OidcOpTokenClientTest < ActiveSupport::TestCase
     end
   end
 
-  test "initial and receipt calls bound the entire HTTP exchange to two and one seconds" do
-    [:refresh, :query].each do |operation|
-      connection = Faraday.new
-      reply = Faraday::Response.new(status: 200, body: { access_token: "a" }.to_json)
-      limits = []
-      timer =
-        lambda do |seconds, error_class, &request|
-          limits << seconds
+  test "a refresh call bounds the entire HTTP exchange to two seconds" do
+    connection = Faraday.new
+    reply = Faraday::Response.new(status: 200, body: { access_token: "a" }.to_json)
+    limits = []
+    timer =
+      lambda do |seconds, error_class, &request|
+        limits << seconds
 
-          assert_equal OidcOpTokenClient::RequestDeadlineExceeded, error_class
-          request.call
-        end
-      OidcClientAssertionJwt.stub(:issue, "assertion") do
-        Process.stub(:clock_gettime, 100.0) do
-          OutboundHttp::Connection.stub(:build, connection) do
-            connection.stub(:post, reply) do
-              Timeout.stub(:timeout, timer) do
-                response =
-                  if operation == :refresh
-                    OidcOpTokenClient.refresh(
-                      client_id: "core-app-jp", token_url: TOKEN_URL,
-                      refresh_token: "r",
-                    )
-                  else
-                    OidcOpTokenClient.query_delivery(
-                      client_id: "core-app-jp", query_url: TOKEN_URL, refresh_token: "r", attempt_ref: "attempt",
-                    )
-                  end
+        assert_equal OidcOpTokenClient::RequestDeadlineExceeded, error_class
+        request.call
+      end
+    OidcClientAssertionJwt.stub(:issue, "assertion") do
+      Process.stub(:clock_gettime, 100.0) do
+        OutboundHttp::Connection.stub(:build, connection) do
+          connection.stub(:post, reply) do
+            Timeout.stub(:timeout, timer) do
+              response = OidcOpTokenClient.refresh(
+                client_id: "core-app-jp", token_url: TOKEN_URL, refresh_token: "r",
+              )
 
-                assert_predicate response, :success?
-              end
+              assert_predicate response, :success?
             end
           end
         end
       end
-
-      assert_equal [(operation == :refresh) ? 2.0 : 1.0], limits
     end
+
+    assert_equal [2.0], limits
   end
 
   test "caller deadline caps the exchange and already expired deadlines never dispatch" do

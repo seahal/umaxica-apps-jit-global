@@ -29,7 +29,6 @@ Counts refer to candidates with a potential axis, not a complete resolved receiv
 | --- | --- | --- | --- | --- |
 | idp-client-sign-in | 63 | 0 | 63 | None |
 | idp-client-sign-up | 21 | 3 | 18 | idp-client-sign-up:T040 |
-| idp-client-sign-out | 4 | 0 | 4 | None |
 | idp-client-auth-ceremony-session | 48 | 7 | 41 | idp-client-auth-ceremony-session:T001, idp-client-auth-ceremony-session:T002, idp-client-auth-ceremony-session:T003, idp-client-auth-ceremony-session:T004, idp-client-auth-ceremony-session:T005, idp-client-auth-ceremony-session:T006, idp-client-auth-ceremony-session:T007, idp-client-auth-ceremony-session:T008, idp-client-auth-ceremony-session:T009, idp-client-auth-ceremony-session:T010, idp-client-auth-ceremony-session:T011, idp-client-auth-ceremony-session:T012 |
 | idp-client-email-ceremony | 7 | 1 | 6 | idp-client-email-ceremony:T001 |
 | idp-client-telephone-ceremony | 7 | 1 | 6 | idp-client-telephone-ceremony:T001 |
@@ -46,7 +45,6 @@ Counts refer to candidates with a potential axis, not a complete resolved receiv
 | idp-client-passkey-credential | 8 | 0 | 8 | None |
 | idp-visitor-sign-in | 63 | 0 | 63 | None |
 | idp-visitor-sign-up | 16 | 4 | 12 | idp-visitor-sign-up:T033 |
-| idp-visitor-sign-out | 4 | 0 | 4 | None |
 | idp-visitor-auth-ceremony-session | 48 | 7 | 41 | idp-visitor-auth-ceremony-session:T001, idp-visitor-auth-ceremony-session:T002, idp-visitor-auth-ceremony-session:T003, idp-visitor-auth-ceremony-session:T004, idp-visitor-auth-ceremony-session:T005, idp-visitor-auth-ceremony-session:T006, idp-visitor-auth-ceremony-session:T007, idp-visitor-auth-ceremony-session:T008, idp-visitor-auth-ceremony-session:T009, idp-visitor-auth-ceremony-session:T010, idp-visitor-auth-ceremony-session:T011, idp-visitor-auth-ceremony-session:T012 |
 | idp-visitor-email-ceremony | 7 | 1 | 6 | idp-visitor-email-ceremony:T001 |
 | idp-visitor-telephone-ceremony | 7 | 1 | 6 | idp-visitor-telephone-ceremony:T001 |
@@ -62,7 +60,6 @@ Counts refer to candidates with a potential axis, not a complete resolved receiv
 | idp-visitor-passkey-credential | 8 | 0 | 8 | None |
 | idp-operator-sign-in | 63 | 0 | 63 | None |
 | idp-operator-sign-up | 9 | 0 | 9 | None |
-| idp-operator-sign-out | 4 | 0 | 4 | None |
 | idp-operator-auth-ceremony-session | 48 | 7 | 41 | idp-operator-auth-ceremony-session:T001, idp-operator-auth-ceremony-session:T002, idp-operator-auth-ceremony-session:T003, idp-operator-auth-ceremony-session:T004, idp-operator-auth-ceremony-session:T005, idp-operator-auth-ceremony-session:T006, idp-operator-auth-ceremony-session:T007, idp-operator-auth-ceremony-session:T008, idp-operator-auth-ceremony-session:T009, idp-operator-auth-ceremony-session:T010, idp-operator-auth-ceremony-session:T011, idp-operator-auth-ceremony-session:T012 |
 | idp-operator-email-ceremony | 7 | 1 | 6 | idp-operator-email-ceremony:T001 |
 | idp-operator-telephone-ceremony | 7 | 1 | 6 | idp-operator-telephone-ceremony:T001 |

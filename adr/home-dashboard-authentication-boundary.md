@@ -31,6 +31,16 @@ This partially supersedes the anonymous `/dashboard` cell of the table below and
 no redirect to sign-in is performed, for Base only. The authenticated Home 404, the absence of a
 redirect between `/` and `/dashboard`, and the Warp contract are unchanged.
 
+## Amendment: Global browser region canonicalization (2026-10-25)
+
+The owner requested automatic `ri` insertion on Global browser URLs. Base Home and Dashboard now
+use `PreferenceGlobal#set_region` for HTML navigation: missing or invalid region context is
+canonicalized by a same-origin, same-path GET/HEAD redirect before the final page outcome. Valid
+request context is preserved. Base JSON representations retain their existing in-request region
+resolution. The table below describes the final response after canonicalization; the Home versus
+Dashboard authentication boundary remains intact. Warp retains its Regional context behavior.
+See `specs/global-region-canonicalization/spec.md` and `docs/architecture/preference.md`.
+
 ## Decision
 
 Base and Warp apply the same contract on their app, com, and org hosts:

@@ -25,7 +25,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           when :org then [Operator, OperatorToken, OperatorSignInFlow, OperatorAuthCeremonySession, OpBaseOrgRecord,
                           :staff_id,]
           end
-        actor = (surface == :com) ? create_unique_visitor! : actors.create!(security_mode_id: SecurityModeTestDefault.id_for(actors))
+        actor =
+          if surface == :com
+            create_unique_visitor!
+          else
+            actors.create!(security_mode_id: SecurityModeTestDefault.id_for(actors))
+          end
         token = tokens.create!(:authentication_epoch => 0, token_key => actor.id, :id => 9_920_000_000_010)
         flow = SignInFlowTestFactory.create!(surface:, principal_id: actor.id)
         ActiveRecord::Base.connection_handler.clear_active_connections!
@@ -141,6 +146,13 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
               )
             end
         end
+        # D-132: ADVANCED keeps two active Passkeys, so ORG holds one more that neither writer removes.
+        if surface == :org
+          model.create!(
+            owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
+            :public_key => "removal-race-floor-key", :uv_verified_at => Time.current,
+          )
+        end
         # COM provisioning requires contact, but unverified contact is not a compatible fallback.
         contact&.reload&.update!(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
         token = token_model.create!(:authentication_epoch => 0, token_key => actor.id, :id => 9_920_000_000_011)
@@ -191,8 +203,10 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
             model.active.where(owner_key => actor.id)
           end
 
-        assert_equal 1, remaining.count, surface.to_s
-        expected_total = (surface == :totp) ? 2 : 1
+        floor = (surface == :org) ? 2 : 1
+
+        assert_equal floor, remaining.count, surface.to_s
+        expected_total = (surface == :totp) ? 2 : floor
 
         assert_equal expected_total, model.where(owner_key => actor.id).count, surface.to_s
         assert_predicate token.reload, :currently_usable?, surface.to_s

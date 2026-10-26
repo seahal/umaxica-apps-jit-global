@@ -83,7 +83,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
   test "schedules visitor email cleanup and actor retention" do
     now = Time.current.change(usec: 0)
     visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: VisitorVisibility::VISITOR,
     )
     email = VisitorEmail.create!(
@@ -189,7 +189,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
   test "visitor pending telephone cleanup updates the phone and pending passkey" do
     now = Time.current.change(usec: 0)
     visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: VisitorVisibility::VISITOR,
     )
     telephone = VisitorTelephone.create!(

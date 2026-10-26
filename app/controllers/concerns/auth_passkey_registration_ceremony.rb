@@ -84,8 +84,6 @@ module AuthPasskeyRegistrationCeremony
 
   private
 
-  def auth_ceremony_admitted_action_url = registration_create_path
-
   def auth_ceremony_entry_intent
     transaction = auth_ceremony_registration_transaction
     return transaction.purpose if transaction

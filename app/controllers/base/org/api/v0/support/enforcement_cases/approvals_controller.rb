@@ -62,18 +62,23 @@ module Base
                 authorize!(@enforcement_case, with: EnforcementCasePolicy, to: :approve?)
                 return unless require_enforcement_step_up!
 
-                claim_approval!
-                begin
-                  attach_requested_effects!(@enforcement_case)
-                  EnforcementCaseApplyOperation.call(
-                    enforcement_case: @enforcement_case, actor_operator_public_id: current_operator.public_id,
-                  )
-                rescue StandardError
-                  # Any failure: release_unapplied_claim! decides from the committed state whether the
-                  # claim can be withdrawn, and the original error is re-raised either way.
-                  release_unapplied_claim!
-                  raise
+                with_owner_step_up(STEP_UP_SCOPE) do |requirement|
+                  claim_approval!
+                  begin
+                    attach_requested_effects!(@enforcement_case)
+                    EnforcementCaseApplyOperation.call(
+                      enforcement_case: @enforcement_case, actor_operator_public_id: current_operator.public_id,
+                      step_up_token: avatar_root, step_up_requirement: requirement,
+                    )
+                  rescue StandardError
+                    # Any failure: release_unapplied_claim! decides from the committed state whether the
+                    # claim can be withdrawn, and the original error is re-raised either way.
+                    release_unapplied_claim!
+                    raise
+                  end
                 end
+                return if performed?
+
                 respond_to do |format|
                   format.json do
                     render json: { public_id: @enforcement_case.public_id, state: @enforcement_case.state }, status: :ok

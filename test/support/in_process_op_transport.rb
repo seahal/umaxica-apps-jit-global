@@ -9,8 +9,8 @@ require "rack/mock"
 # other outbound request still hits the OutboundHttpGuard and must be stubbed explicitly.
 module TestSupport
   module InProcessOpTransport
-    # OP endpoints an RP calls server-to-server (token exchange/refresh and delivery query).
-    OP_PATHS = %w(/oauth/token /oauth/refresh-deliveries/query /.well-known/jwks.json
+    # OP endpoints an RP calls server-to-server (token exchange and refresh).
+    OP_PATHS = %w(/oauth/token /.well-known/jwks.json
                   /api/v0/tech-capability-checks /api/v0/support).freeze
 
     # Forwards a Faraday request to Rails.application as a Rack request.
@@ -77,7 +77,11 @@ module TestSupport
         "/api/v0/membership/", "/api/v0/iam/", "/api/v0/support/", "/api/v0/identity/",
       )
 
-      %w(client visitor operator).any? { |type| URI.parse(OidcIssuer.for_resource_type(type)).host == uri.host }
+      # WU-02: protocol endpoints live on Visa; the owner APIs (/api/v0/...) stay on the Base hosts.
+      hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+      %w(client visitor operator).any? do |type|
+        [URI.parse(OidcIssuer.for_resource_type(type)).host, hosts.base_for_resource_type(type).host].include?(uri.host)
+      end
     rescue URI::InvalidURIError
       false
     end

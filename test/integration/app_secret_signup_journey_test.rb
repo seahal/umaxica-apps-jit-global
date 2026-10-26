@@ -72,9 +72,11 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless auth_uri.host == base_host
         second_rt = Rack::Utils.parse_query(auth_uri.query).fetch("rt")
+        # WU-02: the hop from the authorization step to Auth is issued by Visa.
+        visa_issuer = JitSecurityJwtRegistry.surface("VISA_APP")
         second_payload, = JWT.decode(
-          second_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          second_rt, JitSecurityJwtRegistry.public_key_for(visa_issuer.id, visa_issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{visa_host_for_test_base_host(base_host)}",
           verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
         )
         auth_uri = URI.parse(second_payload.fetch("url"))
@@ -141,6 +143,9 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5043)
                 end
               fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(

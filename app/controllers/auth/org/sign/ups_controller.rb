@@ -54,7 +54,6 @@ module Auth
             },
           }
         end
-
       end
     end
   end

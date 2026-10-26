@@ -31,11 +31,37 @@ JSON boolean `true`. Missing, null, empty, unchecked and unsupported values are 
 existing validation response. Telephone entry requires both policy and MFA-use consent. This
 request-boundary normalization preserves the shared contact models' other creation workflows.
 
-An admitted browser's replacement contact submission passes Turnstile, identifier validation and
-required consent before ending its previous sign-up flow. A rejected CAPTCHA or invalid input
-preserves the previous flow, browser locator, pending contact and principal and queues no OTP. An
-accepted replacement uses the existing HALTED lifecycle and cleanup boundary before allocating new
-artifacts; it does not silently overwrite the previous flow or reuse its proof.
+Sign-up entry is fail-closed (D-177). While the browser's admitted attempt is nonterminal (including
+past its deadline) or terminal with cleanup pending, failed or past its retry cap, a second entry
+submit is refused with the contact-held copy (422) and changes nothing: the earlier flow, browser
+locator, pending contact, principal and proof stay as they are and no OTP is queued. Controllers never
+end or clean an earlier attempt to admit a new one. A new attempt after release starts from a new
+Base admission; a session hint naming the released attempt of an earlier admission is then dropped.
+
+`RetentionPurgeJob` reports stuck APP/COM registrations after its cleanup and retention work using
+the read-only `SignUpStuckRegistrationReportQuery`. The structured event contains the surface, case,
+count and public identifiers, never contact values. A report failure is logged without stopping the
+job. The report itself never releases a registration. After diagnosis, an operator may invoke the
+existing cleanup once for a terminal Flow whose cleanup is pending or failed at the ten-attempt cap
+(D-180); the [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md)
+defines the checks and command. Retention preserves a non-completed terminal Flow until its artifact
+cleanup completes, so a capped Flow remains diagnosable. An unfinished principal/contact whose Flow
+is missing has no safe existing release entry point and remains held for escalation. ORG has no
+matching status and cleanup attempt schema, so it is outside this report.
+
+The read-only `SignUpAttemptDiagnosisInventory` accepts exactly one APP/COM Flow public id,
+entry-reference digest, or principal public id, or the APP-only provider plus subject digest pair. A
+digest lookup may resolve multiple Flows; the inventory returns every match. It reports OIDC
+transaction/result lifecycle, ceremony sessions, APP social Candidate state and audit/log
+correlation ids while omitting raw references, contact values, provider subjects and payloads.
+Unknown well-formed inputs return `flow_not_found`; malformed or ambiguous selectors are refused.
+The [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md) lists the
+runner forms.
+
+A birthdate below the surface's minimum age is decided on the validated, unsaved value and is never
+written (D-178). The refusal ends the attempt as HALTED through `SignUpTermination`, which removes the
+pending artifacts in the same request; if that removal fails, the existing cleanup-pending state,
+the contact hold and the retention cleanup retry apply unchanged.
 
 The reason completed App/Com registration enters the canonical Sign In admission before session
 issuance is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md)

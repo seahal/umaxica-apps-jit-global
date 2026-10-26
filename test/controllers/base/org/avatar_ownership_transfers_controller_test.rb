@@ -52,6 +52,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_response :unprocessable_content
     assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
     assert_not AvatarOwnershipCutover.established?
+    assert_predicate @token.reload.last_step_up_at, :present?
   end
 
   # A client whose first response was lost retries with the same key and discovers the committed result.
@@ -59,20 +60,35 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     establish_avatar_ownership_cutover!
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a55"
     headers = base_browser_headers.merge("Idempotency-Key" => key)
-    public_ids =
-      Array.new(2) do
-        grant_step_up!("avatar_transfer_request")
-        post(
-          base_org_avatar_ownership_transfers_url(host: @host),
-          params: org_request_params, headers: headers, as: :json,
-        )
+    grant_step_up!("avatar_transfer_request")
+    post(
+      base_org_avatar_ownership_transfers_url(host: @host),
+      params: org_request_params, headers: headers, as: :json,
+    )
 
-        assert_response :success
-        assert_equal "registry", response.parsed_body.fetch("transfer_kind")
-        response.parsed_body.fetch("transfer_public_id")
-      end
+    assert_response :success
+    first = response.parsed_body
 
-    assert_equal public_ids.first, public_ids.second
+    assert_equal "registry", first.fetch("transfer_kind")
+    assert_nil @token.reload.last_step_up_at
+
+    post(
+      base_org_avatar_ownership_transfers_url(host: @host),
+      params: org_request_params, headers: headers, as: :json,
+    )
+
+    assert_response :unprocessable_content
+    assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
+
+    grant_step_up!("avatar_transfer_request")
+    post(
+      base_org_avatar_ownership_transfers_url(host: @host),
+      params: org_request_params, headers: headers, as: :json,
+    )
+
+    assert_response :success
+    assert_equal first.fetch("transfer_public_id"), response.parsed_body.fetch("transfer_public_id")
+    assert_predicate @token.reload.last_step_up_at, :present?
     assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
   end
 
@@ -668,7 +684,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   def grant_step_up!(scope, token: @token)
-    token.update!(
+    token.reload.update!(
       last_step_up_at: Time.current,
       last_step_up_scope: scope,
       last_step_up_aal: nil,

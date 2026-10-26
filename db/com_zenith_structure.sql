@@ -31,7 +31,7 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 CREATE FUNCTION public.enforce_visitor_emails_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF current_user = 'umaxica_com_email_hmac_definer_269d72da14b2' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_com_email_hmac_definer_269d72da14b2')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF current_user = 'umaxica_com_email_hmac_definer_00d920046b15' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_com_email_hmac_definer_00d920046b15')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -41,7 +41,7 @@ CREATE FUNCTION public.enforce_visitor_emails_binding_facts() RETURNS trigger
 CREATE FUNCTION public.enforce_visitor_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_com_email_hmac_definer_269d72da14b2' AND NEW.channel = 'email') OR (current_user = 'umaxica_com_telephone_hmac_definer_269d72da14b2' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_com_email_hmac_definer_00d920046b15' AND NEW.channel = 'email') OR (current_user = 'umaxica_com_telephone_hmac_definer_00d920046b15' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -51,7 +51,7 @@ CREATE FUNCTION public.enforce_visitor_rotation_audit() RETURNS trigger
 CREATE FUNCTION public.enforce_visitor_telephones_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF current_user = 'umaxica_com_telephone_hmac_definer_269d72da14b2' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_com_telephone_hmac_definer_269d72da14b2')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF current_user = 'umaxica_com_telephone_hmac_definer_00d920046b15' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_com_telephone_hmac_definer_00d920046b15')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -61,7 +61,7 @@ CREATE FUNCTION public.enforce_visitor_telephones_binding_facts() RETURNS trigge
 CREATE FUNCTION public.rotate_visitor_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_com_email_hmac_definer_269d72da14b2' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.visitor_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.visitor_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.visitor_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_com_email_hmac_definer_00d920046b15' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.visitor_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.visitor_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.visitor_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -71,7 +71,7 @@ CREATE FUNCTION public.rotate_visitor_emails_hmac(p_record_id bigint, p_new_dige
 CREATE FUNCTION public.rotate_visitor_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_com_telephone_hmac_definer_269d72da14b2' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.visitor_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.visitor_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.visitor_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_com_telephone_hmac_definer_00d920046b15' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.visitor_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.visitor_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.visitor_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -3002,6 +3002,35 @@ ALTER SEQUENCE public.visitor_secret_credentials_id_seq OWNED BY public.visitor_
 
 
 --
+-- Name: visitor_security_modes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_security_modes (
+    id bigint NOT NULL,
+    CONSTRAINT chk_visitor_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
+);
+
+
+--
+-- Name: visitor_security_modes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.visitor_security_modes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_security_modes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_security_modes_id_seq OWNED BY public.visitor_security_modes.id;
+
+
+--
 -- Name: visitor_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3314,16 +3343,6 @@ ALTER SEQUENCE public.visitor_withdrawal_flows_id_seq OWNED BY public.visitor_wi
 
 
 --
--- Name: visitor_security_modes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.visitor_security_modes (
-    id bigint NOT NULL,
-    CONSTRAINT chk_visitor_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
-);
-
-
---
 -- Name: visitors; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3340,7 +3359,6 @@ CREATE TABLE public.visitors (
     withdrawn_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp without time zone,
     withdrawal_started_at timestamp(6) with time zone,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT customers_discarded_at_not_null NOT NULL,
-    security_mode_id bigint NOT NULL,
     mfa_status_id bigint DEFAULT 5 CONSTRAINT visitors_multi_factor_status_id_not_null NOT NULL,
     terminated_at timestamp(6) with time zone,
     birthdate text,
@@ -3355,6 +3373,7 @@ CREATE TABLE public.visitors (
     authentication_epoch bigint DEFAULT 0 NOT NULL,
     recovery_available_at timestamp(6) with time zone,
     early_termination_available_at timestamp(6) with time zone,
+    security_mode_id bigint NOT NULL,
     CONSTRAINT chk_customers_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
@@ -3958,6 +3977,13 @@ ALTER TABLE ONLY public.visitor_secret_credentials ALTER COLUMN id SET DEFAULT n
 
 
 --
+-- Name: visitor_security_modes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_security_modes ALTER COLUMN id SET DEFAULT nextval('public.visitor_security_modes_id_seq'::regclass);
+
+
+--
 -- Name: visitor_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4025,14 +4051,6 @@ ALTER TABLE ONLY public.visitor_withdrawal_flows ALTER COLUMN id SET DEFAULT nex
 --
 
 ALTER TABLE ONLY public.visitors ALTER COLUMN id SET DEFAULT nextval('public.visitors_id_seq'::regclass);
-
-
---
--- Name: visitor_security_modes visitor_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitor_security_modes
-    ADD CONSTRAINT visitor_security_modes_pkey PRIMARY KEY (id);
 
 
 --
@@ -4748,6 +4766,14 @@ ALTER TABLE ONLY public.visitor_secret_credentials
 
 
 --
+-- Name: visitor_security_modes visitor_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_security_modes
+    ADD CONSTRAINT visitor_security_modes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: visitor_statuses visitor_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4825,13 +4851,6 @@ ALTER TABLE ONLY public.visitor_withdrawal_flows
 
 ALTER TABLE ONLY public.visitors
     ADD CONSTRAINT visitors_pkey PRIMARY KEY (id);
-
-
---
--- Name: index_visitors_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitors_on_security_mode_id ON public.visitors USING btree (security_mode_id);
 
 
 --
@@ -6102,6 +6121,13 @@ CREATE INDEX index_visitors_on_recovery_available_at ON public.visitors USING bt
 
 
 --
+-- Name: index_visitors_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitors_on_security_mode_id ON public.visitors USING btree (security_mode_id);
+
+
+--
 -- Name: index_visitors_on_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6221,19 +6247,11 @@ CREATE TRIGGER visitor_telephones_binding_facts_trigger BEFORE UPDATE ON public.
 
 
 --
--- Name: visitors fk_rails_d6e6dec333; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitors
-    ADD CONSTRAINT fk_rails_d6e6dec333 FOREIGN KEY (security_mode_id) REFERENCES public.visitor_security_modes(id);
-
-
---
 -- Name: company_units fk_company_units_parent_same_company; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.company_units
-    ADD CONSTRAINT fk_company_units_parent_same_company FOREIGN KEY (parent_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_company_units_parent_same_company FOREIGN KEY (parent_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6249,7 +6267,7 @@ ALTER TABLE ONLY public.core_com_visitor_bridges
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_individual_memberships_unit_same_company FOREIGN KEY (company_unit_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_individual_memberships_unit_same_company FOREIGN KEY (company_unit_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6337,7 +6355,7 @@ ALTER TABLE ONLY public.individual_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_241fa58f6a FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_241fa58f6a FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -6393,7 +6411,7 @@ ALTER TABLE ONLY public.individual_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.visitor_banners
-    ADD CONSTRAINT fk_rails_329012d103 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
+    ADD CONSTRAINT fk_rails_329012d103 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) NOT VALID;
 
 
 --
@@ -6441,7 +6459,7 @@ ALTER TABLE ONLY public.company_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_39edef8680 FOREIGN KEY (approved_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_39edef8680 FOREIGN KEY (approved_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -6465,7 +6483,7 @@ ALTER TABLE ONLY public.visitor_passkeys
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flows
-    ADD CONSTRAINT fk_rails_3e7b55d34f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
+    ADD CONSTRAINT fk_rails_3e7b55d34f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) NOT VALID;
 
 
 --
@@ -6521,7 +6539,7 @@ ALTER TABLE ONLY public.company_administration_grants
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_4d4952ecfc FOREIGN KEY (to_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_4d4952ecfc FOREIGN KEY (to_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6569,7 +6587,7 @@ ALTER TABLE ONLY public.visitor_preference_themes
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -6577,7 +6595,7 @@ ALTER TABLE ONLY public.individual_memberships
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_641ad18d67 FOREIGN KEY (revoked_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_641ad18d67 FOREIGN KEY (revoked_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -6657,7 +6675,7 @@ ALTER TABLE ONLY public.visitor_preference_regions
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_77f6de8097 FOREIGN KEY (membership_kind_id) REFERENCES public.individual_membership_kinds(id);
+    ADD CONSTRAINT fk_rails_77f6de8097 FOREIGN KEY (membership_kind_id) REFERENCES public.individual_membership_kinds(id) NOT VALID;
 
 
 --
@@ -6665,7 +6683,7 @@ ALTER TABLE ONLY public.individual_memberships
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_790f1edfff FOREIGN KEY (membership_state_id) REFERENCES public.individual_membership_states(id);
+    ADD CONSTRAINT fk_rails_790f1edfff FOREIGN KEY (membership_state_id) REFERENCES public.individual_membership_states(id) NOT VALID;
 
 
 --
@@ -6681,7 +6699,7 @@ ALTER TABLE ONLY public.visitor_retention_holds
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flows
-    ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id);
+    ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) NOT VALID;
 
 
 --
@@ -6713,7 +6731,7 @@ ALTER TABLE ONLY public.individual_view_grants
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6721,7 +6739,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 --
 
 ALTER TABLE ONLY public.individuals
-    ADD CONSTRAINT fk_rails_9297b83ebd FOREIGN KEY (visitor_identity_id) REFERENCES public.visitor_identities(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_9297b83ebd FOREIGN KEY (visitor_identity_id) REFERENCES public.visitor_identities(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6801,7 +6819,7 @@ ALTER TABLE ONLY public.company_administration_grants
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_ad4bcaff08 FOREIGN KEY (revoke_reason_id) REFERENCES public.individual_membership_revoke_reasons(id);
+    ADD CONSTRAINT fk_rails_ad4bcaff08 FOREIGN KEY (revoke_reason_id) REFERENCES public.individual_membership_revoke_reasons(id) NOT VALID;
 
 
 --
@@ -6865,7 +6883,7 @@ ALTER TABLE ONLY public.visitor_privacy_requests
 --
 
 ALTER TABLE ONLY public.visitor_identities
-    ADD CONSTRAINT fk_rails_bc90881f37 FOREIGN KEY (status_id) REFERENCES public.visitor_identity_states(id);
+    ADD CONSTRAINT fk_rails_bc90881f37 FOREIGN KEY (status_id) REFERENCES public.visitor_identity_states(id) NOT VALID;
 
 
 --
@@ -6946,6 +6964,14 @@ ALTER TABLE ONLY public.visitor_preference_date_formats
 
 ALTER TABLE ONLY public.visitors
     ADD CONSTRAINT fk_rails_d25b75677b FOREIGN KEY (visibility_id) REFERENCES public.visitor_visibilities(id);
+
+
+--
+-- Name: visitors fk_rails_d6e6dec333; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitors
+    ADD CONSTRAINT fk_rails_d6e6dec333 FOREIGN KEY (security_mode_id) REFERENCES public.visitor_security_modes(id);
 
 
 --
@@ -7091,6 +7117,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261024100000'),
 ('20261023140003'),
 ('20261023140002'),
 ('20261023140001'),

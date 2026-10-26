@@ -6,7 +6,7 @@ require "test_helper"
 
 # Guards that every path advertised in the OIDC discovery document resolves in
 # the Rails router for the corresponding surface host.  A route rename that
-# updates base.rb but not OidcIssuer - or vice versa - will fail here before
+# updates visa.rb but not OidcIssuer - or vice versa - will fail here before
 # any RP ever tries to use the stale URL.
 #
 # This test is the bridge between:
@@ -16,13 +16,13 @@ class OidcDiscoveryRouteStabilityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   SURFACES = [
-    { resource_type: "client",   host_key: :base_service },
-    { resource_type: "visitor",  host_key: :base_corporate },
-    { resource_type: "operator", host_key: :base_staff },
+    { resource_type: "client" },
+    { resource_type: "visitor" },
+    { resource_type: "operator" },
   ].freeze
 
   # HTTP method for each discovery document endpoint key.
-  # Matches the HTTP methods registered in config/routes/base.rb.
+  # Matches the HTTP methods registered in config/routes/visa.rb.
   ENDPOINT_ROUTE_METHODS = {
     authorization_endpoint: :get,
     token_endpoint: :post,
@@ -48,13 +48,18 @@ class OidcDiscoveryRouteStabilityTest < ActionDispatch::IntegrationTest
       end
     end
 
-    test "#{surface[:resource_type]} discovery issuer host matches configured Base host" do
-      host = Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface[:host_key]).host
+    test "#{surface[:resource_type]} discovery issuer host matches configured Visa host" do
+      hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+      host = {
+        "client" => hosts.visa_service.host,
+        "visitor" => hosts.visa_corporate.host,
+        "operator" => hosts.visa_staff.host,
+      }.fetch(surface.fetch(:resource_type))
       document = OidcDiscoveryDocument.for_resource_type(surface[:resource_type])
       issuer_host = URI.parse(document.fetch(:issuer)).host
 
       assert_equal host, issuer_host,
-                   "#{surface[:resource_type]} issuer host must equal the configured Base surface host"
+                   "#{surface[:resource_type]} issuer host must equal the configured Visa surface host"
     end
 
     test "#{surface[:resource_type]} all discovery endpoint URLs share the issuer as prefix" do

@@ -22,6 +22,7 @@ class SocialAuthLinkHandler
 
   def call
     raise UnauthorizedError.new("errors.social_auth.not_logged_in") unless current_client
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.unauthorized") if enforced_subject?
 
     AppPrincipalRecord.transaction do
       current_client.lock!
@@ -49,6 +50,23 @@ class SocialAuthLinkHandler
 
   attr_reader :principal, :credential_candidate, :current_client, :repository, :provider, :uid,
               :ceremony_started_at
+
+  def enforced_subject?
+    digest =
+      case provider.to_s
+      when "google" then EnforcementIdentifierDigest.for_google_subject(
+        realm: "app", issuer: principal.issuer, subject: uid,
+      )
+      when "apple" then EnforcementIdentifierDigest.for_apple_subject(
+        realm: "app", issuer: principal.issuer, subject: uid,
+      )
+      else raise ArgumentError, "unsupported social provider"
+      end
+    raise ArgumentError, "verified social subject is required" unless digest
+
+    AppEnforcementIdentifierEffect.in_force
+      .exists?(identifier_kind: digest[:identifier_kind], lookup_digest: digest[:lookup_digest])
+  end
 
   def refuse_released_history!
     return unless ClientExternalIdentity.released_since_ceremony?(

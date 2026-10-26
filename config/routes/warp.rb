@@ -96,7 +96,7 @@ scope module: :warp, as: :warp do
         # First-party RP sign-out start and completion resources.
 
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+        resource :out_completion, only: :show, path: "out/completion", controller: :outs
       end
 
       # Browser CSP report sink; keep configured report-uri path.
@@ -205,7 +205,7 @@ scope module: :warp, as: :warp do
         # First-party RP sign-out start and completion resources.
 
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+        resource :out_completion, only: :show, path: "out/completion", controller: :outs
       end
 
       # Browser CSP report sink; keep configured report-uri path.
@@ -313,7 +313,7 @@ scope module: :warp, as: :warp do
         # First-party RP sign-out start and completion resources.
 
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+        resource :out_completion, only: :show, path: "out/completion", controller: :outs
       end
 
       # Browser CSP report sink; keep configured report-uri path.

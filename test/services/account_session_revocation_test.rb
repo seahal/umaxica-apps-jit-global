@@ -11,7 +11,9 @@ class AccountSessionRevocationTest < ActiveSupport::TestCase
     AuthenticationSessionRevoker.tokens_for(client).find_each(&:revoke!)
     token = ClientToken.create!(authentication_epoch: 0, user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
-    assert_difference -> { ClientSignOutFlow.count }, 1 do
+    assert_difference -> {
+      OpAppAuthorityStop.where(cause_id: OpAuthorityStopReference.cause_id("browser_logout")).count
+    }, 1 do
       result = AccountSessionRevocation.purge!(
         account: client,
         operator: operator,
@@ -43,7 +45,9 @@ class AccountSessionRevocationTest < ActiveSupport::TestCase
     operator = operators(:one)
     AuthenticationSessionRevoker.tokens_for(client).find_each(&:revoke!)
 
-    assert_no_difference -> { ClientSignOutFlow.count } do
+    assert_no_difference -> {
+      OpAppAuthorityStop.where(cause_id: OpAuthorityStopReference.cause_id("browser_logout")).count
+    } do
       result = AccountSessionRevocation.emergency_revoke!(
         account: client,
         operator: operator,

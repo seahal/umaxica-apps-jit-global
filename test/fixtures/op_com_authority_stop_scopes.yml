@@ -1,0 +1,11 @@
+# Rows inserted by db/op_base_com_migrate/20261025120000_create_op_authority_stops_op_base_com.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: OpComAuthorityStopScope
+
+root:
+  id: 1
+grant:
+  id: 2
+all_roots_of_principal:
+  id: 3

@@ -12,7 +12,6 @@ class RpLocalSchemaContractTest < ActiveSupport::TestCase
     OpSessionBinding
     Session
     CallbackState
-    RefreshAttempt
     EventReceipt
   ).freeze
 

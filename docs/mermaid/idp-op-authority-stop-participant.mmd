@@ -1,0 +1,26 @@
+stateDiagram-v2
+    state "pending id=1" as PENDING
+    state "acknowledged id=2" as ACKNOWLEDGED
+    state "refused id=3" as REFUSED
+    state "expired id=4" as EXPIRED
+
+    [*] --> PENDING: participant committed with OP stop
+    PENDING --> PENDING: claim / lease renewal / transient retry
+    PENDING --> ACKNOWLEDGED: HTTP 200 committed by RP
+    PENDING --> REFUSED: permanent endpoint or request refusal
+    PENDING --> EXPIRED: BX-10 deadline reached
+    ACKNOWLEDGED --> [*]
+    REFUSED --> [*]
+    EXPIRED --> [*]
+
+    note right of PENDING
+        One row per grant stopped by the OP authority-stop transaction.
+        Attempts and leases are delivery metadata, not lifecycle states.
+        Solid Queue enqueues after commit; the recurring sweep recovers lost enqueues and leases.
+        HTTP delivery runs without an OP transaction or row lock.
+    end note
+
+    note right of REFUSED
+        Final refusal classes include stable endpoint misconfiguration.
+        3xx responses are not followed. 413 is permanent for the fixed-size request.
+    end note

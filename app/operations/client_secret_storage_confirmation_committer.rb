@@ -45,11 +45,11 @@ class ClientSecretStorageConfirmationCommitter
         raise Denied, "Secret confirmation belongs to another authorization context"
       end
 
-      verify_step_up!(actor, current, owned)
-      confirm_owned_batch!(context, owned, Client.database_now)
+      requirement = verify_step_up!(actor, current, owned)
+      confirm_owned_batch!(context, owned, Client.database_now, token: current, requirement: requirement)
     end
 
-    def confirm_owned_batch!(context, owned, now)
+    def confirm_owned_batch!(context, owned, now, token: nil, requirement: nil)
       actor = context.subject
       state = owned.state(at: now)
       unless %i(pending_confirmation confirmed).include?(state)
@@ -72,10 +72,10 @@ class ClientSecretStorageConfirmationCommitter
         raise InvalidState, "pending Secret issuance contains a terminal candidate"
       end
 
-      commit_batch!(context.with(subject: actor), owned, candidates, now)
+      commit_batch!(context.with(subject: actor), owned, candidates, now, token: token, requirement: requirement)
     end
 
-    def commit_batch!(context, owned, candidates, now)
+    def commit_batch!(context, owned, candidates, now, token: nil, requirement: nil)
       actor = context.subject
       ClientSecretCapacityQuery.call(client: actor, at: now)
       ClientSecretAuditOutbox.record!(
@@ -91,7 +91,10 @@ class ClientSecretStorageConfirmationCommitter
         candidate.commit_storage_confirmation!(actor_context: context, at: now)
       end
       ClientSecretCapacityQuery.call(client: actor, at: now)
+      token&.consume_step_up_evidence!(requirement: requirement, now: now)
       owned
+    rescue TokenStatusManagement::StepUpEvidenceUnavailable
+      raise Denied, "Secret confirmation requires current scoped Step-Up"
     end
 
     def verify_step_up!(actor, token, issuance)
@@ -109,6 +112,8 @@ class ClientSecretStorageConfirmationCommitter
           StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret confirmation requires current scoped Step-Up"
       end
+
+      requirement
     end
 
     def verify_presented_set!(actor, issuance, candidates)

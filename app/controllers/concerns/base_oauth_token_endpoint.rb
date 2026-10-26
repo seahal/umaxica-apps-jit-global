@@ -37,7 +37,6 @@ module BaseOauthTokenEndpoint
       token_endpoint_uri: request.original_url,
       request_method: request.request_method,
       expected_resource_type: oauth_token_resource_type,
-      attempt_ref: params[:attempt_ref].presence,
     }
   end
 

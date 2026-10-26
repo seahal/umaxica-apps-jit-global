@@ -35,4 +35,9 @@ stateDiagram-v2
       Admission expiry does not erase result correlation.
       Root issuance rotates the Rails session, retaining
       only the proven nonce for exact finalized-result retry.
+      APP/COM sign-up Flows retain their Binding until
+      every Flow is terminal, physically purgeable,
+      and cleanup is complete or registration completed.
+      Flow rows are deleted before their Binding;
+      principal and Auth continuity are not deleted here.
     end note

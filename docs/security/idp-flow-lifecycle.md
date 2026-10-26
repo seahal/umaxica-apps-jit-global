@@ -2,8 +2,9 @@
 
 This document is the reference for lifecycle vocabulary across sign-in, sign-up, and sign-out. The
 vocabulary decision is `adr/idp-flow-lifecycle-vocabulary.md`, the state storage decision is
-`adr/idp-flow-state-machine-lifecycle.md`, and the migration is planned in
-`plans/backlog/idp-flow-state-machine-unification.md`.
+`adr/idp-flow-state-machine-lifecycle.md`, and the sign-in/sign-up migration is planned in
+`plans/backlog/idp-flow-state-machine-unification.md`. Sign-out authority is documented by the
+current OP authority-stop contract, not by the retired flow vocabulary below.
 
 > **Reading rule:** The historical inventory below records the pre-unification vocabulary and is
 > retained for traceability. The delivered amendments at the end of this document describe the
@@ -75,16 +76,13 @@ Records: `ClientSignUpFlow`, `VisitorSignUpFlow` (and `OperatorSignUpFlow`, whic
 
 ### Sign-out
 
-Records: `ClientSignOutFlow`, `VisitorSignOutFlow`, `OperatorSignOutFlow` with `FlowSignOut`.
-
-- Statuses: `NOTHING`, `REQUESTED`, `ACCESS_DISCARDED`, `LOGICALLY_REVOKED`, `AWAITING_EXPIRY`,
-  `COMPLETED`, `FAILED`. Kinds: `IDP_SIGN_OUT`, `RP_INITIATED`, `SESSION_REVOKE`.
-- The current-session logout runs every phase in one request. Any exception marks the flow `FAILED`
-  and re-raises. A completed flow for the same token within five minutes short-circuits a repeated
-  logout.
-- There is no cancellation phase. Not submitting the confirmation page simply never starts a flow.
-- The sign-out Mermaid diagrams are marked deprecated and name `TOKEN_REVOKED` where runtime uses
-  `LOGICALLY_REVOKED`.
+Sign-out is not a persisted flow state machine. The `op_app_authority_stops`,
+`op_com_authority_stops`, and `op_org_authority_stops` records own durable authority-stop decisions;
+root, grant, cutoff, participant, and browser references remain their children. APP, COM, and ORG
+request handling performs its local cleanup around that authority boundary. The retired
+`ClientSignOutFlow`, `VisitorSignOutFlow`, `OperatorSignOutFlow`, kind/status references, and
+`FlowSignOut` concern are removed under D-179 (2); the OP databases drop those tables through the
+D-179 migrations.
 
 ## Target Model
 
@@ -263,37 +261,39 @@ variants live only in the payload.
 
 ## Irreversible Boundaries and Handoff
 
-Shared vocabulary does not merge authority. Auth performs credential ceremonies; Base owns OIDC
-transactions, sessions, and tokens (`adr/base-auth-ceremony-and-seven-rp-boundary.md`).
+Shared vocabulary does not merge authority. Auth performs credential ceremonies; Visa owns OIDC
+transactions, Root Sessions, and authority tokens, while Base owns its browser RP session
+(`adr/visa-op-host.md`).
 
 - **Sign-up finalization to sign-in handoff.** These are two flows. After durable finalization,
   sign-up `back` and `cancel` are unavailable, and nothing in sign-up withdraws the committed
   account. A sign-in failure after handoff belongs to the sign-in flow and never deletes committed
   sign-up data. Ending the sign-up flow after the commit, by any terminal state, must not run
   pending-artifact cleanup against committed data.
-- **Sign-out access discard.** After `ACCESS_DISCARDED`, the browser cannot perform authenticated
-  writes again. No later step re-grants access, and the flow cannot go back.
-- **RP to IdP logout.** The RP clears its local session before redirecting; the IdP return is an
-  `external_result` to the RP flow.
+- **RP-Initiated Logout.** The RP clears its local grant and session before redirecting. The
+  one-time return notice is not an `external_result` to a persisted sign-out flow; OP authority is
+  recorded by the stop primitive described in `docs/security/logout-session-management.md`.
 - **Provider and OIDC callbacks.** Always `external_result`, never a direct phase write.
 
 ## State Storage
 
-Decision: `adr/idp-flow-state-machine-lifecycle.md`. Current facts were observed at commit
-`7430ddea6`; nothing below is implemented unless marked current.
+Decision: `adr/idp-flow-state-machine-lifecycle.md`. The sign-in and sign-up storage observations
+below are historical plan context; the current sign-out amendment reflects D-179 (2) and the
+`op_*_authority_stops` implementation.
 
 ### Current storage
 
-| Flow table (database)                    | State column           | Reference table                        | FK                                                                        | Duplicate representation                            |
-| ---------------------------------------- | ---------------------- | -------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
-| `*_sign_in_flows` (app/com/op_base_org)  | `status_id` default 10 | `*_sign_in_flow_statuses` (`id` only)  | `NOT VALID`, no action                                                    | `state`, `step` strings tied by `NOT VALID` `CHECK` |
-| `*_sign_up_flows` (app/com/op_base_org)  | `status_id` default 10 | `*_sign_up_flow_statuses` (`id` only)  | `NOT VALID`, `ON DELETE RESTRICT` (client, visitor); no action (operator) | `state`, `step` strings, no `CHECK`                 |
-| `*_sign_out_flows` (app/com/op_base_org) | `status_id` default 10 | `*_sign_out_flow_statuses` (`id` only) | `NOT VALID`, no action                                                    | none                                                |
+| Flow table (database)                   | State column           | Reference table                       | FK                                                                        | Duplicate representation                            |
+| --------------------------------------- | ---------------------- | ------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| `*_sign_in_flows` (app/com/op_base_org) | `status_id` default 10 | `*_sign_in_flow_statuses` (`id` only) | `NOT VALID`, no action                                                    | `state`, `step` strings tied by `NOT VALID` `CHECK` |
+| `*_sign_up_flows` (app/com/op_base_org) | `status_id` default 10 | `*_sign_up_flow_statuses` (`id` only) | `NOT VALID`, `ON DELETE RESTRICT` (client, visitor); no action (operator) | `state`, `step` strings, no `CHECK`                 |
 
-Reference rows: sign-up rows are inserted by request-path `ensure_defaults!` calls; no migration
-inserts flow status rows; a provisioning path for sign-in and sign-out rows was not located. Direct
-`status_id` assignments exist outside the state machines (sign-up OTP controllers,
-`sign_up_sequence_controller_support`, sign-up finalizer operations, `SignUpTermination`).
+Sign-out has no persisted flow table or kind/status reference table after D-179 (2). Its durable
+authority record is the OP authority stop; a browser return notice is a one-use transport capability,
+not a sign-out lifecycle. Sign-up reference rows are inserted by request-path `ensure_defaults!`
+calls; no migration inserts flow status rows. Direct `status_id` assignments remain outside the
+sign-in/sign-up state machines (sign-up OTP controllers, `sign_up_sequence_controller_support`,
+sign-up finalizer operations, `SignUpTermination`).
 
 ### Target storage
 
@@ -322,13 +322,13 @@ inserts flow status rows; a provisioning path for sign-in and sign-out rows was 
 - Active phase ids are per-flow namespaces; equal ids across flows mean nothing.
 - Shared terminal ids:
 
-| Lifecycle       | Id    | Sign-in today | Sign-up client/visitor today | Sign-up operator today | Sign-out today |
-| --------------- | ----- | ------------- | ---------------------------- | ---------------------- | -------------- |
-| `COMPLETED`     | `100` | present       | present                      | present                | present        |
-| `EXPIRED`       | `910` | absent        | present                      | absent                 | absent         |
-| `CANCELLED`     | `920` | absent        | present                      | absent                 | absent         |
-| `HALTED`        | `930` | absent        | absent                       | absent                 | absent         |
-| legacy `FAILED` | `900` | present       | present                      | absent                 | present        |
+| Lifecycle       | Id    | Sign-in today | Sign-up client/visitor today | Sign-up operator today |
+| --------------- | ----- | ------------- | ---------------------------- | ---------------------- |
+| `COMPLETED`     | `100` | present       | present                      | present                |
+| `EXPIRED`       | `910` | absent        | present                      | absent                 |
+| `CANCELLED`     | `920` | absent        | present                      | absent                 |
+| `HALTED`        | `930` | absent        | absent                       | absent                 |
+| legacy `FAILED` | `900` | present       | present                      | absent                 |
 
 `900` stays reserved for legacy `FAILED` and is never reassigned. Active phases use ids below `900`,
 never `100`. A renumbering such as `900 COMPLETED / 910 CANCELLED / 920 EXPIRED` is forbidden
@@ -336,29 +336,27 @@ because it would change the meaning of existing ids.
 
 ### Current active phase ids
 
-| Id  | Sign-in                      | Sign-up client/visitor    | Sign-up operator     | Sign-out                        |
-| --- | ---------------------------- | ------------------------- | -------------------- | ------------------------------- |
-| 0   |                              |                           |                      | `NOTHING` (retire to tombstone) |
-| 10  | `PRIMARY_PENDING`            | `STARTED`                 | `STARTED`            | `REQUESTED`                     |
-| 20  | `MFA_PENDING`                | `CONTACT_PENDING`         | `CONTACT_PENDING`    | `ACCESS_DISCARDED`              |
-| 30  | `SESSION_LIMIT_PENDING`      | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` | `LOGICALLY_REVOKED`             |
-| 35  |                              | `CONTACT_VERIFIED`        |                      |                                 |
-| 36  |                              | `SOCIAL_CALLBACK_PENDING` |                      |                                 |
-| 38  |                              | `GUARDRAIL_PENDING`       |                      |                                 |
-| 40  | `GUARDRAIL_PENDING`          | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` | `AWAITING_EXPIRY`               |
-| 50  | `SESSION_ISSUANCE_PENDING`   |                           |                      |                                 |
-| 60  | `CHECKPOINT_PENDING`         | `FINALIZING`              |                      |                                 |
-| 65  | `SELECTOR_PENDING`           |                           |                      |                                 |
-| 70  | `DASHBOARD_PENDING` (retire) | `FINALIZED`               |                      |                                 |
-| 80  | `RETURN_PENDING` (retire)    | `SIGN_IN_HANDOFF_PENDING` |                      |                                 |
+| Id  | Sign-in                      | Sign-up client/visitor    | Sign-up operator     |
+| --- | ---------------------------- | ------------------------- | -------------------- |
+| 10  | `PRIMARY_PENDING`            | `STARTED`                 | `STARTED`            |
+| 20  | `MFA_PENDING`                | `CONTACT_PENDING`         | `CONTACT_PENDING`    |
+| 30  | `SESSION_LIMIT_PENDING`      | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` |
+| 35  |                              | `CONTACT_VERIFIED`        |                      |
+| 36  |                              | `SOCIAL_CALLBACK_PENDING` |                      |
+| 38  |                              | `GUARDRAIL_PENDING`       |                      |
+| 40  | `GUARDRAIL_PENDING`          | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` |
+| 50  | `SESSION_ISSUANCE_PENDING`   |                           |                      |
+| 60  | `CHECKPOINT_PENDING`         | `FINALIZING`              |                      |
+| 65  | `SELECTOR_PENDING`           |                           |                      |
+| 70  | `DASHBOARD_PENDING` (retire) | `FINALIZED`               |                      |
+| 80  | `RETURN_PENDING` (retire)    | `SIGN_IN_HANDOFF_PENDING` |                      |
 
 These ids keep their meaning in the target. New phases take unused ids below `900`.
 
 ### Forbidden transitions (target)
 
 - Any terminal to any active phase, and any terminal to a different terminal.
-- `back` across sign-up durable finalization (`FINALIZING` onward), sign-in session issuance, or
-  sign-out access discard.
+- `back` across sign-up durable finalization (`FINALIZING` onward) or sign-in session issuance.
 - `cancel` after an irreversible commit or authority handoff.
 - Any state write that bypasses the flow's transition boundary.
 - `halt` from a request parameter or UI action.
@@ -369,8 +367,7 @@ Mappings marked "case by case" depend on the call site. No runtime rename is imp
 
 | Current term                                                                                                                                   | Where                        | Category today        | Target                                                                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | --------------------- | --------------------------------------------------------------------------------------- |
-| `*_PENDING`, `STARTED`, `CONTACT_VERIFIED`, `FINALIZING`, `FINALIZED`, `REQUESTED`, `ACCESS_DISCARDED`, `LOGICALLY_REVOKED`, `AWAITING_EXPIRY` | flow statuses                | Status                | Phase under `ACTIVE`                                                                    |
-| `NOTHING`                                                                                                                                      | sign-out status              | Status sentinel       | Not a lifecycle state; pre-`start`; id `0` kept as unreachable tombstone                |
+| `*_PENDING`, `STARTED`, `CONTACT_VERIFIED`, `FINALIZING`, `FINALIZED`                                                                          | sign-in and sign-up statuses | Status                | Phase under `ACTIVE`                                                                    |
 | `status_id`                                                                                                                                    | all flow tables              | Column                | `state_id` (target terminology; rename decided in the plan)                             |
 | `*_flow_statuses`                                                                                                                              | reference tables             | Table                 | `*_flow_states` (target terminology; rename decided in the plan)                        |
 | `DASHBOARD_PENDING`, `RETURN_PENDING`                                                                                                          | sign-in status               | Legacy status         | Retire; post-auth navigation is not lifecycle                                           |
@@ -381,8 +378,7 @@ Mappings marked "case by case" depend on the call site. No runtime rename is imp
 | `FAILED` via user cancel (MFA, session limit)                                                                                                  | sign-in                      | Status                | `CANCELLED`                                                                             |
 | `FAILED` via `session_limit_hard_reject`                                                                                                       | sign-in                      | Status                | `HALTED`, `policy_terminal_block`                                                       |
 | `FAILED` via `fail` event                                                                                                                      | sign-up                      | Status                | Case by case: `HALTED` when unrecoverable; otherwise `rejected` with flow kept `ACTIVE` |
-| `FAILED` via exception during logout                                                                                                           | sign-out                     | Status                | Case by case: operational failure is not `HALTED`; open question in the plan            |
-| `fail`, `fail_sign_in!`, `fail_sign_out!`                                                                                                      | events and methods           | Event                 | `cancel` or `halt` by cause; never a canonical event                                    |
+| `fail`, `fail_sign_in!`                                                                                                                       | events and methods           | Event                 | `cancel` or `halt` by cause; never a canonical event                                    |
 | `failure`, `credential_failed`                                                                                                                 | `SignInResult`               | Outcome               | `rejected` with a reason code                                                           |
 | `credential_rejected`, `identity_unavailable`, `invalid_request`                                                                               | `SignInResult`               | Outcome               | `rejected` with a reason code                                                           |
 | `session_limit_hard_reject`, `guardrail_blocked`, `login_forbidden`                                                                            | `SignInResult`               | Outcome               | Reason code; `halt` when the flow cannot continue                                       |

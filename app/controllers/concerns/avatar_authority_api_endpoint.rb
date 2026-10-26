@@ -82,7 +82,7 @@ module AvatarAuthorityApiEndpoint
         return
       end
 
-      yield
+      yield requirement
     end
   end
 

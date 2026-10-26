@@ -32,6 +32,7 @@ module AuthenticationLogoutable
         token_class: safe_token_class_for_logout,
         session_public_id: safe_current_session_public_id_for_logout,
         reason: reason,
+        cause: "browser_logout",
       )
       record_logout_audit(resource)
     ensure

@@ -93,7 +93,12 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
                audiences: [registered.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(registered),
                subject: OidcSubject.for(actor, resource_type: resource_type), client_id: registered.client_id,
       )
-      rp_session.revoke!(status: "success")
+      OpAuthorityStopCommitter.stop_grant(
+        grant: rp_session,
+        cause: "token_revocation",
+        principal_public_id: actor.public_id,
+        authority_evidence_ref: "neutral-entry-contract:#{rp_session.public_id}",
+      )
       root_before = root.attributes
       reset!
       https!

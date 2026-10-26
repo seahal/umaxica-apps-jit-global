@@ -434,8 +434,16 @@ body.ui-document {
     linear-gradient(to left, var(--ui-surface) 30%, transparent),
     linear-gradient(to right, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent),
     linear-gradient(to left, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent);
-  background-position: left center, right center, left center, right center;
-  background-size: 2rem 100%, 2rem 100%, 1rem 100%, 1rem 100%;
+  background-position:
+    left center,
+    right center,
+    left center,
+    right center;
+  background-size:
+    2rem 100%,
+    2rem 100%,
+    1rem 100%,
+    1rem 100%;
   background-repeat: no-repeat;
   background-attachment: local, local, scroll, scroll;
   scrollbar-color: var(--ui-control) var(--ui-surface);
@@ -444,5 +452,59 @@ body.ui-document {
   background: transparent;
 }
 @media (forced-colors: active) {
-  .ui-table-scroll { background-image: none; }
+  .ui-table-scroll {
+    background-image: none;
+  }
+}
+
+/* Public landings mirror the Auth shell without initializing authentication or preferences. */
+body.ui-landing {
+  display: flex;
+  flex-direction: column;
+}
+.ui-landing > .ui-main {
+  flex: 1;
+}
+.ui-landing__brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.ui-landing__brand a {
+  color: var(--ui-fg);
+}
+.ui-landing__brand span,
+.ui-landing__intro p,
+.ui-landing__copyright {
+  color: var(--ui-fg-muted);
+}
+.ui-landing__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.ui-landing h1 {
+  font-size: 1.875rem;
+}
+.ui-landing__intro p {
+  font-size: 1.125rem;
+}
+.ui-landing a.ui-button {
+  color: var(--ui-accent-fg);
+  text-decoration: none;
+}
+.ui-landing > footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  background: var(--ui-canvas);
+}
+@media (min-width: 640px) {
+  .ui-landing > .ui-main {
+    padding: 3.5rem 1.5rem;
+  }
+  .ui-landing h1 {
+    font-size: 2.25rem;
+  }
 }

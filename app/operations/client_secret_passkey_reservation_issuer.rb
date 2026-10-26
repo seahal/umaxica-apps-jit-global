@@ -42,7 +42,7 @@ class ClientSecretPasskeyReservationIssuer
         ClientSignUpFlow.transaction do
           current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
-            actor = Client.find(current.principal_id)
+            actor = current.association(:principal).scope.take!
             actor.with_lock do
               raise Denied, "Secret activation requires completed signup" unless current.sign_up_completed?
 
@@ -328,18 +328,39 @@ class ClientSecretPasskeyReservationIssuer
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       ticket_now = ClientToken.database_now
+      registration = current && registered && committed_registration_for?(actor, current, registered, ticket_now)
+      step_up_satisfied = current && StepUpResolver.call(
+        token: current, requirement: requirement, now: ticket_now,
+      ).satisfied?
       unless actor.login_allowed? && current && registered && registered.status_id == ClientPasskeyStatus::ACTIVE &&
-          current.active_status?(ticket_now) &&
-          StepUpResolver.call(token: current, requirement: requirement, now: ticket_now).satisfied?
-        raise Denied, "Secret distribution requires independent scoped registration Step-Up"
+          current.active_status?(ticket_now) && (step_up_satisfied || registration)
+        raise Denied, "Secret distribution requires the authorized Passkey registration"
       end
 
-      [current, registered]
+      authorization_at = registration ? registration.consumed_at : current.last_step_up_at
+      [current, registered, authorization_at]
+    end
+
+    # The passkey final committer spends Step-Up before this registration side effect runs. Its
+    # durable consumed transaction is the authorization proof for this same passkey registration.
+    def committed_registration_for?(actor, token, passkey, now)
+      transaction = ClientStepUpCeremonyTransaction.lock.find_by(
+        actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
+        surface: "app", required_scope: "settings_passkey", step_up_required: false,
+        token_binding: token.public_id, require_session_binding: true,
+        status: ClientStepUpCeremonyTransaction::STATUS_CONSUMED,
+        method: "passkey", verified_credential_ref: passkey.public_id,
+      )
+      consumed_at = transaction&.consumed_at
+      return false unless transaction && consumed_at && consumed_at >= now - StepUpRequirement::DEFAULT_TTL &&
+        consumed_at <= now && consumed_at <= transaction.expires_at
+
+      transaction
     end
 
     def reserve!(context, token, passkey, duration)
       actor = context.subject
-      current, registered = authorized_registration!(actor, token, passkey)
+      current, registered, authorization_at = authorized_registration!(actor, token, passkey)
 
       # A server-derived UUID names exactly this persisted registration, including omission retries.
       operation = registration_operation(registered)
@@ -353,14 +374,14 @@ class ClientSecretPasskeyReservationIssuer
 
         return prior
       end
-      unless registered.created_at >= current.last_step_up_at && registered.created_at <= Client.database_now
+      now = Client.database_now
+      unless authorization_at && authorization_at <= now &&
+          authorization_at >= now - StepUpRequirement::DEFAULT_TTL
         raise Denied, "Secret distribution requires the registration authorized by this Step-Up"
       end
 
-      now = Client.database_now
       count = ClientSecretCapacityQuery.call(client: actor, at: now).passkey_count
-      deadline = [now + duration,
-                  current.last_step_up_at + StepUpRequirement::DEFAULT_TTL,].min.round(6) if count.positive?
+      deadline = [now + duration, authorization_at + StepUpRequirement::DEFAULT_TTL].min.round(6) if count.positive?
       issuance = ClientSecretIssuance.create!(
         client: actor, origin: "passkey_registration", origin_operation_id: operation, attempt_number: 1,
         browser_session_ref: current.public_id, planned_count: count, expires_at: deadline,

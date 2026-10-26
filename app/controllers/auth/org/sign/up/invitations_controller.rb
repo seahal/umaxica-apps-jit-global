@@ -57,7 +57,6 @@ module Auth
           end
 
           def sign_up_surface = :org
-
         end
       end
     end

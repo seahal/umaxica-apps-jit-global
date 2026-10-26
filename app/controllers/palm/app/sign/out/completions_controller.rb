@@ -17,15 +17,7 @@ module Palm
           public
 
           def show
-            return continue_browser_rp_logout! if params[:logout_challenge].present?
-
             complete_oidc_rp_logout!
-          end
-
-          def create
-            return head :not_found if params[:logout_challenge].blank?
-
-            continue_browser_rp_logout!
           end
 
           private

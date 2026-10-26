@@ -4,12 +4,13 @@
 module Visa
   module App
     module Oidc
-      class CancellationsController < ::Visa::App::Oauth::AuthorizationsController
+      class CancellationsController < ::Visa::App::AuthorizationBaseController
         include ::OidcAuthorizationContinuation
 
         AUTHENTICATION_MODE = :open
         OIDC_CONTINUATION_KIND = :cancellation
         declare_authentication_mode! :open
+        before_action :enforce_oauth_authorize_request_size!
       end
     end
   end

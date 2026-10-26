@@ -38,15 +38,19 @@ module Base
               status: :unprocessable_content,
             )
           end
-          if @user_email.update(email_preference_params)
-            redirect_to(edit_base_app_identity_email_path(@user_email.public_id, ri: params[:ri]), status: :see_other)
-          else
-            render(
-              inertia: "base/app/identity/emails/edit",
-              props: email_edit_props(@user_email, error: t("sign.app.settings.email.update.failure")),
-              status: :unprocessable_content,
-            )
-          end
+          IdentityEmailPreferenceCommitter.call!(
+            actor: current_client, token: current_session_token, email: @user_email,
+            preferences: email_preference_params.to_h,
+          )
+          redirect_to(edit_base_app_identity_email_path(@user_email.public_id, ri: params[:ri]), status: :see_other)
+        rescue IdentityEmailPreferenceCommitter::Denied
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
+        rescue ActiveRecord::RecordInvalid
+          render(
+            inertia: "base/app/identity/emails/edit",
+            props: email_edit_props(@user_email, error: t("sign.app.settings.email.update.failure")),
+            status: :unprocessable_content,
+          )
         end
 
         def destroy

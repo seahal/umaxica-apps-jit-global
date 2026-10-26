@@ -21,19 +21,14 @@ class SignRiskEnforcer
     end
   end
 
+  # D-172 S-1: a risk stop ends every root of the principal with an epoch cutoff, through the
+  # identity-stop path (Zenith event under the actor lock, then the OP apply with its retry).
   def self.revoke!(resource)
-    revoke_token_set(resource.client_tokens) if resource.respond_to?(:client_tokens)
-    revoke_token_set(resource.staff_tokens) if resource.respond_to?(:staff_tokens)
-  end
-
-  def self.revoke_token_set(tokens)
-    tokens.currently_usable_at.find_each do |token|
-      AuthenticationLogoutCurrentSession.call(
-        resource: token.actor_record,
-        token: token,
-        reason: "sign_risk",
-      )
-    end
+    event =
+      resource.class.transaction do
+        IdentityAuthenticationStopRecorder.call(actor: resource.class.lock.find(resource.id), reason: "sign_risk")
+      end
+    OpIdentityEventInvalidator.deliver(event:)
   end
 
   def self.require_step_up!(resource)
@@ -63,5 +58,5 @@ class SignRiskEnforcer
     enabled_config || ENV["RISK_ENFORCEMENT_ENABLED"] == "true" || Rails.env.production?
   end
 
-  private_class_method :revoke_token_set, :require_step_up_for_token_set
+  private_class_method :require_step_up_for_token_set
 end

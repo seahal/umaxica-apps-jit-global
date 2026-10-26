@@ -43,21 +43,18 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     @ticket = VisitorStepUpSession.find_by!(step_up_ceremony_transaction_ref: @issuance.transaction.transaction_id)
     https!
     host! @host
-    get auth_com_verification_path(ri: "jp", entry_ref: @issuance.reference)
-    @csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_ceremony_bindings_path(ri: "jp"), params: {
-      entry_ref: @issuance.reference, authenticity_token: @csrf,
-    }
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: @issuance.reference)
-    binding.confirm_base!(
+    admit_auth_ceremony_entry!(
+      auth_com_verification_path,
+      reference: @issuance.reference,
+      params: { ri: "jp" },
       base_token: @token,
       browser_digest: AuthAdmissionBinding.browser_digest(
         surface: "com", entry_ref: @issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       ),
     )
-    post auth_com_verification_path(ri: "jp"), params: {
-      entry_ref: @issuance.reference, authenticity_token: @csrf,
-    }
+    # This controller test covers step-up evidence handling. Rails test mode disables forgery
+    # protection; CSRF rejection is covered at the shared boundary tests.
+    @csrf = "test-csrf-token"
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
   end
@@ -116,9 +113,11 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
       assert_response :success
       props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
-      assert_equal auth_com_verification_passkey_options_path(ri: region), props.fetch("panel").fetch("options_url")
-      assert_equal auth_com_verification_passkey_path(ri: region), props.fetch("panel").fetch("verification_url")
-      assert_equal auth_com_verification_path(ri: region), props.fetch("back").fetch("href")
+      assert_equal auth_com_verification_passkey_options_path(ri: region, lx: language),
+                   props.fetch("panel").fetch("options_url")
+      assert_equal auth_com_verification_passkey_path(ri: region, lx: language),
+                   props.fetch("panel").fetch("verification_url")
+      assert_equal auth_com_verification_path(ri: region, lx: language), props.fetch("back").fetch("href")
       assert_equal "post", props.fetch("cancel").fetch("method")
       assert_equal((language == "en") ? "Verification" : "本人確認", props.fetch("title"))
       assert_nil @ticket.reload.passkey_challenge_ref

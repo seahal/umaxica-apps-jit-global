@@ -14,21 +14,15 @@ module Base
 
       AUTHENTICATION_MODE = :open
       skip_before_action :set_preferences_cookie, only: %i(new edit)
-      # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
-      # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
-      # response body.
       layout -> { @render_surface_erb_layout ? "base/org/application" : "base/org/inertia" }
 
       declare_authentication_mode! :open
-      before_action :authenticate_oidc_rp_session!, only: :create,
-                                                    unless: -> { params[:logout_challenge].present? }
+      before_action :authenticate_oidc_rp_session!, only: :create
       after_action :sign_out_notice_cache_headers!, only: %i(edit create)
 
       public
 
       def show
-        return continue_browser_rp_logout! if params[:logout_challenge].present?
-
         complete_oidc_rp_logout!
       end
 
@@ -41,8 +35,6 @@ module Base
       end
 
       def create
-        return continue_browser_rp_logout! if params[:logout_challenge].present?
-
         launch_oidc_rp_logout!(
           client_id: "base-org-ww",
           issuer_resource_type: "operator",
@@ -77,10 +69,6 @@ module Base
         {
           action: sign_out_post_path,
           submit: t("sign.shared.sign_out.button"),
-          logout_challenge: params[:logout_challenge].presence,
-          logout_intent_proof: if params[:logout_challenge].present?
-                                 browser_rp_logout_intent_proof_for(@logout_transaction)
-                               end,
           confirm_description: t("sign.shared.sign_out.confirm_description"),
         }
       end

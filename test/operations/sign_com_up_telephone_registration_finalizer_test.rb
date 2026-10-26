@@ -19,7 +19,7 @@ class SignComUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
   test "finalizes a pending visitor telephone sign-up" do
     visitor = Visitor.create!(
       public_id: PublicId.generate,
-      status_id: VisitorStatus::ACTIVE,
+      status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: VisitorVisibility::VISITOR,
       security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,

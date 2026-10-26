@@ -7,6 +7,7 @@ require_relative "../../../../support/oidc_rp_logout_hint_helper"
 
 class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   include OidcRpLogoutHintHelper
+
   fixtures :clients, :client_token_kinds
 
   setup do
@@ -200,6 +201,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "/oidc/logout", location.path
     redirect_uri = query.fetch("post_logout_redirect_uri")
+
     assert_equal RequestContextContract.default_region,
                  Rack::Utils.parse_nested_query(URI.parse(redirect_uri).query).fetch("ri")
     assert_visa_end_session_redirect(query, location, client_id: "core-app-jp", region: "jp")

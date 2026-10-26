@@ -17,16 +17,13 @@ module Warp
         # ordinary callback chain -- `set_region` included, otherwise every link they generate
         # would drop `ri` (test/unit/security/ri_routing_contract_test.rb).
 
-        before_action :authenticate_oidc_rp_session!, only: :create,
-                                                      unless: -> { params[:logout_challenge].present? }
+        before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
         after_action :sign_out_notice_cache_headers!, only: %i(show edit)
 
         def show
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           complete_oidc_rp_logout!
         end
 
@@ -39,8 +36,6 @@ module Warp
         end
 
         def create
-          return continue_browser_rp_logout! if params[:logout_challenge].present?
-
           launch_oidc_rp_logout!(
             client_id: RpDeploymentBindingValue.client_id("warp-app"),
             issuer_resource_type: "client",

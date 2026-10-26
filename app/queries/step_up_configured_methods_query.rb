@@ -9,6 +9,11 @@ module StepUpConfiguredMethodsQuery
   def call(subject)
     return [] unless subject
 
-    AuthenticationCredentialInventory.call(subject).step_up_methods
+    methods = AuthenticationCredentialInventory.call(subject).step_up_methods
+    return methods unless subject.respond_to?(:security_mode_valid?)
+    # Consolidation ADR 2.3: ADVANCED steps up with a Passkey only; an invalid mode offers nothing.
+    return [] unless subject.security_mode_valid?
+
+    subject.security_mode_advanced? ? methods & [:passkey] : methods
   end
 end

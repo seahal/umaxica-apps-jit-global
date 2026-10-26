@@ -189,12 +189,7 @@ module SignOutNotice
     case transaction.expected_step
     when AcmeLogoutTransaction::STEP_ACME_CLEARED then "acme"
     when AcmeLogoutTransaction::STEP_SIGN_CLEARED then "sign"
-    when AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
-         AcmeLogoutTransaction::STEP_AUTHORITY_CLEANUP_ISSUED
-      "base"
-    when AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED,
-         AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED,
-         AcmeLogoutTransaction::STEP_FINALIZED
+    when AcmeLogoutTransaction::STEP_FINALIZED
       transaction.origin_surface
     end
   end

@@ -4,7 +4,6 @@ flowchart TB
     subgraph client_machines["client machine inventory"]
         M0["idp-client-sign-in"]
         M1["idp-client-sign-up"]
-        M2["idp-client-sign-out"]
         M3["idp-client-auth-ceremony-session"]
         M4["idp-client-email-ceremony"]
         M5["idp-client-telephone-ceremony"]
@@ -51,7 +50,6 @@ flowchart TB
     subgraph visitor_machines["visitor machine inventory"]
         M17["idp-visitor-sign-in"]
         M18["idp-visitor-sign-up"]
-        M19["idp-visitor-sign-out"]
         M20["idp-visitor-auth-ceremony-session"]
         M21["idp-visitor-email-ceremony"]
         M22["idp-visitor-telephone-ceremony"]
@@ -89,7 +87,6 @@ flowchart TB
     subgraph operator_machines["operator machine inventory"]
         M33["idp-operator-sign-in"]
         M34["idp-operator-sign-up"]
-        M35["idp-operator-sign-out"]
         M36["idp-operator-auth-ceremony-session"]
         M37["idp-operator-email-ceremony"]
         M38["idp-operator-telephone-ceremony"]
@@ -160,8 +157,6 @@ flowchart TB
     M100 -->|"contact row owns OTP proof and lock"| M77
     M12 -->|"token owns device binding registration axis"| M13
     M12 -->|"root usability gates RP authority"| M15
-    M2 -->|"logout logical revocation"| M12
-    M2 -->|"issue/consume logout transport"| M122
     M15 -->|"RP logout launcher issues ordered boundary"| M114
     M101 -->|"deactivation revokes root sessions"| M12
     M116 -->|"apply/end locks or refcount-unlocks actor"| M73
@@ -194,8 +189,6 @@ flowchart TB
     M106 -->|"contact row owns OTP proof and lock"| M84
     M28 -->|"token owns device binding registration axis"| M29
     M28 -->|"root usability gates RP authority"| M31
-    M19 -->|"logout logical revocation"| M28
-    M19 -->|"issue/consume logout transport"| M122
     M31 -->|"RP logout launcher issues ordered boundary"| M114
     M107 -->|"deactivation revokes root sessions"| M28
     M118 -->|"apply/end locks or refcount-unlocks actor"| M80
@@ -226,8 +219,6 @@ flowchart TB
     M111 -->|"contact row owns OTP proof and lock"| M91
     M45 -->|"token owns device binding registration axis"| M46
     M45 -->|"root usability gates RP authority"| M48
-    M35 -->|"logout logical revocation"| M45
-    M35 -->|"issue/consume logout transport"| M122
     M48 -->|"RP logout launcher issues ordered boundary"| M114
     M112 -->|"deactivation revokes root sessions"| M45
     M120 -->|"apply/end locks or refcount-unlocks actor"| M87

@@ -15,8 +15,8 @@ module Security
       setup do
         ensure_user_token_reference_records!
         ensure_visitor_token_reference_records!
-        @app_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-        @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+        @app_host = visa_host_for_test_surface(:app)
+        @com_host = visa_host_for_test_surface(:com)
       end
 
       test "active client refresh token is refreshable" do
@@ -34,7 +34,7 @@ module Security
           withdrawn_at: 30.minutes.ago,
         )
 
-        post base_app_edge_v0_token_refresh_url(host: @app_host),
+        post visa_app_edge_v0_token_refresh_url(host: @app_host),
              headers: refresh_headers(raw_refresh)
 
         assert_response :unauthorized
@@ -52,7 +52,7 @@ module Security
           purge_eligible_at: 31.days.from_now,
         )
 
-        post base_app_edge_v0_token_refresh_url(host: @app_host),
+        post visa_app_edge_v0_token_refresh_url(host: @app_host),
              headers: refresh_headers(raw_refresh)
 
         assert_response :forbidden
@@ -69,7 +69,7 @@ module Security
           withdrawn_at: 30.minutes.ago,
         )
 
-        post base_com_edge_v0_token_refresh_url(host: @com_host),
+        post visa_com_edge_v0_token_refresh_url(host: @com_host),
              headers: refresh_headers(raw_refresh)
 
         assert_response :unauthorized
@@ -87,7 +87,7 @@ module Security
           purge_eligible_at: 31.days.from_now,
         )
 
-        post base_com_edge_v0_token_refresh_url(host: @com_host),
+        post visa_com_edge_v0_token_refresh_url(host: @com_host),
              headers: refresh_headers(raw_refresh)
 
         assert_response :forbidden
@@ -146,7 +146,7 @@ module Security
         raw_refresh = token.rotate_refresh_token!
 
         post(
-          base_app_edge_v0_token_refresh_url(host: @app_host),
+          visa_app_edge_v0_token_refresh_url(host: @app_host),
           headers: refresh_headers(raw_refresh),
         )
 

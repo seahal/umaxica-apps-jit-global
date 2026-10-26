@@ -307,12 +307,37 @@ describe("identity multi factor screens", () => {
         toggle_title="Status"
         state_label="Enabled"
         back_link={backLink}
+        form={{
+          action: "/identity/mfa/challenge",
+          security_mode_id: 3,
+          submit_label: "Return to normal",
+        }}
+        form_unavailable={null}
         error={null}
       />,
     );
 
     expect(html).toContain("Enabled");
+    expect(html).toContain("Return to normal");
     expect(html).not.toContain('role="alert"');
+  });
+
+  it("explains why no switch is offered", () => {
+    const html = renderToStaticMarkup(
+      <MfaChallengeShow
+        title="Multi factor"
+        reset_unavailable="Reset is unavailable."
+        toggle_title="Status"
+        state_label="Disabled"
+        back_link={backLink}
+        form={null}
+        form_unavailable="Two passkeys are required."
+        error={null}
+      />,
+    );
+
+    expect(html).toContain("Two passkeys are required.");
+    expect(html).not.toContain("<button");
   });
 
   it("renders the challenge failure", () => {
@@ -323,6 +348,8 @@ describe("identity multi factor screens", () => {
         toggle_title="Status"
         state_label="Disabled"
         back_link={backLink}
+        form={null}
+        form_unavailable="Two passkeys are required."
         error="It could not be changed."
       />,
     );

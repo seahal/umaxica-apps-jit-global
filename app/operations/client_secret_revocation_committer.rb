@@ -42,7 +42,7 @@ class ClientSecretRevocationCommitter
       actor = context.subject
       raise Denied, "Secret revocation actor is unavailable" unless actor.login_allowed?
 
-      verify_session!(actor, token)
+      session, requirement = verify_session!(actor, token)
       owned = ClientSecretCredential.lock.find_by(
         id: credential.id, client_id: actor.id, public_id: credential.public_id,
       )
@@ -63,8 +63,11 @@ class ClientSecretRevocationCommitter
       purge_at = (now + purge_after).round(6)
       raise ArgumentError, "Secret retention must advance the database timestamp" unless purge_at > now
 
-      owned.commit_management_revocation!(actor_context: context, at: now, purge_at: purge_at)
-    rescue ClientSecretCredential::InvalidTransition => e
+      revoked = owned.commit_management_revocation!(actor_context: context, at: now, purge_at: purge_at)
+      # adr/authentication-security-mode.md D3: the Step-Up is spent with the revocation it authorized.
+      session.consume_step_up_evidence!(requirement: requirement)
+      revoked
+    rescue ClientSecretCredential::InvalidTransition, TokenStatusManagement::StepUpEvidenceUnavailable => e
       raise Denied, e.message
     end
 
@@ -85,6 +88,8 @@ class ClientSecretRevocationCommitter
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret revocation requires current scoped Step-Up"
       end
+
+      [current, requirement]
     end
   end
 end

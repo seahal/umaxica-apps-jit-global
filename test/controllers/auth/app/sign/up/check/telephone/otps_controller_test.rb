@@ -28,18 +28,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
-                               headers: { "Host" => @host }
-
-    assert_response :see_other
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/sign/up", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
-                     headers: { "Host" => @host }
+    admit_auth_ceremony_entry!("/sign/up", reference: admission.reference, params: { ri: "jp" })
 
     assert_response :see_other
   end

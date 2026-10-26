@@ -145,12 +145,11 @@ class PalmRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "palm/app/sign/out/completions", recognized[:controller]
     assert_equal "show", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{PALM_HOST}/sign/out/completion",
-      method: :post,
-    )
-
-    assert_equal "palm/app/sign/out/completions", recognized[:controller]
-    assert_equal "create", recognized[:action]
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{PALM_HOST}/sign/out/completion",
+        method: :post,
+      )
+    end
   end
 end

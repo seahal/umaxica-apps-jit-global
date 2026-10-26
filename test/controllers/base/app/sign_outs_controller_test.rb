@@ -2,9 +2,12 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../support/oidc_rp_logout_hint_helper"
 # require "helpers/global_test_support"
 
 class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
+  include OidcRpLogoutHintHelper
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @user = create_verified_user_with_email(email_address: "base-app-sign-out-#{SecureRandom.hex(4)}@example.com")
@@ -61,7 +64,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "receiver-local logout revokes authority before one-shot completion and Home" do
+  test "RP logout clears its session and redirects to Visa with the stored ID Token hint" do
     token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     https!
     rp_headers = session_headers(token)
@@ -69,6 +72,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
       name, value = pair.split("=", 2)
       cookies[name] = Rack::Utils.unescape(value)
     end
+    transactions_before = AcmeLogoutTransaction.count
     csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"), headers: rp_headers)
     post base_app_sign_out_url(host: @host, ri: "jp"), headers: {
       "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
@@ -77,66 +81,23 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_predicate token.reload, :currently_usable?
     authority = URI.parse(response.location)
+    query = Rack::Utils.parse_nested_query(authority.query.to_s)
+    client = OidcClientRegistry.find!("base-app-ww")
 
-    assert_equal @host, authority.host
+    assert_equal URI.parse(OidcIssuer.end_session_endpoint("client")).host, authority.host
     assert_equal "/oidc/logout", authority.path
-    get authority.request_uri
+    assert_equal client.client_id, query.fetch("client_id")
+    assert_predicate query.fetch("id_token_hint"), :present?
+    assert_predicate query.fetch("state"), :present?
+    assert_equal @base_rp_session.logout_hint.id_token, query.fetch("id_token_hint")
+    expected_redirect =
+      client.post_logout_redirect_uris.find do |candidate|
+        Rack::Utils.parse_nested_query(URI.parse(candidate).query.to_s)["ri"] == "jp"
+      end
 
-    assert_response :success
-    assert_predicate token.reload, :currently_usable?
-    csrf_token = fetch_csrf_token(authority.request_uri)
-    form = response.parsed_body.at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    fields["authenticity_token"] = csrf_token
-    post form["action"], params: fields, headers: {
-      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
-    }
-
-    assert_response :see_other
-    assert_predicate token.reload, :revoked?
-    origin = URI.parse(response.location)
-    get origin.request_uri
-
-    assert_response :success
-    assert_equal "base/app/sign_outs/edit", inertia_component
-    challenge = Rack::Utils.parse_nested_query(origin.query.to_s).fetch("logout_challenge")
-    csrf_token = fetch_csrf_token(origin.request_uri)
-    form_props = inertia_props.fetch("form")
-    post form_props.fetch("action"),
-         params: {
-           logout_challenge: challenge,
-           ri: "jp",
-           authenticity_token: csrf_token,
-           logout_intent_proof: form_props.fetch("logout_intent_proof"),
-         }, headers: {
-           "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
-         }
-
-    assert_response :see_other
-    completion = response.location
-    get completion
-
-    assert_response :success
-    assert_equal "base/app/sign_outs/edit", inertia_component
-    assert inertia_page.fetch("clearHistory")
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
-    assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("home_link", "href")
-    get completion
-
-    assert_response :not_found
-    get base_app_root_url(host: @host, ri: "jp")
-
-    assert_response :success
-    assert_equal "base/app/roots/index", inertia_component
-    get base_app_dashboard_url(host: @host, ri: "jp"), headers: rp_headers
-
-    assert_response :found
-    destination = URI.parse(response.location)
-
-    assert_equal @host, destination.host
-    assert_equal "/sign", destination.path
-    assert_equal "jp", Rack::Utils.parse_nested_query(destination.query.to_s).fetch("ri")
-    assert_predicate token.reload, :revoked?
+    assert_equal expected_redirect, query.fetch("post_logout_redirect_uri")
+    assert_not_predicate @base_rp_session.reload, :active?
+    assert_equal transactions_before, AcmeLogoutTransaction.count
   end
 
   test "sign out without an RP session refuses authority mutation" do
@@ -180,6 +141,8 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
             oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,
             refresh_token_expires_at: fixture_now + 1.hour,
           )
+          @base_rp_session = fixture_rp
+          store_oidc_rp_logout_hint!(fixture_rp, fixture_actor, fixture_client)
           fixture_access = AuthenticationTokenService.encode(
             fixture_actor, host: fixture_host, resource_type: "client",
                            session_public_id: fixture_root.public_id, base_session_public_id: fixture_root.public_id,

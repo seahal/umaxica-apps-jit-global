@@ -437,53 +437,40 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_grant", stopped.error
   end
 
-  test "the delivery query returns the exact rotation for its attempt and nothing else" do
-    initial = exchange_issued_code(issue_code!)
-    predecessor = initial.token_response.fetch(:refresh_token)
-    rotated = refresh_with(predecessor, attempt_ref: "attempt-1")
+  test "D-25: every refresh use rotates and the consumed predecessor is never accepted again" do
+    first = exchange_issued_code(issue_code!).token_response.fetch(:refresh_token)
+    second = refresh_with(first)
+    third = refresh_with(second.token_response.fetch(:refresh_token))
 
-    assert_predicate rotated, :success?
-    query =
-      lambda do |attempt_ref, refresh_token: predecessor|
-        OidcRefreshDeliveryQuery.call(
-          refresh_token:, attempt_ref:, client_id: "core-app-jp", client_assertion: "assertion",
-          endpoint_uri: OidcIssuer.refresh_delivery_query_endpoint("client"), resource_type: "client",
-        )
-      end
-    OidcClientRegistry.stub(:authenticate_assertion, true) do
-      recovered = query.call("attempt-1")
-
-      assert_predicate recovered, :success?
-      assert_equal rotated.token_response.fetch(:refresh_token), recovered.token_response[:refresh_token]
-      assert_equal rotated.token_response.fetch(:access_token), recovered.token_response[:access_token]
-      assert_equal "invalid_grant", query.call("attempt-2").error
-      assert_equal "invalid_grant", query.call("").error
-
-      # The receipt window is judged on the OP database clock, so move that clock past it.
-      after_window = OpAppGrant.database_now + OidcRefreshDeliveryReceipt::TTL + 1.second
-
-      OpAppGrant.stub(:database_now, after_window) do
-        assert_equal "invalid_grant", query.call("attempt-1").error
-      end
-    end
+    assert_predicate second, :success?
+    assert_predicate third, :success?
+    assert_equal 3, [first, second.token_response.fetch(:refresh_token), third.token_response.fetch(:refresh_token)]
+      .uniq.size
   end
 
-  test "the delivery query refuses a failed client assertion and a stopped actor" do
-    initial = exchange_issued_code(issue_code!)
-    predecessor = initial.token_response.fetch(:refresh_token)
-    refresh_with(predecessor, attempt_ref: "attempt-1")
-    query =
-      lambda do
-        OidcRefreshDeliveryQuery.call(
-          refresh_token: predecessor, attempt_ref: "attempt-1", client_id: "core-app-jp", client_assertion: "x",
-          endpoint_uri: OidcIssuer.refresh_delivery_query_endpoint("client"), resource_type: "client",
-        )
-      end
+  test "D-25: reuse of a consumed refresh token is invalid_grant and revokes only that grant's family" do
+    predecessor = exchange_issued_code(issue_code!).token_response.fetch(:refresh_token)
+    successor = refresh_with(predecessor).token_response.fetch(:refresh_token)
+    grant = OidcRefreshTokenIssuer.resolve(refresh_token: successor, resource_type: "client").usage
 
-    OidcClientRegistry.stub(:authenticate_assertion, false) { assert_equal "invalid_client", query.call.error }
-    @user.update_columns(authentication_epoch: @user.authentication_epoch + 1)
+    reused = refresh_with(predecessor)
 
-    OidcClientRegistry.stub(:authenticate_assertion, true) { assert_equal "invalid_grant", query.call.error }
+    assert_equal "invalid_grant", reused.error
+    assert_predicate grant.reload.revoked_at, :present?
+    assert_equal "invalid_grant", refresh_with(successor).error, "the whole family is revoked, successor included"
+    assert_predicate @user_session_token.reload, :active_status?, "the OP Root Session stays intact"
+  end
+
+  test "D-25: an unknown verifier for an existing grant and a garbage token revoke nothing" do
+    current = exchange_issued_code(issue_code!).token_response.fetch(:refresh_token)
+    grant = OidcRefreshTokenIssuer.resolve(refresh_token: current, resource_type: "client").usage
+    public_id, = ClientToken.parse_refresh_token(current)
+    forged = ClientToken.build_refresh_token(public_id, SecureRandom.urlsafe_base64(32))
+
+    assert_equal "invalid_grant", refresh_with(forged).error
+    assert_equal "invalid_grant", refresh_with("not-a-refresh-token").error
+    assert_nil grant.reload.revoked_at
+    assert_predicate refresh_with(current), :success?
   end
 
   test "refresh grant rejects a different registered client without rotating the usage" do
@@ -3190,10 +3177,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  def refresh_with(refresh_token, attempt_ref: nil)
+  def refresh_with(refresh_token)
     with_authenticated_client do
       OidcTokenExchangeCoordinator.call(
-        grant_type: "refresh_token", refresh_token:, client_id: "core-app-jp", attempt_ref:,
+        grant_type: "refresh_token", refresh_token:, client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE, client_assertion: "test-client-assertion",
         token_endpoint_uri: "https://log.umaxica.app/oauth/token", expected_resource_type: "client",
       )

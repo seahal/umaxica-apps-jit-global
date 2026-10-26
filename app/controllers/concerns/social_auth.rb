@@ -203,9 +203,9 @@ module SocialAuth
     )
   end
 
-  def social_auth_step_up_requirement(token, ttl:)
+  def social_auth_step_up_requirement(token, ttl:, scope: SOCIAL_LINK_SCOPE)
     StepUpRequirement.new(
-      scope: SOCIAL_LINK_SCOPE,
+      scope: scope,
       step_up_required: true,
       allowed_methods: step_up_supported_methods,
       phishing_resistant_required: false,

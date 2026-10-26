@@ -6,7 +6,7 @@ require "test_helper"
 class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "Jump issuer capability is exactly the thirteen canonical namespaces mapped to existing PUBLIC_* settings" do
+  test "Jump issuer capability includes the three Visa namespaces" do
     expected = {
       "AUTH_APP" => "PUBLIC_AUTH_SERVICE_URL",
       "AUTH_COM" => "PUBLIC_AUTH_CORPORATE_URL",
@@ -14,6 +14,9 @@ class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
       "BASE_APP" => "PUBLIC_BASE_SERVICE_URL",
       "BASE_COM" => "PUBLIC_BASE_CORPORATE_URL",
       "BASE_ORG" => "PUBLIC_BASE_STAFF_URL",
+      "VISA_APP" => "PUBLIC_VISA_SERVICE_URL",
+      "VISA_COM" => "PUBLIC_VISA_CORPORATE_URL",
+      "VISA_ORG" => "PUBLIC_VISA_STAFF_URL",
       "CORE_APP" => "PUBLIC_CORE_SERVICE_URL",
       "CORE_COM" => "PUBLIC_CORE_CORPORATE_URL",
       "CORE_ORG" => "PUBLIC_CORE_STAFF_URL",
@@ -23,7 +26,7 @@ class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
       "PALM_APP" => "PUBLIC_PALM_SERVICE_URL",
     }
 
-    assert_equal 13, JumpRtSurface::ISSUER_NAMESPACES.size
+    assert_equal 16, JumpRtSurface::ISSUER_NAMESPACES.size
     assert_equal expected, JumpRtSurface::ISSUER_ORIGIN_ENV
     assert_equal expected.keys.sort, JumpRtSurface::ISSUER_NAMESPACES.sort
   end
@@ -35,6 +38,12 @@ class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
     [nil, "", "0", "auth_app\u0000"].each do |namespace|
       assert_raises(JumpRtConfigurationError, namespace.inspect) { JumpRtSurface.normalize_namespace(namespace) }
     end
+  end
+
+  test "Visa controllers resolve to the Visa Jump issuer namespace" do
+    assert_equal "VISA_APP", JumpRtSurface.namespace_for_controller("Visa::App::Oauth::AuthorizationsController")
+    assert_equal "VISA_COM", JumpRtSurface.namespace_for_controller("Visa::Com::Oauth::TokensController")
+    assert_equal "VISA_ORG", JumpRtSurface.namespace_for_controller("Visa::Org::Sign::ByesController")
   end
 
   test "Acme controllers have no Jump issuer namespace" do

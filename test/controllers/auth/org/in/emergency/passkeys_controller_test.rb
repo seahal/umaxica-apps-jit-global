@@ -20,6 +20,8 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
   setup do
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    @org_sign_in_feature = FeatureFlags::REGISTRY.fetch(:sign_in_available_org).name
+    @previous_org_sign_in_availability = Flipper.enabled?(@org_sign_in_feature)
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     TurnstileVerifierStub.challenge_enabled = true
@@ -61,16 +63,15 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       "#{cookie_name}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}/"),
     )
     get auth_org_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
-    form = response.parsed_body.at_css("form")
-    fields = form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
-    post form["action"], params: fields, headers: {
-      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-origin",
-    }
 
     assert_response :see_other
+    follow_redirect!
+
+    assert_response :success
   end
 
   teardown do
+    @previous_org_sign_in_availability ? Flipper.enable(@org_sign_in_feature) : Flipper.disable(@org_sign_in_feature)
     TurnstileVerifierStub.enabled = false
     TurnstileVerifierStub.response = nil
     TurnstileVerifierStub.challenge_enabled = false
@@ -159,6 +160,36 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
     assert_nil response.parsed_body["access_token"]
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+  end
+
+  test "A29-9: ORG Emergency remains available while normal Sign In is blocked" do
+    Flipper.disable(@org_sign_in_feature)
+
+    get new_auth_org_sign_in_emergency_passkey_url(ri: "jp")
+
+    assert_response :success
+
+    post auth_org_sign_in_emergency_passkey_options_url(ri: "jp"), params: { identifier: @staff.public_id }
+
+    assert_response :ok
+    challenge_id = response.parsed_body.fetch("challenge_id")
+    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+    verification_params = {
+      challenge_id: challenge_id,
+      credential: {
+        id: @staff_passkey.webauthn_id,
+        response: { clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h" },
+      },
+    }
+
+    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
+      post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"), params: verification_params
+    end
+
+    assert_response :ok
+    assert_equal "ok", response.parsed_body.fetch("status")
+    assert_equal "standby", OperatorSignInFlow.where(principal_id: @staff.id).recent_first.first!.authentication_context
+    assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
   end
 
   test "a normal sign-in challenge is rejected by the emergency verifier" do

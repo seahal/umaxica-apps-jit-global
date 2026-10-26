@@ -32,23 +32,9 @@ module Auth::App::Up
       issuance = OidcTestEntry.issue!(
         surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
-      binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-      get auth_app_sign_up_path(ri: "jp", entry_ref: issuance.reference)
-
-      assert_response :success
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
-      post "/ceremony_bindings",
-           params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers
-
-      assert_response :see_other
-      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      get auth_app_sign_up_path(ri: "jp", entry_ref: issuance.reference)
-
-      assert_response :success
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post auth_app_sign_up_path(ri: "jp"),
-           params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers
+      admit_auth_ceremony_entry!(
+        auth_app_sign_up_path, reference: issuance.reference, params: { ri: "jp" },
+      )
 
       assert_response :see_other
     end
@@ -97,6 +83,7 @@ module Auth::App::Up
       # never the telephone, an Email or the user handle.
       assert_equal %w(umaxica.app umaxica.app),
                    [json.dig("options", "user", "name"), json.dig("options", "user", "displayName")]
+      assert_equal "required", json.dig("options", "authenticatorSelection", "residentKey")
 
       challenge = session[:passkey_challenges][json["challenge_id"]]
 

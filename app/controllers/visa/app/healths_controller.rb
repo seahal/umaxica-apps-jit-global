@@ -9,6 +9,8 @@ module Visa
       AUTHENTICATION_MODE = :bare
       HEALTH_PROFILE = ::Health::Profiles::App
 
+      public
+
       def show
         render_snapshot(::Health::SnapshotCheck.call(profile: health_profile))
       end

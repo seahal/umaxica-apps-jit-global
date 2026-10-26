@@ -32,10 +32,10 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal :no_hint, result.source
   end
 
-  test "accepts verified id_token_hint for current session" do
+  test "accepts a verified RP hint whose sid identifies its grant and targets the current OP session" do
     install_actor_context!
 
-    result = call(id_token_hint: id_token)
+    result = call(id_token_hint: id_token(sid: "rp-grant-public-id"))
 
     assert_predicate result, :success?
     assert_not_predicate result, :requires_confirmation?
@@ -65,10 +65,20 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error_code
   end
 
-  test "rejects expired id_token_hint" do
+  test "accepts expired id_token_hint for end-session while validating its issuer and signature" do
     install_actor_context!
 
     result = call(id_token_hint: id_token(issued_at: 10.minutes.ago, expires_at: 1.minute.ago))
+
+    assert_predicate result, :success?
+    assert_equal @client.client_id, result.client_id
+    assert_equal @sid, result.sid
+  end
+
+  test "rejects a not-yet-valid id_token_hint even for end-session" do
+    install_actor_context!
+
+    result = call(id_token_hint: id_token(issued_at: 5.minutes.from_now, expires_at: 10.minutes.from_now))
 
     assert_predicate result, :error?
     assert_equal "invalid_request", result.error_code
@@ -93,13 +103,13 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal "id_token_hint subject does not match current session", result.error_description
   end
 
-  test "rejects sid mismatch with current session" do
-    install_actor_context!(sid: SecureRandom.uuid)
+  test "declines the hint sid and targets the authenticated OP session" do
+    install_actor_context!(sid: "op-root-session-public-id")
 
-    result = call(id_token_hint: id_token)
+    result = call(id_token_hint: id_token(sid: "unrelated-rp-grant-public-id"))
 
-    assert_predicate result, :error?
-    assert_equal "id_token_hint sid does not match current session", result.error_description
+    assert_predicate result, :success?
+    assert_equal "op-root-session-public-id", result.sid
   end
 
   test "requires confirmation for valid id_token_hint without current session" do

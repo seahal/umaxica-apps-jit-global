@@ -11,9 +11,6 @@ class RpBaseComSession < RpBaseComRecord
   include PublicId
 
   belongs_to :op_session_binding, class_name: "RpBaseComOpSessionBinding", inverse_of: :sessions
-  has_many :refresh_attempts, class_name: "RpBaseComRefreshAttempt", foreign_key: :session_id,
-                              inverse_of: :session,
-                              dependent: :restrict_with_error
 
   # The partial index counts every unrevoked row, including an expired one.
   validates :op_session_binding_id,

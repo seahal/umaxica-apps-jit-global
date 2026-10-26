@@ -28,27 +28,8 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
-    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
-    post(
-      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
-                            headers: admission_headers,
-    )
-
-    assert_response :see_other
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
-                                       headers: admission_headers,
-    )
+    VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    admit_auth_ceremony_entry!(auth_com_sign_up_path(ri: "jp"), reference: issuance.reference)
 
     assert_response :see_other
 
@@ -132,7 +113,13 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     post(auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding), headers: default_headers)
 
     assert_response :ok
-    challenge_id = response.parsed_body["challenge_id"]
+    options_response = response.parsed_body
+    challenge_id = options_response["challenge_id"]
+
+    assert_equal %w(umaxica.com umaxica.com),
+                 [options_response.dig("options", "user", "name"),
+                  options_response.dig("options", "user", "displayName"),]
+    assert_equal "required", options_response.dig("options", "authenticatorSelection", "residentKey")
 
     mock_credential = Object.new
     mock_credential.define_singleton_method(:id) { "#{webauthn_suffix}_webauthn_id" }

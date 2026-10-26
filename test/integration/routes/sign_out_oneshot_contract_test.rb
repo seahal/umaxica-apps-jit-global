@@ -4,7 +4,7 @@
 require "test_helper"
 
 class SignOutOneshotContractTest < ActionDispatch::IntegrationTest
-  test "every first-party Browser RP exposes read-only GET and protected POST completion routes" do
+  test "every first-party Browser RP exposes a GET-only OIDC logout return route" do
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     cases = [
       [hosts.core_service.host, "core/app/sign/outs"],
@@ -23,12 +23,12 @@ class SignOutOneshotContractTest < ActionDispatch::IntegrationTest
 
     cases.each do |host, controller|
       get_route = Rails.application.routes.recognize_path("https://#{host}/sign/out/completion", method: :get)
-      post_route = Rails.application.routes.recognize_path("https://#{host}/sign/out/completion", method: :post)
 
       assert_equal controller, get_route.fetch(:controller), host
       assert_equal "show", get_route.fetch(:action), host
-      assert_equal controller, post_route.fetch(:controller), host
-      assert_equal "create", post_route.fetch(:action), host
+      assert_raises(ActionController::RoutingError, host) do
+        Rails.application.routes.recognize_path("https://#{host}/sign/out/completion", method: :post)
+      end
     end
   end
 

@@ -107,20 +107,30 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     auth.https!
     auth.get(entry_uri.to_s)
 
-    assert_equal [200, "/ceremony_bindings", nil],
-                 [auth.response.status, URI.parse(auth.response.parsed_body.at_css("form")["action"]).path,
+    assert_equal [303, "/ceremony_bindings", nil],
+                 [auth.response.status, URI.parse(auth.response.location).path,
                   binding.reload.auth_ceremony_session_id,]
-    csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     auth_headers = {
       "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
     }
-    auth.post(
-      "/ceremony_bindings", params: { entry_ref: reference, authenticity_token: csrf, ri: "jp" },
-                            headers: auth_headers,
-    )
+    auth.get(auth.response.location, headers: auth_headers)
 
     assert_equal 303, auth.response.status
     confirmation_url = auth.response.location
+
+    assert_equal base_host, URI.parse(confirmation_url).host
+    confirmation_ref = URI.parse(confirmation_url).path.match(%r{\A/ceremony_bindings/([^/]+)/confirmation\z})[1]
+    visa = open_session
+    visa.host!(visa_host_for_test_surface(:app))
+    visa.https!
+    visa.get(
+      visa_app_ceremony_binding_confirmation_url(
+        binding_ref: confirmation_ref, ri: "jp", host: visa_host_for_test_surface(:app), protocol: "https",
+      ),
+    )
+
+    assert_equal 400, visa.response.status
+    assert_nil binding.reload.base_confirmed_at
     root_headers =
       begin
         rp_headers = as_user_headers(actor, host: base_host, session_public_id: token.public_id)
@@ -192,15 +202,9 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
 
     assert_equal [303, true, new_auth_app_settings_totp_path],
                  [base.response.status, binding.reload.confirmed?, URI.parse(base.response.location).path]
-    auth.get(base.response.location)
-
-    assert_equal 200, auth.response.status
-    csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    assert_equal 303, auth.response.status
     assert_no_difference("IdentityTotpCeremonyCandidate.count") do
-      auth.post(
-        auth_app_settings_totps_path(ri: "jp"),
-        params: { entry_ref: reference, authenticity_token: csrf }, headers: auth_headers,
-      )
+      auth.get(base.response.location, headers: auth_headers)
     end
 
     assert_equal 303, auth.response.status

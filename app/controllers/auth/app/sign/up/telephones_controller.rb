@@ -111,7 +111,11 @@ module Auth
               return
             end
 
-            supersede_active_sign_up_flow!
+            if sign_up_entry_held_by_earlier_attempt?
+              @user_telephone.errors.add(:base, t("sign.app.registration.telephone.create.contact_held"))
+              render_sign_up_telephone_new(status: :unprocessable_content)
+              return
+            end
 
             begin
               result = TelephoneSignUpCandidateCreator.call(
@@ -121,6 +125,11 @@ module Auth
               @user_telephone = result.telephone
               if result.status == :rate_limited
                 render_sign_up_telephone_new(status: :too_many_requests)
+                return
+              end
+              if result.status == :contact_held
+                @user_telephone.errors.add(:base, t("sign.app.registration.telephone.create.contact_held"))
+                render_sign_up_telephone_new(status: :unprocessable_content)
                 return
               end
               raise ArgumentError, "unsupported telephone signup outcome" unless result.status == :created

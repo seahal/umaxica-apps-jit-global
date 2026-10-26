@@ -7,7 +7,6 @@ class EmailSignUpOtpVerificationCommitter
     def call(flow:, email:, session_nonce:, code:)
       owner, transaction_model, pending_status, surface = components(flow, email)
       reset_snapshot = nil
-      admitted_flow = false
       verification =
         flow.with_lock do
           unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
@@ -19,7 +18,6 @@ class EmailSignUpOtpVerificationCommitter
             next result(:invalid_code, email)
           end
 
-          admitted_flow = true
           owner.with_lock do
             email.with_lock do
               now = flow.class.database_now
@@ -40,7 +38,6 @@ class EmailSignUpOtpVerificationCommitter
           end
         end
       unless verification.success?
-        terminate_expired_flow(flow) if admitted_flow
         return verification
       end
 
@@ -48,12 +45,6 @@ class EmailSignUpOtpVerificationCommitter
     end
 
     private
-
-    def terminate_expired_flow(flow)
-      return if flow.sign_up_terminal? || flow.expires_at > flow.class.database_now
-
-      SignUpTermination.call(cycle: flow, event: :expire)
-    end
 
     def components(flow, email)
       case flow
@@ -64,7 +55,7 @@ class EmailSignUpOtpVerificationCommitter
       when VisitorSignUpFlow
         raise ArgumentError, "COM signup requires its own Email" unless email.is_a?(VisitorEmail)
 
-        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::ACTIVE, :com]
+        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::UNVERIFIED_WITH_SIGN_UP, :com]
       else raise ArgumentError, "unsupported Email signup realm"
       end
     end

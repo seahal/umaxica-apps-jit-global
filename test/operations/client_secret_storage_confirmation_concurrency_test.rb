@@ -215,7 +215,9 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       assert ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: raw, transaction:, ceremony:)
     end
     claim_operation = candidate.reload.claim_operation_id
-    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    end
 
     assert_equal claim_operation, candidate.reload.claim_operation_id
     assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
@@ -248,7 +250,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
-  test "separate writers converge duplicate confirmations on one declaration and one credential activation" do
+  test "concurrent confirmations spend one Step-Up once and activate one credential" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
@@ -297,6 +299,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
               end
             end
           end
+        rescue ClientSecretStorageConfirmationCommitter::Denied
+          :denied
         rescue StandardError => e
           ready << e
           raise
@@ -314,7 +318,12 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       end
 
     assert_equal 2, pids.uniq.length
-    assert_equal 1, results.uniq.length
+    successful_results = results.reject { |result| result == :denied }
+
+    assert_equal 1, successful_results.length
+    assert_equal 1, results.count(:denied)
+    assert_equal issuance.public_id, successful_results.first.first
+    assert_nil token.reload.last_step_up_at
     assert_equal issuance.reload.confirmed_at, candidate.reload.confirmed_at
     assert_equal 1, ClientSecretAuditOutbox.where(client_ref: actor.public_id, event_name: "secret.created").count
     declarations = ClientSecretAuditOutbox.where(client_ref: actor.public_id, event_name: "secret.storage_declared")

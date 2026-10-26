@@ -18,7 +18,6 @@ vi.mock("@inertiajs/react", () => ({
 const { default: SignInMethodChoice } = await import("@/features/auth/signin/SignInMethodChoice");
 const { default: EmailSignInForm } = await import("@/features/auth/signin/EmailSignInForm");
 const { default: EmailPassCodeForm } = await import("@/features/auth/signin/EmailPassCodeForm");
-const { default: TotpChallengeForm } = await import("@/features/auth/signin/TotpChallengeForm");
 const { default: PasskeySignInScreen } = await import("@/features/auth/signin/PasskeySignInScreen");
 const { default: StepUpPasskeyScreen } = await import("@/features/auth/signin/StepUpPasskeyScreen");
 
@@ -300,87 +299,6 @@ describe("email pass code form", () => {
     );
 
     expect(markup).toContain("認証コードが違います");
-  });
-});
-
-describe("totp challenge form", () => {
-  const props = {
-    title: "二段階認証",
-    description: "認証アプリのコード",
-    form: {
-      action: "/sign/in/challenge/totp",
-      method: "post",
-      token_field: {
-        scope: "totp_challenge_form",
-        field: "token",
-        name: "totp_challenge_form[token]",
-        label: "コード",
-        placeholder: "6桁",
-        max_length: 6,
-        inputmode: "numeric" as const,
-        help: "認証アプリを開いてください",
-      },
-      submit_label: "確認する",
-    },
-    error_heading: "入力を確認してください",
-    form_errors: [],
-    turnstile: { ...turnstile, mode: "execute" as const },
-    back_link: backLink,
-    cancel: { label: "キャンセル", action: "/sign/in/challenge", method: "delete" as const },
-  };
-
-  it("renders the code field without a delivered-code autocomplete", () => {
-    const markup = renderToStaticMarkup(<TotpChallengeForm {...props} />);
-
-    expect(markup).toContain('name="totp_challenge_form[token]"');
-    expect(markup).not.toContain("one-time-code");
-    expect(markup).toContain("認証アプリを開いてください");
-  });
-
-  it("renders an actor-scoped credential selector without database identifiers", () => {
-    const markup = renderToStaticMarkup(
-      <TotpChallengeForm
-        {...props}
-        form={{
-          ...props.form,
-          credential_selector: {
-            name: "totp_challenge_form[credential_public_id]",
-            field: "credential_public_id",
-            scope: "totp_challenge_form",
-            label: "認証アプリ",
-            options: [
-              { value: "client-totp-a", label: "仕事用" },
-              { value: "client-totp-b", label: "個人用" },
-            ],
-          },
-        }}
-      />,
-    );
-
-    expect(markup).toContain('name="totp_challenge_form[credential_public_id]"');
-    expect(markup).toContain('value="client-totp-a"');
-    expect(markup).toContain('value="client-totp-b"');
-    expect(markup).not.toContain('name="totp_challenge_form[credential_id]"');
-  });
-
-  // Back steps to method selection (a link); Cancel ends the ceremony (a DELETE form).
-  it("keeps back to method selection separate from cancelling the ceremony", () => {
-    const markup = renderToStaticMarkup(<TotpChallengeForm {...props} />);
-
-    expect(markup).toContain(`href="${backLink.href}"`);
-    expect(markup).toMatch(/<form[^>]*action="\/sign\/in\/challenge" method="post"/u);
-    expect(markup).toContain('name="_method" value="delete"');
-  });
-
-  it("shows the verification failure the server returned", () => {
-    const markup = renderToStaticMarkup(
-      <TotpChallengeForm
-        {...props}
-        form_errors={["確認に失敗しました"]}
-      />,
-    );
-
-    expect(markup).toContain("確認に失敗しました");
   });
 });
 

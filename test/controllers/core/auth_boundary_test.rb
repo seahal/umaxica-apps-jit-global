@@ -97,7 +97,10 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       assert response.redirect? || handoff_rendered, "expected redirect or handoff success, got #{response.status}"
       assert_includes response.body, 'id="sign-out-handoff-form"' if handoff_rendered
     ensure
-      RpSessionRevoker.call(scope: :rp_session, record: rp_session) if rp_session
+      RpSessionRevoker.call(
+        scope: :rp_session, record: rp_session, cause: "token_revocation",
+        authority_evidence_ref: "test",
+      ) if rp_session
     end
   end
 

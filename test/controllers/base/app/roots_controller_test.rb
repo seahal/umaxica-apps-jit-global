@@ -53,18 +53,26 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
 
-  test "renders Home for an unknown region without redirect" do
+  test "renders Home for an unknown region after region canonicalization" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     get base_app_root_url(ri: "xx")
+
+    assert_response :found
+    assert_redirected_to base_app_root_url(ri: "jp")
+    follow_redirect!
 
     assert_response :success
     assert_nil response.location
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "renders Home for a missing region without redirect" do
+  test "renders Home for a missing region after region canonicalization" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     get "/"
+
+    assert_response :found
+    assert_redirected_to base_app_root_url(ri: "jp")
+    follow_redirect!
 
     assert_response :success
     assert_nil response.location
@@ -148,7 +156,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
 
-  test "authenticated Home without region returns 404 without redirect" do
+  test "authenticated Home without region returns 404 after region canonicalization" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     http_headers_3 =
       begin
@@ -212,6 +220,10 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
         rp_headers
       end
     get "/", headers: http_headers_3
+
+    assert_response :found
+    assert_redirected_to base_app_root_url(ri: "jp")
+    follow_redirect!(headers: http_headers_3)
 
     assert_response :not_found
     assert_nil response.location

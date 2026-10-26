@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "timeout"
 
 # D-136 / D-144 decision table for unknown `kid`s (two.md 6.3), through the public JWKS lookup.
 class OidcJwksRefetchLimiterTest < ActiveSupport::TestCase
@@ -127,7 +128,68 @@ class OidcJwksRefetchLimiterTest < ActiveSupport::TestCase
     assert_equal 0, @fetches
   end
 
+  test "a lease holder that dies without a result blocks others only until the lease TTL expires" do
+    issuer_key = unique_issuer_key
+    holder = OidcJwksRefetchLimiter.new
+    other = OidcJwksRefetchLimiter.new
+
+    assert_predicate holder.acquire(issuer_key), :lease?
+    # The holder never records an outcome (crashed mid-fetch).
+    assert_predicate other.acquire(issuer_key), :busy?
+    assert_operator store.call("PTTL", store.key("#{issuer_key}:lease")), :>, 9_000
+    assert_operator store.call("PTTL", store.key("#{issuer_key}:lease")), :<=, 10_000
+
+    expire_now(issuer_key, "lease")
+
+    assert_predicate other.acquire(issuer_key), :lease?
+  ensure
+    clear_store(issuer_key)
+  end
+
+  test "real store: the recorded outcome limits fetches until its 30 s TTL expires, then a lease is allowed" do
+    issuer_key = unique_issuer_key
+    limiter = OidcJwksRefetchLimiter.new
+    limiter.acquire(issuer_key)
+    limiter.record(issuer_key, outcome: "ok", kids: ["k1"])
+    remaining = store.call("PTTL", store.key("#{issuer_key}:last"))
+
+    assert_operator remaining, :>, 29_000, "below the window boundary the record is still present"
+    assert_operator remaining, :<=, 30_000, "the record never outlives the window"
+    store.call("DEL", store.key("#{issuer_key}:lease"))
+    decision = OidcJwksRefetchLimiter.new.acquire(issuer_key)
+
+    assert_predicate decision, :window?, "inside the window another worker is limited"
+    assert_equal ["k1"], decision.kids
+    expire_now(issuer_key, "last")
+
+    assert_predicate OidcJwksRefetchLimiter.new.acquire(issuer_key), :lease?, "at expiry a new fetch is allowed"
+  ensure
+    clear_store(issuer_key)
+  end
+
   private
+
+  def store
+    @store ||= Umaxica::Valkey::Connection.new(
+      url: Umaxica::Valkey::Settings.current.rate_limit.url,
+      namespace: "#{Rails.configuration.x.rate_limit.fetch(:namespace)}:#{OidcJwksRefetchLimiter::NAMESPACE_SUFFIX}",
+    )
+  end
+
+  def unique_issuer_key
+    OidcJwksRefetchLimiter.issuer_key("https://op-#{SecureRandom.hex(8)}.example/.well-known/jwks.json")
+  end
+
+  # The Valkey clock cannot be injected; a 1 ms PEXPIRE lets the real store expire the key itself.
+  def expire_now(issuer_key, suffix)
+    key = store.key("#{issuer_key}:#{suffix}")
+    store.call("PEXPIRE", key, 1)
+    Timeout.timeout(2) { Thread.pass until store.call("EXISTS", key).zero? }
+  end
+
+  def clear_store(issuer_key)
+    store.call("DEL", store.key("#{issuer_key}:lease"), store.key("#{issuer_key}:last"))
+  end
 
   def client_with(limiter:, fetcher: nil)
     fetcher ||=

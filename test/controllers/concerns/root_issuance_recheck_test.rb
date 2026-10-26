@@ -57,6 +57,27 @@ class RootIssuanceRecheckTest < ActiveSupport::TestCase
     assert_equal @user.reload.authentication_epoch, ClientToken.where(user_id: @user.id).sole.authentication_epoch
   end
 
+  # A44-2: the stop commits after the Root insert. The Root carries the pre-stop epoch, so the OP
+  # apply of the committed stop event revokes it, and the authoritative epoch check (D-165) refuses
+  # it at every boundary even before that apply.
+  test "a stop committed after the Root insert revokes that Root through the identity-stop apply" do
+    result = @controller.log_in(
+      Client.find(@user.id), establishment: :root_login, require_totp_check: false, sign_in_flow: issuance_flow,
+    )
+
+    assert_equal :success, result.fetch(:status)
+    root = ClientToken.where(user_id: @user.id).sole
+
+    event =
+      Client.transaction do
+        IdentityAuthenticationStopRecorder.call(actor: Client.lock.find(@user.id), reason: "withdrawal_suspend")
+      end
+
+    assert_not AuthenticationEpochValue.root_current?(root_token: root.reload, actor: @user.reload)
+    assert_equal :applied, OpIdentityEventInvalidator.call(event:)
+    assert_predicate root.reload, :revoked?
+  end
+
   private
 
   def issuance_flow

@@ -66,7 +66,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow1_index|
               flow1_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -356,7 +356,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               URI.parse(response.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-            flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             flow3_callback_uri = URI.parse(response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow3_callback_uri.host == flow3_base_host
@@ -506,7 +506,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow5_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow5_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow5_index|
               flow5_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -685,7 +685,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow7_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow7_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow7_index|
               flow7_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -857,7 +857,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow9_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow9_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow9_index|
               flow9_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1148,7 +1148,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               URI.parse(response.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-            flow11_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             flow11_callback_uri = URI.parse(response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow11_callback_uri.host == flow11_base_host
@@ -1291,7 +1291,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow13_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow13_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow13_index|
               flow13_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1565,7 +1565,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               URI.parse(response.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-            flow15_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             flow15_callback_uri = URI.parse(response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow15_callback_uri.host == flow15_base_host
@@ -1709,7 +1709,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow17_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            flow17_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow17_index|
               flow17_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -1999,7 +1999,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               URI.parse(response.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
-            flow19_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            JitSecurityJwtRegistry.surface("BASE_APP")
             flow19_callback_uri = URI.parse(response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow19_callback_uri.host == flow19_base_host

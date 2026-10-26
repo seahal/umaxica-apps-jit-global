@@ -40,37 +40,31 @@ class EffectiveEntryIntentTest < ActionDispatch::IntegrationTest
           browser = open_session
           browser.host!(host)
           browser.https!
-          headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
           fields = { entry_ref: issuance.reference, ri: "jp" }
 
           if phase == :continuation
             before = binding.attributes
             browser.get(wrong_path, params: fields)
 
-            assert_equal 400, browser.response.status
+            assert_equal 303, browser.response.status
+            assert_equal "/ceremony_bindings", URI.parse(browser.response.location).path
             assert_equal before, binding.reload.attributes
           end
 
-          browser.get(valid_path, params: fields)
-
-          assert_equal 200, browser.response.status
-          csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-          fields[:authenticity_token] = csrf
-          browser.post("/ceremony_bindings", params: fields, headers: headers)
-
-          assert_equal 303, browser.response.status
+          binding = attach_auth_ceremony_entry!(
+            valid_path, reference: issuance.reference, params: { ri: "jp" },
+                        browser:,
+          )
           binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
 
-          if phase == :redemption
-            before = binding.reload.attributes
-            browser.post(wrong_path, params: fields, headers: headers)
+          before = binding.reload.attributes
+          browser.get(wrong_path, params: fields)
 
-            assert_equal 400, browser.response.status
-            assert_equal before, binding.reload.attributes
-            assert_not_predicate binding, :redeemed?
-          end
+          assert_equal 400, browser.response.status
+          assert_equal before, binding.reload.attributes
+          assert_not_predicate binding, :redeemed?
 
-          browser.post(valid_path, params: fields, headers: headers)
+          browser.get(valid_path, params: fields)
 
           assert_equal 303, browser.response.status
           assert_predicate binding.reload, :redeemed?

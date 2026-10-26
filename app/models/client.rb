@@ -87,6 +87,8 @@ class Client < AppPrincipalRecord
   include Retainable
 
   LOGIN_BLOCKED_STATUS_IDS = [ClientStatus::RESERVED].freeze
+  # D-106 (WU-34): statuses of a registration that has not reached its decisive commit (D-131).
+  UNFINISHED_REGISTRATION_STATUS_IDS = [ClientStatus::UNVERIFIED_WITH_SIGN_UP].freeze
   # what is this?
   VERIFIED_RECOVERY_EMAIL_STATUS_IDS = [
     ClientEmailStatus::VERIFIED,

@@ -20,8 +20,6 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
         state.updated_at = Time.current
       end
     end
-    ClientSignOutFlowKind::DEFAULTS.each { |id| ClientSignOutFlowKind.find_or_create_by!(id: id) }
-    ClientSignOutFlowStatus::DEFAULTS.each { |id| ClientSignOutFlowStatus.find_or_create_by!(id: id) }
     ClientIdentityState::DEFAULTS.each { |id| ClientIdentityState.find_or_create_by!(id: id) }
     VisitorIdentityState::DEFAULTS.each { |id| VisitorIdentityState.find_or_create_by!(id: id) }
     VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
@@ -45,9 +43,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
   test "a principal id in the session alone does not open session-limit management" do
     Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
 
-    get base_app_sign_in_limitation_path, params: { ri: "jp", principal_id: @user.id, actor_ref: @user.public_id }
+    get visa_app_sign_in_limitation_path, params: { ri: "jp", principal_id: @user.id, actor_ref: @user.public_id }
 
     assert_response :gone
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -57,12 +55,13 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
   test "a legacy RESTRICTED token does not authenticate even with a valid access token" do
     legacy = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
+    visa_host = visa_host_for_test_surface(:app)
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    host! base_host
+    host! visa_host
     https!
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    issuer = JitSecurityJwtRegistry.surface("VISA_APP")
     access_token = AuthenticationToken.encode(
-      @user, host: base_host, session_public_id: legacy.public_id, resource_type: "client",
+      @user, host: visa_host, session_public_id: legacy.public_id, resource_type: "client",
              jwt_issuer_id: issuer.id,
     )
     source_before = @email.reload.attributes
@@ -93,7 +92,10 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :found
-    callback_response = URI.parse(response.location)
+    # Base now hands the browser to the cross-origin Jump gateway before the RP callback.
+    # Decode the signed return target for the contract assertion; the gateway itself is not the
+    # OIDC callback destination.
+    callback_response = URI.parse(jump_rt_url_from_location_for_test(response.location))
     callback_query = Rack::Utils.parse_nested_query(callback_response.query)
 
     assert_equal URI.parse(callback).host, callback_response.host

@@ -11,6 +11,8 @@ module Visa
 
         HEALTH_PROFILE = ::Health::Profiles::Org
 
+        public
+
         def show
           render_probe(::Health::StartupCheck.call(profile: health_profile))
         end

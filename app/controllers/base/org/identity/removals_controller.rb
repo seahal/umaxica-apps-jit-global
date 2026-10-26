@@ -16,8 +16,15 @@ module Base
             return
           end
 
-          OperatorSecretCredentialsDestroy.call(actor: current_operator, secret_credential: secret)
+          OperatorSecretCredentialsDestroy.call(
+            actor: current_operator, secret_credential: secret,
+            step_up_token: current_session_token,
+            step_up_requirement: step_up_requirement(scope: "settings_secret_credential"),
+            request: request,
+          )
           redirect_to(base_org_identity_secrets_path(ri: params[:ri]), status: :see_other)
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
       end
     end

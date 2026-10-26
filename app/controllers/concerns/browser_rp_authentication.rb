@@ -419,7 +419,7 @@ module BrowserRpAuthentication
 
     case controller_path.split("/").first
     when "base", "core", "edit", "palm", "tech", "warp"
-      sign_in_url_with_pt(encoded_pt(request.fullpath))
+      sign_in_url_with_target(encoded_pt(request.fullpath))
     end
   end
 
@@ -431,6 +431,8 @@ module BrowserRpAuthentication
   def render_browser_rp_unauthenticated!
     response.set_header("Cache-Control", "no-store")
     return render(json: { error: "Unauthorized" }, status: :unauthorized) if request.format.json?
+
+    return redirect_to_browser_rp_silent_reauthorization! if browser_rp_silent_reauthorization?
 
     redirect_path = browser_rp_unauthenticated_redirect_path
     if redirect_path.present?
@@ -446,6 +448,23 @@ module BrowserRpAuthentication
     end
 
     render plain: "Authentication required", status: :unauthorized, content_type: "text/plain"
+  end
+
+  # D-25 / D-80 / D-110: an RP session whose refresh was refused recovers through a new
+  # Authorization Code flow with prompt=none, without a click, only on a top-level HTML navigation.
+  # The OP answers login_required when its Root Session is gone; the callback then sends the browser
+  # to the interactive GET /sign entry, so there is exactly one silent attempt and no retry loop.
+  # Browserless requests (JSON, Inertia, non-navigation fetches) get 401 or the ordinary entry.
+  def browser_rp_silent_reauthorization?
+    @browser_rp_refresh_refused == true && request.get? && request.format.html? &&
+      request.headers["X-Inertia"].blank? &&
+      request.headers["Sec-Fetch-Mode"].to_s.downcase.in?(["", "navigate"]) &&
+      browser_rp_unauthenticated_redirect_path.present?
+  end
+
+  def redirect_to_browser_rp_silent_reauthorization!
+    url = initiate_oidc_session!(target_link_uri: request.path, prompt: "none")
+    redirect_to_oidc_authorization_url(url, status: :see_other)
   end
 
   def render_browser_rp_invalid_credentials!
@@ -771,7 +790,7 @@ module BrowserRpAuthentication
     :dependency
   end
 
-  # R5-WU17 cell process: reserve/dispatch/install under the local session (RpRefreshCommitter).
+  # R5-WU17 cell process: check/dispatch/install under the local session (RpRefreshCommitter).
   def refresh_rp_cell_credentials!(refresh_token)
     cell = rp_cell
     # The explicit Refresh path reserves and installs on the cell writer.
@@ -781,7 +800,6 @@ module BrowserRpAuthentication
           cell:, local_session_id: cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE].to_s,
           refresh_token:, issuer: rp_cell_issuer,
           jwks_client: rp_cell_jwks_client, token_url: OidcIssuer.token_endpoint(browser_rp_resource_type),
-          query_url: OidcIssuer.refresh_delivery_query_endpoint(browser_rp_resource_type),
         )
       end
     case result.outcome
@@ -790,11 +808,12 @@ module BrowserRpAuthentication
       :success
     when :refused, :revoked
       @browser_rp_refused_access_status = browser_rp_access_state.status
+      @browser_rp_refresh_refused = true
       clear_browser_rp_cookies!
       :invalid
     else
-      # dependency, or superseded by a concurrent attempt: keep the cookies; a retry reads the
-      # generation the other attempt installed.
+      # dependency, or superseded by a concurrent request: keep the cookies; a retry reads the
+      # generation the other request installed.
       @browser_rp_dependency_failed = true
       render_browser_rp_dependency_failure!
       :dependency
@@ -807,9 +826,10 @@ module BrowserRpAuthentication
       return :success
     end
 
-    # Only a definitive OAuth refusal clears credentials. Transport failure, an invalid remote
-    # answer and an indeterminate commit keep the cookies so a later attempt can recover.
-    unless result.outcome == :refused
+    # A definitive OAuth refusal clears credentials, and so does an indeterminate commit: the OP may
+    # have rotated the credential, and presenting it again would be reuse (D-25). Transport failure
+    # and an invalid remote answer keep the cookies so a later request can retry.
+    unless %i(refused indeterminate).include?(result.outcome)
       @browser_rp_dependency_failed = true
       render_browser_rp_dependency_failure!
       return :dependency
@@ -817,6 +837,7 @@ module BrowserRpAuthentication
 
     # Clearing authority must not turn a presented invalid credential into a missing-credential log.
     @browser_rp_refused_access_status = browser_rp_access_state.status
+    @browser_rp_refresh_refused = true
     clear_browser_rp_cookies!
     :invalid
   end

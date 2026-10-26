@@ -303,7 +303,10 @@ class RpSessionTest < ActiveSupport::TestCase
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
-      session.revoke!(status: "success")
+      OpAuthorityStopCommitter.stop_grant(
+        grant: session, cause: "token_revocation", principal_public_id: root.actor_record.public_id,
+        authority_evidence_ref: "rp_session_test:access_expiry_after_revoke",
+      )
 
       assert_raises(RpSession::IssuanceRejected) do
         session.record_access_token_expiry!(10.minutes.from_now)
@@ -320,7 +323,10 @@ class RpSessionTest < ActiveSupport::TestCase
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
-      session.revoke!(status: "success")
+      OpAuthorityStopCommitter.stop_grant(
+        grant: session, cause: "token_revocation", principal_public_id: root.actor_record.public_id,
+        authority_evidence_ref: "rp_session_test:refresh_after_revoke",
+      )
 
       assert_raises(RpSession::IssuanceRejected) do
         session.issue_refresh_token!
@@ -356,8 +362,12 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_equal database_time.to_i, rotated.last_used_at.to_i
       assert_equal database_time.to_i, rotated.refresh_token_rotated_at.to_i
 
-      rp_session_case[:model].stub(:database_now, database_time) do
-        rotated.revoke!(status: "success", now: nil)
+      stop_model = OpAuthorityStopCommitter.stop_class(OpAuthorityStopCommitter.realm_for_grant(rotated))
+      stop_model.stub(:database_now, database_time) do
+        OpAuthorityStopCommitter.stop_grant(
+          grant: rotated, cause: "token_revocation", principal_public_id: root.actor_record.public_id,
+          authority_evidence_ref: "rp_session_test:database_clock",
+        )
       end
 
       revoked = rotated.reload

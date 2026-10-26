@@ -18,7 +18,7 @@ class TelephoneSignUpOtpDeliveryTest < ActiveSupport::TestCase
         owner_model, telephone_model, flow_model, owner_key, status =
           case surface
           when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-          when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
+          when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
           end
         owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         telephone = telephone_model.create!(

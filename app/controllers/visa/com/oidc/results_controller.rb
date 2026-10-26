@@ -4,12 +4,13 @@
 module Visa
   module Com
     module Oidc
-      class ResultsController < ::Visa::Com::Oauth::AuthorizationsController
+      class ResultsController < ::Visa::Com::AuthorizationBaseController
         include ::OidcAuthorizationContinuation
 
         AUTHENTICATION_MODE = :open
         OIDC_CONTINUATION_KIND = :result
         declare_authentication_mode! :open
+        before_action :enforce_oauth_authorize_request_size!
       end
     end
   end

@@ -25,11 +25,11 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       discard_at: 1.day.from_now,
     )
     connection = OperatorOidcConnection.create!(
-      staff: operator, client_id: "org-console-rp", last_used_at: 3.days.ago,
+      staff: operator, client_id: "core-org-jp", last_used_at: 3.days.ago,
     )
     usage = OpOrgGrant.create!(
       authentication_epoch: 0,
-      operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
+      operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
 
@@ -51,7 +51,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     )
     usage = OpOrgGrant.create!(
       authentication_epoch: 0,
-      operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
+      operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     replayed = usage.issue_refresh_token!
 
@@ -94,11 +94,11 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       discard_at: 1.day.from_now,
     )
     connection = VisitorOidcConnection.create!(
-      visitor: visitor, client_id: "com-portal-rp", last_used_at: 3.days.ago,
+      visitor: visitor, client_id: "core-com-jp", last_used_at: 3.days.ago,
     )
     usage = OpComGrant.create!(
       authentication_epoch: 0,
-      visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
+      visitor_token: token, oidc_client_id: "core-com-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
 
@@ -129,7 +129,10 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     refresh_digest = usage.reload.refresh_token_digest
     refresh_generation = usage.refresh_generation
 
-    RpSessionRevoker.call(scope: :browser_session, record: token)
+    RpSessionRevoker.call(
+      scope: :browser_session, record: token, cause: "browser_logout",
+      authority_evidence_ref: "test",
+    )
     result = OidcRefreshTokenIssuer.call(refresh_token:, resource_type: "client")
 
     assert_not result.success?
@@ -149,7 +152,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     )
     usage = OpComGrant.create!(
       authentication_epoch: 0,
-      visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
+      visitor_token: token, oidc_client_id: "core-com-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     replayed = usage.issue_refresh_token!
 
@@ -193,7 +196,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     )
     usage = OpOrgGrant.create!(
       authentication_epoch: 0,
-      operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
+      operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
     lock_tables = []

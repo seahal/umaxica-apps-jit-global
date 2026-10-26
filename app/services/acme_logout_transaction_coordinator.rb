@@ -9,76 +9,31 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
 
   def self.issue!(origin_surface:, initiating_client_id:, completion_url:, actor_ref: nil, session_ref: nil,
                   callback_state: nil, now: Time.current, expires_in: 10.minutes, surface: "app",
-                  ri: RequestContextContract.default_region,
-                  workflow: AcmeLogoutTransaction::LEGACY_WORKFLOW, binding_version: nil, realm: nil,
-                  parent_session_ref: nil, captured_root_ref: nil, root_refresh_family_ref: nil,
-                  captured_root_generation: nil, origin_intent_digest: nil)
+                  ri: RequestContextContract.default_region)
     persisted_origin_surface = origin_surface.to_s
-    persisted_workflow = workflow.to_s
     region = RequestContextContract.normalize_region(ri)
     issue_rejection = issue_rejection_for(
-      origin_surface: origin_surface,
       persisted_origin_surface: persisted_origin_surface,
-      persisted_workflow: persisted_workflow,
       completion_url: completion_url,
       surface: surface,
       ri: region,
     )
     return rejected_result(issue_rejection) if issue_rejection
 
-    binding_attributes = browser_rp_binding_attributes(
-      workflow: persisted_workflow,
-      binding_version: binding_version,
-      realm: realm,
-      parent_session_ref: parent_session_ref,
-      captured_root_ref: captured_root_ref,
-      root_refresh_family_ref: root_refresh_family_ref,
-      captured_root_generation: captured_root_generation,
-      origin_intent_digest: origin_intent_digest,
-    )
-    return rejected_result("Browser RP authority binding is required") if binding_attributes.nil?
-
     transaction_attributes = {
       origin_surface: persisted_origin_surface,
-      workflow: persisted_workflow,
+      workflow: AcmeLogoutTransaction::LEGACY_WORKFLOW,
+      binding_version: AcmeLogoutTransaction::BINDING_VERSION_LEGACY,
       initiating_client_id: initiating_client_id.to_s,
       completion_url: completion_url.to_s,
       actor_ref: actor_ref.to_s.presence,
       session_ref: session_ref.to_s.presence,
       callback_state: callback_state.to_s.presence,
-      **binding_attributes,
-      expected_step: AcmeLogoutTransaction.step_sequence_for(
-        persisted_origin_surface,
-        workflow: persisted_workflow,
-      ).first,
+      expected_step: AcmeLogoutTransaction.step_sequence_for(persisted_origin_surface).first,
     }
     transaction = persist_transaction!(transaction_attributes, now:, expires_in:)
 
     Result.new(transaction: transaction, status: :issued, error: nil, error_description: nil)
-  end
-
-  def self.browser_rp_binding_for(session_record:, resource_type:, origin_intent_digest:)
-    device_session = session_record.parent_device_session
-    root_token = session_record.parent_token
-    raise RpSession::IssuanceRejected, "Browser Session device session is missing" unless device_session
-    raise RpSession::IssuanceRejected, "Browser Session current root token is missing" unless root_token
-
-    refresh_family_ref = root_token.refresh_token_family_id.presence || device_session.refresh_token_family_id.presence
-    raise RpSession::IssuanceRejected, "Browser Session refresh family is missing" if refresh_family_ref.blank?
-
-    {
-      binding_version: AcmeLogoutTransaction::BINDING_VERSION_BROWSER_RP,
-      realm: { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(resource_type.to_s),
-      parent_session_ref: device_session.public_id,
-      captured_root_ref: root_token.public_id,
-      root_refresh_family_ref: refresh_family_ref,
-      captured_root_generation: Integer(root_token.refresh_token_generation),
-      origin_intent_digest: origin_intent_digest.to_s.b,
-    }
-  rescue KeyError
-    raise RpSession::IssuanceRejected, "unsupported Browser RP resource type"
-  rescue ArgumentError, TypeError
-    raise RpSession::IssuanceRejected, "Browser Session root generation is invalid"
   end
 
   def self.find_by_logout_challenge!(logout_challenge)
@@ -113,23 +68,6 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     Result.new(transaction: nil, status: :missing, error: "not_found", error_description: "logout challenge not found")
   rescue ArgumentError => e
     Result.new(transaction: transaction, status: :rejected, error: "invalid_request", error_description: e.message)
-  end
-
-  # The parent state on the realm Ticket writer is the single source of truth for whether the
-  # sign-out happened (REQ-001, REQ-003). Every display after the authority step is derived from it,
-  # never from the AppTicket progress, which is a separate fact on another database. A database
-  # error propagates: an unreadable parent is an indeterminate result, not a "no".
-  def self.parent_revoked?(transaction)
-    return false unless transaction&.browser_rp_binding_v1?
-
-    device_session_class =
-      { "app" => ClientDeviceSession, "com" => VisitorDeviceSession, "org" => OperatorDeviceSession }
-        .fetch(transaction.realm.to_s)
-    device_session_class.connection_class_for_self.connected_to(role: :writing) do
-      device_session_class.uncached do
-        device_session_class.find_by(public_id: transaction.parent_session_ref)&.revoked? == true
-      end
-    end
   end
 
   def self.allowed_completion_url?(origin_surface:, completion_url:, surface: "app",
@@ -241,38 +179,9 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     )
   end
 
-  def self.browser_rp_binding_attributes(workflow:, binding_version:, realm:, parent_session_ref:, captured_root_ref:,
-                                         root_refresh_family_ref:, captured_root_generation:, origin_intent_digest:)
-    return { binding_version: AcmeLogoutTransaction::BINDING_VERSION_LEGACY } unless
-      workflow == AcmeLogoutTransaction::BROWSER_RP_WORKFLOW
-
-    return if binding_version.to_i != AcmeLogoutTransaction::BINDING_VERSION_BROWSER_RP
-    return if realm.blank? || parent_session_ref.blank? || captured_root_ref.blank?
-    return if root_refresh_family_ref.blank? || captured_root_generation.nil? || origin_intent_digest.blank?
-
-    {
-      binding_version: AcmeLogoutTransaction::BINDING_VERSION_BROWSER_RP,
-      realm: realm.to_s,
-      parent_session_ref: parent_session_ref.to_s,
-      captured_root_ref: captured_root_ref.to_s,
-      root_refresh_family_ref: root_refresh_family_ref.to_s,
-      captured_root_generation: Integer(captured_root_generation),
-      origin_intent_digest: origin_intent_digest.to_s.b,
-    }
-  rescue ArgumentError, TypeError
-    nil
-  end
-
-  def self.issue_rejection_for(origin_surface:, persisted_origin_surface:, persisted_workflow:, completion_url:,
-                               surface:, ri:)
-    return "unsupported logout workflow" unless AcmeLogoutTransaction::WORKFLOWS.include?(persisted_workflow)
-    if persisted_workflow == AcmeLogoutTransaction::BROWSER_RP_WORKFLOW &&
-        AcmeLogoutTransaction::BROWSER_RP_ORIGIN_SURFACES.exclude?(persisted_origin_surface)
-      return "unsupported Browser RP logout origin"
-    end
-
+  def self.issue_rejection_for(persisted_origin_surface:, completion_url:, surface:, ri:)
     "completion destination is not allowlisted" unless allowed_completion_url?(
-      origin_surface:,
+      origin_surface: persisted_origin_surface,
       completion_url:,
       surface:,
       ri:,
@@ -290,7 +199,6 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     end
   end
 
-  public_class_method :browser_rp_binding_for
   private_class_method :completion_route_url, :find_by_logout_challenge!, :allowed_completion_url?, :rejected_result,
-                       :browser_rp_binding_attributes, :issue_rejection_for, :persist_transaction!
+                       :issue_rejection_for, :persist_transaction!
 end

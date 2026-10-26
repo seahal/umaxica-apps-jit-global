@@ -10,9 +10,15 @@ class AuthenticationLogoutCurrentSession
     new(...).call
   end
 
-  def initialize(current: nil, resource: nil, token: nil, token_class: nil, session_public_id: nil,
+  # cause - the two.md 5.8 v2 authority-stop cause (D-172, D-173); every root this sign-out ends is
+  #         stopped through OpAuthorityStopCommitter with it (BX-1).
+  # browser_binding - for browser_logout / rp_initiated_logout, binds the one-time receipt of the
+  #         stop of the presented root to this browser.
+  def initialize(cause:, current: nil, resource: nil, token: nil, token_class: nil, session_public_id: nil,
                  reason: "user_logout", cascade_device_session_tokens: true, precondition: nil,
-                 within_commit: nil)
+                 browser_binding: nil)
+    @cause = cause.to_s
+    OpAuthorityStopReference.cause_id(@cause)
     @current = current
     @resource = resource
     @token = token
@@ -21,46 +27,40 @@ class AuthenticationLogoutCurrentSession
     @reason = reason
     @cascade_device_session_tokens = cascade_device_session_tokens
     @precondition = precondition
-    # R5-WU09: runs inside the same OP transaction after the revocation, so the realm logout Flow,
-    # Participants, Receipt and Outbox commit atomically with it (OpLogoutCommitter).
-    @within_commit = within_commit
+    @browser_binding = browser_binding
+    @stop_results = []
   end
+
+  # The authority-stop results committed by #call, the presented root's first.
+  attr_reader :stop_results
 
   def call
     token_record = resolved_token
-    return true if recent_completed_sign_out_flow?(token_record)
+    return stop_risk_authority!(token_record) if cause == "risk" && !op_root?(token_record)
 
     with_token_writing_connection(token_record) do
-      # An in-memory token is an internal legacy edge case: creating the flow
-      # first persists its token association and establishes the expiry fields
-      # needed by the token status callbacks. Persisted tokens follow the
-      # lock-first order below so concurrent refresh cannot deadlock on the
-      # flow's token foreign key.
-      cycle = begin_sign_out_flow(token_record) unless token_record&.respond_to?(:persisted?) && token_record.persisted?
-      begin
-        verify_precondition_under_parent_lock!(token_record)
-        revoke_device_session!(token_record)
-        revoke_token!(token_record) unless device_session_cascade_handles_token?(token_record)
-        # The parent/device hierarchy is locked before the SignOutFlow insert.
-        # Its token foreign key otherwise takes a key-share lock first and can
-        # deadlock with a concurrent RP refresh taking Device -> root -> RP.
-        cycle ||= begin_sign_out_flow(token_record)
-        cycle&.mark_access_discarded!
-        cycle&.mark_logically_revoked!
-        cycle&.complete_sign_out!
-        @within_commit_result = within_commit&.call(token_record)
-      rescue StandardError
-        fail_sign_out_flow(cycle)
-        raise
-      end
+      verify_precondition_under_parent_lock!(token_record)
+      stop_authority!(token_record)
     end
     true
   end
 
   private
 
-  attr_reader :current, :resource, :token, :token_class, :session_public_id, :reason,
-              :cascade_device_session_tokens, :precondition, :within_commit
+  # A risk event without a resolved OP root is principal-wide and begins in the actor store before
+  # the stop is applied in OP, preserving the Zenith -> OP lock order.
+  def stop_risk_authority!(_token_record)
+    actor = resource
+    unless [Client, Visitor, Operator].include?(actor.class) && actor.persisted?
+      raise OpAuthorityStopCommitter::Refused, "risk stop requires an established principal"
+    end
+
+    SignRiskEnforcer.revoke!(actor)
+    true
+  end
+
+  attr_reader :cause, :current, :resource, :token, :token_class, :session_public_id, :reason,
+              :cascade_device_session_tokens, :precondition, :browser_binding
 
   # REQ-002: a caller's authority decision is re-checked inside the revoking transaction after the
   # parent Device Session row is locked, the first lock of the Device -> root -> RP order. A
@@ -220,19 +220,17 @@ class AuthenticationLogoutCurrentSession
     end
   end
 
-  def revoke_device_session!(token_record)
+  # Device Session -> each root through the one authority-stop primitive (which revokes the root
+  # and every grant under it) -> the Device Session itself.
+  def stop_authority!(token_record)
     device_session = device_session_for_token(token_record) || find_device_session
-    return if device_session.blank?
-
-    revoke_browser_rp_sessions!(token_record)
-    device_session.revoke!(reason: reason)
-    return unless cascade_device_session_tokens
-
-    if token_record&.class&.respond_to?(:where)
-      token_record.class.where(device_session_id: device_session.id).find_each { |session_token|
-        revoke_token!(session_token)
-      }
+    stop_roots_for(token_record, device_session).each_with_index do |root, index|
+      @stop_results << OpAuthorityStopCommitter.stop_root(
+        root:, cause:, principal_public_id: principal_public_id_for(root),
+        authority_evidence_ref: reason.to_s, browser_binding: index.zero? ? browser_binding : nil,
+      )
     end
+    device_session&.revoke!(reason: reason)
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed, ActiveRecord::StatementInvalid,
          ActiveRecord::ConnectionNotDefined => e
     Rails.logger.warn(
@@ -244,48 +242,33 @@ class AuthenticationLogoutCurrentSession
         error_class: e.class.name,
       ),
     )
-    # A failed parent revoke must remain observable. Revoking only the token
-    # would leave the parent and its children in a contradictory state.
+    # A failed stop must remain observable; a partial sign-out never reports success.
     raise
   end
 
-  def revoke_browser_rp_sessions!(token_record)
-    return if token_record.blank?
-    return unless token_record.is_a?(ClientToken) ||
-      token_record.is_a?(VisitorToken) || token_record.is_a?(OperatorToken)
-
-    RpSessionRevoker.call(
-      scope: :browser_session,
-      record: token_record,
-      status: "success",
-      allow_missing_current_root: true,
-    )
+  def stop_roots_for(token_record, device_session)
+    roots = []
+    roots << token_record if op_root?(token_record)
+    if device_session && cascade_device_session_tokens
+      root_class = op_root?(token_record) ? token_record.class : token_class
+      if op_root_class?(root_class)
+        root_class.where(device_session_id: device_session.id).order(:id).each do |sibling|
+          roots << sibling unless roots.any? { |root| root.id == sibling.id }
+        end
+      end
+    end
+    roots
   end
 
-  # Revocation either takes effect or raises. A row that is already gone is
-  # the only failure that leaves nothing usable, so it is the only one treated
-  # as done; any other failure must not let the sign-out flow complete.
-  def revoke_token!(token_record)
-    return true if token_record.blank?
-    return true if token_record.respond_to?(:revoked?) && token_record.revoked?
+  def op_root?(record) = record.present? && op_root_class?(record.class)
 
-    if token_record.respond_to?(:revoke!)
-      token_record.revoke!
-    elsif token_record.respond_to?(:destroy)
-      raise ActiveRecord::RecordNotDestroyed.new("session token was not destroyed", token_record) unless
-        token_record.destroy
-    end
-    true
-  rescue ActiveRecord::RecordNotFound
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.logout_current_session.token_already_gone",
-        reason: reason,
-        resource_class: resource&.class&.name,
-        token_class: token_record&.class&.name,
-      ),
-    )
-    true
+  def op_root_class?(klass) = [ClientToken, VisitorToken, OperatorToken].include?(klass)
+
+  # D-123: the stop names its principal; one that cannot be established is refused by the primitive.
+  def principal_public_id_for(root)
+    actor = root.respond_to?(:actor_record) ? root.actor_record : nil
+    actor ||= resource
+    actor.respond_to?(:public_id) ? actor.public_id.to_s : ""
   end
 
   def device_session_for_token(token_record)
@@ -293,115 +276,5 @@ class AuthenticationLogoutCurrentSession
     when ClientToken, VisitorToken, OperatorToken
       token_record.device_session_record
     end
-  end
-
-  def device_session_cascade_handles_token?(token_record)
-    cascade_device_session_tokens &&
-      device_session_for_token(token_record).present?
-  end
-
-  def begin_sign_out_flow(token_record)
-    cycle_class = sign_out_flow_class_for(token_record)
-    return if cycle_class.blank?
-
-    cycle_class.connection_class_for_self.connected_to(role: :writing) do
-      cycle_class.create!(
-        principal_id: sign_out_principal_id(token_record),
-        token: token_record,
-        kind_id: cycle_class.kind_id_for("IDP_SIGN_OUT"),
-        refresh_token_family_id: sign_out_refresh_token_family_id(token_record),
-        requested_at: Time.current,
-        access_expires_at: Time.current,
-        refresh_expires_at: sign_out_refresh_expires_at(token_record),
-      )
-    end
-  rescue ActiveRecord::ActiveRecordError, ArgumentError => e
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.logout_current_session.cycle_unavailable",
-        reason: reason,
-        resource_class: resource&.class&.name,
-        token_class: token_record&.class&.name,
-        error_class: e.class.name,
-      ),
-    )
-    raise
-  end
-
-  def recent_completed_sign_out_flow?(token_record)
-    return false unless token_record&.respond_to?(:revoked?) && token_record.revoked?
-
-    cycle_class = sign_out_flow_class_for(token_record)
-    return false if cycle_class.blank?
-
-    completed = cycle_class.where(token_id: token_record.id)
-      .where(status_id: cycle_class.status_id_for("COMPLETED"))
-      .where(cycle_class.arel_table[:completed_at].gt(5.minutes.ago))
-      .exists?
-    return false unless completed
-    return false if unrevoked_browser_rp_sessions?(token_record)
-
-    true
-  rescue ActiveRecord::ActiveRecordError, ArgumentError
-    false
-  end
-
-  def unrevoked_browser_rp_sessions?(token_record)
-    owner = connection_owner_for(token_record.class)
-    return false if owner.blank?
-
-    owner.connected_to(role: :writing) do
-      device_session = device_session_for_token(token_record)
-      next false if device_session.blank?
-
-      relation =
-        case token_record
-        when ClientToken then OpAppGrant
-        when VisitorToken then OpComGrant
-        when OperatorToken then OpOrgGrant
-        else next false
-        end
-      relation.exists?(device_session_id: device_session.id, revoked_at: nil)
-    end
-  end
-
-  def fail_sign_out_flow(cycle)
-    return if cycle.blank? || cycle.sign_out_completed? || cycle.sign_out_failed?
-
-    cycle.class.connection_class_for_self.connected_to(role: :writing) do
-      cycle.reload.halt_sign_out!
-    end
-  rescue ActiveRecord::ActiveRecordError, FlowInvalidTransition
-    nil
-  end
-
-  def sign_out_flow_class_for(token_record)
-    case token_record
-    when ClientToken then ClientSignOutFlow
-    when VisitorToken then VisitorSignOutFlow
-    when OperatorToken then OperatorSignOutFlow
-    end
-  end
-
-  def sign_out_principal_id(token_record)
-    return token_record.user_id if token_record.respond_to?(:user_id)
-    return token_record.visitor_id if token_record.respond_to?(:visitor_id)
-    return token_record.staff_id if token_record.respond_to?(:staff_id)
-
-    resource&.id
-  end
-
-  def sign_out_refresh_token_family_id(token_record)
-    token_record.refresh_token_family_id if token_record.respond_to?(:refresh_token_family_id)
-  end
-
-  def sign_out_refresh_expires_at(token_record)
-    discard_at = token_record.discard_at if token_record.respond_to?(:discard_at)
-    # An infinite expiry is never replaced by an invented finite one; after sign-out the refresh
-    # ends now (REQ-008).
-    return Time.current if discard_at.respond_to?(:infinite?) && discard_at.infinite?
-    return discard_at if discard_at.present? && discard_at > Time.current
-
-    Time.current
   end
 end

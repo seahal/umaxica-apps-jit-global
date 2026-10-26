@@ -52,26 +52,10 @@ module Auth
 
                 @sign_up_actor = sign_up_pending_actor
                 return unless validate_sign_up_checkpoint_version!(json: true)
-                if @sign_up_ticket.pending_passkey_registration_id
-                  return render json: {
-                    status: "ok",
-                    redirect_url: auth_app_sign_up_check_telephone_secret_path(
-                      **sign_up_flow_binding_params,
-                      ri: params[:ri],
-                      pt: signed_pt_param,
-                    ),
-                  }, status: :created
-                end
+                return render_passkey_registration_success if @sign_up_ticket.pending_passkey_registration_id
                 return unless verify_and_create_passkey_registration!
 
-                render json: {
-                  status: "ok",
-                  redirect_url: auth_app_sign_up_check_telephone_secret_path(
-                    **sign_up_flow_binding_params,
-                    ri: params[:ri],
-                    pt: signed_pt_param,
-                  ),
-                }, status: :created
+                render_passkey_registration_success
               end
 
               def destroy
@@ -79,6 +63,10 @@ module Auth
               end
 
               private
+
+              def render_passkey_registration_success
+                render json: { status: "ok", redirect_url: success_redirect_url }, status: :created
+              end
 
               # The same two endpoints the Stimulus registration controller used, and the same
               # checkpoint version the server re-validates before it clears the requirement.
@@ -124,6 +112,20 @@ module Auth
 
               def save_passkey_registration!(passkey, event_type: "passkey.registered.signup")
                 @sign_up_ticket.with_cycle_lock do
+                  now = @sign_up_ticket.class.database_now
+                  # D-177: a late registration is only refused; expiring the Flow and cleaning its
+                  # artifacts belong to SignUpExpiryJob.
+                  if @sign_up_ticket.sign_up_terminal? || @sign_up_ticket.lapsed?(now) || @sign_up_ticket.expired?(now)
+                    refuse_late_passkey_registration
+                    next
+                  end
+                  next unless load_gate_context!(gate_for_update)
+
+                  if @sign_up_ticket.pending_passkey_registration_id
+                    render_passkey_registration_success
+                    next
+                  end
+
                   @sign_up_actor.with_lock do
                     PasskeyRegistrationOperation.call!(
                       actor: @sign_up_actor,
@@ -137,6 +139,16 @@ module Auth
                     )
                   end
                 end
+              end
+
+              def refuse_late_passkey_registration
+                Rails.logger.info(
+                  JitLogEvent.format(
+                    "sign.signup.passkey_registration_refused", reason_code: "registration_no_longer_current",
+                                                                surface: "app", request_id: request.request_id,
+                  ),
+                )
+                render_sign_flow_phase_refusal
               end
 
               def sign_up_requirement_context

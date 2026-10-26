@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable I18n/RailsI18n/DecorateString
-
 require "test_helper"
 
 module Security
@@ -19,27 +17,14 @@ module Security
     class MfaAccountRateLimitInvariantTest < ActiveSupport::TestCase
       self.fixture_table_names = []
 
-      GUESSABLE_SECOND_FACTOR_CONTROLLERS = {
-        "app/controllers/auth/app/sign/in/challenge/totps_controller.rb" => "mfa_totp_create_account",
-      }.freeze
+      # WU-30 removed the APP TOTP second factor; every sign-in second factor is now a Passkey,
+      # which is not guessable. A new guessable factor must bring back a per-account limit keyed on
+      # the pending MFA actor.
+      test "sign-in second-factor controllers are Passkey ceremonies only" do
+        controllers = Rails.root.glob("app/controllers/auth/*/sign/in/challenge/*_controller.rb")
+          .map { |path| path.basename.to_s }.uniq
 
-      test "every guessable second factor declares a per-account rate limit" do
-        GUESSABLE_SECOND_FACTOR_CONTROLLERS.each do |relative_path, rule_name|
-          source = Rails.root.join(relative_path).read
-
-          assert_includes source, "name: \"#{rule_name}\"",
-                          "#{relative_path} must declare a per-account rate limit named #{rule_name}."
-        end
-      end
-
-      test "the per-account rules are keyed on the pending MFA actor, not the request IP" do
-        GUESSABLE_SECOND_FACTOR_CONTROLLERS.each_key do |relative_path|
-          source = Rails.root.join(relative_path).read
-
-          assert_includes source, "actor_id = pending_mfa&.dig(:user_id)",
-                          "#{relative_path} must derive its per-account limit key from the pending MFA actor. " \
-                          "A key derived from request.remote_ip is the IP limit again under a different name."
-        end
+        assert_equal ["passkeys_controller.rb"], controllers
       end
 
       test "the pending MFA session entry keeps no attempt counter that reads as a control" do
@@ -54,5 +39,3 @@ module Security
     end
   end
 end
-
-# rubocop:enable I18n/RailsI18n/DecorateString

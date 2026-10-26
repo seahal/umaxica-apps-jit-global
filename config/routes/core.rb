@@ -86,7 +86,7 @@ scope module: :core, as: :core do
         # First-party RP sign-out start and completion resources.
 
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+        resource :out_completion, only: :show, path: "out/completion", controller: :outs
       end
     end
   end
@@ -173,7 +173,7 @@ scope module: :core, as: :core do
         # First-party RP sign-out start and completion resources.
 
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+        resource :out_completion, only: :show, path: "out/completion", controller: :outs
       end
     end
   end
@@ -260,7 +260,7 @@ scope module: :core, as: :core do
         # First-party RP sign-out start and completion resources.
 
         resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+        resource :out_completion, only: :show, path: "out/completion", controller: :outs
       end
     end
   end

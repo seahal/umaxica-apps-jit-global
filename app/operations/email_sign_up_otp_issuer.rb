@@ -6,42 +6,34 @@ class EmailSignUpOtpIssuer
 
     def call(flow:, email:, session_nonce:)
       owner, transaction_model, pending_status = components(flow, email)
-      outcome =
-        flow.with_lock do
-          unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-              session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
-            next refused(:session_mismatch)
-          end
-
-          now = flow.class.database_now
-          if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
-            next refused(:inactive_flow)
-          end
-          unless flow.pending_contact_type == "email" && flow.pending_contact_id == email.id &&
-              flow.principal_id == owner.id
-            next refused(:binding_mismatch)
-          end
-
-          owner.with_lock do
-            unless owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
-                owner.accessible?(owner.class.database_now)
-              next refused(:inactive_candidate)
-            end
-
-            email.with_lock { issue_locked(flow, email, owner, transaction_model) }
-          end
+      flow.with_lock do
+        unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+            session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
+          next refused(:session_mismatch)
         end
-      terminate_expired_flow(flow) if outcome.status == :inactive_flow
-      outcome
+
+        now = flow.class.database_now
+        if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
+          next refused(:inactive_flow)
+        end
+        unless flow.pending_contact_type == "email" && flow.pending_contact_id == email.id &&
+            flow.principal_id == owner.id
+          next refused(:binding_mismatch)
+        end
+
+        owner.with_lock do
+          unless owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
+              owner.accessible?(owner.class.database_now)
+            next refused(:inactive_candidate)
+          end
+
+          email.with_lock { issue_locked(flow, email, owner, transaction_model) }
+        end
+      end
+
     end
 
     private
-
-    def terminate_expired_flow(flow)
-      return if flow.sign_up_terminal? || flow.expires_at > flow.class.database_now
-
-      SignUpTermination.call(cycle: flow, event: :expire)
-    end
 
     def components(flow, email)
       case flow
@@ -52,7 +44,7 @@ class EmailSignUpOtpIssuer
       when VisitorSignUpFlow
         raise ArgumentError, "COM signup requires its own Email" unless email.is_a?(VisitorEmail)
 
-        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::ACTIVE]
+        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Email signup realm"
       end
     end

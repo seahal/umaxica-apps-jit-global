@@ -82,7 +82,10 @@ class OidcTokenRevoker < ApplicationService
     return false unless token_record.oidc_client_id == client_id
     return false unless token_record.refresh_token_digest_matches?(verifier)
 
-    RpSessionRevoker.call(scope: :rp_session, record: token_record)
+    RpSessionRevoker.call(
+      scope: :rp_session, record: token_record, cause: "token_revocation",
+      authority_evidence_ref: "oauth_revocation:#{client_id}",
+    )
     true
   end
 
@@ -111,7 +114,10 @@ class OidcTokenRevoker < ApplicationService
     return false unless token_record&.oidc_client_id == client_id
     return false unless token_jti_matches?(token_record, payload)
 
-    RpSessionRevoker.call(scope: :rp_session, record: token_record)
+    RpSessionRevoker.call(
+      scope: :rp_session, record: token_record, cause: "token_revocation",
+      authority_evidence_ref: "oauth_revocation:#{client_id}",
+    )
     true
   end
 

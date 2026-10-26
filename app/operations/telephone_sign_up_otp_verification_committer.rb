@@ -7,7 +7,6 @@ class TelephoneSignUpOtpVerificationCommitter
     def call(flow:, telephone:, session_nonce:, code:)
       owner, transaction_model, pending_status, surface = components(flow, telephone)
       source_failure_state = nil
-      admitted_flow = false
       verification =
         flow.with_lock do
           unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
@@ -19,7 +18,6 @@ class TelephoneSignUpOtpVerificationCommitter
             next result(:invalid_code, telephone)
           end
 
-          admitted_flow = true
           owner.with_lock do
             telephone.with_lock do
               now = flow.class.database_now
@@ -36,7 +34,6 @@ class TelephoneSignUpOtpVerificationCommitter
           end
         end
       unless verification.success?
-        terminate_expired_flow(flow) if admitted_flow
         return verification
       end
 
@@ -44,12 +41,6 @@ class TelephoneSignUpOtpVerificationCommitter
     end
 
     private
-
-    def terminate_expired_flow(flow)
-      return if flow.sign_up_terminal? || flow.expires_at > flow.class.database_now
-
-      SignUpTermination.call(cycle: flow, event: :expire)
-    end
 
     def components(flow, telephone)
       case flow
@@ -61,7 +52,8 @@ class TelephoneSignUpOtpVerificationCommitter
       when VisitorSignUpFlow
         raise ArgumentError, "COM signup requires its own Telephone" unless telephone.is_a?(VisitorTelephone)
 
-        [Visitor.find(telephone.visitor_id), VisitorTelephoneCeremonyTransaction, VisitorStatus::ACTIVE, :com]
+        [Visitor.find(telephone.visitor_id), VisitorTelephoneCeremonyTransaction,
+         VisitorStatus::UNVERIFIED_WITH_SIGN_UP, :com,]
       else raise ArgumentError, "unsupported Telephone signup realm"
       end
     end

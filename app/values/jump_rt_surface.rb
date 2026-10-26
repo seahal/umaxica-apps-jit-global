@@ -48,7 +48,10 @@ module JumpRtSurface
     raw = raw.to_s
     candidate = raw.match?(%r{\A[a-z][a-z0-9+.-]*://}i) ? raw : "https://#{raw}"
     begin
-      from_local_boot ? ConfigValues.build(candidate, allow_localhost: true).to_s : ConfigValues.public_https_origin(candidate)
+      from_local_boot ? ConfigValues.build(
+        candidate,
+        allow_localhost: true,
+      ).to_s : ConfigValues.public_https_origin(candidate)
     rescue ArgumentError => e
       raise JumpRtConfigurationError, "#{name} must be a public HTTPS origin for Jump: #{e.message}"
     end

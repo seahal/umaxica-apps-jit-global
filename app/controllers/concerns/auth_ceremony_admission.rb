@@ -13,13 +13,6 @@ module AuthCeremonyAdmission
 
   public
 
-  def create
-    apply_admission_transport_headers!
-    redeem_admission_reference_and_redirect!(expected_intent: auth_ceremony_entry_intent)
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
-    render_invalid_admission_request!
-  end
-
   private
 
   def admit_or_render_sign_ceremony!(expected_intent:)
@@ -29,23 +22,7 @@ module AuthCeremonyAdmission
     return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
 
     if request.get? && admission_reference_param.present?
-      binding = admission_binding_for_reference
-      return render_invalid_admission_request! unless binding
-
-      if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
-        return redeem_admission_reference_and_redirect!(expected_intent:) if binding.attached? && binding.confirmed?
-
-        return redirect_to(
-          auth_ceremony_admission_action_url(
-            entry_ref: admission_reference_param,
-            ri: params[:ri],
-            lx: normalized_locale(params[:lx]),
-          ),
-          status: :see_other,
-        )
-      end
-
-      return render_admission_continuation!(expected_intent:)
+      return render_admission_reference!(expected_intent:)
     end
 
     if logged_in? && admission_reference_param.blank? && !admitted_ceremony_present?(expected_intent: expected_intent)
@@ -66,6 +43,31 @@ module AuthCeremonyAdmission
     # request is refused rather than bridged to Base (adr/sign-neutral-entry-and-logout-target-authorization.md).
     log_ticket_ceremony_entry_refusal(expected_intent)
     render_invalid_admission_request!
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+    log_ticket_ceremony_entry_refusal(expected_intent)
+    render_invalid_admission_request!
+  end
+
+  def render_admission_reference!(expected_intent:)
+    binding = admission_binding_for_reference
+    return render_invalid_admission_request! unless binding
+
+    authorization_parent = AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction)
+    unless authorization_parent.include?(binding.purpose)
+      BaseAuthAdmissionCoordinator.validate_admission_continuation!(
+        binding:, surface: auth_ceremony_surface, expected_intent:,
+      )
+    end
+    return redeem_admission_reference_and_redirect!(expected_intent:) if binding.attached? && binding.confirmed?
+
+    redirect_to(
+      auth_ceremony_admission_action_url(
+        entry_ref: admission_reference_param,
+        ri: params[:ri],
+        lx: normalized_locale(params[:lx]),
+      ),
+      status: :see_other,
+    )
   end
 
   # Sign-in admissions share this entry; only ticket ceremonies belong in the Step-Up log.
@@ -246,38 +248,6 @@ module AuthCeremonyAdmission
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
   end
 
-  def render_admission_continuation!(expected_intent:)
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-      surface: auth_ceremony_surface, reference: admission_reference_param,
-    )
-    BaseAuthAdmissionCoordinator.validate_admission_continuation!(
-      binding: binding, surface: auth_ceremony_surface, expected_intent: expected_intent,
-    )
-    if binding.attached? && current_auth_ceremony_session&.id != binding.auth_ceremony_session_id
-      return render_invalid_admission_request!
-    end
-
-    action_url =
-      if binding.attached? && binding.confirmed?
-        auth_ceremony_admitted_action_url
-      else
-        auth_ceremony_admission_action_url
-      end
-
-    render "auth/shared/admission_continuation",
-           layout: false,
-           locals: {
-             action_url: action_url,
-             reference_param: admission_reference_param_name,
-             reference: admission_reference_param,
-             ri: params[:ri],
-             lx: normalized_locale(params[:lx]),
-             pt: params[:pt],
-           }
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
-    render_invalid_admission_request!
-  end
-
   def render_invalid_admission_request!
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
@@ -290,8 +260,6 @@ module AuthCeremonyAdmission
     else raise ArgumentError, "unsupported Auth ceremony surface"
     end
   end
-
-  def auth_ceremony_admitted_action_url = request.path
 
   def admission_reference_param
     params[:entry_ref].to_s.presence

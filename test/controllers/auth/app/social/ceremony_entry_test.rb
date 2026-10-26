@@ -22,7 +22,7 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
         "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
       },
     )
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    JitSecurityJwtRegistry.surface("BASE_APP")
     2.times do |index|
       target = URI.parse(@base_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -30,7 +30,8 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
         target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       end
       if index.zero?
-        raise RuntimeError, "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
+        raise RuntimeError,
+              "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
 
         @base_browser.host!(target.host)
         @base_browser.get(target.request_uri)

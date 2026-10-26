@@ -76,6 +76,8 @@ module Base
           @secret_credential ||= e.record
           @raw_secret_credential ||= raw_secret_credential
           render_new_failure
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
 
         def update
@@ -88,8 +90,13 @@ module Base
             )
             blocked = disabling_secret_credential?(secret_credential_params) &&
               !AuthMethodGuard.can_remove_secret_credential?(current_visitor, @secret_credential)
-            apply_secret_credential_update! unless blocked
+            unless blocked
+              with_secret_credential_step_up do |token, requirement, now|
+                apply_secret_credential_update!(token:, requirement:, now:)
+              end
+            end
           end
+          return if performed?
 
           if blocked
             redirect_to(
@@ -103,6 +110,8 @@ module Base
             base_com_identity_secret_path(@secret_credential.public_id, ri: params[:ri]),
             status: :see_other,
           )
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
 
         def destroy
@@ -118,11 +127,23 @@ module Base
               )
             end
 
-            @secret_credential.discard_now!(purge_after: 1.day)
-            @secret_credential.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(:deleted)
-            @secret_credential.save!
+            with_secret_credential_step_up do |token, _requirement, _now|
+              VisitorSecretCredential.transaction do
+                CredentialSecurityTransition.call(
+                  actor: current_visitor, current_session: token, reason: :secret_credential_changed,
+                  affected_surface: "com", request: request,
+                )
+                @secret_credential.discard_now!(purge_after: 1.day)
+                @secret_credential.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(:deleted)
+                @secret_credential.save!
+              end
+            end
           end
+          return if performed?
+
           redirect_to(base_com_identity_secrets_path(ri: params[:ri]), status: :see_other)
+        rescue TokenStatusManagement::StepUpEvidenceUnavailable
+          render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
         end
 
         private
@@ -265,14 +286,46 @@ module Base
           params.key?(:enabled) && !ActiveModel::Type::Boolean.new.cast(params[:enabled])
         end
 
-        def apply_secret_credential_update!
-          attrs = secret_credential_params
-          @secret_credential.name = attrs[:name].to_s.strip if attrs[:name].present?
-          if attrs.key?(:enabled)
-            status = ActiveModel::Type::Boolean.new.cast(attrs[:enabled]) ? :active : :revoked
-            @secret_credential.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(status)
+        def apply_secret_credential_update!(token:, requirement:, now:)
+          VisitorSecretCredential.transaction do
+            was_active = @secret_credential.active?
+            attrs = secret_credential_params
+            @secret_credential.name = attrs[:name].to_s.strip if attrs[:name].present?
+            if attrs.key?(:enabled)
+              status = ActiveModel::Type::Boolean.new.cast(attrs[:enabled]) ? :active : :revoked
+              @secret_credential.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(status)
+            end
+            changed = @secret_credential.has_changes_to_save?
+            credential_removed = was_active &&
+              @secret_credential.visitor_secret_credential_status_id == VisitorSecretCredentialStatus::REVOKED
+            if credential_removed
+              CredentialSecurityTransition.call(
+                actor: current_visitor, current_session: token, reason: :secret_credential_changed,
+                affected_surface: "com", request: request,
+              )
+            end
+            @secret_credential.save!
+            token.consume_step_up_evidence!(requirement:, now:) if changed && !credential_removed
           end
-          @secret_credential.save!
+        end
+
+        def with_secret_credential_step_up
+          token = current_session_token
+          unless token.is_a?(VisitorToken)
+            render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
+            return false
+          end
+
+          requirement = step_up_requirement(scope: "settings_secret_credential")
+          token.with_lock do
+            now = token.class.database_now
+            unless token.active_status?(now) && StepUpResolver.call(token:, requirement:, now:).satisfied?
+              render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
+              next false
+            end
+
+            yield token, requirement, now
+          end
         end
 
         def ensure_verified_recovery_identity_for_registration!

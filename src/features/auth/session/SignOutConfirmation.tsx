@@ -25,8 +25,6 @@ export type SignOutConfirmationProps = {
   submit_label: string;
   form: {
     action: string;
-    logout_challenge: string | null;
-    logout_intent_proof: string | null;
   };
   cancel: {
     label: string;
@@ -64,22 +62,6 @@ export default function SignOutConfirmation({
                 name="authenticity_token"
                 value={csrfToken()}
               />
-              {form.logout_challenge ? (
-                <input
-                  type="hidden"
-                  name="logout_challenge"
-                  value={form.logout_challenge}
-                  readOnly
-                />
-              ) : null}
-              {form.logout_intent_proof ? (
-                <input
-                  type="hidden"
-                  name="logout_intent_proof"
-                  value={form.logout_intent_proof}
-                  readOnly
-                />
-              ) : null}
               <Button
                 type="submit"
                 variant="danger"

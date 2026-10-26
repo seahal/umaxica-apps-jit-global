@@ -245,4 +245,31 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       end
     end
   end
+
+  test "the registration side effect uses its consumed credential registration instead of spending Step-Up twice" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "registered-key")
+    now = ClientStepUpCeremonyTransaction.database_now
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
+      required_scope: "settings_passkey", step_up_required: false, allowed_methods: ["passkey"],
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, expires_at: now + StepUpRequirement::DEFAULT_TTL, now: now,
+    )
+    transaction.record_registration_verification!(method: "passkey", verified_at: now)
+    transaction.commit_registration_consumption!(
+      now: now, method: "passkey", registered_credential_ref: passkey.public_id,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+
+    issuance = ClientSecretPasskeyReservationIssuer.call!(
+      actor_context: context, token: token, passkey: passkey, expires_after: 1.minute,
+    )
+
+    assert_equal 2, issuance.planned_count
+    assert_equal token.public_id, issuance.browser_session_ref
+    assert_nil token.reload.last_step_up_at
+  end
 end

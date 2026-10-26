@@ -5,10 +5,13 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SurfaceRootsControllerTest < ActionDispatch::IntegrationTest
-  # Public www hosts share Base Root. Home resolves a missing region in place without redirecting
-  # (adr/home-dashboard-authentication-boundary.md).
-  test "acme app root without a region renders the control-plane home without redirect" do
-    get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost") }
+  # Public www hosts share Base Root. Global HTML canonicalizes a missing region before Home.
+  # See adr/home-dashboard-authentication-boundary.md and specs/global-region-canonicalization/spec.md.
+  test "acme app root without a region renders the control-plane home after region canonicalization" do
+    get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_SERVICE_URL") }
+
+    assert_response :found
+    follow_redirect!
 
     assert_response :success
     assert_nil response.location
@@ -22,15 +25,21 @@ class SurfaceRootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "acme com root without a region renders the control-plane home without redirect" do
-    get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost") }
+  test "acme com root without a region renders the control-plane home after region canonicalization" do
+    get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_CORPORATE_URL") }
+
+    assert_response :found
+    follow_redirect!
 
     assert_response :success
     assert_equal "base/com/roots/index", inertia_component
   end
 
-  test "acme org root without a region renders the control-plane home without redirect" do
-    get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost") }
+  test "acme org root without a region renders the control-plane home after region canonicalization" do
+    get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_STAFF_URL") }
+
+    assert_response :found
+    follow_redirect!
 
     assert_response :success
     assert_equal "base/org/roots/index", inertia_component

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="<%= I18n.locale %>" data-theme="<%= theme_cookie_value %>" data-edition="app">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Visa App</title>
+    <%= stylesheet_link_tag "application", nonce: true %>
+  </head>
+  <body class="ui-document ui-landing">
+    <%= render "shared/ui/skip_link" %>
+    <header>
+      <p class="ui-landing__brand">
+        <strong><%= link_to ENV.fetch("BRAND_NAME"), visa_app_root_path %></strong>
+        <span>VISA (app)</span>
+      </p>
+    </header>
+    <main id="main" class="ui-main" tabindex="-1">
+      <section class="ui-page" aria-labelledby="landing-title">
+        <div class="ui-landing__intro">
+          <h1 id="landing-title">Visa App</h1>
+          <p><%= t("landing.thin_endpoint") %></p>
+        </div>
+        <nav aria-label="<%= t("ui_presentation.navigation.authentication") %>">
+          <%= link_to t("landing.sign_in"),
+                      base_app_sign_show_url(host: @base_origin.host, protocol: @base_origin.scheme,
+                                                port: @base_origin.port, ri: params[:ri]),
+                      class: "ui-button" %>
+        </nav>
+      </section>
+    </main>
+    <footer>
+      <nav aria-label="<%= t("ui_presentation.navigation.footer") %>">
+        <%= link_to t("ui_presentation.navigation.preferences"),
+                    base_app_preference_url(host: @base_origin.host, protocol: @base_origin.scheme,
+                                               port: @base_origin.port, ri: params[:ri]) %>
+      </nav>
+      <p class="ui-landing__copyright"><%= render "layouts/shared/copyright" %></p>
+    </footer>
+  </body>
+</html>

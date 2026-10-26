@@ -1,7 +1,8 @@
-# Current storage topology
+# Historical storage topology snapshot (before D-179)
 
-R3 target table names are shown for the OP grant rows. The moved structure dumps remain
-byte-preserved pre-cutover artifacts until the approved development/test rebuild in R3-WU08.
+This static snapshot predates D-179 (2). It records the checked-in structures at commit
+`f313b126931cfe3c9ecf64bbb72fb1cd3a0aada5`; its legacy sign-out tables are retired by the later
+D-179 migrations and do not describe the current topology.
 
 Checked-in PostgreSQL structures and migrations, including pre-existing uncommitted files, at commit
 `f313b126931cfe3c9ecf64bbb72fb1cd3a0aada5`. Live database application and catalog validation are

@@ -25,6 +25,7 @@ module AppSocialCeremonyEntry
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include SocialAuth
+
     rescue_from SocialAuth::BaseError, with: :handle_social_auth_error
     rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
   end

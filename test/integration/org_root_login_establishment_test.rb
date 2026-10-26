@@ -9,9 +9,9 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.response = nil
   end
 
-  # Provider HTTP is simulated; state, nonce, JWT signature, WebAuthn and Base issuance are real.
+  # Provider HTTP is simulated; state, nonce, JWT signature, WebAuthn and Visa issuance are real.
   # rubocop:disable Minitest/MultipleAssertions
-  test "Entra and Passkey establish Normal root credentials only on Base" do
+  test "Entra and Passkey establish Normal root credentials only on Visa" do
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     tenant = SecureRandom.uuid
     audience = SecureRandom.uuid
@@ -24,6 +24,7 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     )
     auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    visa_host = ENV.fetch("PUBLIC_VISA_STAFF_URL")
     fake = WebAuthn::FakeClient.new("https://#{auth_host}", encoding: :base64url)
     registration = fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)
     relying_party = WebAuthn::RelyingParty.new(
@@ -33,6 +34,8 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     operator.staff_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     base_issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
+    visa_issuer = JitSecurityJwtRegistry.surface("VISA_ORG")
+    jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
     base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
     auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
     https!
@@ -53,50 +56,37 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
       target = URI.parse(payload.fetch("url"))
     end
 
-    assert_equal base_host, target.host
-    get(target.request_uri)
-    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    post(
-      form["action"], params: fields, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-      },
-    )
-    target = URI.parse(response.location)
-    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless target.host == base_host
-      handoff_rt = Rack::Utils.parse_query(target.query).fetch("rt")
-      handoff_payload, = JWT.decode(
-        handoff_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      target = URI.parse(handoff_payload.fetch("url"))
+    assert_equal visa_host, target.host
+    auth_browser = open_session
+    current_browser = self
+    current_host = visa_host
+    entry_ref = nil
+    12.times do
+      current_browser.host!(current_host)
+      current_browser.https!
+      current_browser.get(target.request_uri, headers: oidc_navigation_headers(current_host))
+      break unless current_browser.response.redirect?
+
+      target = URI.parse(current_browser.response.location.to_s)
+      target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+      target = URI.parse(jump_rt_url_from_location_for_test(target.to_s)) if target.host == jump_host
+      entry_ref ||= Rack::Utils.parse_query(target.query)["entry_ref"] if target.query.to_s.present?
+      current_host = target.host
+      current_browser =
+        case current_host
+        when visa_host then self
+        when auth_host then auth_browser
+        else raise "unexpected OIDC admission host: #{current_host.inspect}"
+        end
     end
 
-    assert_equal auth_host, target.host
-    entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
+    raise "OIDC admission did not reach Auth" unless current_browser.equal?(auth_browser) &&
+      auth_browser.response.successful?
+
+    raise "OIDC admission entry reference is missing" if entry_ref.blank?
+
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
     flow = authorization_transaction_for_test(binding)
-    auth_browser = open_session
-    auth_browser.host!(auth_host)
-    auth_browser.https!
-    auth_browser.get(target.request_uri)
-    3.times do |index|
-      sender = (index == 1) ? self : auth_browser
-      form = Nokogiri::HTML(sender.response.body).at_css("form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      sender.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-      raise RuntimeError, "Admission failed at step #{index}" unless sender.response.status == 303
-      next if index == 2
-
-      receiver = index.zero? ? self : auth_browser
-      receiver.get(URI.parse(sender.response.location).request_uri)
-    end
 
     assert_predicate binding.reload, :redeemed?
     previous_test_mode = OmniAuth.config.test_mode
@@ -196,18 +186,20 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
       auth_browser.get(auth_browser.response.parsed_body.fetch("redirect_url"))
       auth_browser.follow_redirect!
-      auth_browser.post(auth_org_sign_oidc_handoff_path, params: { ri: "jp" })
+      auth_browser.get(
+        auth_org_sign_oidc_handoff_path(ri: "jp"),
+        headers: oidc_navigation_headers(auth_host),
+      )
     end
 
     assert_equal 303, auth_browser.response.status
     assert_nil auth_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil auth_browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
     target = URI.parse(auth_browser.response.location)
-    get(target.request_uri)
-    form = response.parsed_body.at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    callback_uri = nil
+    host!(visa_host)
     assert_difference(-> { OperatorToken.where(staff_id: operator.id).count }, 1) do
-      post(form["action"], params: fields, headers: base_headers)
+      get(target.request_uri, headers: oidc_navigation_headers(visa_host))
     end
 
     assert_response :see_other
@@ -219,19 +211,21 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     assert_equal token.public_id, flow.browser_session_ref
     assert_predicate cookies[AuthenticationBase::ACCESS_COOKIE_KEY].to_s, :present?
     established_at = token.root_login_established_at
+    callback_uri = URI.parse(response.location)
     assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
-      post(form["action"], params: fields, headers: base_headers)
+      get(target.request_uri, headers: oidc_navigation_headers(visa_host))
     end
-    assert_response :see_other
+    # WU-27/D-104: the finalized result is terminal and cannot issue a second
+    # callback or Root Session.
+    assert_response :bad_request
     assert_equal token.public_id, flow.reload.browser_session_ref
     assert_equal established_at, token.reload.root_login_established_at
-    callback_uri = URI.parse(response.location)
     # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless callback_uri.host == base_host
+    unless callback_uri.host == visa_host
       callback_rt = Rack::Utils.parse_query(callback_uri.query).fetch("rt")
       callback_payload, = JWT.decode(
-        callback_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        callback_rt, JitSecurityJwtRegistry.public_key_for(visa_issuer.id, visa_issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{visa_host}",
         verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
       )
       callback_uri = URI.parse(callback_payload.fetch("url"))
@@ -296,11 +290,12 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
       end
     OutboundHttp::Connection.stub(
       :build, ->(**args) {
-        assert_equal base_host, args.fetch(:url).host
+        assert_equal visa_host, args.fetch(:url).host
         connection
       },
     ) do
       TestSupport::OutboundHttpGuard.allow do
+        host!(callback_uri.host)
         get(callback_uri.request_uri)
       end
     end
@@ -313,11 +308,14 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
       post(base_org_sign_show_path, params: { ri: "jp" })
     end
 
-    assert_response :forbidden
+    assert_response :redirect
+    assert_equal "/identity/passkeys/new", URI.parse(response.location).path
     get(base_org_identity_birthdate_path(ri: "jp"))
 
     assert_response :redirect
-    assert_equal "settings_birthdate", Rack::Utils.parse_query(URI.parse(response.location).query).fetch("scope")
+    continuation_query = Rack::Utils.parse_query(URI.parse(response.location).query)
+
+    assert_equal "settings_birthdate", continuation_query["scope"], response.location
     assert_nil session[:flash]
     get(response.location)
 
@@ -392,5 +390,17 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
   ensure
     OmniAuth.config.test_mode = previous_test_mode unless previous_test_mode.nil?
   end
+
+  private
+
+  def oidc_navigation_headers(host)
+    {
+      "Host" => host,
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+  end
+
   # rubocop:enable Minitest/MultipleAssertions
 end

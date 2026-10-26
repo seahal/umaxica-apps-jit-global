@@ -95,7 +95,7 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
             "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
           },
         )
-        flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+        JitSecurityJwtRegistry.surface("BASE_APP")
         2.times do |flow0_index|
           flow0_target = URI.parse(@base_browser.response.location)
           # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -103,7 +103,8 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
             flow0_target = URI.parse(jump_rt_url_from_location_for_test(flow0_target.to_s))
           end
           if flow0_index.zero?
-            raise RuntimeError, "Base authorization host mismatch" unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
+            raise RuntimeError,
+                  "Base authorization host mismatch" unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
 
             @base_browser.host!(flow0_target.host)
             @base_browser.get(flow0_target.request_uri)
@@ -372,7 +373,7 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow1_index|
             flow1_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -520,7 +521,7 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
               "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
             },
           )
-          flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow2_index|
             flow2_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.

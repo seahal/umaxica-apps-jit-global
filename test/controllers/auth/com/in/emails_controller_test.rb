@@ -57,19 +57,9 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    get auth_com_sign_in_url(ri: "jp", entry_ref: issuance.reference), headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" },
-                               headers: { "Host" => @host }
-
-    assert_response :see_other
-    # Independent Base HTTP coverage verifies confirmation; isolate verification after public admission transitions.
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_com_sign_in_url(ri: "jp", entry_ref: issuance.reference), headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_sign_in_url(ri: "jp"),
-         params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: { "Host" => @host }
+    admit_auth_ceremony_entry!(
+      auth_com_sign_in_path, reference: issuance.reference, params: { ri: "jp" },
+    )
 
     assert_response :see_other
     @primary_sign_in_binding = nil
@@ -109,22 +99,12 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    get auth_com_sign_in_url(ri: "jp", entry_ref: issuance.reference), headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" },
-                               headers: { "Host" => @host }
+    admit_auth_ceremony_entry!(
+      auth_com_sign_in_path, reference: issuance.reference, params: { ri: "jp" },
+    )
 
     assert_response :see_other
-
-    # Independent Base HTTP coverage verifies confirmation; this test isolates OTP after admission.
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_com_sign_in_url(ri: "jp", entry_ref: issuance.reference), headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_sign_in_url(ri: "jp"),
-         params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: { "Host" => @host }
-
-    assert_response :see_other
     @primary_sign_in_binding = nil
 
     visitor = create_verified_visitor_with_email(email_address: "shared-signin-#{SecureRandom.hex(8)}@example.test")
@@ -179,21 +159,12 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    get auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" },
-                               headers: { "Host" => @host }
+    admit_auth_ceremony_entry!(
+      auth_com_sign_in_path, reference: admission.reference, params: { ri: "jp" },
+    )
 
     assert_response :see_other
-    # Independent Base HTTP tests cover confirmation; this public transition isolates the email endpoint.
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_sign_in_url(ri: "jp"),
-         params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: { "Host" => @host }
-
-    assert_response :see_other
     ceremony = VisitorAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     @current_auth_ceremony = ceremony
     @primary_sign_in_binding = nil
@@ -588,14 +559,10 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    other.get(auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference))
-    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    other.post("/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+    admit_auth_ceremony_entry!(
+      auth_com_sign_in_path, reference: admission.reference, params: { ri: "jp" }, browser: other,
+    )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    other.get(auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference))
-    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    other.post(auth_com_sign_in_url(ri: "jp"), params: { entry_ref: admission.reference, authenticity_token: csrf })
     other_binding = nil
     other_ceremony = VisitorAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     other.post(

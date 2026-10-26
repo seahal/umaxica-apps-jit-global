@@ -6,7 +6,7 @@ require "test_helper"
 
 class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @base_host = Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
     host! @host
   end
@@ -31,7 +31,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert inertia_props.fetch("active_context")
     assert_equal auth_app_sign_out_path(ri: "jp"), inertia_props.fetch("form").fetch("action")
     # Cancelling the pending logout stays a DELETE to the sign-out route.
-    assert_equal auth_app_sign_out_path(ri: "jp"), inertia_props.fetch("cancel").fetch("action")
+    assert_nil inertia_props.fetch("cancel")
     assert_predicate token.reload, :currently_usable?
 
     post auth_app_sign_out_url(ri: "jp", host: @host), headers: rp_session_headers(user, token)
@@ -52,7 +52,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
-  test "post sign out with a coordinated challenge clears this host and returns to base completion" do
+  test "post sign out with a coordinated challenge clears this host and hands off to Visa" do
     user = create_verified_user_with_email(email_address: "auth-app-coordinated-#{SecureRandom.hex(4)}@example.com")
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     transaction =
@@ -80,11 +80,11 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
          headers: rp_session_headers(user, token)
 
     # The continuation hop must not start a second RP ceremony; it only clears this host and
-    # redirects to the passive receiver on Base's authoritative end-session endpoint.
+    # redirects to Visa's authoritative end-session endpoint.
     assert_response :see_other
     location = URI.parse(response.location)
 
-    assert_equal @base_host, location.host
+    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host, location.host
     assert_equal "/oidc/logout", location.path
     assert_equal transaction.logout_challenge,
                  Rack::Utils.parse_query(location.query).fetch("logout_challenge")

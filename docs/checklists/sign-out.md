@@ -1,50 +1,46 @@
 # Sign-out
 
-Applies to first-party sign-out over the shared Ticket databases: the IdP (Base) and every
-registered first-party Browser RP — Base Self-RP, Core, Warp, Edit, Palm and Tech, in the app, com
-and org realms where each exists. These are durable requirements, not current verification results.
+These are acceptance requirements for the APP, COM and ORG OP/RP surfaces. They describe expected
+behavior, not evidence that a deployment has passed acceptance.
 
-- SIGNOUT-1: A global sign-out revokes the parent Device Session, its root lineage, the origin RP row
-  and every sibling RP row in one transaction. Other parents of the same actor and other actors stay
-  unchanged, an already-revoked historical row keeps its revocation, and no HTTP request is sent to
-  an RP. An RP credential or a challenge alone revokes no parent.
-- SIGNOUT-2: Every caller that ends a parent — IdP sign-out, sign-out of all sessions, revocation of
-  a selected session, account-level emergency, risk and credential-transition revocation — revokes
-  the parent and all of its RP rows together, enqueues no delivery job, and never falls back to
-  revoking a token alone.
-- SIGNOUT-3: Only the current IdP session that owns the parent can confirm its revocation. A
-  different parent, actor, device, root family, a regressed root generation or a substituted
-  session identifier revokes nothing; a legitimately rotated root of the same family is accepted.
-  Authority is checked again after the parent is locked.
-- SIGNOUT-4: GET and HEAD on initiation, confirmation and completion change no row. An unsafe
-  confirmation without a valid CSRF token or from another site is refused before any effect. An
-  `id_token_hint` identifies a session and never authorizes; an unregistered or inexact
-  `post_logout_redirect_uri` is refused before redirect.
-- SIGNOUT-5: A failure inside the transaction revokes nothing and produces no success output. A
-  failure after the COMMIT — origin cookie cleanup or the progress write — shows the global result
-  with cleanup incomplete, never a sign-out failure, and recreates nothing. When the parent state
-  cannot be read, the result is indeterminate (no-store 503) and nothing is retried.
-- SIGNOUT-6: After a committed parent revocation, an unexpired credential of that parent is refused
-  at its next browser request and safe refresh, and the RP clears its cookies. A revocation is
-  read from the Ticket writer and is not hidden by a query cache; an unreadable Ticket database
-  fails closed with no protected content.
-- SIGNOUT-7: The completion display derives from the parent state, states the global result and
-  never states an end time. Sign-out failure logs carry no actor, token or session identifier.
-- SIGNOUT-8: When the IdP session is absent or belongs to another account, the IdP revokes nothing,
-  changes no session or intent row, answers with a localized no-store error and does not redirect to
-  the completion URI; the origin RP session keeps working. No path ends only the origin RP session.
-- SIGNOUT-9: The sign-out intent expires 10 minutes after creation and is refused at and after
-  expiry; a COMMIT made before expiry stays committed. Starting again from the same RP session
-  reuses its unfinished intent; an intent of another RP session or browser is never reused. The
-  proof is filtered from logs and never appears in a redirect URL. Completion uses the exact
-  registered `/sign/out/completion` URI bound to client, realm and state.
-- SIGNOUT-10: First-party back-channel logout does not exist: no receiver route, no back-channel
-  declaration in discovery, no BCL URI on a registered client and no delivery job. ID Tokens still
-  carry `sid`.
+- SIGNOUT-1: A current-session OP logout requires the authenticated current browser session and
+  stops exactly its Root Session and every RP grant under that root. Other roots, principals and
+  realms remain unchanged. A `rp_initiated_logout` stop has scope `root` and does not advance the
+  principal epoch.
+- SIGNOUT-2: An authenticated RP `POST /sign/out` requires the active RP grant and its stored
+  verified ID Token hint. Before redirecting to Visa, it revokes only that grant, clears its own
+  access and refresh cookies, resets its local session and issues a one-use notice bound to the
+  RP surface and OIDC `state`. Missing hint or callback configuration leaves the grant active.
+- SIGNOUT-3: Visa accepts end-session requests by GET and POST and only stages confirmation. It
+  verifies hint signature, issuer, audience, type and not-before time; it permits an expired hint.
+  The supplied `client_id` must match when present. The hint subject must match the authenticated
+  OP actor. Its `sid` is declined; the current OP Root Session ID is the target. A missing OP session
+  or captured session ID returns `login_required` without staging, redirecting or mutating state.
+- SIGNOUT-4: A return URI must exactly match the URI registered for the requesting client and
+  realm. Visa adds the original OIDC `state` to the return. The RP callback consumes only a live,
+  one-use notice whose surface and state match; replay, expiry, mismatch or missing notice is
+  refused. Callback processing never revokes the RP grant again.
+- SIGNOUT-5: Visa always shows a confirmation. Only a CSRF-protected
+  `POST /oidc/logout/confirmation` can commit an RP-initiated stop. GET and HEAD at request,
+  confirmation and callback boundaries do not mutate authority state; unsafe requests without a
+  valid CSRF token are refused before the stop.
+- SIGNOUT-6: An RP that has already cleared its local session stays signed out if the user leaves
+  Visa without confirming. In that case the OP root and other RP grants remain active. On
+  confirmation, the same OP stop revokes the root and all its grants; other device roots remain
+  independent.
+- SIGNOUT-7: A stop transaction writes one durable BCL participant for each participating grant.
+  Dispatch runs after commit through Solid Queue and the recurring sweep; it never holds the OP
+  authority lock or delays the browser redirect. Each receiver commits the replay receipt, absorbing
+  `sid` tombstone and matching local grant revocation before answering success.
+- SIGNOUT-8: A failed or rolled-back stop produces no success redirect and revokes nothing. An
+  unknown commit outcome is reported as indeterminate and is not retried as a new sign-out.
+  Diagnostic output never includes ID Tokens, access or refresh tokens, cookies, CSRF tokens, OIDC
+  `state`, or raw session identifiers.
+- SIGNOUT-9: OP authority-stop retention deletes child records before their stop and only after
+  every referenced root is purge-eligible and every participant has a final delivery state.
+  Restrictive foreign keys preserve the order; a rootless identity-stop record remains durable.
 
-Sources: [shared-database sign-out](../../adr/first-party-sign-out-shared-database-without-backchannel-logout.md),
-[logout primitive](../../adr/logout-primitive-and-composition.md),
-[logout completion](../../adr/logout-completion-boundary.md),
-[logout target authorization](../../adr/sign-neutral-entry-and-logout-target-authorization.md),
-[logout session management](../security/logout-session-management.md).
-Session issuance and revocation failures: [session management](session-management.md).
+Sources: [logout sequence](../security/logout-sequence.md),
+[logout session management](../security/logout-session-management.md),
+[authority-stop contract](../../two.md#58-wu-16--wu-22--op-authority-stop-record-accepted-design-locally-implemented),
+[Visa OP host decision](../../adr/visa-op-host.md).

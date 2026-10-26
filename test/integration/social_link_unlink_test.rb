@@ -134,6 +134,22 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     assert_not_nil identity.reload.released_at
     assert @secret.reload.available_at?(at: Client.database_now)
     assert_nil @secret.claimed_at
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "already unlinked Apple identity keeps Step-Up evidence" do
+    satisfy_user_verification(@token)
+    mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+
+    delete(
+      auth_app_settings_apple_url(ri: "jp", host: @host),
+      headers: @headers,
+      params: { "cf-turnstile-response": "test" },
+    )
+
+    assert_response :see_other
+    assert_predicate @token.reload.last_step_up_at, :present?
+    assert_equal "social_unlink", @token.last_step_up_scope
   end
 
   test "social unlink requires an alternative allowed by its existing method policy" do

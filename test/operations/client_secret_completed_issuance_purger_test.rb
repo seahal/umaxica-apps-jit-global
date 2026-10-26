@@ -312,6 +312,13 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
+    token.reload.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-for-revocation", last_step_up_full_reauthentication: false,
+    )
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
     )

@@ -154,52 +154,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied.new("result browser binding is unavailable", code: "return_binding_mismatch")
     end
 
-    def validate_social_result_browser_binding!(reference:, surface:, provider:, base_browser_nonce:, base_token:)
-      binding = find_admission_binding!(surface:, reference:)
-      unless binding.redeemed? && !binding.retired? && !binding.expired? &&
-          binding.purpose == "authentication_handoff" &&
-          base_browser_nonce.is_a?(String) && base_browser_nonce.present?
-        raise Denied.new("social result admission is unavailable", code: "return_binding_mismatch")
-      end
-
-      validate_sign_in_path_curfew!(binding)
-      ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
-      ensure_binding_token_matches!(binding, base_token)
-      validate_admission_parent!(binding)
-      validate_admission_root!(binding)
-      ceremony = admitted_ceremony_session(binding)
-      unless ceremony&.active? && ceremony.admitted? && ceremony.authentication_evidence_recorded? &&
-          ceremony.authentication_method == provider.to_s
-        raise Denied.new("social authentication evidence is unavailable", code: "return_binding_mismatch")
-      end
-
-      binding
-    rescue ActiveRecord::RecordNotFound, ArgumentError
-      raise Denied.new("social result admission is unavailable", code: "return_binding_mismatch")
-    end
-
-    def validate_completed_social_signup_browser_binding!(commit:, surface:, base_browser_nonce:, base_token:,
-                                                          allow_incomplete: false)
-      binding = find_admission_binding!(surface:, reference: commit.result["session_ref"])
-      unless binding.redeemed? && !binding.retired? && !binding.expired? &&
-          binding.purpose == "authentication_handoff"
-        raise Denied.new("social receipt admission is unavailable", code: "return_binding_mismatch")
-      end
-
-      ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
-      ceremony = admitted_ceremony_session(binding)
-      unless ceremony && (ceremony.completed? || (allow_incomplete && ceremony.active?)) &&
-          !ceremony.cancelled? && !ceremony.revoked_at &&
-          ceremony.authentication_method == commit.identity.provider && ceremony.authentication_evidence_recorded?
-        raise Denied.new("social receipt evidence is unavailable", code: "return_binding_mismatch")
-      end
-
-      validate_completed_social_parent!(binding, commit, base_token, allow_incomplete:)
-      binding
-    rescue ActiveRecord::RecordNotFound, ArgumentError
-      raise Denied.new("social receipt browser binding is unavailable", code: "return_binding_mismatch")
-    end
-
     def validate_registration_restart_browser!(binding:, surface:, base_browser_nonce:, base_token:, scope:, method:)
       unless binding.is_a?(admission_binding_model(surface)) && !binding.retired? &&
           binding.parent_kind == :step_up_ceremony_transaction && binding.purpose == "credential_registration_handoff"
@@ -1082,49 +1036,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       return if base_token.is_a?(expected_class)
 
       raise Denied.new("Base token binding is invalid", code: "session_binding_mismatch")
-    end
-
-    def validate_completed_social_parent!(binding, commit, token, allow_incomplete: false)
-      parent = admission_parent_record(binding)
-      valid =
-        if binding.parent_kind == :authorization_transaction
-          completed_social_authorization_parent_valid?(binding, commit, token, parent, allow_incomplete:)
-        else
-          completed_social_sign_in_parent_valid?(binding, commit, token, parent, allow_incomplete:)
-        end
-      return if valid
-
-      raise Denied.new("social receipt parent is unavailable", code: "return_binding_mismatch")
-    end
-
-    def completed_social_authorization_parent_valid?(binding, commit, token, parent, allow_incomplete:)
-      return false unless parent
-
-      pending_resume = allow_incomplete && parent.status == OidcAuthorizationTransactionable::STATUS_PENDING &&
-        parent.actor_ref.nil? && binding.base_token_id == token&.id
-      established = (parent.authenticated? || parent.consumed?) &&
-        parent.actor_ref == commit.user.public_id && result_root_context_matches?(binding, parent, token)
-      now = parent.class.database_now
-      (pending_resume || established) && !parent.expired?(now:) && !parent.login_challenge_expired?(now:)
-    end
-
-    def completed_social_sign_in_parent_valid?(binding, commit, token, parent, allow_incomplete:)
-      return false unless parent
-
-      pending_resume = allow_incomplete && binding.base_token_id == token&.id &&
-        completed_social_sign_in_parent_pending?(binding, commit, parent)
-      completed = parent.sign_in_completed? && parent.principal_id == commit.user.id &&
-        token&.id == parent.token_id && token.active_status?(token.class.database_now)
-      (pending_resume || completed) && !parent.expired?(parent.class.database_now)
-    end
-
-    def completed_social_sign_in_parent_pending?(binding, commit, parent)
-      return true if parent.sign_in_primary_pending? && parent.principal_id.nil?
-
-      ceremony = admitted_ceremony_session(binding)
-      (parent.sign_in_primary_pending? || parent.sign_in_session_issuance_pending?) &&
-        parent.principal_id == commit.user.id && parent.authentication_method == ceremony.authentication_method &&
-        parent.authentication_event_at == ceremony.authentication_event_at
     end
 
     def ensure_binding_token_matches!(binding, base_token)

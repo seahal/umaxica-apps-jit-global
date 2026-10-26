@@ -48,10 +48,11 @@ module Base
             return false unless @user_email.valid?
 
             @user_email.save!
+            bootstrap_transaction = open_email_bootstrap_transaction
             issued = EmailCredentialRegistrationOtpIssuer.call(
               actor: current_client, token: current_session_token, email: @user_email,
-              browser_nonce: ensure_base_admission_browser_nonce!,
-              bootstrap_transaction: open_email_bootstrap_transaction,
+              browser_nonce: bootstrap_transaction ? require_base_admission_browser_nonce! : ensure_base_admission_browser_nonce!,
+              bootstrap_transaction: bootstrap_transaction,
             )
             return false unless issued.success?
 
@@ -281,8 +282,6 @@ module Base
               subject_id: current_client.id.to_s, subject_type: "Client", occurred_at: Time.current,
             )
           end
-
-          def cleanup_pending_signup! = nil
 
           def remove_existing_unverified_emails! = nil
         end

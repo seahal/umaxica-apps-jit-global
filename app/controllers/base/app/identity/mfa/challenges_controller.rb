@@ -68,8 +68,25 @@ module Base
                 label: t("sign.app.settings.show.back"),
                 href: base_app_identity_path(ri: params[:ri]),
               },
+              form: security_mode_form,
+              form_unavailable:
+                security_mode_form ? nil : t("sign.app.settings.mfa.show.advanced_requires_two_passkeys"),
               error: error,
             }
+          end
+
+          # The page offers the one switch the owner can make now: back to NORMAL, or up to ADVANCED
+          # once two active Passkeys exist.
+          def security_mode_form
+            if current_client.security_mode_advanced?
+              { action: base_app_identity_mfa_challenge_path(ri: params[:ri]),
+                security_mode_id: ClientSecurityMode::NORMAL,
+                submit_label: t("sign.app.settings.mfa.show.switch_to_normal"), }
+            elsif active_passkey_count >= 2
+              { action: base_app_identity_mfa_challenge_path(ri: params[:ri]),
+                security_mode_id: ClientSecurityMode::ADVANCED,
+                submit_label: t("sign.app.settings.mfa.show.switch_to_advanced"), }
+            end
           end
 
           def requested_security_mode_id

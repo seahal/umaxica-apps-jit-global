@@ -92,7 +92,7 @@ class TelephoneSignupCreatorLockingTest < ActiveSupport::TestCase
     assert_equal :created, result.status
     assert_nil result.telephone.binding_finalized_at
     assert_equal result.telephone.public_id, result.session_payload.fetch(:public_id)
-    assert_equal VisitorStatus::ACTIVE, result.telephone.visitor.status_id
+    assert_equal VisitorStatus::UNVERIFIED_WITH_SIGN_UP, result.telephone.visitor.status_id
     assert_equal VisitorVisibility::VISITOR, result.telephone.visitor.visibility_id
     assert_equal VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, result.telephone.visitor_telephone_status_id
     assert_instance_of TrueClass, result.session_payload.fetch(:confirm_policy)

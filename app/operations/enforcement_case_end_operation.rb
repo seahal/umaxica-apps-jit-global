@@ -16,10 +16,14 @@ class EnforcementCaseEndOperation
     new(...).call
   end
 
-  def initialize(enforcement_case:, reason:, ended_by_operator_public_id: nil)
+  def initialize(enforcement_case:, reason:, ended_by_operator_public_id: nil,
+                 step_up_token: nil, step_up_requirement: nil)
     @enforcement_case = enforcement_case
     @reason = reason
     @ended_by_operator_public_id = ended_by_operator_public_id
+    @step_up_token = step_up_token
+    @step_up_requirement = step_up_requirement
+    validate_step_up_pair!
   end
 
   def call
@@ -43,6 +47,7 @@ class EnforcementCaseEndOperation
           enforcement_case.authentication_method_effects.where(ended_at: nil).update_all(ended_at: now)
           enforcement_case.identifier_effects.where(ended_at: nil).update_all(ended_at: now)
           # rubocop:enable Rails/SkipsModelValidations
+          step_up_token&.consume_step_up_evidence!(requirement: step_up_requirement, now:)
         end
 
         committed_end_reason = enforcement_case.end_reason
@@ -68,7 +73,19 @@ class EnforcementCaseEndOperation
 
   private
 
-  attr_reader :enforcement_case, :reason, :ended_by_operator_public_id
+  attr_reader :enforcement_case, :reason, :ended_by_operator_public_id, :step_up_token, :step_up_requirement
+
+  def validate_step_up_pair!
+    return if step_up_token.nil? && step_up_requirement.nil?
+    return if step_up_token.is_a?(OperatorToken) && step_up_requirement.is_a?(StepUpRequirement) &&
+      step_up_requirement.scope == "enforcement_case_release" &&
+      step_up_requirement.actor_ref == ended_by_operator_public_id &&
+      Operator.exists?(id: step_up_token.staff_id, public_id: ended_by_operator_public_id) &&
+      step_up_requirement.token_binding == step_up_token.public_id &&
+      step_up_requirement.audience == "step_up:org"
+
+    raise ArgumentError, "enforcement end Step-Up token and requirement must be supplied together"
+  end
 
   # The operator who ended the Case; nil when no operator did (expiry, principal verification).
   def audit_actor

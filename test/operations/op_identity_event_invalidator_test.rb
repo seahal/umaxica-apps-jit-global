@@ -28,6 +28,29 @@ class OpIdentityEventInvalidatorTest < ActiveSupport::TestCase
     assert_predicate legacy_root.reload, :revoked?
   end
 
+  test "identity invalidation repairs live grants under an already revoked legacy root" do
+    legacy_root = ClientToken.create!(user: @client, authentication_epoch: 0)
+    grant = OpAppGrant.create!(
+      authentication_epoch: 0,
+      client_token: legacy_root,
+      oidc_client_id: "core-app-jp",
+      oidc_scope: "openid",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    legacy_root.revoke!
+    event = record_stop
+
+    assert_equal :applied, OpIdentityEventInvalidator.call(event:)
+
+    stop = OpAppAuthorityStop.find_by!(authority_evidence_ref: event.event_id)
+
+    assert_predicate legacy_root.reload, :revoked?
+    assert_predicate grant.reload, :revoked?
+    assert OpAppAuthorityStopRootTarget.exists?(stop:, root: legacy_root)
+    assert OpAppAuthorityStopGrantTarget.exists?(stop:, grant:)
+    assert_equal 1, OpAppAuthorityStopParticipant.where(stop:).count
+  end
+
   test "a delayed stop event never revokes a root established after recovery under a newer epoch" do
     event = record_stop
     recovered_root = ClientToken.create!(user: @client, authentication_epoch: 1)
@@ -43,6 +66,16 @@ class OpIdentityEventInvalidatorTest < ActiveSupport::TestCase
     assert_equal :applied, OpIdentityEventInvalidator.call(event:)
     assert_equal :duplicate, OpIdentityEventInvalidator.call(event:)
     assert_equal 1, OpAppInboundEventReceipt.where(event_id: event.event_id).count
+  end
+
+  test "an unsupported persisted event reason fails before recording an OP receipt or revoking roots" do
+    root = ClientToken.create!(user: @client, authentication_epoch: 0)
+    event = record_stop
+    event.update!(reason: "unsupported_reason")
+
+    assert_raises(ArgumentError) { OpIdentityEventInvalidator.call(event:) }
+    assert_not_predicate root.reload, :revoked?
+    assert_equal 0, OpAppInboundEventReceipt.where(event_id: event.event_id).count
   end
 
   test "an unavailable OP leaves a durable retry instead of losing the stop" do

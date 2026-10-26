@@ -85,15 +85,109 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
         assert_equal 1, target.reload.status_id
       end
       token.update!(last_step_up_scope: "settings_passkey", last_step_up_at: Time.current)
+
+      assert_base_passkey_registration_options!(
+        browser:, surface:, token:, headers:,
+      )
       browser.patch(path, params: { passkey: { description: "Changed" } }, headers: headers)
 
       assert_equal 303, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
       assert_equal "Changed", target.reload.description
+      # adr/authentication-security-mode.md D3: the rename spent its Step-Up; deletion needs a new one.
+      browser.delete(path, headers: headers)
+
+      assert_equal 401, browser.response.status, "#{surface}: Step-Up evidence was reused"
+      assert_equal 1, target.reload.status_id
+      token.reload.update!(
+        last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+        last_step_up_credential_ref: ref, last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{surface}",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_full_reauthentication: false,
+      )
       browser.delete(path, headers: headers)
 
       assert_equal 303, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
       assert_not target.class.exists?(target.id),
                  "#{surface}: passkey removal must physically delete the current credential"
     end
+  end
+
+  private
+
+  def assert_base_passkey_registration_options!(browser:, surface:, token:, headers:)
+    auth_host = auth_service_host(surface)
+    reference = base_registration_handoff_reference(browser, surface, headers, auth_host)
+    options = auth_registration_options(surface, token, auth_host, reference)
+    expected_label = "umaxica.#{surface}"
+
+    assert_equal [expected_label, expected_label], [options.dig("user", "name"), options.dig("user", "displayName")]
+    assert_equal "required", options.dig("authenticatorSelection", "residentKey")
+  ensure
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
+  end
+
+  def base_registration_handoff_reference(browser, surface, headers, auth_host)
+    new_path = public_send("new_base_#{surface}_identity_passkey_path", ri: "jp")
+    collection_path = public_send("base_#{surface}_identity_passkeys_path", ri: "jp")
+
+    browser.get(new_path, headers: headers)
+
+    assert_equal 200, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
+    csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    browser.post(collection_path, params: { authenticity_token: csrf, ri: "jp" }, headers: headers)
+
+    assert_equal 303, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
+    registration_uri = URI.parse(browser.response.location)
+
+    assert_equal auth_host, registration_uri.host
+    Rack::Utils.parse_query(registration_uri.query).fetch("entry_ref")
+  end
+
+  def auth_registration_options(surface, token, auth_host, reference)
+    binding = auth_admission_binding(surface, reference)
+
+    assert_equal "credential_registration_handoff", binding.purpose
+
+    auth_browser = open_session
+    auth_browser.host!(auth_host)
+    auth_browser.https!
+    auth_registration_path = public_send("new_auth_#{surface}_verification_registration_passkey_path", ri: "jp")
+    admit_auth_ceremony_entry!(
+      auth_registration_path,
+      reference:,
+      params: { ri: "jp" },
+      browser: auth_browser,
+      base_token: token,
+      browser_digest: binding.base_browser_digest,
+    )
+    auth_browser.get(auth_registration_path)
+
+    assert_equal 200, auth_browser.response.status, "#{surface}: #{auth_browser.response.body.first(100)}"
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    options_path = public_send("auth_#{surface}_verification_registration_passkey_options_path", ri: "jp")
+    auth_browser.post(options_path, params: { "cf-turnstile-response" => "test-only" }, as: :json)
+
+    assert_equal 200, auth_browser.response.status, "#{surface}: #{auth_browser.response.body.first(100)}"
+
+    auth_browser.response.parsed_body.fetch("options")
+  end
+
+  def auth_service_host(surface)
+    {
+      "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+      "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+      "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+    }.fetch(surface)
+  end
+
+  def auth_admission_binding(surface, reference)
+    {
+      "app" => ClientAuthAdmissionBinding,
+      "com" => VisitorAuthAdmissionBinding,
+      "org" => OperatorAuthAdmissionBinding,
+    }.fetch(surface).find_by!(entry_ref: reference)
   end
 end

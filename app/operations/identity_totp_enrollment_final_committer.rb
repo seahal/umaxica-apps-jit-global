@@ -95,6 +95,8 @@ class IdentityTotpEnrollmentFinalCommitter
               last_otp_at: candidate.last_otp_at,
               user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
             )
+            consume_registration_step_up!(actor, token, transaction, now) if
+              transaction.purpose == "credential_registration"
             child.update!(status: "consumed", result_jti: transaction.result_jti, consumed_at: now)
             candidate.update!(consumed_at: now)
             transaction.commit_registration_consumption!(
@@ -105,6 +107,19 @@ class IdentityTotpEnrollmentFinalCommitter
           end
         end
       end
+    end
+
+    def consume_registration_step_up!(actor, token, transaction, now)
+      requirement = StepUpRequirement.new(
+        scope: transaction.required_scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
+        session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
+        ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      )
+      token.consume_step_up_evidence!(requirement:, now:)
+    rescue TokenStatusManagement::StepUpEvidenceUnavailable
+      raise IdentityTotpCeremonyContract::Error, "TOTP enrollment requires current scoped Step-Up"
     end
 
     def validate_ticket!(actor, token, transaction, record, digest, payload, now)

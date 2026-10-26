@@ -10,6 +10,8 @@ module Visa
       protect_csp_violation_report_intake
       rescue_from ActionDispatch::Http::Parameters::ParseError, with: :ignore_malformed_csp_report
 
+      public
+
       def create
         record_csp_violation!
         head :no_content

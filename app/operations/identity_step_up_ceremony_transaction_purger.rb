@@ -44,30 +44,51 @@ class IdentityStepUpCeremonyTransactionPurger
     model.connection_owner.connected_to(role: :writing) do
       model.purgeable_at(now, retention_period: retention_period).in_batches(of: batch_size) do |batch|
         batch.each do |parent|
-          parent.with_lock do
-            cutoff = now - retention_period
-            terminal_times = parent.attributes.values_at("consumed_at", "canceled_at", "revoked_at")
-            next unless parent.expires_at <= cutoff && terminal_times.all? { |time| time.nil? || time <= cutoff }
-            next unless AuthAdmissionBindingPurger.purge_for_parent!(
-              parent:, now:, retention_period:,
-            )
+          begin
+            parent.with_lock do
+              cutoff = now - retention_period
+              terminal_times = parent.attributes.values_at("consumed_at", "canceled_at", "revoked_at")
+              next unless parent.expires_at <= cutoff && terminal_times.all? { |time| time.nil? || time <= cutoff }
+              next unless AuthAdmissionBindingPurger.purge_for_parent!(
+                parent:, now:, retention_period:,
+              )
 
-            children =
-              DEPENDENT_MODELS.fetch(model).map do |child_model|
-                child_model.where(step_up_ceremony_transaction_ref: parent.transaction_id)
-              end
-            eligible = children.map { |relation| eligible_children(relation) }
-            next unless children.zip(eligible).all? { |all, old| all.count == old.count }
+              children =
+                DEPENDENT_MODELS.fetch(model).map do |child_model|
+                  child_model.where(step_up_ceremony_transaction_ref: parent.transaction_id)
+                end
+              eligible = children.map { |relation| eligible_children(relation) }
+              next unless children.zip(eligible).all? { |all, old| all.count == old.count }
 
-            # Restrictive FKs remain intact. A concurrent new reference aborts the whole writer
-            # transaction rather than leaving partially removed continuity or reviving authority.
-            eligible.each(&:delete_all)
-            deleted += model.where(id: parent.id).delete_all
+              # Restrictive FKs remain intact. A concurrent new reference aborts the whole writer
+              # transaction rather than leaving partially removed continuity or reviving authority.
+              eligible.each(&:delete_all)
+              deleted += model.where(id: parent.id).delete_all
+            end
+          rescue ActiveRecord::InvalidForeignKey => e
+            # A concurrent ceremony writer can add or retain a restrictive child after the
+            # eligibility snapshot. The transaction has already rolled back the child deletes;
+            # leave the complete cohort for the next retention pass.
+            raise unless foreign_key_restriction?(e)
+          rescue ActiveRecord::StatementInvalid => e
+            # PostgreSQL exposes RESTRICT failures as StatementInvalid with a PG::RestrictViolation
+            # cause on this Rails version. Treat that race exactly like ActiveRecord::InvalidForeignKey.
+            raise unless foreign_key_restriction?(e)
           end
         end
       end
     end
     deleted
+  end
+
+  def foreign_key_restriction?(error)
+    current = error
+    while current
+      return true if ["PG::ForeignKeyViolation", "PG::RestrictViolation"].include?(current.class.name)
+
+      current = current.cause
+    end
+    false
   end
 
   def eligible_children(relation)

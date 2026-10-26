@@ -35,8 +35,6 @@ module Auth
 
         def auth_ceremony_admission_action_url(**query) = auth_org_ceremony_bindings_path(**query)
 
-        def auth_ceremony_admitted_action_url = auth_org_verification_setup_path(ri: params[:ri])
-
         def ceremony_actor_model = Operator
 
         def ceremony_step_up_session_model = OperatorStepUpSession

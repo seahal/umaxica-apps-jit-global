@@ -1,15 +1,16 @@
 # Refresh Token Rotation
 
-> **Current boundary (2026-09-15):** Base is the sole Identity Provider, Authorization Server and
-> token authority. Auth is a credential ceremony surface; it is not an RP, token issuer, session
-> authority or assurance-policy authority. Older Acme/Sign names in this document describe legacy
-> physical namespaces only and do not change the current Base/Auth ownership boundary.
+> **Current boundary (2026-10-24):** Visa is the sole Identity Provider, Authorization Server and
+> authority token issuer. Auth is a credential ceremony surface; it is not an RP, token issuer,
+> session authority or assurance-policy authority. Base is the browser RP on `www.umaxica.*` and
+> only owns its RP session and credential transport. Older Acme/Sign/Base-OP names in this document
+> describe legacy physical namespaces only and do not change the current Visa/Auth/Base-RP boundary.
 
 ## Authority
 
-Refresh token families are Base authority.
+Refresh token families are Visa authority.
 
-Base owns refresh token issuance, rotation, replay detection, family revocation, compromise state,
+Visa owns refresh token issuance, rotation, replay detection, family revocation, compromise state,
 DBSC/device binding interaction, explicit refresh endpoints, and audit. Auth must not issue, rotate,
 refresh, revoke, or list refresh tokens. It must not issue access tokens or downstream tokens.
 
@@ -25,7 +26,7 @@ authentication-event time fails closed. Replay and revoke outcomes remain scoped
 session/family, and the project continues to accept the residual risk that already-issued
 short-lived access JWTs remain usable until their normal expiry after session termination.
 
-The three Base OAuth token controllers bind their expected realm from the controller class
+The three Visa OAuth token controllers bind their expected realm from the controller class
 (`client`, `visitor`, or `operator`). Authorization-code exchange rejects a code whose stored realm
 does not match that fixed endpoint binding before code consumption, rotation, or RP-session side
 effects. Refresh exchange performs the equivalent check against the concrete RP-session class before
@@ -33,7 +34,7 @@ rotation: the resolver receives the controller-selected realm and queries only t
 writing database and RP-session class. It does not scan the other surface databases and then rely on
 a later realm comparison. The request does not supply or select the expected realm.
 
-For one Base Browser Session and one registered RP client, an authorization-code exchange may have
+For one Visa Root Session and one registered RP client, an authorization-code exchange may have
 at most one non-retired RP Session. A second authorization-code request is rejected; it does not
 replace the existing JTI, scope, refresh family, or session row. Revoked sessions remain occupied
 until the latest Access JWT they issued is outside the configured verifier clock-skew window. The
@@ -41,13 +42,13 @@ maximum Access JWT `exp` is persisted monotonically on the RP Session before the
 returned. A legacy row without a recorded maximum is conservatively treated as not retired until a
 separate migration/backfill decision establishes its history.
 
-Browser-session revocation uses the same database lock order as exchange: it locks the parent Base
-Browser Session first, then locks eligible child RP Sessions in ascending primary-key order before
+Browser-session revocation uses the same database lock order as exchange: it locks the parent Visa
+Root Session first, then locks eligible child RP Sessions in ascending primary-key order before
 recording the revocations. This prevents a revocation that already owns a child row from waiting on
 the parent while an exchange owns the parent and waits on that child.
 
 Initial refresh issuance, refresh-token rotation, and RP-session revocation use the same
-parent-before-child order. The refresh issuer locks the surface-local Base Browser Session before
+parent-before-child order. The refresh issuer locks the surface-local Visa Root Session before
 its RP Session and performs replay, activity, digest, and rotation checks while both locks are held.
 A refresh cannot acquire a child-only lock and pass a revoke that has already serialized on the
 parent. The RP-session model methods enforce the same boundary for direct callers; issuance after
@@ -65,7 +66,7 @@ RP-session-only revocation follows the same order on the writing connection: it 
 Browser Session, then the targeted RP Session, and never revokes the parent or sibling RP Sessions.
 OIDC token revocation and verified back-channel logout use this operation rather than directly
 updating the child row. Back-channel logout records a successful RP-session revoke only after the
-client-bound, surface-local lookup succeeds. A legacy UUID `sid` that identifies a Base Browser
+client-bound, surface-local lookup succeeds. A legacy UUID `sid` that identifies a Visa Root
 Session remains on the existing parent logout primitive; it is not reinterpreted as an RP Session.
 
 First-party browser RPs use the same child-only authority for their normal POST `/sign/out` flow.
@@ -91,14 +92,14 @@ details. They do not make Auth the refresh-token authority.
 
 During migration, code may still live in sign-named modules or use sign-side physical tables. That
 placement must be treated as compatibility implementation until the code is moved or renamed. The
-authority decision is already Base.
+authority decision is already Visa.
 
 ## Rotation Contract
 
 Refresh tokens are stateful records. A successful refresh consumes the presented refresh token and
 returns a newly issued token in the same family.
 
-Base refresh rotation must:
+Visa refresh rotation must:
 
 - store verifiers only as digests;
 - preserve a family identifier across rotations;
@@ -106,7 +107,7 @@ Base refresh rotation must:
 - mark the previous token as rotated or retired;
 - run on the writing role so row locks and mutation hit the primary database;
 - keep access-token `jti`, protocol `sid`, and refresh-token family identifiers distinct;
-- return refreshed access tokens to the default AAL1 context unless Base policy explicitly says
+- return refreshed access tokens to the default AAL1 context unless Visa policy explicitly says
   otherwise.
 
 ### Absolute Session Lifetime
@@ -137,13 +138,13 @@ Step-up freshness is not sticky across refresh. A refresh must not extend `recen
 Browser GET/HEAD navigation does not refresh an authentication token, rotate a refresh credential,
 or update session activity. Refresh remains available only through the existing explicit POST
 protocol endpoint, subject to its surface, client, device-binding, and session checks. Auth remains
-a credential ceremony service and does not issue or rotate Base refresh tokens.
+a credential ceremony service and does not issue or rotate Visa refresh tokens.
 
 ## Replay And Compromise
 
 Reusing an already-rotated refresh token is compromise evidence.
 
-When replay is detected, Base owns the response:
+When replay is detected, Visa owns the response:
 
 - reject the refresh;
 - revoke or quarantine the refresh token family according to policy;
@@ -153,22 +154,23 @@ When replay is detected, Base owns the response:
 - emit audit and security telemetry without logging raw verifiers.
 
 Revoked or expired tokens remain invalid but do not automatically imply replay compromise unless
-Base policy classifies them that way.
+Visa policy classifies them that way.
 
 ## DBSC And Device Binding
 
-DBSC and device binding are attached to Base session and refresh-token authority. Refresh rotation
-must evaluate the expected device/session binding and reject mismatches according to Base policy.
+DBSC and device binding are attached to Visa Root Session and refresh-token authority. Refresh
+rotation must evaluate the expected device/session binding and reject mismatches according to Visa
+policy.
 
 Auth may execute credential ceremonies that help prove an actor or credential, but it must not use
 DBSC/device binding to rotate refresh tokens or update session state.
 
 ## Downstream Tokens
 
-Downstream tokens must be Base-issued. `core`, `line`, and future downstream services must not trust
+Downstream tokens must be Visa-issued. `core`, `line`, and future downstream services must not trust
 Auth-issued session, access, refresh, or downstream tokens.
 
-Refresh rotation may result in new Base access tokens or downstream-token eligibility, but Auth does
+Refresh rotation may result in new Visa access tokens or downstream-token eligibility, but Auth does
 not mint those tokens.
 
 ### RP retirement and the remaining Access JWT window
@@ -194,12 +196,12 @@ concurrent revocation.
 
 OIDC token revocation is scoped to the RP Session identified by the token's `sid`, and the matching
 client and `jti` are required. If no RP Session matches, revocation does not fall back to a parent
-Base Browser Session. Parent-session termination remains an explicit logout or parent-scope
+Visa Root Session. Parent-session termination remains an explicit logout or parent-scope
 operation; an RP cannot revoke sibling RPs or the parent merely because it knows a parent `sid`.
 
 Back-channel logout uses the verified logout-token audience as the client binding. Its `sid` is an
 opaque, bounded identifier: the implementation accepts the URL-safe Nanoid used by RP Sessions as
-well as the UUID values retained by legacy Base Browser Session bindings. A matching RP Session is
+well as the UUID values retained by legacy Visa Root Session bindings. A matching RP Session is
 resolved before a legacy parent-session binding, and the logout primitive receives the concrete
 matched class so revoking an RP Session cannot accidentally revoke its parent. A different client
 cannot revoke a RP Session merely by presenting its `sid` to its own verified endpoint.
@@ -218,7 +220,7 @@ binding mismatch, revoked-token handling, and compromise-state updates.
 Regression coverage should prove:
 
 - Auth cannot issue or rotate refresh tokens;
-- Base rotates refresh token families atomically;
+- Visa rotates refresh token families atomically;
 - replay revokes or quarantines the correct family;
 - device/session binding mismatch fails closed;
 - refreshed access returns to default AAL1 context;
@@ -234,45 +236,33 @@ renamed. They must not assert sign-side authority.
 - `docs/security/downstream-token-authority.md`
 - `docs/security/cookie-domain-scope.md`
 
-## Delivered reconciliation (2026-10-06)
+## Standard refresh (WU-10, D-25, 2026-10-25)
 
-The active contract is the device-session-first rotation in the Base RP layer. Access and refresh
-credentials are evaluated independently. GET/HEAD and unsafe requests use separate refresh
-orchestrators; unsafe requests complete CSRF, Origin and Fetch Metadata checks before refresh and
-mutation. Valkey single-flight coalescing is bounded by the fixed encrypted delivery receipt, while
-the database receipt remains the recovery authority. Credential failure clears RP cookies;
-dependency failure preserves them and is observable. Earlier sign/acme authority wording above is
-historical.
+Refresh follows RFC 6749 section 6 and RFC 9700 section 4.14 with no grace period:
 
-## Separated RP local Refresh implementation
+- every use rotates the grant's refresh credential (`OidcRefreshTokenIssuer`, writer role, grant
+  row lock; the token response is built inside that lock, so a failure to build it rolls the
+  rotation back);
+- presenting the consumed predecessor answers `invalid_grant` and revokes only that grant (its
+  refresh family); the OP Root Session and other grants are untouched;
+- an unknown public ID, a wrong verifier or a malformed token answers `invalid_grant` and revokes
+  nothing;
+- there is no delivery receipt, receipt query endpoint, replay of an earlier response or RP-side
+  refresh attempt record.
 
-`RpRefreshCommitter` resolves the browser's opaque local session public ID in the fixed cell store;
-a database primary key is not a browser session credential. Reservation and installation lock the
-per-sid OP binding before the local session, matching callback and back-channel logout. Both phases
-refuse ended local sessions, revoked bindings, unresolved identity and disabled local principals.
-After the network call, installation also requires the response's exact issuer/client/realm,
-subject, sid and integer contract epoch to match the enrolled identity/session, and uses the
-expected installed generation to prevent a delayed response from overwriting another winner. No row
-lock spans HTTPS. These source guarantees do not establish runtime secret isolation or complete the
-deferred R5 activation prerequisites.
+The RP dispatches a refresh once. Access and refresh credentials are evaluated independently;
+GET/HEAD and unsafe requests use separate refresh orchestrators, and unsafe requests complete CSRF,
+Origin and Fetch Metadata checks before refresh and mutation. A definitive refusal and an
+indeterminate commit (the OP may already have rotated, so resending would be reuse) both clear the
+RP cookies; a dependency failure keeps them and answers 503. Recovery is a new Authorization Code
+flow (D-80, D-110): on a top-level HTML navigation the RP starts one `prompt=none` authorization
+with new `state`, PKCE and nonce; `login_required` sends the browser to the interactive `GET /sign`
+entry, and the cleared credentials prevent a second silent attempt. Browserless requests (JSON,
+Inertia, non-navigation fetches) answer 401 or the ordinary entry without starting an authorization.
 
-The prior attempt is reused for the same session and input HMAC, retaining its expected generation.
-An in-flight sibling request returns the existing superseded outcome without another rotation. An
-uncertain or dependency/invalid-protocol delivery retains its original attempt reference; a later
-request queries only that exact receipt. An expired pending attempt requires a new Code Flow and
-cannot redispatch the predecessor. The database receipt remains the OP recovery authority; local
-attempt metadata is only dispatch coordination and contains no token vault. If local installation
-committed but its browser response was lost, exact receipt recovery within the original window can
-return the already-installed generation without incrementing it again. A newer generation, changed
-binding or tombstone prevents that recovery. Expiry never permits redispatching the predecessor,
-including after a successful local installation.
-
-The token client bounds the entire HTTP exchange to two seconds, or one second for the receipt
-query, using a monotonic deadline. All socket phases are bounded as well. The committer passes the
-remaining four-second dispatch deadline, capped by the original receipt's fresh writer-clock expiry.
-Assertion preparation consumes the request budget; an exhausted budget prevents sending. Only the
-disposable HTTP exchange is interrupted on timeout: database transactions and local installation
-locks are never interrupted. Installation rechecks the total deadline after its locks are acquired,
-preserving credentials on a dependency timeout. Slow database waits can still exceed the latency
-target, but cannot authorize late installation. Reserved receiving capacity and independent
-admitted-process latency measurements remain necessary acceptance evidence.
+In separated RP cell processes `RpRefreshCommitter` resolves the opaque local session public ID in
+the fixed cell store, refuses ended sessions, revoked bindings and disabled principals before
+dispatch, and installs only a verified Access JWT whose issuer, client, realm, subject and sid
+match, under the binding-before-session lock order and an installed-generation compare-and-set. No
+row lock spans HTTPS. The token client bounds the whole HTTP exchange to two seconds within a
+four-second dispatch budget.

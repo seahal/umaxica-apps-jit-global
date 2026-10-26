@@ -40,6 +40,13 @@ Flow-selection rationale and reconsideration criteria are extended by
 7. **Accepted risk:** whether a Jump-forwarded authorize request keeps `redirect_uri` byte-identical
    is judged in the Jump integration test; until then exact matching refuses any altered value, so
    the residual is a failed sign-in, never a wrong delivery.
+8. **Visa endpoint separation (2026-10-25):** `/oauth/authorize` starts authorization only.
+   HEAD and the presence of `result`, `result_ref`, `transaction_ref`, `cancellation_ref` or
+   `switch_handoff` receive a local HTTP 400 before protocol validation or allocation, including
+   blank values. These are transport-boundary refusals, not the post-validation errors in point 3.
+   Results, Cancel and Switch use their dedicated `/oidc/*` navigation resources under
+   [Design D](sign-in-path-continuation-protocol.md), as required by WU-12/WU-13 and the retained
+   continuation-parameter refusal in WU-42. This adds no legacy receiver or compatibility route.
 
 ## References
 

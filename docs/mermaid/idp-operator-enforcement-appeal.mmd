@@ -1,5 +1,7 @@
 stateDiagram-v2
     %% CURRENT implementation; sources and guards in transition inventory.
+%% Interactive resolution consumes matching operation-scope Step-Up evidence in the appeal-state
+%% transaction. The subsequent Case-end operation does not consume a second proof.
     state "submitted" as submitted
     state "under_review" as under_review
     state "approved" as approved

@@ -7,8 +7,6 @@ require "webauthn/fake_client"
 require "base64"
 
 class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationTest
-  include AuthCeremonyEntryHelper
-
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! @host
@@ -34,102 +32,44 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       description: "Login Key",
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
-    begin
-      fv5026 = "com"
-      fv5025 = auth_com_sign_in_path
-      fv5024 = { ri: "jp" }
-      fv5023 = { "Host" => @host }
-      begin
-        fv5001 = self
-        fv5017 = fv5026.to_s
-        fv5013 = fv5025
-        fv5012 = fv5024
-        fv5020 = fv5023
-        fv5015 = fv5001.cookies["__Host-auth_sid"].presence || fv5001.cookies["auth_sid"].presence
-        if fv5015.present?
-          fv5022 = {
-            "app" => ClientAuthCeremonySession,
-            "com" => VisitorAuthCeremonySession,
-            "org" => OperatorAuthCeremonySession,
-          }.fetch(fv5017).find_active_by_raw_sid(fv5015)
-          fv5021 = fv5022&.admitted? && fv5022.admission_purpose == "authentication_handoff"
-        end
+    base_browser_nonce = "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+    client = OidcClientRegistry.find!("core-com-jp")
+    params = {
+      client_id: client.client_id,
+      response_type: "code",
+      scope: "openid profile",
+      redirect_uri: client.redirect_uris.first,
+      state: SecureRandom.hex(8),
+      nonce: SecureRandom.hex(8),
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      code_challenge_method: "S256",
+    }
+    issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
+      surface: "com", intent: "sign_in", params:, base_browser_nonce:, base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: "com", reference: issuance.handoff.reference,
+    )
+    entry_params = { ri: "jp", entry_ref: issuance.handoff.reference }
+    auth_headers = {
+      "Host" => @host,
+      "Origin" => "https://#{@host}",
+      "Sec-Fetch-Site" => "same-origin",
+    }
 
-        unless fv5021
-          fv5014 = ENV.fetch(
-            { "app" => "PUBLIC_AUTH_SERVICE_URL",
-              "com" => "PUBLIC_AUTH_CORPORATE_URL",
-              "org" => "PUBLIC_AUTH_STAFF_URL", }.fetch(fv5017),
-          )
+    get auth_com_sign_in_path(ri: "jp"), params: entry_params, headers: auth_headers
 
-          fv5002 = fv5020.merge(
-            "Host" => fv5014, "Origin" => "https://#{fv5014}", "Sec-Fetch-Site" => "same-origin",
-          )
-          fv5011 = OidcTestEntry.issue!(
-            surface: fv5017,
-            intent: "sign_in",
-            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-            base_token: nil,
-          )
-          fv5018 = BaseAuthAdmissionCoordinator.find_admission_binding!(
-            surface: fv5017, reference: fv5011.reference,
-          )
-          fv5019, fv5015 = fv5018.class.auth_admission_session_class.issue!
-          fv5018.attach_auth_session!(auth_session: fv5019, confirmation_ref: SecureRandom.uuid)
-          fv5018.confirm_base!(
-            base_token: nil,
-            browser_digest: AuthAdmissionBinding.browser_digest(
-              surface: fv5017,
-              entry_ref: fv5011.reference,
-              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-            ),
-          )
-          fv5001.host!(fv5014)
-          fv5001.https!
-          fv5016 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-          fv5001.cookies.delete("auth_sid")
-          fv5001.cookies.delete("__Host-auth_sid")
-          store_raw_cookies(
-            fv5001.cookies,
-            "#{fv5016}=#{Rack::Utils.escape(fv5015)}", URI.parse("https://#{fv5014}/"),
-          )
-          fv5001.get(
-            fv5013,
-            params: fv5012.merge(entry_ref: fv5011.reference),
-            headers: fv5002,
-          )
-          fv5005, fv5003, fv5004 =
-            begin
-              fv5010 = fv5001.response.body
-              fv5009 = false
-              fv5008 = Nokogiri::HTML(fv5010).at_css("form")
-              if fv5008.nil? && fv5009
-                nil
-              else
-                raise RuntimeError, "Auth continuation form is missing" unless fv5008
+    assert_response :see_other
+    assert_equal "/ceremony_bindings", URI.parse(response.location).path
+    get response.location, headers: auth_headers
 
-                fv5007 = fv5008.at_css("input[name='authenticity_token']")&.[]("value")
-                raise RuntimeError,
-                      "Auth continuation is missing its CSRF token" if fv5007.blank?
+    assert_response :see_other
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_com_sign_in_path(ri: "jp"), params: entry_params, headers: auth_headers
 
-                fv5006 = fv5008.css("input[type='hidden']").to_h do |input|
-                  [input["name"], input["value"]]
-                end.except("authenticity_token")
-                [fv5008["action"], fv5007, fv5006]
-              end
-            end
-          fv5001.post(
-            fv5005, params: fv5004.merge(authenticity_token: fv5003),
-                    headers: fv5002,
-          )
-
-          assert_equal 303, fv5001.response.status
-        end
-      end
-      cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-      VisitorAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
-      @primary_sign_in_binding = nil
-    end
+    assert_response :see_other
+    assert_predicate binding.reload, :redeemed?
+    @primary_sign_in_binding = nil
   end
 
   teardown do
@@ -176,10 +116,14 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
 
   test "an unknown identifier gets the same response shape and a challenge no credential can satisfy" do
     post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params(identifier: "warmup-#{SecureRandom.hex(4)}@example.com"), headers: @origin_headers
+
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: com_options_params, headers: @origin_headers
 
     assert_response :ok
     known = response.parsed_body
+    known_shape = options_response_shape
 
     assert_equal "com:#{@visitor.id}",
                  session[:passkey_challenges].fetch(known.fetch("challenge_id"))["actor_global_key"]
@@ -190,17 +134,139 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_response :ok
     unknown = response.parsed_body
 
+    assert_equal known_shape, options_response_shape
     assert_equal known.fetch("options").keys.sort, unknown.fetch("options").keys.sort
     assert_empty Array(unknown.dig("options", "allowCredentials"))
     assert_equal "com:0", session[:passkey_challenges].fetch(unknown.fetch("challenge_id"))["actor_global_key"]
+    assert_not_includes response.body, @passkey.webauthn_id
   end
 
   test "options refuses a missing identifier without issuing a challenge" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
-         params: { "cf-turnstile-response": "test_token" }, headers: @origin_headers
+    [
+      { "cf-turnstile-response": "test_token" },
+      { "cf-turnstile-response": "test_token", identifier: "" },
+    ].each do |params|
+      post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: params, headers: @origin_headers
 
-    assert_response :unprocessable_content
-    assert_empty session[:passkey_challenges].to_h
+      assert_response :unprocessable_content
+      assert_empty session[:passkey_challenges].to_h
+    end
+  end
+
+  test "a malformed identifier challenge cannot authenticate a known credential" do
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params(identifier: "not-an-identifier"), headers: @origin_headers
+
+    assert_response :ok
+    options = response.parsed_body
+
+    assert_empty Array(options.dig("options", "allowCredentials"))
+    assert_equal "com:0", session[:passkey_challenges].fetch(options.fetch("challenge_id"))["actor_global_key"]
+
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: {
+           challenge_id: options.fetch("challenge_id"),
+           credential: @fake.get(
+             challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+             user_handle: @visitor.webauthn_user_handle,
+           ),
+         }, headers: @origin_headers
+
+    assert_response :unauthorized
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
+  end
+
+  test "unverified, released and expired contacts cannot select an otherwise eligible Identity" do
+    [
+      ["unverified", -> {
+        @visitor.visitor_emails.first.update!(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
+      },],
+      ["released", lambda {
+        email = @visitor.visitor_emails.first
+        email.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+        email.release_binding!
+      },],
+    ].each do |label, invalidate|
+      invalidate.call
+      post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: com_options_params, headers: @origin_headers
+
+      assert_response :ok, label
+      options = response.parsed_body
+
+      assert_equal "com:0", session[:passkey_challenges].fetch(options.fetch("challenge_id"))["actor_global_key"], label
+
+      post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+        challenge_id: options.fetch("challenge_id"),
+        credential: @fake.get(
+          challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+          user_handle: @visitor.webauthn_user_handle,
+        ),
+      }, headers: @origin_headers
+
+      assert_response :unauthorized, label
+    end
+  end
+
+  test "an expired contact cannot select an otherwise eligible Identity" do
+    email = @visitor.visitor_emails.first
+    email.update!(discard_at: email.created_at, purge_eligible_at: email.created_at + 1.day)
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params, headers: @origin_headers
+
+    assert_response :ok
+    options = response.parsed_body
+
+    assert_equal "com:0", session[:passkey_challenges].fetch(options.fetch("challenge_id"))["actor_global_key"]
+
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+      challenge_id: options.fetch("challenge_id"),
+      credential: @fake.get(
+        challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+        user_handle: @visitor.webauthn_user_handle,
+      ),
+    }, headers: @origin_headers
+
+    assert_response :unauthorized
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
+  end
+
+  test "verification stays bound to the selected Identity after its contact moves to another owner" do
+    former_address = @visitor.visitor_emails.first.address
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params(identifier: former_address), headers: @origin_headers
+    options = response.parsed_body
+
+    assert_response :ok
+    assert_equal "com:#{@visitor.id}",
+                 session[:passkey_challenges].fetch(options.fetch("challenge_id"))["actor_global_key"]
+
+    former_email = @visitor.visitor_emails.first
+    former_email.release_binding!
+    former_email.update!(visitor_email_status_id: VisitorEmailStatus::DELETED)
+    successor = create_verified_visitor_with_email(email_address: former_address)
+    successor_email = successor.visitor_emails.first
+    successor_email.finalize_binding!
+    successor_fake = WebAuthn::FakeClient.new("https://#{@host}")
+    registration = WebAuthn::Credential.from_create(successor_fake.create(user_verified: true))
+    successor_passkey = VisitorPasskey.create!(
+      visitor: successor, webauthn_id: registration.id, external_id: SecureRandom.uuid,
+      public_key: registration.public_key, description: "Successor key", status_id: VisitorPasskeyStatus::ACTIVE,
+    )
+    successor.reload
+
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+      challenge_id: options.fetch("challenge_id"),
+      credential: successor_fake.get(
+        challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+        user_handle: successor.webauthn_user_handle,
+      ),
+    }, headers: @origin_headers
+
+    assert_response :unauthorized
+    assert_equal VisitorPasskeyStatus::ACTIVE, successor_passkey.reload.status_id
+    assert_empty VisitorToken.where(visitor_id: successor.id)
   end
 
   test "verification logs visitor in on success" do
@@ -215,6 +281,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
              challenge: response.parsed_body.fetch("options").fetch("challenge"),
              user_verified: true,
              sign_count: 1,
+             user_handle: @visitor.webauthn_user_handle,
            ),
          },
          headers: @origin_headers
@@ -223,6 +290,46 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "ok", response.parsed_body["status"]
     assert_equal URI.parse(auth_com_sign_in_check_path(ri: "jp")).path,
                  URI.parse(response.parsed_body.fetch("redirect_url")).path
+  end
+
+  test "each valid Passkey of the named Identity can authenticate independently" do
+    second_fake = WebAuthn::FakeClient.new("https://#{@host}")
+    registration = WebAuthn::Credential.from_create(second_fake.create(user_verified: true))
+    second_passkey = VisitorPasskey.create!(
+      visitor: @visitor, webauthn_id: registration.id, external_id: SecureRandom.uuid,
+      public_key: registration.public_key, description: "Second Login Key", status_id: VisitorPasskeyStatus::ACTIVE,
+    )
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params, headers: @origin_headers
+    options = response.parsed_body
+
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+      challenge_id: options.fetch("challenge_id"),
+      credential: second_fake.get(
+        challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+        user_handle: @visitor.webauthn_user_handle,
+      ),
+    }, headers: @origin_headers
+
+    assert_response :ok
+    assert_equal "ok", response.parsed_body.fetch("status")
+    assert_equal 1, second_passkey.reload.sign_count
+  end
+
+  test "verification rejects a UP=false assertion even with a valid signature" do
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params, headers: @origin_headers
+    options = response.parsed_body
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+      challenge_id: options.fetch("challenge_id"),
+      credential: @fake.get(
+        challenge: options.dig("options", "challenge"), user_present: false, user_verified: true,
+        sign_count: 1, user_handle: @visitor.webauthn_user_handle,
+      ),
+    }, headers: @origin_headers
+
+    assert_response :unauthorized
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 
   private
@@ -275,7 +382,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
   end
 
-  test "verification uses credential ownership and ignores a forged userHandle" do
+  test "verification refuses a forged userHandle even when credential ownership matches" do
     other_visitor = create_verified_visitor_with_email(email_address: "com_other_passkey@example.com")
     other_visitor.visitor_emails.first.finalize_binding!
     other_fake = WebAuthn::FakeClient.new("https://#{@host}")
@@ -293,6 +400,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 
+    token_count = VisitorToken.where(visitor_id: other_visitor.id).count
     post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
@@ -306,8 +414,8 @@ class Auth::Com::Sign::In::PasskeysControllerTest
            },
          }, headers: @origin_headers
 
-    assert_response :ok
-    assert_equal "ok", response.parsed_body["status"]
+    assert_response :unauthorized
+    assert_equal token_count, VisitorToken.where(visitor_id: other_visitor.id).count
     assert_empty VisitorToken.where(visitor_id: other_visitor.id)
   end
 
@@ -347,27 +455,26 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     assert_empty VisitorToken.where(visitor_id: other_visitor.id)
   end
 
-  test "verification rejects a disabled discoverable credential" do
+  test "verification rejects disabled revoked and deleted discoverable credentials" do
     VisitorPasskeyStatus.ensure_defaults!
-    @passkey.update!(status_id: VisitorPasskeyStatus::DISABLED)
-    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
-         params: com_options_params,
-         headers: @origin_headers
-    challenge_id = response.parsed_body.fetch("challenge_id")
+    [VisitorPasskeyStatus::DISABLED, VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].each do |status_id|
+      @passkey.update!(status_id: status_id)
+      post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: com_options_params, headers: @origin_headers
+      options = response.parsed_body
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
-         params: {
-           challenge_id: challenge_id,
-           credential: @fake.get(
-             challenge: response.parsed_body.fetch("options").fetch("challenge"),
-             user_verified: true,
-             sign_count: 1,
-           ),
-         }, headers: @origin_headers
+      post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+        challenge_id: options.fetch("challenge_id"),
+        credential: @fake.get(
+          challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+          user_handle: @visitor.webauthn_user_handle,
+        ),
+      }, headers: @origin_headers
 
-    assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
-    assert_empty VisitorToken.where(visitor_id: @visitor.id)
+      assert_response :unauthorized, status_id.to_s
+      assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
+      assert_empty VisitorToken.where(visitor_id: @visitor.id)
+    end
   end
 
   test "verification rejects a discoverable credential owned by a suspended visitor" do
@@ -423,6 +530,25 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 
+  test "verification rejects a correctly signed but unknown credential identifier" do
+    unregistered_fake = WebAuthn::FakeClient.new("https://#{@host}")
+    unregistered_fake.create(user_verified: true)
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params, headers: @origin_headers
+    options = response.parsed_body
+
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+      challenge_id: options.fetch("challenge_id"),
+      credential: unregistered_fake.get(
+        challenge: options.dig("options", "challenge"), user_verified: true, sign_count: 1,
+        user_handle: @visitor.webauthn_user_handle,
+      ),
+    }, headers: @origin_headers
+
+    assert_response :unauthorized
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
+  end
+
   test "verification rejects a challenge id that was never issued" do
     post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { challenge_id: "not-a-real-challenge", credential: { id: "x" } },
@@ -435,6 +561,16 @@ class Auth::Com::Sign::In::PasskeysControllerTest
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
+  end
+
+  def options_response_shape
+    body = response.parsed_body
+    cookies = Array(response.headers["Set-Cookie"]).flat_map { |value| value.to_s.split("\n") }.map do |cookie|
+      parts = cookie.split(";").map(&:strip)
+      [parts.first.to_s.split("=", 2).first, parts.drop(1).map { |part| part.split("=", 2).first.downcase }.sort]
+    end.sort
+    [response.status, body.keys.sort, body.fetch("options").keys.sort, response.body.bytesize,
+     response.headers["Location"], cookies,]
   end
 
   def bearer_headers(token, host: nil, headers: {})

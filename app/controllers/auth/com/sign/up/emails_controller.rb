@@ -304,7 +304,10 @@ module Auth
             return false if @user_email.address_digest.blank?
             return false if @user_email.errors.details.except(:visitor, :visitor_id).any?
 
-            supersede_active_sign_up_flow!
+            if sign_up_entry_held_by_earlier_attempt?
+              @user_email.errors.add(:base, t("sign.com.registration.email.create.contact_held"))
+              return false
+            end
 
             SignUpEmailPendingGuard.with_lock(
               address_digest: @user_email.address_digest,
@@ -312,7 +315,12 @@ module Auth
             ) do
               next false if @user_email.errors.details.except(:visitor, :visitor_id).any?
 
-              cleanup_pending_visitor_signup!
+              # D-135/D-177: no user-initiated reset; only the background cleanup releases a held contact.
+              if SignUpContactHoldQuery.call(contact: @user_email)
+                @user_email.errors.add(:base, t("sign.com.registration.email.create.contact_held"))
+                next false
+              end
+
               EmailSignUpCandidateCreator.call(email: @user_email)
               bind_sign_up_flow_to_email!(@user_email)
               EmailSignUpOtpDeliveryIssuer.call(
@@ -324,13 +332,6 @@ module Auth
             @user_email = e.record if e.record.is_a?(VisitorEmail)
             strip_visitor_owner_errors!
             false
-          end
-
-          def cleanup_pending_visitor_signup!
-            cycle = current_sign_up_flow_ticket
-            return unless cycle&.principal_id
-
-            Visitor.find_by(id: cycle.principal_id)&.destroy!
           end
 
           def sanitized_rt_param

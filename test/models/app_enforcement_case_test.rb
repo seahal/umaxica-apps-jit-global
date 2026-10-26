@@ -313,6 +313,12 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
     other_token.reload
 
     assert_predicate matching_token, :revoked?
+    target = OpAppAuthorityStopRootTarget.find_by!(root: matching_token)
+    stop = OpAppAuthorityStop.find(target.stop_id)
+
+    assert_equal "administrative", stop.cause_name
+    assert_equal OpAuthorityStopReference.scope_id("root"), stop.scope_id
+    assert_equal "enforcement_unusable", stop.authority_evidence_ref
     assert_not_predicate other_token, :revoked?
   end
 

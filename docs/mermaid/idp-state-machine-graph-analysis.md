@@ -8,7 +8,6 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | idp-client-sign-in | 11 | 26 | PRIMARY_PENDING | COMPLETED, FAILED | None | None | 1 | None |
 | idp-client-sign-up | 14 | 40 | STARTED | COMPLETED, FAILED, EXPIRED, CANCELLED | None | None | 1 | CHECKPOINT_PENDING |
-| idp-client-sign-out | 7 | 9 | REQUESTED | COMPLETED, FAILED | NOTHING | None | 0 | None |
 | idp-client-auth-ceremony-session | 6 | 12 | issued, admitted | revoked, completed, cancelled | None | None | 3 | admitted, evidence, issued |
 | idp-client-email-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |
 | idp-client-telephone-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |
@@ -25,7 +24,6 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | idp-client-passkey-credential | 5 | 13 | ACTIVE | REVOKED | DISABLED, NOTHING | None | 1 | DELETED, REVOKED |
 | idp-visitor-sign-in | 11 | 26 | PRIMARY_PENDING | COMPLETED, FAILED | None | None | 1 | None |
 | idp-visitor-sign-up | 13 | 33 | STARTED | COMPLETED, FAILED, EXPIRED, CANCELLED | None | None | 1 | CHECKPOINT_PENDING |
-| idp-visitor-sign-out | 7 | 9 | REQUESTED | COMPLETED, FAILED | NOTHING | None | 0 | None |
 | idp-visitor-auth-ceremony-session | 6 | 12 | issued, admitted | revoked, completed, cancelled | None | None | 3 | admitted, evidence, issued |
 | idp-visitor-email-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |
 | idp-visitor-telephone-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |
@@ -41,7 +39,6 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | idp-visitor-passkey-credential | 5 | 13 | ACTIVE | REVOKED | DISABLED, NOTHING | None | 1 | DELETED, REVOKED |
 | idp-operator-sign-in | 11 | 26 | PRIMARY_PENDING | COMPLETED, FAILED | None | None | 1 | None |
 | idp-operator-sign-up | 5 | 10 | STARTED | COMPLETED | None | None | 0 | None |
-| idp-operator-sign-out | 7 | 9 | REQUESTED | COMPLETED, FAILED | NOTHING | None | 0 | None |
 | idp-operator-auth-ceremony-session | 6 | 12 | issued, admitted | revoked, completed, cancelled | None | None | 3 | admitted, evidence, issued |
 | idp-operator-email-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |
 | idp-operator-telephone-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |

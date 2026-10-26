@@ -22,7 +22,7 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
       test "#{surface} #{channel} delayed signup checks #{state} evidence" do
         owner = owner_model.create!(
           security_mode_id: SecurityModeConfigurable::NORMAL,
-          status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+          status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
         )
         destination =
           (channel == :email) ? "delayed-#{SecureRandom.hex(8)}@example.test" :
@@ -106,9 +106,8 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
         end
 
         assert_equal((state == "current") ? 1 : 0, sent)
-        expired = flow.reload.sign_up_expired?
-
-        assert_equal state == "expired", expired
+        # D-177: an undelivered expired generation leaves the Ticket for SignUpExpiryJob.
+        assert_not flow.reload.sign_up_terminal?
         assert_nil contact.reload.binding_finalized_at
       end
     end

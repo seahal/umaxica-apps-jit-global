@@ -3,20 +3,26 @@
 
 module AvatarOwnershipTransfers
   class CancelOperation < Operation
-    def initialize(actor:, surface:, subject_public_id:, transfer_public_id:)
+    def initialize(actor:, surface:, subject_public_id:, transfer_public_id:, step_up_token: nil,
+                   step_up_requirement: nil)
       super()
       @actor = actor
       @surface = surface.to_s
       @subject_public_id = subject_public_id.to_s
       @transfer_public_id = transfer_public_id.to_s
+      @step_up_token = step_up_token
+      @step_up_requirement = step_up_requirement
     end
 
     def call
+      validate_step_up_context!(
+        actor: actor, surface: surface, scope: "avatar_transfer_cancel",
+        token: step_up_token, requirement: step_up_requirement,
+      )
       reject_legacy_transfer_after_cutover!
       observed_transfer = find_transfer!(transfer_public_id)
-      unless observed_transfer.from_owner_surface == surface
-        raise Unauthorized, "transfer source surface does not match the authenticated surface"
-      end
+      raise Unauthorized, "transfer source surface does not match the authenticated surface" unless
+        observed_transfer.from_owner_surface == surface
 
       expired = false
       result = nil
@@ -52,6 +58,7 @@ module AvatarOwnershipTransfers
             cancel_actor_surface: surface,
             cancel_actor_public_id: subject_public_id,
           )
+          consume_step_up!(step_up_token, step_up_requirement)
           result = transfer
         end
       end
@@ -62,7 +69,7 @@ module AvatarOwnershipTransfers
 
     private
 
-    attr_reader :actor, :surface, :subject_public_id, :transfer_public_id
+    attr_reader :actor, :surface, :subject_public_id, :transfer_public_id, :step_up_token, :step_up_requirement
 
     def assert_same_transfer!(locked, observed)
       attributes = %w(

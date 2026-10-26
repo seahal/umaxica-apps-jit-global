@@ -22,7 +22,7 @@ Email and telephone bindings enforce both directions of uniqueness: one effectiv
 one Identity, and one Identity has one effective binding of that kind. Social bindings use the
 verified issuer and subject, retain release history, and enforce one active social binding per
 Client across Google and Apple. A released binding is never reattached by a stale callback or OTP.
-Passkeys retain an opaque immutable user handle and four-slot Identity ownership. Discoverable
+Passkeys retain an opaque immutable user handle and ten-Passkey-per-Identity ownership. Discoverable
 assertions compare returned `userHandle` bytes with the registered handle; actor-known assertions
 recheck credential ownership.
 

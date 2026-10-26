@@ -8,9 +8,10 @@ current code still uses `mfa_level_id` and the `NOTHING/WEAK/MEDIUM/FULL` refere
 > that Emergency never satisfies Persona/RP authorization, F1–F5 and G2 (returned to Pending), and
 > resolves Open decision 2. Those sections are kept below as history and are not current.
 >
-> **Open decision 1 (2026-10-23):** answered by the consolidation ADR §2.2 — the `ADVANCED` minimum is
-> two active passkeys and nothing else counts. Value mapping for the migration (D-92): APP/COM every
-> value → `NORMAL=3`; ORG every Operator → `ADVANCED=7`.
+> **Open decision 1 resolved (2026-10-23, D-92/D-132):** the `ADVANCED` minimum is two active
+> passkeys and nothing else counts. Value mapping for the migration: APP/COM every existing value
+> becomes `NORMAL=3`; every ORG Operator becomes `ADVANCED=7`. The ORG one-passkey restriction and
+> zero-passkey refusal are defined by the consolidation ADR §2.6.
 
 ## Context
 
@@ -29,9 +30,9 @@ Security Mode that drives those rules.
 - **A2.** The current modes are `NORMAL = 3` and `ADVANCED = 7`. The names `MEDIUM`, `WEAK`,
   `FULL` and `STRICT` are retired.
 - **A3.** `NOTHING = 0` is not a valid authentication mode.
-- **A4.** The minimum active passkey count is defined by mode ID: IDs `1..6` allow zero, ID `7`
-  requires at least one. This rule exists for future extension only; IDs `1`, `2`, `4`, `5` and `6`
-  are not valid modes now.
+- **A4.** The current valid mode IDs are `NORMAL=3` and `ADVANCED=7`; unknown and reserved IDs are
+  invalid. `ADVANCED=7` requires two active distinct passkeys for the general holding minimum, with
+  the ORG one-passkey restriction defined by the consolidation ADR's D-92 amendment.
 - **A5.** Unknown mode values fail closed.
 
 ### B. Mode by surface
@@ -64,11 +65,19 @@ Security Mode that drives those rules.
 - **D3.** Step-up evidence is bound to the operation, the target, the actor and the session, and is
   consumed once. The previous scope-level reuse within 15 minutes is replaced.
 
+**Implementation status (2026-10-26):** Current consumers enforce one-time, operation-scope,
+actor and session binding. Per-record target binding through `resource_ref` is deferred; existing
+settings requirements use `nil`. Operations that write target state and Step-Up evidence to separate
+databases cannot guarantee atomic commit across both stores. The consumer audit and affected
+boundaries are recorded in `evidence/2026-10-26-wu30-step-up-consumption-M3A7.md`.
+
 ### E. Passkey credential lifecycle
 
-- **E1.** In `ADVANCED`, at least one active passkey remains. Deleting the last one is refused.
-- **E2.** With passkeys P1 and P2, deleting P1 may be re-authenticated with P2 or with P1 itself.
-  The post-deletion minimum and the step-up requirement are checked separately.
+- **E1.** In `ADVANCED`, at least two active distinct passkeys remain. Deleting a passkey that would
+  leave fewer than two is refused, subject to the ORG D-92 restricted one-passkey state.
+- **E2.** With passkeys P1, P2 and P3, deleting P1 may be re-authenticated with an authorized active
+  passkey and leaves P2/P3. A two-to-one deletion is refused; the post-deletion minimum and the
+  step-up requirement are checked separately.
 - **E3.** In `NORMAL`, an owner whose only method is Email OTP may register a first passkey after a
   purpose-limited Email OTP re-authentication.
 - **E4.** Adding, deleting or replacing an individual passkey does not by itself purge or revoke the
@@ -111,19 +120,16 @@ Security Mode that drives those rules.
 
 These are not decided by this ADR and must be resolved before the affected part is implemented:
 
-1. The definition of "two secure authentication methods" required to enable `ADVANCED`: two
-   passkeys, or passkey plus Recovery Key; how ORG Entra authentication counts; the explicit rule of
-   two at transition and one afterwards.
-2. Re-authentication for an owner-initiated `ADVANCED` → `NORMAL` downgrade (existing passkey only,
+1. Re-authentication for an owner-initiated `ADVANCED` → `NORMAL` downgrade (existing passkey only,
    or an additional passkey/Recovery Key), and atomicity on partial failure and full session
    revocation.
-3. Recovery cases B/C: Case C evidence standard, Operator permissions and approver count, the start
+2. Recovery cases B/C: Case C evidence standard, Operator permissions and approver count, the start
    of the 24/72 hour clock, cancellation, conflicts and retries, and the permissions and issuance
    conditions of the recovery session.
-4. ORG sign-up completion conditions and state machine: invitation acceptance, Operator activation,
+3. ORG sign-up completion conditions and state machine: invitation acceptance, Operator activation,
    Entra pre-registration, required passkey count, Recovery Key, and compensation for multi-database
    failure.
-5. Reconciliation against the original WU-2 item list; per-audit-ID coverage is pending.
+4. Reconciliation against the original WU-2 item list; per-audit-ID coverage is pending.
 
 ## Implementation verification requirements
 

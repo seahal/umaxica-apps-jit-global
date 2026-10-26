@@ -66,7 +66,8 @@ module PasskeyRegistrationFlow
       description: passkey_description(provider_name: metadata[:provider_name]),
       **metadata,
     )
-    save_passkey_registration!(passkey, event_type: "passkey.registered.signup")
+    return nil unless save_passkey_registration!(passkey, event_type: "passkey.registered.signup")
+
     passkey
   rescue Webauthn::ChallengeStore::ChallengeError => e
     Rails.logger.warn(JitLogEvent.format("#{passkey_registration_log_prefix}.challenge_error", message: e.message))

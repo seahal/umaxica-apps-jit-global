@@ -62,6 +62,7 @@ Minitest.load(:test_prof)
 # `test_prof` require above, and must be loaded explicitly like any other TestProf recipe.
 require "test_prof/recipes/minitest/sample"
 require_relative "support/parallel_test_database_cloner"
+require_relative "support/authority_stop_cleanup"
 require_relative "support/external_identity_test_helper"
 require_relative "support/publishing_content_helper"
 require_relative "support/oidc_state_test_support"

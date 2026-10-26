@@ -42,17 +42,18 @@ surface-specific. These are durable requirements, not current verification resul
 
 - AUTH-10: In separated RP cell processes, Refresh resolves only the opaque local session public ID.
   An ended session, revoked OP binding or disabled local principal prevents dispatch. Before
-  installing a response, recheck its exact issuer/client/realm/subject/sid/contract epoch and local
-  generation under the binding-before-session lock order shared with callback and logout. A
-  mismatched response never advances the installed generation or changes credential metadata.
-- AUTH-11: An unresolved RP Refresh attempt retains its original input binding, generation and
-  deadline. Another tab cannot dispatch a second rotation for that pending input. After uncertain
-  delivery or a dependency/invalid-protocol outcome, a subsequent request may only recover the same
-  receipt; it cannot resend the predecessor to rotate or extend the five-second window.
-- AUTH-12: RP token exchanges have a two-second total HTTP budget; receipt queries have one second
-  and inherit the remaining four-second dispatch budget and original receipt expiry. Expired
-  deadlines prevent dispatch, and late results cannot install credentials. Network deadlines never
-  interrupt a database transaction. These controls do not prove receiving capacity.
+  installing a response, recheck its exact issuer/client/realm/subject/sid and local generation
+  under the binding-before-session lock order shared with callback and logout. A mismatched or
+  unverifiable response never advances the installed generation or changes credential metadata.
+- AUTH-11: Refresh rotates on every use with no grace period and no stored replay (D-25). Reuse of
+  the consumed predecessor answers `invalid_grant` and revokes only that grant's family, never the
+  OP Root Session; an unknown or malformed credential revokes nothing. The RP never resends a
+  credential after an indeterminate commit; it clears the cookies instead.
+- AUTH-12: A refused refresh on a top-level HTML navigation starts exactly one new Authorization
+  Code flow with `prompt=none` (new state, PKCE, nonce); `login_required` leads to the interactive
+  `GET /sign` entry without another silent attempt (D-80, D-110). Browserless refresh failures
+  answer 401. RP token exchanges have a two-second total HTTP budget within a four-second dispatch
+  budget; network deadlines never interrupt a database transaction.
 - AUTH-13: Callback and back-channel logout select the fixed cell writer and serialize on the same
   sid anchor. Callback checks fresh writer time after acquiring it, refuses expired authority and
   disabled principals, and cannot reopen a logout tombstone. Concurrent duplicate logout deliveries
@@ -69,6 +70,8 @@ surface-specific. These are durable requirements, not current verification resul
 - AUTH-17: An RP verifying OP-issued JWTs uses only the fixed public JWKS. An unknown key ID gets at
   most one refetch; while that fetch fails, the unknown key stays untrusted and an already cached
   key remains usable only within its fresh and bounded stale windows.
+  Concurrent requests sharing a cold JWKS client reuse the fresh key fetched by the first request
+  when the distributed window identifies that key as recently published (D-144).
 
 - AUTH-18: APP/COM/ORG Passkey lifecycle mutations and their audit outbox facts share the owning
   principal transaction. Additional metadata cannot replace the authoritative surface, target UUID
@@ -87,11 +90,15 @@ surface-specific. These are durable requirements, not current verification resul
 - AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or JSON
   `true`); telephone entry also requires explicit MFA-use consent. Missing, null, empty, unchecked
   and unsupported consent values refuse before creating registration or OTP artifacts.
-- AUTH-21: APP/COM contact-entry replacement validates Turnstile and submitted inputs before
-  superseding the browser's active sign-up. A rejected replacement preserves the flow, locator,
-  pending contact and principal and queues no OTP. An accepted replacement retains the existing
-  HALTED and cleanup semantics. See
-  [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement).
+- AUTH-21: APP/COM sign-up entry is fail-closed (D-177). A second entry submit while the browser's
+  attempt is not terminal with completed cleanup is refused (422) and preserves the flow, locator,
+  pending contact, principal and proof, queuing no OTP; no controller ends or cleans the earlier
+  attempt. An underage birthdate is never written and its refusal halts the attempt with
+  same-request cleanup (D-178). Stuck-registration reporting is read-only and logs identifiers, not
+  contact values; report failure does not interrupt cleanup. An operator retries only a diagnosed,
+  capped terminal Flow through the existing cleanup service; a missing-Flow case remains held for
+  escalation (D-180). See [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement)
+  and the [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md).
 
 - AUTH-22: Protected CAPTCHA entry points reject missing and failed tokens server-side. Enabling
   outage degradation still refuses missing/empty tokens, failed challenges and missing secrets; only
@@ -135,6 +142,35 @@ surface-specific. These are durable requirements, not current verification resul
   resource is `access_denied`, and a disallowed scope is `invalid_scope`. Refused requests return no
   success redirect; missing required parameters remain `invalid_request`. See
   [authorization request profile](../../adr/oidc-authorization-request-profile.md).
+
+- AUTH-32: APP Google/Apple callbacks resolve the verified issuer/subject under the admitted
+  intent. Unknown subjects continue only Sign Up; registered subjects continue only Sign In;
+  unusable or unfinished Clients, release during the ceremony, revoked consent and deleted
+  provider accounts refuse. An in-force subject ban precedes identity lookup for Sign In,
+  Sign Up and linking. A missing Client behind an identity produces HTTP 500 and one FATAL
+  event without exposing the subject or clearing Auth continuity. Refused callbacks create no
+  Flow, pending Client, external identity or Root Session and record no authentication evidence.
+  See [identity binding](../../adr/identity-resolution-and-credential-binding.md) and
+  [enforcement](../../adr/unified-enforcement.md).
+
+- AUTH-33: Visa APP/COM/ORG authorization and result/cancellation/switch endpoints share only their
+  realm-local protocol base. The base denies access by default; continuation endpoints expose only
+  their navigation action and retain request-size, rate-limit and browser-binding protections.
+  Public Visa roots remain passive, with no preference or authentication cookie issuance.
+  See [Visa OP boundary](../../adr/visa-op-host.md).
+
+- AUTH-34: Visa APP/COM/ORG `/oauth/authorize` rejects HEAD and any result/cancellation/switch
+  continuation parameter, including empty values, before allocating a transaction. A result can
+  establish one Root Session only through its owning Visa browser's navigation to `/oidc/result`;
+  foreign browsers, missing navigation metadata, HEAD and replay cannot consume it or issue a root.
+  See [authorization request profile](../../adr/oidc-authorization-request-profile.md) and
+  [continuation protocol](../../adr/sign-in-path-continuation-protocol.md).
+
+- AUTH-35: Global Base/Auth/Visa/Tech/Edit browser HTML canonicalizes missing region on GET/HEAD
+  before rendering, retaining origin, path and valid supplied context. Explicit `jp`/`us` remain
+  selected; Base Home/Dashboard retain their final authentication outcomes. Visa roots issue no
+  cookies and protocol endpoints retain their existing transport exemptions. See
+  [request context](../architecture/preference.md#request-context-parameters).
 
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),

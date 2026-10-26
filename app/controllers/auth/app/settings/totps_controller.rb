@@ -101,8 +101,6 @@ module Auth
 
         def auth_step_up_ceremony_clean_url = new_auth_app_settings_totp_path(ri: params[:ri])
 
-        def auth_ceremony_admitted_action_url = auth_app_settings_totps_path(ri: params[:ri])
-
         def handle_failure
           @totp.errors.add(:first_token, t("sign.app.settings.totps.invalid_code"))
           render_totp_qrcode(@totp_enrollment.private_key)

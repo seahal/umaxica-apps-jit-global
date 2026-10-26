@@ -188,3 +188,14 @@ Negative:
 The coding harness must instruct agents to avoid non-resourceful routing. Agents must not add
 routing exceptions without user approval. Tests must be added before route changes. ADR history must
 be updated for every approved exception.
+
+### Visa public roots (2026-10-25)
+
+Approved by the user's explicit request to configure the three Visa roots like the other surfaces.
+In `config/routes/visa.rb`, `root "roots#index"` inside each existing Visa realm host constraint
+serves GET/HEAD `/` through `Visa::{App,Com,Org}::RootsController#index`, with helpers
+`visa_app_root_path`, `visa_com_root_path`, and `visa_org_root_path`. This permanent B exception uses
+Rails' conventional root declaration because the public entry path is `/`. Each root is a passive,
+public HTML landing on its own BareController boundary; it issues no authentication or session
+state. The host constraints exclude look-alike hosts. Request coverage lives in
+`test/integration/visa_roots_test.rb` and preserves the unknown-host fallback.

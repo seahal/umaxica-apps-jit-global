@@ -50,6 +50,19 @@ Age is calculated from the submitted birthdate using the canonical `AgeEligibili
 - The birthday is considered reached when the current date is on or after the birthday anniversary.
 - February 29 birthdays use the service's canonical leap-day handling.
 - The sign-up check uses the service timezone date at finalization time.
+- A calendar-impossible but structurally valid birthdate (for example `2000-02-31`) is accepted and
+  stored by design (`docs/security/credential-abuse-rate-limits.md`); for age it counts as the first
+  day of the following month (`2000-03-01`).
+
+## Refusal Handling
+
+The age is decided on the validated, unsaved birthdate before it is written (D-178). A birthdate
+below the minimum age is never stored. The refusal ends the sign-up attempt as `HALTED` through
+`SignUpTermination`, which removes the pending principal, contact, Passkey and Secret reservation in
+the same request. If that removal fails, the existing cleanup-pending state keeps the contact held
+(D-177) and the retention cleanup retries it; no further mechanism is added. All six `.app` and
+`.com` entry paths share this one check (`SignUpSequenceControllerSupport`); `.org` collects no
+sign-up birthdate.
 
 ## Known Implementation Gaps
 

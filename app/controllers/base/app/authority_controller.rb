@@ -90,7 +90,7 @@ module Base
         handle_unverified_request
       end
 
-      def sign_in_url_with_pt(_return_to)
+      def sign_in_url_with_target(_return_to)
         base_app_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]))
       end
 

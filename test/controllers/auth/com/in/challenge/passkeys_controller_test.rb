@@ -52,20 +52,9 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: nil,
     )
-    get auth_com_sign_in_path, params: { entry_ref: @issuance.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: {
-      entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp",
-    }
-
-    assert_response :see_other
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: @issuance.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_com_sign_in_path, params: { entry_ref: @issuance.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_sign_in_path, params: { entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp" }
-
-    assert_response :see_other
+    admit_auth_ceremony_entry!(
+      auth_com_sign_in_path, reference: @issuance.reference, params: { ri: "jp" },
+    )
     @primary_sign_in_binding = nil
   end
 

@@ -258,7 +258,6 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
             outcomes << RpRefreshCommitter.call(
               cell: cell, local_session_id: session.public_id, refresh_token: "synthetic-predecessor",
               issuer: issuer, jwks_client: jwks, token_url: "#{issuer}/oauth/token",
-              query_url: "#{issuer}/oauth/refresh-deliveries/query",
             )
           end
         rescue StandardError => e
@@ -287,13 +286,11 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
       assert_nil session.current_access_jti_digest
       assert_not_nil anchor.reload.revoked_at
       assert_equal 1, RpCoreAppEventReceipt.where(op_session_binding_id: anchor.id).count
-      assert_nil RpCoreAppRefreshAttempt.find_by!(session_id: session.id).installed_at
     end
   ensure
     deliver << true if deliver
     worker&.join(10)
     if session
-      RpCoreAppRefreshAttempt.where(session_id: session.id).delete_all
       RpCoreAppSession.where(id: session.id).delete_all
     end
     if anchor

@@ -1,0 +1,4751 @@
+---
+en:
+  acme:
+    app:
+      preference:
+        cookie:
+          edit:
+            accept_consent_cookies: Allow consent cookies
+            accept_functional_cookies: Allow functional cookies
+            accept_necessary_cookies: Allow strictly necessary cookies (required)
+            accept_performance_cookies: Allow performance cookies
+            accept_targeting_cookies: Allow targeting cookies
+            description: Review and update cookie consent settings for this browser.
+            h1: Cookie Preferences
+        currency:
+          edit:
+            description: Choose the currency used for regional display.
+            heading: Currency
+            option_label: Currency
+          options:
+            jpy: Japanese Yen
+            usd: US Dollar
+        date_format:
+          edit:
+            description: Choose how dates are displayed in the application.
+            heading: Date Format
+            option_label: Date format
+          options:
+            iso: ISO (YYYY-MM-DD)
+            uk: UK (DD/MM/YYYY)
+            us: US (MM/DD/YYYY)
+        density:
+          edit:
+            description: Choose how compact the interface should be.
+            heading: Density Settings
+            option_label: Density
+          options:
+            compact: Compact density
+            standard: Standard density
+        language:
+          edit:
+            description: Change the display language for the application.
+            heading: Language Settings
+            language_label: Language
+          options:
+            en: English
+            ja: Japanese - 日本語
+        locale:
+          edit:
+            cancel: Cancel
+            description: Manage your language and timezone settings.
+            language_label: Language
+            language_options:
+              en: English
+              ja: Japanese - 日本語
+            language_prompt: Choose your language...
+            language_section: Language Settings
+            submit: Update settings
+            timezone_label: Timezone
+            timezone_options:
+              AMERICA_ANCHORAGE: Alaska Time
+              AMERICA_CHICAGO: Central Time (US & Canada)
+              AMERICA_DENVER: Mountain Time (US & Canada)
+              AMERICA_LOS_ANGELES: Pacific Time (US & Canada)
+              AMERICA_NEW_YORK: Eastern Time (US & Canada)
+              ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+              ETC_UTC: Coordinated Universal Time (UTC)
+              JST: Japan Standard Time (Asia/Tokyo)
+              PACIFIC_HONOLULU: Hawaii Time
+              UTC: Coordinated Universal Time (UTC)
+            timezone_prompt: Choose your timezone...
+            timezone_section: Timezone Settings
+            title: Locale Settings
+        motion:
+          edit:
+            description: Choose how much animation and movement the interface uses.
+            heading: Motion Settings
+            option_label: Motion
+          options:
+            reduced: Reduced motion
+            standard: Standard motion
+        page_size:
+          edit:
+            description: Choose how many items are shown in each paginated list.
+            heading: Page Size
+            option_label: Items per page
+          options:
+            '10': 10 items
+            '100': 100 items
+            '20': 20 items
+            '50': 50 items
+            infinity: Unlimited
+        region:
+          edit:
+            description: Change the region used for regional defaults such as currency and formats.
+            heading: Region Settings
+            region_label: Region
+        resets:
+          back: Back to preferences
+          button: Clear preference data
+          confirm: This action deletes saved preference data for this browser. Continue?
+          description: Remove saved preference data for this browser.
+          destroyed: Preferences have been reset
+          title: Reset Preferences
+        theme:
+          edit:
+            description: Pick the display mode that helps you focus on corporate dashboards.
+            heading: Theme Settings
+            hints:
+              dark: Ideal for night shifts or reducing eye strain.
+              light: Great when you work during the day or in bright rooms.
+              system: Matches your operating system and switches automatically.
+            legend: Select a theme
+            options:
+              dark: Dark — dimmed colors for low-light comfort
+              light: Light — bright backgrounds for well-lit spaces
+              system: System default — follow your device settings
+            submit: Save theme preference
+            theme_label: Theme
+            title: Choose Dark or Light Theme
+          options:
+            dark: Dark
+            light: Light
+            system: System default
+        time_format:
+          options:
+            '12': 12-hour
+            '24': 24-hour
+            hour_12: 12-hour
+            hour_24: 24-hour
+        timezone:
+          edit:
+            description: Update the timezone stored for this browser.
+            heading: Timezone Settings
+            timezone_label: Timezone
+      preferences:
+        back_to_settings: Back to Preferences
+        cookie_settings: Cookie Settings
+        density_settings: Density Settings
+        description: Manage language, theme, and other preferences in one place.
+        email_settings: Email Settings
+        email_settings_description: Manage notification email sender and content.
+        footer:
+          cookie: Cookies
+          home: Home
+          preference: Preferences
+          privacy: Privacy
+        language_settings: Language Settings
+        languages:
+          unsupported: Unsupported language selected
+        locale_settings: Language settings
+        motion_settings: Motion Settings
+        pagination_settings: Page Size
+        region:
+          currency:
+            link: Currency
+          date_format:
+            link: Date Format
+          language:
+            link: Language Settings
+          time_format:
+            link: Time Format
+          timezone:
+            link: Timezone Settings
+        region_settings: Region Settings
+        regions:
+          back_link: Back
+          cancel: Cancel
+          language_section: Language Settings
+          region_section: Region Settings
+          select_language: Select Language
+          select_language_prompt: Choose your language...
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region: Select Region
+          select_region_prompt: Choose your region...
+          select_region_selector:
+            JAPAN: Japan - 日本
+            JP: Japan - 日本
+            US: United States - USA
+            USA: United States - USA
+          select_timezone: Select Timezone
+          select_timezone_prompt: Choose your timezone...
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+          timezone_section: Timezone Settings
+          title: Region Settings
+          update_settings: Update Settings
+        reset_settings: Reset Settings
+        submitting: Submitting...
+        theme:
+          select_theme: Select theme
+        theme_settings: Theme Settings
+        themes:
+          invalid: Invalid theme selected
+          updated: Theme updated to %{theme}
+        timezone_settings: Timezone Settings
+        timezones:
+          invalid: Invalid timezone selected
+        title: Preferences
+        up_link: Back
+        update_settings: Update Settings
+        update_success: Preferences updated successfully
+      settings:
+        description: Review and adjust your service settings.
+        email_settings: Email settings
+        email_settings_description: Manage notification senders and descriptions.
+        i18n_settings: Locale settings
+        i18n_settings_description: Update the default language and region for this browser.
+        title: Settings
+      sign:
+        in:
+          limitations:
+            capacity_still_full: Session capacity is still full. Revoke another session to continue.
+            invalid_or_expired: This sign-in limitation link is invalid or expired.
+            revoke_failed: The selected session could not be revoked.
+    com:
+      preference:
+        cookie:
+          edit:
+            accept_consent_cookies: Allow consent cookies
+            accept_functional_cookies: Allow functional cookies
+            accept_necessary_cookies: Allow necessary cookies (required)
+            accept_performance_cookies: Allow performance cookies
+            accept_targeting_cookies: Allow targeting cookies
+            description: Manage cookie consent settings for this browser.
+            h1: Cookie Preferences
+        currency:
+          edit:
+            description: Choose the currency used for regional display.
+            heading: Currency
+            option_label: Currency
+          options:
+            jpy: Japanese Yen
+            usd: US Dollar
+        date_format:
+          edit:
+            description: Choose how dates are displayed.
+            heading: Date Format
+            option_label: Date format
+          options:
+            iso: ISO (YYYY-MM-DD)
+            uk: UK (DD/MM/YYYY)
+            us: US (MM/DD/YYYY)
+        density:
+          options:
+            compact: Compact density
+            standard: Standard density
+        language:
+          edit:
+            description: Change the display language for the corporate site.
+            h1: Language Select
+            heading: Language Settings
+            language_label: Language
+          options:
+            en: English
+            ja: Japanese - 日本語
+        locale:
+          edit:
+            cancel: Cancel
+            description: Manage your language and timezone settings.
+            language_label: Language
+            language_options:
+              en: English
+              ja: Japanese - 日本語
+            language_prompt: Choose your language...
+            language_section: Language Settings
+            submit: Update settings
+            timezone_label: Timezone
+            timezone_options:
+              AMERICA_ANCHORAGE: Alaska Time
+              AMERICA_CHICAGO: Central Time (US & Canada)
+              AMERICA_DENVER: Mountain Time (US & Canada)
+              AMERICA_LOS_ANGELES: Pacific Time (US & Canada)
+              AMERICA_NEW_YORK: Eastern Time (US & Canada)
+              ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+              ETC_UTC: Coordinated Universal Time (UTC)
+              JST: Japan Standard Time (Asia/Tokyo)
+              PACIFIC_HONOLULU: Hawaii Time
+              UTC: Coordinated Universal Time (UTC)
+            timezone_prompt: Choose your timezone...
+            timezone_section: Timezone Settings
+            title: Locale Settings
+        motion:
+          options:
+            reduced: Reduced motion
+            standard: Standard motion
+        page_size:
+          options:
+            '10': 10 items
+            '100': 100 items
+            '20': 20 items
+            '50': 50 items
+            infinity: Unlimited
+        region:
+          edit:
+            description: Change the region used for regional defaults such as currency and formats.
+            heading: Region Settings
+            region_label: Region
+        resets:
+          back: Back to preferences
+          button: Clear preference data
+          confirm: This action deletes saved preference data for this browser. Continue?
+          description: Remove saved preference data for this browser.
+          destroyed: Preferences have been reset
+          title: Reset Preferences
+        theme:
+          edit:
+            description: Pick the display mode that helps you focus on corporate dashboards.
+            heading: Theme Settings
+            hints:
+              dark: Ideal for night shifts or reducing eye strain.
+              light: Great when you work during the day or in bright rooms.
+              system: Matches your operating system and switches automatically.
+            legend: Select a theme
+            options:
+              dark: Dark — dimmed colors for low-light comfort
+              light: Light — bright backgrounds for well-lit spaces
+              system: System default — follow your device settings
+            submit: Save theme preference
+            theme_label: Theme
+            title: Choose Dark or Light Theme
+          options:
+            dark: Dark
+            light: Light
+            system: System default
+        time_format:
+          edit:
+            description: Choose how times are displayed.
+            heading: Time Format
+            option_label: Time format
+          options:
+            '12': 12-hour
+            '24': 24-hour
+            hour_12: 12-hour
+            hour_24: 24-hour
+        timezone:
+          edit:
+            description: Update the timezone stored for this browser.
+            heading: Timezone Settings
+            timezone_label: Timezone
+      preferences:
+        back_to_settings: Back to Preferences
+        cookie_settings: Cookie Settings
+        density_settings: Density Settings
+        description: Manage language, theme, and other preferences in one place.
+        email_settings: Email Settings
+        email_settings_description: Manage notification email sender and content.
+        footer:
+          cookie: Cookie
+          home: Home
+          preference: Preference
+          privacy: Privacy
+        language_settings: Language Settings
+        languages:
+          unsupported: Unsupported language selected
+        locale_settings: Language settings
+        motion_settings: Motion Settings
+        pagination_settings: Page Size
+        region:
+          currency:
+            link: Currency
+          date_format:
+            link: Date Format
+          language:
+            link: Language Settings
+          time_format:
+            link: Time Format
+          timezone:
+            link: Timezone Settings
+        region_settings: Region Settings
+        regions:
+          back_link: Back
+          cancel: Cancel
+          language_section: Language Settings
+          region_section: Region Settings
+          select_language: Select Language
+          select_language_prompt: Choose your language...
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region: Select Region
+          select_region_prompt: Choose your region...
+          select_region_selector:
+            JAPAN: Japan - 日本
+            JP: Japan - 日本
+            US: United States - USA
+            USA: United States - USA
+          select_timezone: Select Timezone
+          select_timezone_prompt: Choose your timezone...
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+          timezone_section: Timezone Settings
+          title: Region Settings
+          update_settings: Update Settings
+        reset_settings: Reset Settings
+        submitting: Submitting...
+        theme:
+          select_theme: Select theme
+        theme_settings: Theme Settings
+        themes:
+          updated: Corporate theme updated to %{theme}
+        timezone_settings: Timezone Settings
+        timezones:
+          invalid: Invalid timezone selected
+        title: Preferences
+        up_link: Back
+        update_settings: Update Settings
+        update_success: Preferences updated successfully
+    org:
+      preference:
+        cookie:
+          edit:
+            accept_consent_cookies: Allow consent cookies
+            accept_functional_cookies: Allow functional cookies
+            accept_necessary_cookies: Allow necessary cookies (required)
+            accept_performance_cookies: Allow performance cookies
+            accept_targeting_cookies: Allow targeting cookies
+            description: Cookie Preferences
+            h1: Cookie Preferences
+        currency:
+          edit:
+            description: Choose the currency used for regional display.
+            heading: Currency
+            option_label: Currency
+          options:
+            jpy: Japanese Yen
+            usd: US Dollar
+        date_format:
+          edit:
+            description: Choose how dates are displayed.
+            heading: Date Format
+            option_label: Date format
+          options:
+            iso: ISO (YYYY-MM-DD)
+            uk: UK (DD/MM/YYYY)
+            us: US (MM/DD/YYYY)
+        density:
+          options:
+            compact: Compact density
+            standard: Standard density
+        language:
+          edit:
+            description: Change the display language for the organization console.
+            heading: Language Settings
+            language_label: Language
+          options:
+            en: English
+            ja: Japanese - 日本語
+        locale:
+          edit:
+            cancel: Cancel
+            description: Manage your language and timezone settings.
+            language_label: Language
+            language_options:
+              en: English
+              ja: Japanese - 日本語
+            language_prompt: Choose your language...
+            language_section: Language Settings
+            submit: Update settings
+            timezone_label: Timezone
+            timezone_options:
+              AMERICA_ANCHORAGE: Alaska Time
+              AMERICA_CHICAGO: Central Time (US & Canada)
+              AMERICA_DENVER: Mountain Time (US & Canada)
+              AMERICA_LOS_ANGELES: Pacific Time (US & Canada)
+              AMERICA_NEW_YORK: Eastern Time (US & Canada)
+              ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+              ETC_UTC: Coordinated Universal Time (UTC)
+              JST: Japan Standard Time (Asia/Tokyo)
+              PACIFIC_HONOLULU: Hawaii Time
+              UTC: Coordinated Universal Time (UTC)
+            timezone_prompt: Choose your timezone...
+            timezone_section: Timezone Settings
+            title: Locale Settings
+        motion:
+          options:
+            reduced: Reduced motion
+            standard: Standard motion
+        page_size:
+          options:
+            '10': 10 items
+            '100': 100 items
+            '20': 20 items
+            '50': 50 items
+            infinity: Unlimited
+        region:
+          edit:
+            description: Change the region used for regional defaults such as currency and formats.
+            heading: Region Settings
+            region_label: Region
+        resets:
+          back: Back to preferences
+          button: Clear preference data
+          confirm: This action deletes saved preference data for this browser. Continue?
+          description: Remove saved preference data for this browser.
+          destroyed: Preferences have been reset
+          title: Reset Preferences
+        theme:
+          edit:
+            description: Set the default display mode for organization operators.
+            heading: Theme Settings
+            hints:
+              dark: Keeps monitoring readable during night shifts while reducing eye strain.
+              light: Keeps dashboards legible in brightly lit rooms.
+              system: Follows the theme of organization-managed devices automatically.
+            legend: Select a theme
+            options:
+              dark: Dark — tuned for low-light monitoring rooms
+              light: Light — tuned for bright operations centers
+              system: System — follows the managed device setting
+            submit: Save theme preference
+            theme_label: Theme
+            title: Choose Dark or Light Theme
+          options:
+            dark: Dark
+            light: Light
+            system: System default
+        time_format:
+          edit:
+            description: Choose how times are displayed.
+            heading: Time Format
+            option_label: Time format
+          options:
+            '12': 12-hour
+            '24': 24-hour
+            hour_12: 12-hour
+            hour_24: 24-hour
+        timezone:
+          edit:
+            description: Update the timezone stored for this browser.
+            heading: Timezone Settings
+            timezone_label: Timezone
+      preferences:
+        back_to_settings: Back to Preferences
+        cookie_settings: Cookie Settings
+        density_settings: Density Settings
+        description: Manage language, theme, and other preferences in one place.
+        email_settings: Email Settings
+        email_settings_description: Manage notification email sender and content.
+        footer:
+          cookie: Cookie
+          home: Home
+          preference: Preference
+          privacy: Privacy
+        language_settings: Language Settings
+        languages:
+          unsupported: Unsupported language selected
+        locale_settings: Language settings
+        motion_settings: Motion Settings
+        pagination_settings: Page Size
+        region:
+          currency:
+            link: Currency
+          date_format:
+            link: Date Format
+          language:
+            link: Language Settings
+          time_format:
+            link: Time Format
+          timezone:
+            link: Timezone Settings
+        region_settings: Region Settings
+        regions:
+          back_link: Back
+          cancel: Cancel
+          language_section: Language Settings
+          region_section: Region Settings
+          select_language: Select Language
+          select_language_prompt: Choose your language...
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region: Select Region
+          select_region_prompt: Choose your region...
+          select_region_selector:
+            JAPAN: Japan - 日本
+            JP: Japan - 日本
+            US: United States - USA
+            USA: United States - USA
+          select_timezone: Select Timezone
+          select_timezone_prompt: Choose your timezone...
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+          timezone_section: Timezone Settings
+          title: Region Settings
+          update_settings: Update Settings
+        reset_settings: Reset Settings
+        submitting: Submitting...
+        theme:
+          select_theme: Select theme
+        theme_settings: Theme Settings
+        themes:
+          invalid: Invalid theme selected
+          updated: Theme updated to %{theme}
+        timezone_settings: Timezone Settings
+        timezones:
+          invalid: Invalid timezone selected
+        title: Preferences
+        up_link: Back
+        update_settings: Update Settings
+        update_success: Preferences updated successfully
+      settings:
+        description: Review and adjust your organization settings.
+        email_settings: Email settings
+        email_settings_description: Manage notification senders and descriptions.
+        i18n_settings: Locale settings
+        i18n_settings_description: Update the default language and region for this organization.
+        title: Settings
+  actions:
+    actions: Actions
+    add: Add
+    back: Back
+    cancel: Cancel
+    cancel_and_start: Cancel and start new verification
+    connect: Connect
+    continue: Continue
+    delete: Delete
+    destroy: Delete
+    disconnect: Disconnect
+    edit: Edit
+    restart: Restart verification
+    save: Save
+    submit: "Submit"
+    up: Back
+    update: "Update"
+  activemodel:
+    errors:
+      models:
+        sign/app/settings/withdrawal/deactivate_form:
+          attributes:
+            ack_deactivate_today:
+              accepted: You must check this box.
+        sign/app/settings/withdrawal/schedule_form:
+          attributes:
+            ack_schedule_purge:
+              accepted: You must check this box.
+  activerecord:
+    attributes:
+      acme_logout_transaction:
+        workflow: Workflow
+      agent:
+        title: Title
+      agent_assignment:
+        assigned_at: Assigned at
+      app_enforcement_appeal:
+        reason_code: Appeal reason
+        statement: Appeal statement
+      avatar_block:
+        blocked_avatar_id: Blocked avatar
+        blocker_avatar_id: Blocker avatar
+      avatar_follow:
+        followed_avatar_id: Followed avatar
+        follower_avatar_id: Follower avatar
+      avatar_mute:
+        muted_avatar_id: Muted avatar
+        muter_avatar_id: Muter avatar
+      avatar_persona_binding:
+        persona_id: Bound persona
+      bureau:
+        title: Title
+      client:
+        mfa_status: MFA status
+        security_mode: Security mode
+        user_status: Status
+        visibility: Visibility
+      client_contact_audit_outbox:
+        acknowledged_at: Acknowledged at
+        actor_ref: Actor reference
+        contact_kind: Contact kind
+        contact_ref: Contact reference
+        event_name: Event
+        event_uuid: Event UUID
+        occurred_at: Occurred at
+        operation_ref: Operation reference
+        owner_ref: Owner reference
+      client_email:
+        address: Email address
+        address_digest: Email address digest
+        otp_counter: OTP counter
+        otp_private_key: OTP private key
+      client_email_ceremony_transaction:
+        operation: Operation
+      client_identity:
+        source_record_id: Source record ID
+      client_persona:
+        client_identity_id: Client identity
+        title: Title
+      client_secret_audit_outbox:
+        actor_public_ref: Actor reference
+        client_ref: Client reference
+        credential_ref: Secret reference
+        event_id: Event ID
+        event_name: Event
+        item_count: Item count
+        occurred_at: Occurred at
+        operation_ref: Operation reference
+        reason: Reason
+      client_secret_credential:
+        client: Client
+        issuance: Secret issuance
+      client_sign_up_flow:
+        auth_admission_binding: Admission binding
+      client_telephone:
+        number: Telephone number
+        number_digest: Telephone number digest
+        otp_counter: OTP counter
+        otp_private_key: OTP private key
+      client_telephone_ceremony_transaction:
+        result_jti: Result JTI
+      com_enforcement_appeal:
+        reason_code: Appeal reason
+        statement: Appeal statement
+      company:
+        title: Title
+      enterprise:
+        title: Title
+      individual:
+        title: Title
+      individual_assignment:
+        assigned_at: Assigned at
+      op_app_client_activation:
+        actor_ref: Changed by
+        audit_ref: Audit reference
+        changed_at: Changed at
+        client_id: Client ID
+        enabled: Enabled
+        source_manifest_digest: Source manifest digest
+      op_com_client_activation:
+        actor_ref: Changed by
+        audit_ref: Audit reference
+        changed_at: Changed at
+        client_id: Client ID
+        enabled: Enabled
+        source_manifest_digest: Source manifest digest
+      op_org_client_activation:
+        actor_ref: Changed by
+        audit_ref: Audit reference
+        changed_at: Changed at
+        client_id: Client ID
+        enabled: Enabled
+        source_manifest_digest: Source manifest digest
+      operator:
+        security_mode: Security mode
+      operator_identity:
+        source_record_id: Source record ID
+      operator_step_up_session:
+        staff_token_id: Staff token ID
+      org_enforcement_appeal:
+        reason_code: Appeal reason
+        statement: Appeal statement
+      persona_assignment:
+        assigned_at: Assigned at
+      staff_email:
+        address: "Email address"
+        status: "Status"
+      staff_passkey:
+        created_at: Registered
+        description: Name
+        provider_name: Provider
+        sign_count: Usage count
+      staff_secret_credential:
+        created_at: "Created at"
+        last_used_at: "Last used at"
+        name: "Name"
+        value: "Value"
+      staff_telephone:
+        number: "Telephone number"
+        status: "Status"
+      staff_token:
+        discard_at: Lapses at
+        purge_eligible_at: Purge at
+        refresh_expires_at: Refresh expires at
+      user_email:
+        address: Email address
+        confirm_policy: Terms of service
+        raw_address: Email address
+        status: Status
+        user: Client
+      user_identity_email:
+        address: Email address
+      user_passkey:
+        created_at: Registered
+        description: Name
+        last_used_at: Last used
+        provider_name: Provider
+        sign_count: Usage count
+      user_telephone:
+        status: "Status"
+      user_token:
+        discard_at: Lapses at
+        purge_eligible_at: Purge at
+        refresh_expires_at: Refresh expires at
+      user_totp_credential:
+        created_at: Created
+        last_otp_at: Last used
+        title: Name
+      visitor:
+        security_mode: Security mode
+      visitor_contact_audit_outbox:
+        acknowledged_at: Acknowledged at
+        actor_ref: Actor reference
+        contact_kind: Contact kind
+        contact_ref: Contact reference
+        event_name: Event
+        event_uuid: Event UUID
+        occurred_at: Occurred at
+        operation_ref: Operation reference
+        owner_ref: Owner reference
+      visitor_email:
+        address: Email address
+        address_digest: Email address digest
+        otp_counter: OTP counter
+        otp_private_key: OTP private key
+      visitor_identity:
+        source_record_id: Source record ID
+      visitor_passkey:
+        description: "Description"
+        sign_count: "Sign count"
+      visitor_secret_credential:
+        name: "Name"
+      visitor_sign_up_flow:
+        auth_admission_binding: Admission binding
+      visitor_step_up_session:
+        visitor_token_id: Visitor token ID
+      visitor_telephone:
+        number: Telephone number
+        number_digest: Telephone number digest
+        otp_counter: OTP counter
+        otp_private_key: OTP private key
+      visitor_token:
+        discard_at: Lapses at
+        purge_eligible_at: Purge at
+        refresh_expires_at: Refresh expires at
+    errors:
+      messages:
+        birthdate_before_today: must be before today
+        birthdate_format: must be entered in YYYY-MM-DD format
+        code_format: must contain only uppercase letters, numbers, and underscores
+        country_code_cannot_start_with_zero: country code cannot start with zero
+        exceeds_e164_length: exceeds E.164 maximum length of %{max} digits
+        identity_audit_event_format_invalid: must be composed of uppercase letters and underscores only
+        invalid_e164_format: must be in E.164 format (e.g., +819012345678)
+        record_invalid: 'Validation failed: %{errors}'
+        restrict_dependent_destroy:
+          has_many: Cannot delete record because dependent %{record} exist
+          has_one: Cannot delete record because a dependent %{record} exists
+        uuid_format: must be a valid UUID
+      models:
+        operator:
+          attributes:
+            public_id:
+              invalid_format: must be 16 uppercase characters from SecureRandom::BASE32_ALPHABET
+        org_document_tagger:
+          attributes:
+            org_document_tag_id:
+              already_tagged: is already tagged to this document
+        staff:
+          attributes:
+            public_id:
+              invalid_format: must be 16 uppercase characters from SecureRandom::BASE32_ALPHABET
+  app_document_categories:
+    "%{id}": app_document_category_%{id}
+    announcement: Announcement
+    article: Article
+    faq: FAQ
+    guide: Guide
+    news: News
+    reference: Reference
+    release_note: Release Note
+    tutorial: Tutorial
+  app_document_tags:
+    "%{id}": app_document_tag_%{id}
+    backend: Backend
+    business: Business
+    database: Database
+    design: Design
+    development: Development
+    frontend: Frontend
+    marketing: Marketing
+    none: None
+    security: Security
+    technology: Technology
+  app_timeline_categories:
+    "%{id}": app_timeline_category_%{id}
+    announcement: Announcement
+    article: Article
+    faq: FAQ
+    guide: Guide
+    news: News
+    reference: Reference
+    release_note: Release Note
+    tutorial: Tutorial
+  app_timeline_tags:
+    "%{id}": app_timeline_tag_%{id}
+    backend: Backend
+    business: Business
+    database: Database
+    design: Design
+    development: Development
+    frontend: Frontend
+    marketing: Marketing
+    none: None
+    security: Security
+    technology: Technology
+  architecture_guard:
+    avatar_binding_create: Avatar binding create!
+  attributes:
+    ack_deactivate_today: Deactivation confirmation
+    ack_schedule_purge: Purge schedule confirmation
+    active_avatars: Active avatars
+    actor_ref: Actor reference
+    address: Email address
+    agent_id: Agent ID
+    agent_public_id: Agent reference
+    app_enforcement_case_id: APP enforcement case ID
+    app_preference_languages: Language preferences
+    app_preference_regions: Region preferences
+    app_preference_themes: Theme preferences
+    app_preference_timezones: Timezone preferences
+    app_preferences: App preferences
+    area_occurrence_id: Area occurrence
+    attempt_count: Attempt count
+    attempt_number: Attempt number
+    authentication_method_effects: Authentication method effects
+    avatar_id: Avatar
+    avatars: Avatars
+    base: Base
+    birthdate: Birthdate
+    body: Body
+    bureau_id: Bureau ID
+    can_create_content: Can create content
+    canceled_at: Canceled at
+    capability_id: Capability
+    client_emails: Email addresses
+    client_id: Client ID
+    client_persona_id: Persona ID
+    client_preference_themes: Theme preferences
+    client_preference_timezones: Timezone preferences
+    client_telephones: Telephone numbers
+    client_tokens: Tokens
+    code: Code
+    code_challenge: Code challenge
+    code_challenge_method: Code challenge method
+    com_enforcement_case_id: COM enforcement case ID
+    com_preference_languages: Language preferences
+    com_preference_regions: Region preferences
+    com_preference_themes: Theme preferences
+    com_preference_timezones: Timezone preferences
+    company_id: Company ID
+    confirm_policy: Terms of service
+    confirm_reset: Reset confirmation
+    confirm_using_mfa: MFA confirmation
+    confirmed_at: Confirmed at
+    content_digest: Content digest
+    cooldown_until: Cooldown until
+    current_refresh_token: Current refresh token
+    description: Description
+    discard_at: Discarded at
+    discoverable: Discoverable
+    divisions: Divisions
+    domain_occurrence_id: Domain occurrence
+    editable_by_owner: Editable by owner
+    effective_from: Publication start
+    email: Email address
+    email_occurrence_id: Email occurrence
+    enabled: Enabled
+    ends_at: Ends at
+    enterprise_id: Enterprise ID
+    entry_method: Entry method
+    error_message: Error message
+    event_id: Event
+    event_type: Event type
+    expires_at: Expires at
+    followable: Followable
+    functional: Functional
+    grant_jti: Grant JTI
+    group_attachable: Group attachable
+    handle: Handle
+    handle_id: Handle
+    id: ID
+    identifier: Identifier
+    identifier_effects: Identifier effects
+    individual_id: Individual ID
+    initiator_actor_id: Initiator actor
+    invited_by: Invited by
+    ip_occurrence_id: IP occurrence
+    issuance: Issuance
+    jti: JTI
+    jti_digest: Event digest
+    key: Key
+    kid: KID
+    kind_id: Kind
+    last_otp_at: Last OTP at
+    locale: Locale
+    lookup_digest: Lookup digest
+    member_id: Member
+    metadata: Metadata
+    method: Method
+    moderation_visible: Visible to moderation
+    moniker: Moniker
+    name: Name
+    number: Telephone number
+    occurred_at: Occurred at
+    op_session_binding_id: OP session binding ID
+    operator: Operator
+    option: Option
+    org_enforcement_case_id: ORG enforcement case ID
+    org_preference_languages: Language preferences
+    org_preference_regions: Region preferences
+    org_preference_themes: Theme preferences
+    org_preference_timezones: Timezone preferences
+    org_preferences: Organization preferences
+    organization: Organization
+    organization_id: Organization
+    pass_code: Verification code
+    password_digest: Password digest
+    performant: Performance
+    persona_id: Persona ID
+    persona_public_id: Persona reference
+    position: Position
+    preference: Preference
+    preference_id: Preference
+    presented_at: Presented at
+    principal_effect: Principal effect
+    private_key: Private key
+    public_id: Public ID
+    publish_at: Publish at
+    raw_number: Telephone number
+    recipient_actor_id: Recipient actor
+    redirect_uri: Redirect URI
+    redirect_url: Redirect URL
+    request_host: Request host
+    response_mode: Response mode
+    restorable_by_owner: Restorable by owner
+    result_jti: Result JTI
+    role: Role
+    secret_credential_value: Secret
+    sequence: Sequence number
+    sid: Session reference
+    sign_count: Sign count
+    sign_in_flow_id: Sign-in flow
+    social_provider: Social provider
+    source_record_id: Source record ID
+    staff: Staff
+    staff_chronicles: Staff chronicles
+    staff_emails: Email addresses
+    staff_id: Staff
+    staff_occurrence_id: Staff occurrence
+    staff_preference_languages: Language preferences
+    staff_preference_themes: Theme preferences
+    staff_preference_timezones: Timezone preferences
+    staff_secret_credential_kind: Secret credential kind
+    staff_telephones: Telephone numbers
+    staff_token_id: Staff token ID
+    staff_tokens: Tokens
+    status: Status
+    status_id: Status
+    step_up_ceremony_transaction_ref: Step-up transaction reference
+    storage_key: Storage reference
+    subject: Subject reference
+    subject_id: Subject
+    subject_type: Subject type
+    target_operator: Target operator
+    targetable: Targeting
+    telephone_occurrence_id: Telephone occurrence
+    term_public_id_snapshot: Term public ID snapshot
+    terminal: Terminal state
+    token: Token
+    token_expires_at: Token expiration
+    token_id: Root session reference
+    transaction_id: Transaction ID
+    transfer_reservation_id: Transfer reservation
+    uid: UID
+    user: User
+    user_id: User
+    user_occurrence_id: User occurrence
+    user_secret_credential_kind: Secret credential kind
+    user_token_id: User token ID
+    visible_by_default: Visible by default
+    visitor: Visitor
+    visitor_token_id: Visitor token ID
+    vocabulary_public_id_snapshot: Vocabulary public ID snapshot
+    webauthn_id: WebAuthn ID
+  auth:
+    app:
+      dashboards:
+        show:
+          description: Sign app signed-in landing.
+      settings:
+        activity:
+          events:
+            email_registered: Email address registered
+            email_removed: Email address removed
+            logged_in: Logged in
+            logged_out: Logged out
+            login_success: Login success
+            logout: Logged out
+            passkey_registered: Passkey registered
+            recovery_codes_generated: Recovery codes generated
+            session_revoked: Session revoked
+            signed_up_with_apple: Signed up with Apple
+            signed_up_with_email: Signed up with email
+            signed_up_with_google: Signed up with Google
+            signed_up_with_telephone: Signed up with telephone
+            social_linked: Social account linked
+            social_unlinked: Social account unlinked
+            telephone_registered: Telephone number registered
+            telephone_removed: Telephone number removed
+            totp_enabled: Authenticator app registered
+            unknown: Unknown event (%{event_id})
+            user_secret_credential_created: Secret created
+      verification:
+        emails:
+          update:
+            page_title: Email verification
+    com:
+      dashboards:
+        show:
+          description: Sign com signed-in landing.
+      settings:
+        activity:
+          events:
+            logged_in: Logged in
+            login_success: Login success
+            unknown: Unknown event (%{event_id})
+    org:
+      dashboards:
+        show:
+          description: Sign org signed-in landing.
+      settings:
+        activity:
+          events:
+            logged_in: Logged in
+            login_success: Login success
+            social_unlinked: Social account unlinked
+            unknown: Unknown event (%{event_id})
+      sign:
+        in:
+          passkeys:
+            create:
+              page_title: Sign in with a passkey
+          sessions:
+            update:
+              page_title: Sign in
+        up:
+          invitations:
+            create:
+              turnstile_failed: "Security verification failed. Please try again."
+    session_expired: Your session has expired. Please sign in again.
+    step_up:
+      canceled: Cancel verification
+      completed: Continue
+      emergency_unavailable: This session was established through Emergency Access and cannot perform step-up verification. Sign out and sign in normally to continue.
+      fresh_sign_in_required: Sign out and sign in again to register your first verification method.
+      invalid_request: Invalid verification request.
+      method_unavailable: Selected verification method is unavailable.
+      register_methods_required: No step-up methods available. Please register passkey/email/totp.
+      required: Step-up authentication is required to continue.
+      session_expired: Verification required.
+      verification_required: Verification required.
+    unauthorized: You are not authorized to access this page.
+  avatar_backfill:
+    legacy_client_bindings_desc: Backfill unambiguous legacy avatars.client_id bindings. Defaults to dry-run; set APPLY=1 to mutate.
+  base:
+    app:
+      avatars:
+        already_assigned: You already have an avatar, so another one cannot be created.
+        moniker_validation:
+          blank: Name can't be blank.
+          invalid: Name contains unsupported characters or surrounding whitespace.
+          max_bytes: Name must use at most %{count} UTF-8 bytes.
+          max_graphemes: Name must contain at most %{count} visible characters.
+      identity:
+        credential_warning:
+          body: Adding another sign-in method helps you access your account if Apple sign-in is unavailable.
+          google: Link Google
+          heading: Add another sign-in method
+          passkey: Add a passkey
+        emails:
+          registrations:
+            edit:
+              delivery_help: The code expires after a short time. Request a new one if it does not arrive.
+              description: Enter the verification code that was sent to the address you added.
+          show:
+            page_title: Email address
+        privacy:
+          erasure:
+            statuses:
+              show:
+                empty_message: No privacy erasure request is active.
+        recoveries:
+          show:
+            description: Complete verification to restore access.
+        recovery:
+          sessions:
+            new:
+              description: If an eligible account is found, a verification code will be sent.
+        secrets:
+          edit:
+            description: Rename this secret credential or disable it.
+          new:
+            description: Save this secret now. It is shown only once.
+          show:
+            description: The details of this secret credential.
+        sessions:
+          index:
+            empty_message: No active sessions were found.
+            revoke_confirm: Revoke this session?
+          show:
+            page_title: Session
+        telephones:
+          create:
+            page_title: Telephone added
+          destroy:
+            page_title: Telephone removed
+          registrations:
+            edit:
+              delivery_help: The code expires after a short time. Request a new one if it does not arrive.
+          show:
+            page_title: Telephone
+          update:
+            page_title: Telephone updated
+      navigation:
+        edit_membership: Edit Membership %{id}
+        groups_empty: No groups
+        membership: Membership %{id}
+        membership_unavailable: Membership management is not yet available.
+        memberships: Memberships
+        memberships_empty: No memberships
+        new_membership: New Membership
+        telephone_registration: Telephone verification registration
+      preference:
+        currency:
+          edit:
+            description: Select the currency used for display.
+            heading: Currency Settings
+            option_label: Currency
+          options:
+            jpy: Japanese Yen
+            usd: US Dollar
+        date_format:
+          edit:
+            description: Select the date format used by the application.
+            heading: Date Format
+            option_label: Date Format
+          options:
+            iso: ISO (YYYY-MM-DD)
+            uk: UK (DD/MM/YYYY)
+            us: US (MM/DD/YYYY)
+        density:
+          edit:
+            description: Select how compactly information is shown on screen.
+            heading: Density Settings
+            option_label: Density
+          options:
+            compact: Compact
+            standard: Standard
+        emails:
+          unsubscribe:
+            description: Stop promotional email for this address.
+            disabled_description: Promotional email is already turned off for this address.
+        language:
+          options:
+            en: English
+            ja: Japanese
+        locale:
+          edit:
+            language_options:
+              en: English
+              ja: Japanese
+            timezone_options:
+              AMERICA_ANCHORAGE: Alaska Time
+              AMERICA_CHICAGO: Central Time (US & Canada)
+              AMERICA_DENVER: Mountain Time (US & Canada)
+              AMERICA_LOS_ANGELES: Pacific Time (US & Canada)
+              AMERICA_NEW_YORK: Eastern Time (US & Canada)
+              ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+              ETC_UTC: Coordinated Universal Time (UTC)
+              JST: Japan Standard Time (Asia/Tokyo)
+              PACIFIC_HONOLULU: Hawaii Time
+              UTC: Coordinated Universal Time (UTC)
+        motion:
+          edit:
+            description: Select the amount of animation and movement on screen.
+            heading: Motion Settings
+            option_label: Motion
+          options:
+            reduced: Reduced motion
+            standard: Standard motion
+        page_size:
+          edit:
+            description: Select how many items are shown at once in paginated lists.
+            heading: Page Size
+            option_label: Page Size
+          options:
+            '10': 10 items
+            '100': 100 items
+            '20': 20 items
+            '50': 50 items
+            infinity: Unlimited
+        theme:
+          edit:
+            options:
+              dark: Dark - easier on the eyes in low light
+              light: Light - for bright environments
+              system: System - follow the device setting
+        time_format:
+          edit:
+            description: Select the time format used by the application.
+            heading: Time Format
+            option_label: Time Format
+      preferences:
+        back_to_settings: Back to settings
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
+        cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
+        density_settings: Density Settings
+        description: Manage language, theme, and other preferences in one place.
+        language_settings: Language Settings
+        motion_settings: Motion Settings
+        pagination_settings: Page Size
+        region_settings: Region Settings
+        regions:
+          back_link: Back
+        reset_settings: Reset Settings
+        submitting: Submitting...
+        theme_settings: Theme Settings
+        timezone_settings: Timezone Settings
+        title: Preferences
+        up_link: Back
+        update_settings: Update Settings
+        update_success: Preferences updated successfully
+      roots:
+        message: Manage your account and preferences from here.
+      secrets:
+        add: Add one Secret
+        capacity_conflict: Secret capacity is full or another issuance is in progress.
+        confirm: I have saved the displayed Secret
+        distribution_omitted: You have the maximum of 20 active Secrets, so no new Secrets were distributed. Your saved Secrets remain usable.
+        distribution_one_confirmed: You can hold at most 20 Secrets. To stay within the limit, this registration distributed one Secret instead of two.
+        distribution_one_present: You can hold at most 20 Secrets. To stay within the limit, this registration will distribute one Secret instead of two.
+        payload_unavailable: The Secret payload is unavailable. Start a new issuance explicitly.
+        present: Show the Secret once
+        reattempt: "Issue again"
+        rename: Rename
+        revoke: Revoke
+        single_delivery: Save this value now. It cannot be displayed again. This value cannot sign in until you confirm saving it.
+        title: Secrets
+      sign:
+        in:
+          limitations:
+            capacity_still_full: "Session capacity is still full. Revoke another session to continue."
+            invalid_or_expired: This sign-in limitation link is invalid or expired.
+            revoke_failed: "The session could not be revoked."
+    com:
+      identity:
+        privacy:
+          erasure:
+            statuses:
+              show:
+                empty_message: No privacy erasure request is active.
+          erasures:
+            new:
+              paragraphs:
+                privacy_request: This is a privacy request for personal data deletion or restriction. It is separate from normal withdrawal.
+                records: Messages, posts, audit logs, billing records, and similar records may follow separate retention policies.
+                retention: After processing, recovery may no longer be available. Some data may be retained for legal, safety, audit, billing, or dispute handling reasons.
+        recoveries:
+          show:
+            description: Complete verification to restore access.
+        recovery:
+          sessions:
+            new:
+              description: If an eligible account is found, a verification code will be sent.
+        sessions:
+          index:
+            empty_message: No active sessions were found.
+            revoke_all_confirm: Revoke all sessions?
+            revoke_confirm: Revoke this session?
+            revoke_others_confirm: Revoke other sessions?
+      preference:
+        currency:
+          edit:
+            description: Select the currency used for display.
+            heading: Currency Settings
+            option_label: Currency
+          options:
+            jpy: Japanese Yen
+            usd: US Dollar
+        date_format:
+          edit:
+            description: Select the date format used by the application.
+            heading: Date Format
+            option_label: Date Format
+          options:
+            iso: ISO (YYYY-MM-DD)
+            uk: UK (DD/MM/YYYY)
+            us: US (MM/DD/YYYY)
+        density:
+          edit:
+            description: Select how compactly information is shown on screen.
+            heading: Density Settings
+            option_label: Density
+          options:
+            compact: Compact
+            standard: Standard
+        emails:
+          unsubscribe:
+            description: Stop promotional email for this address.
+            disabled_description: Promotional email is already turned off for this address.
+        language:
+          options:
+            en: English
+            ja: Japanese
+        locale:
+          edit:
+            language_options:
+              en: English
+              ja: Japanese
+            timezone_options:
+              AMERICA_ANCHORAGE: Alaska Time
+              AMERICA_CHICAGO: Central Time (US & Canada)
+              AMERICA_DENVER: Mountain Time (US & Canada)
+              AMERICA_LOS_ANGELES: Pacific Time (US & Canada)
+              AMERICA_NEW_YORK: Eastern Time (US & Canada)
+              ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+              ETC_UTC: Coordinated Universal Time (UTC)
+              JST: Japan Standard Time (Asia/Tokyo)
+              PACIFIC_HONOLULU: Hawaii Time
+              UTC: Coordinated Universal Time (UTC)
+        motion:
+          edit:
+            description: Select the amount of animation and movement on screen.
+            heading: Motion Settings
+            option_label: Motion
+          options:
+            reduced: Reduced motion
+            standard: Standard motion
+        page_size:
+          edit:
+            description: Select how many items are shown at once in paginated lists.
+            heading: Page Size
+            option_label: Page Size
+          options:
+            '10': 10 items
+            '100': 100 items
+            '20': 20 items
+            '50': 50 items
+            infinity: Unlimited
+        resets:
+          back: Back to Preferences
+          button: Clear preference data
+          confirm: This action deletes saved preference data for this browser. Continue?
+          description: Remove saved preference cookies for this browser.
+          destroyed: Preferences have been reset
+          title: Reset Preferences
+        theme:
+          edit:
+            options:
+              dark: Dark - easier on the eyes in low light
+              light: Light - for bright environments
+              system: System - follow the device setting
+        time_format:
+          edit:
+            description: Select the time format used by the application.
+            heading: Time Format
+            option_label: Time Format
+      preferences:
+        back_to_settings: Back to Preferences
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
+        cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
+        density_settings: Density Settings
+        description: Manage language, theme, and other preferences in one place.
+        language_settings: Language Settings
+        motion_settings: Motion Settings
+        pagination_settings: Page Size
+        region_settings: Region Settings
+        regions:
+          back_link: Back
+        reset_settings: Reset Settings
+        submitting: Submitting...
+        theme_settings: Theme Settings
+        timezone_settings: Timezone Settings
+        title: Preferences
+        up_link: Back
+        update_settings: Update Settings
+        update_success: Preferences updated successfully
+      roots:
+        message: Continue to your account and preference controls.
+    dev:
+      roots:
+        message: Developer access and support entry point.
+    org:
+      admin:
+        clients:
+          empty: No clients match.
+          show_title: App client %{public_id}
+          title: App clients
+        context:
+          operator: Acting operator
+          realm: Target realm
+        dashboard:
+          administration: Administration
+        enforcement:
+          appeal_review_acknowledgement: I have reviewed the appeal independently of the operators who opened and approved the case.
+          appeal_review_action: Review appeal
+          appeal_review_effect: An approved appeal ends the case. A rejected appeal leaves it in force.
+          appeal_review_submit: Record decision
+          appeal_review_title: Review appeal
+          apply_acknowledgement: I have checked the principal, the kind, and the reason.
+          apply_effect: The case is applied now, or held for approval when its kind requires it.
+          apply_submit: Open case
+          approve_acknowledgement: I have reviewed this case independently of the operator who opened it.
+          approve_action: Approve
+          approve_effect: Approving applies the case with the effect chosen here.
+          approve_submit: Approve and apply
+          approve_title: Approve enforcement case
+          convergence_pending: This case is active, but its side effects or audit event are still being completed.
+          empty: No enforcement cases match.
+          new_action: Open an enforcement case
+          new_title: Open an enforcement case
+          release_acknowledgement: I have checked why this case should end.
+          release_action: Release
+          release_effect: Ending this case restores access only if no other case still blocks the principal. Earlier sessions are not restored.
+          release_submit: Release case
+          release_title: Release enforcement case
+          show_title: Enforcement case %{public_id}
+          title: Enforcement cases
+        errors:
+          audit_unavailable: The audit record could not be written, so the operation was not started.
+          break_glass_required: This case needs a break-glass release with a second approver, which the console does not provide.
+          capability: Choose a capability from the list.
+          conflict: This operation conflicts with one already recorded or with the target's current state. Reload and check the target.
+          duration: Choose a validity period from the list.
+          last_holder: This is the last in-force holder of this capability, so it cannot be revoked.
+          operation_id: This confirmation screen is no longer valid. Open it again.
+          operator: Enter the public ID of an existing, active operator.
+          reason_code: Choose a reason code from the list.
+          release_reason: Choose a release reason from the list.
+          self_grant: You cannot grant a capability to yourself.
+          ticket_id: Ticket IDs are up to 64 letters, digits, dots, hyphens, or underscores.
+        fields:
+          access_blocking: Blocks access
+          access_state: Access state
+          active_sessions: Active sessions
+          applied_by: Applied by
+          approved_by: Approved by
+          audited_at: Audited
+          capability: Capability
+          case_id: Case ID
+          created_at: Created
+          duration_days: Validity (days)
+          duration_mode: Duration mode
+          effective_at: Effective
+          end_reason: End reason
+          ended_at: Ended
+          expires_at: Expires
+          expires_at_iso: Expires (ISO 8601, optional)
+          grant_id: Grant ID
+          granted_by: Granted by
+          in_force: In force
+          kind: Kind
+          occurred_at: Occurred
+          operation_id: Operation ID
+          operator: Operator
+          origin: Origin
+          performed_by: Performed by
+          principal: Principal
+          public_id: Public ID
+          reason_code: Reason code
+          release_mode: Release mode
+          resolution_code: Resolution
+          result: Result
+          revoked_at: Revoked
+          revoked_by: Revoked by
+          revoked_count: Sessions revoked
+          starts_at: Starts
+          state: State
+          target: Target
+          ticket_id: Ticket ID
+          visibility: Visibility
+        grants:
+          acknowledgement: I confirm this operator needs this capability for their duties.
+          effect: The operator gains this one capability until the grant expires or is revoked.
+          empty: No grants match.
+          new_action: Grant a capability
+          new_title: Grant a capability
+          revoke_acknowledgement: I have checked this grant should end.
+          revoke_action: Revoke
+          revoke_effect: Operations the operator starts after this are refused unless another grant covers them.
+          revoke_submit: Revoke grant
+          revoke_title: Revoke grant
+          show_title: Grant %{public_id}
+          states:
+            expired: Expired
+            in_force: In force
+            pending: Not yet started
+            revoked: Revoked
+          submit: Grant
+          title: Capability grants
+        iam:
+          areas: Areas
+          description: Operator capability grants.
+          title: IAM
+        pagination:
+          next: Next page
+          previous: Previous page
+        results:
+          failed: Failed
+          failed_notice: The operation failed. Nothing was reported as completed.
+          incomplete: Not confirmed
+          incomplete_notice: The audit record of this operation is not complete. Check the target's current state before retrying.
+          recovery_required: Audit recovery required
+          succeeded: Completed
+        revocations:
+          acknowledgement: I have checked the target account and the reason.
+          action: Revoke all sessions
+          effect: Every session this account has right now is ended. The account is not locked and may sign in again.
+          new_title: Revoke all sessions
+          show_title: Session revocation result
+          submit: Revoke sessions
+        search:
+          operator_public_id: Operator public ID (exact)
+          principal_public_id: Principal public ID (exact)
+          public_id: Public ID (exact)
+          submit: Search
+        support:
+          areas: Areas
+          clients: App clients
+          description: Account support for the app and com realms.
+          enforcement_app: App enforcement cases
+          enforcement_com: Com enforcement cases
+          title: Support
+          visitors: Com visitors
+        values:
+          bootstrap: Bootstrap procedure
+          none: None
+        visitors:
+          empty: No visitors match.
+          show_title: Com visitor %{public_id}
+          title: Com visitors
+      avatars:
+        none_selected: No Avatar is selected for this organization context.
+      identity:
+        secret_credentials:
+          edit:
+            description: Rename this secret credential or disable it.
+            title: Edit secret
+          index:
+            description: Manage registered secrets.
+            new: New secret
+            title: Secret management
+          new:
+            description: Save this secret now. It is shown only once.
+            title: New secret
+          show:
+            description: The details of this secret credential.
+            title: Secret
+        sessions:
+          index:
+            empty_message: No active sessions were found.
+            revoke_confirm: Revoke this session?
+          show:
+            page_title: Session
+      preference:
+        cookie:
+          edit:
+            accept_consent_cookies: Allow cookie consent
+            accept_functional_cookies: Allow functional cookies
+            accept_necessary_cookies: Allow necessary cookies (required)
+            accept_performance_cookies: Allow performance cookies
+            accept_targeting_cookies: Allow targeting cookies
+            description: Cookie settings
+            h1: Cookie settings
+        currency:
+          edit:
+            description: Select the currency used for display.
+            heading: Currency Settings
+            option_label: Currency
+          options:
+            jpy: Japanese Yen
+            usd: US Dollar
+        date_format:
+          edit:
+            description: Select the date format used by the application.
+            heading: Date Format
+            option_label: Date Format
+          options:
+            iso: ISO (YYYY-MM-DD)
+            uk: UK (DD/MM/YYYY)
+            us: US (MM/DD/YYYY)
+        density:
+          edit:
+            description: Select how compactly information is shown on screen.
+            heading: Density Settings
+            option_label: Density
+          options:
+            compact: Compact
+            standard: Standard
+        emails:
+          unsubscribe:
+            description: Stop promotional email for this address.
+            disabled_description: Promotional email is already turned off for this address.
+        language:
+          edit:
+            description: Change the display language for the application.
+            heading: Language Settings
+            language_label: Language
+          options:
+            en: English
+            ja: Japanese
+        locale:
+          edit:
+            cancel: Cancel
+            description: Manage language and timezone settings.
+            language_label: Language
+            language_options:
+              en: English
+              ja: Japanese
+            language_prompt: Choose your language...
+            language_section: Language Settings
+            submit: Update Settings
+            timezone_label: Timezone
+            timezone_options:
+              AMERICA_ANCHORAGE: Alaska Time
+              AMERICA_CHICAGO: Central Time (US & Canada)
+              AMERICA_DENVER: Mountain Time (US & Canada)
+              AMERICA_LOS_ANGELES: Pacific Time (US & Canada)
+              AMERICA_NEW_YORK: Eastern Time (US & Canada)
+              ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+              ETC_UTC: Coordinated Universal Time (UTC)
+              JST: Japan Standard Time (Asia/Tokyo)
+              PACIFIC_HONOLULU: Hawaii Time
+              UTC: Coordinated Universal Time (UTC)
+            timezone_prompt: Choose your timezone...
+            timezone_section: Timezone Settings
+            title: Locale Settings
+        motion:
+          edit:
+            description: Select the amount of animation and movement on screen.
+            heading: Motion Settings
+            option_label: Motion
+          options:
+            reduced: Reduced motion
+            standard: Standard motion
+        page_size:
+          edit:
+            description: Select how many items are shown at once in paginated lists.
+            heading: Page Size
+            option_label: Page Size
+          options:
+            '10': 10 items
+            '100': 100 items
+            '20': 20 items
+            '50': 50 items
+            infinity: Unlimited
+        resets:
+          back: Back to Preferences
+          button: Clear preference data
+          confirm: This action deletes saved preference data for this browser. Continue?
+          description: Remove saved preference cookies for this browser.
+          destroyed: Preferences have been reset
+          title: Reset Preferences
+        theme:
+          edit:
+            description: Choose a display mode that fits your working environment.
+            hints:
+              dark: Helps reduce eye strain during night shifts and long sessions.
+              light: Recommended for daytime work and shared spaces.
+              system: Automatically follows the OS theme.
+            legend: Theme of Choice
+            options:
+              dark: Dark - easier on the eyes in low light
+              light: Light - for bright environments
+              system: System - follow the device setting
+            submit: Save Theme Settings
+            title: Theme Settings (Light/Dark Toggle)
+        time_format:
+          edit:
+            description: Select the time format used by the application.
+            heading: Time Format
+            option_label: Time Format
+        timezone:
+          edit:
+            description: Change the timezone used to display dates and times.
+            heading: Timezone Settings
+            timezone_label: Timezone
+      preferences:
+        back_to_settings: Back to Preferences
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
+        cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
+        density_settings: Density Settings
+        description: Manage language, theme, and other preferences in one place.
+        language_settings: Language Settings
+        motion_settings: Motion Settings
+        pagination_settings: Page Size
+        region_settings: Region Settings
+        regions:
+          back_link: Back
+        reset_settings: Reset Settings
+        submitting: Submitting...
+        theme_settings: Theme Settings
+        timezone_settings: Timezone Settings
+        title: Preferences
+        up_link: Back
+        update_settings: Update Settings
+        update_success: Preferences updated successfully
+      roots:
+        message: Continue to your organization account and preferences.
+    shared:
+      dashboard:
+        description: Signed in
+        links:
+          account: Account
+          authorize_sign_in: Authorize (sign in)
+          authorize_sign_up: Authorize (sign up)
+          avatar: Avatar
+          billings: Billings
+          dashboard: Dashboard
+          groups: Groups
+          identity: Identity
+          jwks: JWKS
+          logout: Logout
+          offline: Offline
+          oidc_discovery: OIDC discovery
+          organization: Organization
+          preference: Preferences
+          root: Root
+          selector: Selector
+          switcher: Switcher
+          userinfo: UserInfo
+        sections:
+          menu_links: Menu links
+          primary_links: Primary links
+          protocol_links: Protocol links
+          publishing: Publishing
+        title: Dashboard
+      identity:
+        activities:
+          columns:
+            activity: Activity
+            device: Device
+            occurred_at: Occurred at
+            risk: Risk
+            source: Source
+          description: Recent security-related activity for your account.
+          empty: No activities to show.
+          events:
+            apple_account_created: Account created with Apple
+            apple_sign_in: Signed in with Apple
+            email_account_created: Account created with email
+            google_account_created: Account created with Google
+            google_sign_in: Signed in with Google
+            passkey_description_changed: Passkey name changed
+            passkey_registered: Passkey registered
+            passkey_removed: Passkey removed
+            security_change: Security settings changed
+            session_revoked: Session ended
+            session_security_alert: Session ended for security reasons
+            sign_in: Signed in
+            sign_in_failed: Sign-in failed
+            sign_out: Signed out
+            step_up_completed: Step-up authentication completed
+            step_up_failed: Step-up authentication failed
+            telephone_account_created: Account created with phone number
+          risks:
+            critical: Critical
+            high: High
+            low: Low
+            medium: Medium
+            none: None
+          title: Activity history
+          unknown_device: Unknown device
+          unknown_location: Location unavailable
+        links:
+          activities: Activity
+          birthdate: Birthdate
+          emails: Email
+          passkey: Passkey
+          secrets: Secrets
+          sessions: Sessions
+          standing: Account standing
+          telephones: Telephone
+          totp: TOTP
+          withdrawal: Withdrawal
+        passkeys:
+          description: Manage your passkeys.
+          title: Passkeys
+        sections:
+          account: Account
+          profile: Profile
+          security: Security
+        sessions:
+          active: Active
+          columns:
+            action: Action
+            created: Created
+            device: Device
+            expires_at: Expires at
+            last_activity: Last activity
+            mode: Mode
+            status: Status
+          current_session: Current session
+          emergency: Emergency
+          empty: No active sessions.
+          expires_at_description: This session ends at this time. This limit cannot be extended.
+          normal: Normal
+          revoke: Revoke
+          title: Sessions
+          unknown_device: Unknown device
+          unknown_mode: Unknown
+        totps:
+          description: Manage your authenticator apps.
+          remove_confirm: Remove this authenticator app?
+          show_description: Review or rename this authenticator app.
+          show_title: Authenticator app
+          status_label: Status
+          statuses:
+            active: Active
+            deleted: Deleted
+            inactive: Inactive
+            nothing: Not configured
+            revoked: Revoked
+          title: Authenticator apps
+        up_link: Back
+      lobby:
+        description: Sign in to continue.
+        heading: Lobby
+        sign_in: Sign in
+        title: Lobby
+  billings:
+    signed_in_required: Signed in required.
+  com_document_categories:
+    "%{id}": com_document_category_%{id}
+    announcement: Announcement
+    article: Article
+    faq: FAQ
+    guide: Guide
+    news: News
+    reference: Reference
+    release_note: Release Note
+    tutorial: Tutorial
+  com_document_tags:
+    "%{id}": com_document_tag_%{id}
+    backend: Backend
+    business: Business
+    database: Database
+    design: Design
+    development: Development
+    frontend: Frontend
+    marketing: Marketing
+    none: None
+    security: Security
+    technology: Technology
+  com_timeline_categories:
+    "%{id}": com_timeline_category_%{id}
+    announcement: Announcement
+    article: Article
+    faq: FAQ
+    guide: Guide
+    news: News
+    reference: Reference
+    release_note: Release Note
+    tutorial: Tutorial
+  com_timeline_tags:
+    "%{id}": com_timeline_tag_%{id}
+    backend: Backend
+    business: Business
+    database: Database
+    design: Design
+    development: Development
+    frontend: Frontend
+    marketing: Marketing
+    none: None
+    security: Security
+    technology: Technology
+  common:
+    ok: OK
+  controller:
+    acme:
+      org:
+        preferences:
+          themes:
+            invalid: Invalid admin theme selected
+            updated: Admin theme updated to %{theme}
+    sign:
+      app:
+        setting:
+          index:
+            activity: Activity
+            apple: Apple
+            birthdate: Birthdate
+            email: Email
+            google: Google
+            passkey: Passkey
+            secret_credential: Recovery Code
+            session: Session
+            telephone: Telephone
+            totp: TOTP
+        settings:
+          index:
+            apple: Apple
+            google: Google
+            passkey: Passkey
+            secret_credential: Recovery Code
+            totp: TOTP
+          show:
+            page_title: Settings
+        v1:
+          passkey:
+            new: New passkey
+      preferences:
+        back_to_settings: Back to Preferences
+        cookie_settings: Cookie Settings
+        footer:
+          home: Home
+          preference: Preferences
+          settings: Settings
+        languages:
+          unsupported: Unsupported language selected
+        locale_settings: Language settings
+        region_settings: Region Settings
+        regions:
+          cancel: Cancel
+          language_section: Language Preferences
+          region_section: Regional Settings
+          select_country: Select Country
+          select_country_prompt: Choose your country...
+          select_language: Select Language
+          select_language_prompt: Choose your language...
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region: Select Region
+          select_region_prompt: Choose your region...
+          select_region_selector:
+            JAPAN: Japan - 日本
+            JP: Japan - 日本
+            US: United States - USA
+            USA: United States - USA
+          select_timezone: Select Timezone
+          select_timezone_prompt: Choose your timezone...
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+          timezone_section: Timezone Settings
+          title: Regional & Language Settings
+          update_settings: Update Settings
+        theme_settings: Theme Settings
+        themes:
+          invalid: Invalid theme selected
+          updated: Theme updated to %{theme}
+        timezones:
+          invalid: Invalid timezone selected
+        title: Preferences
+  controllers:
+    sign:
+      app_verification_base:
+        code_expired: The verification code has expired.
+        code_resend_required: Please resend the verification code.
+        email_unverified: Email address is not verified.
+        invalid_code: The verification code is incorrect.
+        invalid_code_format: The verification code is invalid.
+      com_verification_base:
+        email_unverified: Email address is not verified.
+      verification_passkey_checks:
+        missing_credential_data: Passkey authentication data is missing.
+      verification_totp_checks:
+        invalid_code: The verification code is incorrect.
+        invalid_code_format: The verification code is invalid.
+  core:
+    app:
+      layout:
+        nav:
+          contact: Contact
+          settings: Settings
+      preference:
+        emails:
+          edit:
+            always_on: Essential notices
+            always_on_description: Essential messages are always enabled and cannot be turned off.
+            description: Adjust optional notifications using the link sent to your email.
+            heading: Edit email preferences
+            page_title: Edit email preferences
+            product_updates_description: Receive news about new features and improvements.
+            product_updates_label: Product updates
+            promotional_messages_description: Receive campaign and event announcements.
+            promotional_messages_label: Promotional messages
+            submit: Save preferences
+          new:
+            description: Enter your email address to receive a one-time token.
+            email_label: Email address
+            failure: Check your input and try again.
+            heading: Request a secure link
+            page_title: Request a preferences link
+            submit: Send the link
+            success: If the address is registered, we have emailed a secure link.
+      preferences:
+        back_to_settings: Back to settings
+        description: Request a link that lets you change notification settings immediately without signing in.
+        email_settings: Request an email preferences link
+        email_settings_description: Enter your email address and we will send you a secure link.
+        footer:
+          home: Home
+          preference: Preferences
+        title: Email preferences
+        token_guidance: Use the link in the email to change your settings within two hours.
+    com:
+      layout:
+        nav:
+          contact: Contact
+      preferences:
+        footer:
+          preference: Preferences
+    dev:
+      roots:
+        message: Support and status entry point.
+    org:
+      preference:
+        emails:
+          edit:
+            always_on: Essential notices
+            always_on_description: Critical alerts stay enabled automatically.
+            description: Choose which notifications you receive.
+            heading: Choose staff notifications
+            page_title: Adjust staff email preferences
+            product_updates_description: Receive news about staff products and features.
+            product_updates_label: Product updates
+            promotional_messages_description: Receive promotional and event information.
+            promotional_messages_label: Promotional messages
+            submit: Save staff preferences
+          new:
+            description: Enter the target email address to receive a one-time token.
+            email_label: Staff email
+            failure: Correct the errors and try again.
+            heading: Request a secure staff link
+            page_title: Request a staff link
+            submit: Send the link
+            success: If the address is registered, we have sent an email containing the link.
+      preferences:
+        back_to_settings: Back to settings
+        description: Email staff a link to their notification settings.
+        email_settings: Request an email preferences link
+        email_settings_description: Send a one-time token link for staff.
+        footer:
+          cookie: Cookie
+          preference: Preferences
+        title: Email preferences
+        token_guidance: Use the link you received to change your settings before it expires.
+    shared:
+      preference_emails:
+        token_invalid: This link has expired. Please request a new one.
+        turnstile_error: Turnstile verification failed. Refresh the page and try again.
+        update_failure: We could not save your preferences. Please try again.
+  custom:
+    error:
+      key: Custom Error
+  date:
+    abbr_day_names:
+    - Sun
+    - Mon
+    - Tue
+    - Wed
+    - Thu
+    - Fri
+    - Sat
+    abbr_month_names:
+    -
+    - Jan
+    - Feb
+    - Mar
+    - Apr
+    - May
+    - Jun
+    - Jul
+    - Aug
+    - Sep
+    - Oct
+    - Nov
+    - Dec
+    day_names:
+    - Sunday
+    - Monday
+    - Tuesday
+    - Wednesday
+    - Thursday
+    - Friday
+    - Saturday
+    formats:
+      default: "%Y-%m-%d"
+      long: "%B %d, %Y"
+      short: "%b %d"
+    month_names:
+    -
+    - January
+    - February
+    - March
+    - April
+    - May
+    - June
+    - July
+    - August
+    - September
+    - October
+    - November
+    - December
+    order:
+    - year
+    - month
+    - day
+  datetime:
+    distance_in_words:
+      about_x_hours:
+        one: about %{count} hour
+        other: about %{count} hours
+      about_x_months:
+        one: about %{count} month
+        other: about %{count} months
+      about_x_years:
+        one: about %{count} year
+        other: about %{count} years
+      almost_x_years:
+        one: almost %{count} year
+        other: almost %{count} years
+      half_a_minute: half a minute
+      less_than_x_minutes:
+        one: less than a minute
+        other: less than %{count} minutes
+      less_than_x_seconds:
+        one: less than %{count} second
+        other: less than %{count} seconds
+      over_x_years:
+        one: over %{count} year
+        other: over %{count} years
+      x_days:
+        one: "%{count} day"
+        other: "%{count} days"
+      x_minutes:
+        one: "%{count} minute"
+        other: "%{count} minutes"
+      x_months:
+        one: "%{count} month"
+        other: "%{count} months"
+      x_seconds:
+        one: "%{count} second"
+        other: "%{count} seconds"
+      x_years:
+        one: "%{count} year"
+        other: "%{count} years"
+    prompts:
+      day: Day
+      hour: Hour
+      minute: Minute
+      month: Month
+      second: Seconds
+      year: Year
+  db_verify_no_schema_drift:
+    run_reset_workflow: Run the appropriate database reset/migration workflow, review the schema dump changes, and commit the intended dumps.
+    unable_to_inspect: Unable to inspect schema dump drift.
+  defaults:
+    never: Never
+  description: Withdrawal
+  docs:
+    app:
+      preferences:
+        footer:
+          home: Home
+          preference: Preferences
+      roots:
+        message: Docs API is available. Browser article pages are served outside Rails.
+    com:
+      preferences:
+        footer:
+          home: Home
+          preference: Preferences
+      roots:
+        message: Docs API is available. Browser article pages are served outside Rails.
+    org:
+      preferences:
+        footer:
+          home: Home
+          preference: Preferences
+      roots:
+        message: Docs API is available. Browser article pages are served outside Rails.
+    posts:
+      index:
+        count: "%{count} documents"
+        empty: No documents found
+        search_all: All
+        search_button: Search
+        search_found: "%{count} found"
+        search_placeholder: Search...
+        select_description: Click on a document from the list to view its details
+        select_title: Select a document
+        title: Documents
+    versions:
+      index:
+        description: Document versions list
+        title: Versions
+      show:
+        description: Document version details
+        title: Version
+  email:
+    app:
+      preference_mailer:
+        update_request:
+          cta: Update my preferences
+          expiration_notice: The link expires in two hours and can only be used once.
+          greeting: Hello,
+          intro: Click the link below to manage your email preferences.
+          subject: Update your email preferences
+    org:
+      preference_mailer:
+        update_request:
+          cta: Update staff preferences
+          expiration_notice: This link is single-use and expires in two hours.
+          greeting: Hello,
+          intro: Use the link below to manage staff email preferences.
+          subject: Update your staff email preferences
+  errors:
+    forbidden: "Access is forbidden."
+    format: "%{attribute} %{message}"
+    fqdn_availability:
+      unavailable: This service is temporarily unavailable. Please try again later.
+    invalid_authenticity_token: Your session has expired. Please reload the page.
+    login_failed: Login failed
+    messages:
+      accepted: must be accepted
+      already_authenticated: "You are already signed in."
+      blank: can't be blank
+      challenge_id_required: Challenge ID is required
+      challenge_invalid: Challenge is invalid or expired
+      confirmation: doesn't match %{attribute}
+      credential_not_found: Passkey not found
+      empty: can't be empty
+      equal_to: must be equal to %{count}
+      even: must be even
+      exclusion: is reserved
+      greater_than: must be greater than %{count}
+      greater_than_or_equal_to: must be greater than or equal to %{count}
+      in: must be in %{count}
+      inclusion: is not included in the list
+      invalid: is invalid
+      invalid_request: Invalid request.
+      less_than: must be less than %{count}
+      less_than_or_equal_to: must be less than or equal to %{count}
+      login_cooldown_retry: Sign-in is temporarily unavailable. Please wait a moment, then start again at %{restart_url}
+      login_required: "You must sign in."
+      model_invalid: 'Validation failed: %{errors}'
+      not_a_number: is not a number
+      not_an_integer: must be an integer
+      not_authorized: "You are not authorized to perform this action."
+      not_found: Not found.
+      odd: must be odd
+      operation_not_permitted: This operation is not permitted.
+      other_than: must be other than %{count}
+      password_too_long: is too long
+      phase_violation_refused: Going back is not allowed.
+      preference_operation_failed: The preference operation failed.
+      present: must be blank
+      required: must exist
+      session_limit_exceeded: Session limit exceeded
+      sign_count_mismatch: Passkey security verification failed
+      sign_in_unavailable: Sign-in is temporarily unavailable. Please try again later.
+      sign_up_unavailable: Sign-up is temporarily unavailable. Please try again later.
+      taken: has already been taken
+      too_long:
+        one: is too long (maximum is %{count} character)
+        other: is too long (maximum is %{count} characters)
+      too_short:
+        one: is too short (minimum is %{count} character)
+        other: is too short (minimum is %{count} characters)
+      validation_errors:
+        one: 1 error
+        other: "%{count} errors"
+      verification_failed: Passkey verification failed
+      webauthn:
+        email_required: Please enter your email address
+        identifier_invalid: Please enter a valid 16-character staff code
+        identifier_required: Please enter your email or staff code
+        no_passkeys_available: No passkeys available
+        options_failed: Failed to get authentication options
+        origin_invalid: Authentication from this site is not allowed
+        origin_not_trusted: Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
+        pii_required: Please enter your email address or telephone number
+      wrong_length:
+        one: is the wrong length (should be %{count} character)
+        other: is the wrong length (should be %{count} characters)
+    not_implemented: This feature is not implemented
+    occurrence:
+      invalid_telephone_format: "The phone number must be in E.164 format."
+      missing_hmac_secret_credential: "The HMAC secret credential is not configured."
+    otp_locked: You have exceeded the maximum number of attempts. Please start over.
+    preference:
+      cookie:
+        invalid_access_token: Preference access token is invalid or missing.
+    rate_limit:
+      backend_unavailable: Authorization is temporarily unavailable. Please try again later.
+      exceeded: Too many requests. Please try again later.
+      retry_later: Please retry in a little while.
+      too_many_requests: Too many requests right now. Please try again shortly.
+    social_auth:
+      conflict: This account is already linked to another user
+      fatal: A fatal error occurred
+      identity_conflict: This account is already linked
+      identity_not_found: No %{provider} account linked
+      insufficient_login_methods: Please add another login method (email, passkey with verified phone, or another social account) before unlinking
+      invalid_intent: Invalid authentication intent
+      last_identity: Cannot remove your last login method
+      linked_to_another_user: This %{provider} account is already linked to another user
+      missing_auth_hash: Authentication data not received
+      missing_provider: Provider information missing
+      missing_uid: User identifier not received from provider
+      not_logged_in: Please log in first
+      pending_social_signup_failed: Could not complete the social sign-up confirmation. Please start over.
+      pending_social_signup_invalid_state: The social sign-up confirmation state is invalid. Please refresh and start over.
+      provider_error: Error communicating with provider
+      state_expired: Session expired. Please try again.
+      state_mismatch: Security verification failed. Please try again.
+      state_missing: Security state parameter missing. Please try again.
+      step_up_identity_mismatch: Please use the same %{provider} account that is linked to your profile
+      step_up_required: This action requires recent step-up authentication. Please authenticate again.
+      unauthorized: Authentication failed
+      user_changed: User session changed during authentication
+    template:
+      body: 'There were problems with the following fields:'
+      header:
+        one: "%{count} error prohibited this %{model} from being saved"
+        other: "%{count} errors prohibited this %{model} from being saved"
+    webauthn:
+      challenge_id_required: Challenge ID is required
+      challenge_invalid: Challenge is invalid or expired
+      credential_already_registered: This passkey is already registered
+      credential_not_found: Passkey not found
+      email_required: Please enter your email address
+      identifier_invalid: Please enter a valid 16-character staff code
+      identifier_required: Please enter your email or staff code
+      no_passkey: No passkey registered
+      no_passkeys_available: No passkeys available
+      options_failed: Failed to get authentication options
+      origin_invalid: Authentication from this site is not allowed
+      origin_not_trusted: Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
+      passkey_limit_reached: You have reached the maximum number of passkeys. Remove one before adding another.
+      pii_required: Please enter your email address or telephone number
+      sign_count_mismatch: Passkey security verification failed
+      sign_in_transaction_required: Your sign-in session has expired or was not started with Microsoft. Please start over.
+      verification_failed: Passkey verification failed
+      verification_required: Passkey registration must be completed through WebAuthn verification.
+  hello: Hello world 2
+  help:
+    app:
+      contacts:
+        create:
+          success: Your inquiry has been received.
+        new:
+          badge: Contact
+          body: Body
+          cancel: Cancel
+          category_id: Inquiry Category
+          confirm_policy: I agree to the privacy policy
+          confirm_policy_note: You must agree to the privacy policy before submitting.
+          description: Please fill out the form below to contact us.
+          email_address: Email Address
+          error_heading:
+            one: 1 error prohibited this contact from being saved.
+            other: "%{count} errors prohibited this contact from being saved."
+          page_title: Contact Us
+          submit: Create
+          telephone_number: Telephone Number
+          title: Title
+      preference:
+        cookie:
+          edit:
+            accept_consent_cookies: About allowing consent cookies
+            accept_functional_cookies: About allowing functional cookies
+            accept_necessary_cookies: About allowing necessary cookies (required)
+            accept_performance_cookies: About allowing performance cookies
+            accept_targeting_cookies: About allowing targeting cookies
+            h1: Cookie settings
+        theme:
+          edit:
+            description: Choose a display mode that suits your working environment.
+            hints:
+              dark: Best for night-time work or when you want to reduce eye strain.
+              light: Recommended for shared spaces and brightly lit offices.
+              system: Switches together with the theme of your operating system.
+            legend: Select a theme
+            options:
+              dark: Dark — easy on the eyes in low-light environments
+              light: Light — bright background suited to daytime work
+              system: System — switches automatically with your device setting
+            title: Theme settings (switch between light and dark)
+      preferences:
+        footer:
+          document: Document
+          help_center: Help Center
+          home: Home
+          newsroom: NewsRoom
+          preference: Preferences
+      roots:
+        message: Help API is available. Browser article pages are served outside Rails.
+    com:
+      contact:
+        emails:
+          create:
+            failure: Unable to send verification code. Please try again.
+            hotp_code_invalid: Invalid verification code. Please try again.
+            hotp_code_required: Please enter the verification code.
+            success: Email address verified successfully.
+            turnstile_error: Security verification failed. Please refresh the page and try again.
+          edit:
+            code_label: Verification Code
+            description: Enter the 6-digit code we sent to your email address.
+            heading: Verify your email
+            page_title: Enter Verification Code
+            resend_code: Resend code
+            retry: Start over
+            session_expired: Your session has expired. Please start over.
+            submit: Verify email
+            telephone_link: Verify phone number
+          new:
+            description: We will send a verification code to your email address.
+            email_label: Email Address
+            heading: Enter your email address
+            page_title: Verify Email Address
+            submit: Send verification code
+          update:
+            expired: Verification code has expired. Please request a new code.
+            invalid_code: Invalid verification code. %{attempts_left} attempts remaining.
+            max_attempts: Maximum verification attempts exceeded. Please request a new code.
+            session_expired: Your session has expired. Please start over.
+            success: Email verified successfully. Please verify your phone number.
+      contacts:
+        create:
+          confirm_policy_error: You must agree to the privacy policy to continue.
+          failure: Unable to process your request. Please check the form and try again.
+          success: Thank you for contacting us. Please verify your email address.
+          turnstile_error: Security verification failed. Please refresh the page and try again.
+        new:
+          badge: Contact
+          body: Body
+          cancel: Cancel
+          category_id: Inquiry Category
+          confirm_policy: I agree to the privacy policy
+          confirm_policy_note: You must agree to the privacy policy before submitting.
+          contact_category_title: Inquiry Category
+          description: Please fill out the form below to contact us.
+          email_address: Email Address
+          error_heading:
+            one: 1 error prohibited this contact from being saved.
+            other: "%{count} errors prohibited this contact from being saved."
+          heading: Send us a message
+          page_title: Contact Us
+          submit: Continue
+          telephone_number: Telephone Number
+          title: Title
+        update:
+          success: Your inquiry has been received.
+      preference:
+        theme:
+          edit:
+            options:
+              dark: Dark — easy on the eyes in low-light environments
+              light: Light — bright background suited to daytime work
+              system: System — switches automatically with your device setting
+      preferences:
+        footer:
+          document: Document
+          help_center: Help Center
+          home: Home
+          newsroom: NewsRoom
+          preference: Preferences
+      roots:
+        message: Help API is available. Browser article pages are served outside Rails.
+    contact:
+      errors:
+        id_required: Contact ID is required
+        invalid_status: 'Invalid contact status: expected SET_UP, got %{current_status}'
+        not_found: Contact not found
+    org:
+      contacts:
+        create:
+          confirm_policy_error: You must agree to the privacy policy to continue.
+          failure: Unable to process your request. Please check the form and try again.
+          success: Your inquiry has been received.
+          turnstile_error: Security verification failed. Please refresh the page and try again.
+        new:
+          badge: Contact
+          body: Body
+          cancel: Cancel
+          category_id: Inquiry Category
+          confirm_policy: I agree to the privacy policy
+          confirm_policy_note: You must agree to the privacy policy before submitting.
+          contact_category_title: Inquiry Category
+          description: Please fill out the form below to contact us.
+          email_address: Email Address
+          error_heading:
+            one: 1 error prohibited this contact from being saved.
+            other: "%{count} errors prohibited this contact from being saved."
+          heading: Send us a message
+          page_title: Contact Us
+          submit: Continue
+          telephone_number: Telephone Number
+          title: Title
+        update:
+          success: Your inquiry has been received.
+      preference:
+        theme:
+          edit:
+            options:
+              dark: Dark — easy on the eyes in low-light environments
+              light: Light — bright background suited to daytime work
+              system: System — switches automatically with your device setting
+      preferences:
+        footer:
+          document: Document
+          help_center: Help Center
+          home: Home
+          newsroom: NewsRoom
+          preference: Preferences
+      roots:
+        message: Help API is available. Browser article pages are served outside Rails.
+  helpers:
+    select:
+      prompt: Please select
+    submit:
+      create: Create %{model}
+      submit: Save %{model}
+      update: Update %{model}
+  info:
+    app:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+    com:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+    org:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+  jump:
+    redirector:
+      unavailable: This jump link is unavailable.
+  landing:
+    sign_in: Sign in
+    thin_endpoint: Use the options below to continue.
+  languages:
+    english: English
+    japanese: 日本語
+  layouts:
+    shared:
+      footer_cookie_controls:
+        accept_all: Accept all
+        close_button: Close
+        description_html: We use essential cookies and cookies for analytics and marketing purposes. Please review our %{privacy_policy} for details.
+        open_settings: Manage settings
+        privacy_policy: Privacy Policy
+        reject_all: Reject all
+        title: About our use of cookies
+      footer_theme_controls:
+        description: Choose your display theme (or follow your system setting)
+        options:
+          dark: Dark
+          light: Light
+          system: Follow system setting
+        title: Theme settings
+      restricted_mode:
+        description: Step-up verification and the operations that require it are unavailable.
+        label: Restricted Mode - Emergency Access
+        sign_out: Sign out and sign in normally
+  mail:
+    common:
+      cta: Learn more
+      footer_note: This is an automated message. Please do not reply.
+      greeting: Hello,
+    email:
+      app:
+        otp_mailer:
+          create:
+            expiration_note: This code will expire in 10 minutes.
+            ignore_instruction: If you did not request this, please ignore this email.
+            instruction: 'Please use the following verification code to complete your registration:'
+            subject: Your verification code
+            subjects:
+              sign_in: UMAXICA - Confirm your sign-in
+              sign_up: UMAXICA - Verify your email address
+            title: Verify your email address
+            verify_link: Verify email
+      com:
+        otp_mailer:
+          create:
+            expiration_note: This code will expire in 10 minutes.
+            ignore_instruction: If you did not request this, please ignore this email.
+            instruction: 'Please use the following verification code to continue:'
+            subject: Your verification code
+            subjects:
+              sign_in: UMAXICA - Confirm your sign-in
+              sign_up: UMAXICA - Verify your email address
+            title: Verify your email address
+            verify_link: Verify email
+      org:
+        otp_mailer:
+          create:
+            expiration_note: This code will expire in 10 minutes.
+            ignore_instruction: If you did not request this, please ignore this email.
+            instruction: 'Please use the following verification code to continue:'
+            subject: Your verification code
+            title: Verify your staff email address
+            verify_link: Verify email
+  messages:
+    access_blocked_auth_error: 'Access blocked: Authentication error'
+    cannot_delete_last_passkey: Cannot delete the last passkey. You must have at least one passkey.
+    confirm_destroy: Are you sure you want to delete this?
+    email_successfully_created: Verification code has been sent to your email.
+    no_totp_found: No authenticator apps are registered.
+    passkey_successfully_destroyed: Passkey deleted successfully
+    passkey_successfully_updated: Passkey updated successfully
+    region_settings_updated_successfully: Region settings updated successfully.
+    sample_successfully_updated: Registration completed successfully.
+    telephone_successfully_created: Verification code has been sent to your phone.
+    totp_credential_default_label: "Authenticator app %{count}"
+    totp_credential_label: "Authenticator app"
+    totp_status_label: Status
+    totp_title_placeholder: "Title (optional)"
+    user_registration_error: An error occurred during user registration.
+  model:
+    identity_audit_event_format_invalid: Invalid event ID format. Only uppercase letters and underscores are allowed.
+  models:
+    user:
+      recovery_identity_required: To register a passkey or secret_credential, please register and verify at least one email address or phone number first.
+    visitor:
+      recovery_identity_required: To register a passkey or secret_credential, please register and verify at least one email address or phone number first.
+  news:
+    app:
+      preferences:
+        footer:
+          home: Home
+          preference: Preferences
+      roots:
+        message: News API is available. Browser article pages are served outside Rails.
+    com:
+      preferences:
+        footer:
+          home: Home
+          preference: Preferences
+      roots:
+        message: News API is available. Browser article pages are served outside Rails.
+    org:
+      preferences:
+        footer:
+          home: Home
+          preference: Preferences
+      roots:
+        message: News API is available. Browser article pages are served outside Rails.
+    posts:
+      index:
+        count: "%{count} posts"
+        empty: No posts found
+        select_description: Click on a post from the list to view its details
+        select_title: Select a post
+        title: News
+    versions:
+      index:
+        description: News versions list
+        title: Versions
+      show:
+        description: News version details
+        title: Version
+  number:
+    currency:
+      format:
+        delimiter: ","
+        format: "%u%n"
+        precision: 2
+        separator: "."
+        significant: false
+        strip_insignificant_zeros: false
+        unit: "$"
+    format:
+      delimiter: ","
+      precision: 3
+      round_mode: default
+      separator: "."
+      significant: false
+      strip_insignificant_zeros: false
+    human:
+      decimal_units:
+        format: "%n %u"
+        units:
+          billion: Billion
+          million: Million
+          quadrillion: Quadrillion
+          thousand: Thousand
+          trillion: Trillion
+          unit: ''
+      format:
+        delimiter: ''
+        precision: 3
+        significant: true
+        strip_insignificant_zeros: true
+      storage_units:
+        format: "%n %u"
+        units:
+          byte:
+            one: Byte
+            other: Bytes
+          eb: EB
+          gb: GB
+          kb: KB
+          mb: MB
+          pb: PB
+          tb: TB
+    percentage:
+      format:
+        delimiter: ''
+        format: "%n%"
+    precision:
+      format:
+        delimiter: ''
+  oidc:
+    rp_logout:
+      local_only: This domain has been signed out. You are still signed in to sign. To sign out everywhere, use session management at %{idp_sessions_url}.
+  oidc_rp:
+    interruption:
+      body: Sign-in could not be completed. Please sign in again.
+      sign_in: Sign in
+      title: Sign-in could not be completed
+      top: Top page
+  org_document_categories:
+    "%{id}": org_document_category_%{id}
+    announcement: Announcement
+    article: Article
+    faq: FAQ
+    guide: Guide
+    news: News
+    reference: Reference
+    release_note: Release Note
+    tutorial: Tutorial
+  org_document_tags:
+    "%{id}": org_document_tag_%{id}
+    backend: Backend
+    business: Business
+    database: Database
+    design: Design
+    development: Development
+    frontend: Frontend
+    marketing: Marketing
+    none: None
+    security: Security
+    technology: Technology
+  org_timeline_categories:
+    "%{id}": org_timeline_category_%{id}
+    announcement: Announcement
+    article: Article
+    faq: FAQ
+    guide: Guide
+    news: News
+    reference: Reference
+    release_note: Release Note
+    tutorial: Tutorial
+  org_timeline_tags:
+    "%{id}": org_timeline_tag_%{id}
+    backend: Backend
+    business: Business
+    database: Database
+    design: Design
+    development: Development
+    frontend: Frontend
+    marketing: Marketing
+    none: None
+    security: Security
+    technology: Technology
+  otp:
+    resend:
+      button: Resend code
+      failed: Unable to resend code. Please try again.
+      sent: Verification code sent.
+      too_soon: Please wait before requesting another code.
+  palm:
+    app:
+      dashboard:
+        description: This is a protected Palm browser page.
+        sign_out: Sign out
+        status: Your browser session is active.
+        status_heading: Session
+        title: Palm App
+      roots:
+        message: Sign in to your Palm account to open the protected app.
+        sign_in: Sign in
+      sign_out:
+        completed: Your Palm session was revoked and the browser logout flow completed.
+        heading: Signed out
+        missing: There is no active Palm logout transaction to display.
+  preference:
+    cookie:
+      banner:
+        accept: Accept
+        cancel: Cancel
+        message: We use cookies to improve your experience.
+  preferences:
+    title: Preferences
+  privacy_erasure:
+    forbidden: Privacy erasure requests are available only during withdrawal procedures.
+  pwa:
+    offline:
+      description: Unable to connect to the server. Check your internet connection and try again.
+      reload: Reload this page
+      retry: Retry
+      title: Unable to connect to the network
+  reproduce_issue:
+    check_positions: |2-
+
+      Checking existing positions:
+    duplicate_position: |2-
+
+      Attempting to create AppPreferenceStatus with duplicate position...
+    expected_db_error: 'Expected DB Error: %{message}'
+    expected_error: 'Expected Error: %{message}'
+    missing_position: Attempting to create AppPreferenceStatus without position...
+    success_created: 'Success: Created with id %{id}, position: %{position}'
+  root:
+    app:
+      com:
+        preference:
+          cookie:
+            edit:
+              accept_functional_cookies: About allowing functional cookies
+              accept_necessary_cookies: About allowing necessary cookies (required)
+              accept_performance_cookies: About allowing performance cookies
+              accept_targeting_cookies: About allowing targeting cookies
+              accept_tracking_cookies: About allowing tracking
+              h1: Cookie settings
+              page_title: Cookie settings
+          show:
+            page_title: konomi
+          theme:
+            edit:
+              description: Switch the business dashboard to the display mode that works best.
+              hints:
+                dark: Easy on the eyes during night-time monitoring and long sessions.
+                light: Suited to presentations in bright meeting rooms.
+                system: Switches automatically with your company device setting.
+              legend: Select a theme
+              options:
+                dark: Dark — for control rooms and night-time monitoring
+                light: Light — for meeting rooms and bright offices
+                system: System — adjusts automatically to your device policy
+              submit: Save theme settings
+              title: Theme settings (switch between light and dark)
+      org:
+        preference:
+          cookie:
+            edit:
+              accept_functional_cookies: About allowing functional cookies
+              accept_necessary_cookies: About allowing necessary cookies (required)
+              accept_performance_cookies: About allowing performance cookies
+              accept_targeting_cookies: About allowing targeting cookies
+              accept_tracking_cookies: About allowing tracking
+              h1: Cookie settings
+              page_title: Cookie settings
+          show:
+            page_title: konomi
+          theme:
+            edit:
+              description: Switch the admin console display mode to suit your preference.
+              hints:
+                dark: Reduces eye strain during night-time monitoring and long sessions.
+                light: Recommended for collaborative work in shared spaces.
+                system: Changes automatically with your device theme setting.
+              legend: Select a theme
+              options:
+                dark: Dark — low-brightness display suited to night duty
+                light: Light — bright screen for office work
+                system: System — inherits the managed device setting
+              submit: Save theme settings
+              title: Theme settings (switch between light and dark)
+      preference:
+        cookie:
+          edit:
+            accept_functional_cookies: Allow functional cookies
+            accept_necessary_cookies: Allow necessary cookies (required)
+            accept_performance_cookies: Allow performance cookies
+            accept_targeting_cookies: Allow targeting cookies
+            accept_tracking_cookies: Allow tracking cookies
+            page_title: Cookie settings
+        email:
+          new:
+            page_title: Email settings
+        show:
+          page_title: konomi
+        theme:
+          edit:
+            description: Pick the display mode that fits your workspace and comfort.
+            hints:
+              dark: Ideal for night shifts or reducing eye strain.
+              light: Great when you work during the day or in bright rooms.
+              system: Matches your operating system and switches automatically.
+            legend: Select a theme
+            options:
+              dark: Dark — dimmed colors for low-light comfort
+              light: Light — bright backgrounds for well-lit spaces
+              system: System default — follow your device settings
+            submit: Save theme preference
+            title: Choose Dark or Light Theme
+      preferences:
+        regions:
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region_selector:
+            JAPAN: Japan - 日本
+            JP: Japan - 日本
+            US: United States - USA
+            USA: United States - USA
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+    com:
+      com:
+        preference:
+          theme:
+            edit:
+              options:
+                dark: Dark — for control rooms and night-time monitoring
+                light: Light — for meeting rooms and bright offices
+                system: System — adjusts automatically to your device policy
+      org:
+        preference:
+          theme:
+            edit:
+              options:
+                dark: Dark — low-brightness display suited to night duty
+                light: Light — bright screen for office work
+                system: System — inherits the managed device setting
+      preference:
+        theme:
+          edit:
+            options:
+              dark: Dark — subdued colors for command centers
+              light: Light — bright backgrounds for well-lit offices
+              system: System default — mirror corporate device settings
+      preferences:
+        regions:
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region_selector:
+            JAPAN: Japan - 日本
+            JP: Japan - 日本
+            US: United States - USA
+            USA: United States - USA
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+    org:
+      com:
+        preference:
+          theme:
+            edit:
+              options:
+                dark: Dark — for control rooms and night-time monitoring
+                light: Light — for meeting rooms and bright offices
+                system: System — adjusts automatically to your device policy
+      org:
+        preference:
+          theme:
+            edit:
+              options:
+                dark: Dark — low-brightness display suited to night duty
+                light: Light — bright screen for office work
+                system: System — inherits the managed device setting
+      preference:
+        cookie:
+          edit:
+            accept_functional_cookies: Allow functional cookies
+            accept_necessary_cookies: Allow necessary cookies (required)
+            accept_performance_cookies: Allow performance cookies
+            accept_targeting_cookies: Allow targeting cookies
+            h1: Operator Cookie Preferences
+        theme:
+          edit:
+            description: Switch the console appearance for long on-call shifts.
+            hints:
+              dark: Gentle on the eyes during overnight monitoring.
+              light: Recommended when collaborating in shared spaces.
+              system: Automatically adapts when your device switches modes.
+            legend: Select a theme
+            options:
+              dark: Dark — low-glare view for night duty
+              light: Light — bright interface for office work
+              system: System default — inherit operator workstation setting
+            submit: Save theme preference
+            title: Choose Dark or Light Theme
+      preferences:
+        back_to_settings: Back to Preferences
+        cookie_settings: Cookie Settings
+        languages:
+          unsupported: Unsupported operator language selected
+        locale_settings: Language settings
+        region_settings: Region Settings
+        regions:
+          cancel: Cancel
+          language_section: Operator Language Preferences
+          region_section: Regional Settings
+          select_country: Select a country
+          select_country_prompt: Choose your country...
+          select_language: Select Operator Language
+          select_language_prompt: Choose operator language...
+          select_language_selector:
+            ENGLISH: English
+            JAPANESE: Japanese
+          select_region: Select Region
+          select_region_prompt: Choose your region...
+          select_region_selector:
+            JAPAN: Japan
+            JP: Japan
+            US: United States (USA)
+            USA: United States (USA)
+          select_timezone: Select Operator Timezone
+          select_timezone_prompt: Choose operator timezone...
+          select_timezone_selector:
+            ASIA_TOKYO: Japan Standard Time (Asia/Tokyo)
+            ETC_UTC: Coordinated Universal Time (UTC)
+            JST: Japan Standard Time (Asia/Tokyo)
+            UTC: Coordinated Universal Time (UTC)
+          timezone_section: Operator Timezone Settings
+          title: Operator Regional & Language Settings
+          update_settings: Update Settings
+        theme_settings: Choose Dark or Light Theme
+        themes:
+          invalid: Invalid operator theme selected
+          updated: Operator theme updated to %{theme}
+        timezones:
+          invalid: Invalid timezone selected for operator interface
+        title: Operator Preferences
+  scripts:
+    token_refresh:
+      errors:
+        invalid_refresh_token: Invalid or expired refresh token
+        missing_refresh_token: Refresh token is required
+    update_contact_fixtures:
+      done: Done updating contact statuses/categories.
+  seed:
+    roles:
+      contributor:
+        description: Can create content and edit own posts only.
+      editor:
+        description: Can create and edit all content. Can only delete own posts.
+      manager:
+        description: Can manage content and edit other users' posts. Has delete permissions for managed resources.
+      operator:
+        description: Full system access. Can manage users, settings, and perform all operations including deletions.
+      viewer:
+        description: Read-only access to content. Cannot create or modify anything.
+  seeds:
+    preference_statuses:
+      complete: Seeding complete.
+      start: Seeding Preference Statuses...
+  sequential_flow:
+    invalid_step: Invalid access. Please start from the beginning.
+  session_limit:
+    all_sessions_revoked: All sessions have been revoked. Please sign in again.
+    cancelled: Session cancelled. Please sign in again.
+    cannot_revoke_current: The current session cannot be revoked.
+    edit:
+      active_sessions: Active Sessions
+      cancel: Cancel
+      cancel_logout: "Cancel and sign out."
+      continue: Continue sign-in
+      created_at: Created
+      description: You have reached the maximum number of concurrent sessions. To continue logging in, please select sessions to revoke.
+      last_used: Last used
+      no_sessions: No active sessions found.
+      page_title: Session Management
+      session_label: Session
+      submit: Revoke Selected Sessions and Log In
+      title: Session Limit Reached
+    gate_expired: The operation has timed out. Please log in again.
+    invalid_session: Invalid session.
+    login_limit_exceeded: Login limit exceeded. Please end an existing session and try again.
+    login_required: You need to sign in to manage sessions.
+    no_sessions_selected: Please select sessions to revoke.
+    pending:
+      message: You need to tidy up your sessions. Revoke an existing session to continue.
+    promoted: Session promoted.
+    restricted_notice: Your active session limit has been reached. Please manage your existing sessions.
+    session_revoked: Session revoked.
+    sessions_purged: Sessions purged successfully.
+    sessions_revoked: Sessions revoked. Please continue logging in.
+    staff_not_found: Staff not found. Please log in again.
+    totp_limit_reached: You cannot register more than %{count} TOTP credentials.
+    turnstile_failed: Verification failed. Please try again.
+    user_not_found: User not found. Please log in again.
+  shared:
+    links:
+      acme_preference: Acme preferences
+    page_header:
+      up_label_fallback: Back
+  sign:
+    app:
+      authentication:
+        email:
+          create:
+            cooldown: Please wait and try again.
+            email_not_found: We couldn't find an account matching that email address.
+            invalid_format: "Invalid email address format."
+            turnstile_error: Security verification failed. Please refresh and try again.
+            verification_code_sent: Verification code has been sent to your email address.
+            you_have_already_logged_in: You are already signed in.
+          edit:
+            code_label: "Verification code"
+            code_placeholder: "Enter the 6-digit code"
+            delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
+            description: "Almost done. Enter the 6-digit verification code sent to your email address."
+            page_title: "Enter verification code"
+            return_page: "Back"
+            submit: Register with Email
+          locked: Sign-in with this email address is locked.
+          new:
+            page_title: Sign in with email
+            registration: Need an account?
+            you_have_already_logged_in: You are already signed in.
+          update:
+            invalid_code: "Invalid verification code."
+        new:
+          back: Prefer a different method?
+          back_link: Back
+          description: Select the method that fits your current session.
+          links:
+            apple: Continue with Apple
+            email: Email
+            google: Continue with Google
+            passkey: Passkey
+            recovery: Recovery code
+            registration: Need an account?
+            secret: Secret
+            secret_credential: Secret
+            telephone: Telephone
+          page_title: Choose how to sign in
+        passkey:
+          new:
+            description: Use your device's security features for a faster and safer login.
+            page_title: Sign in with a passkey
+            pii_label: Email or telephone
+            pii_placeholder: user@example.com or +81 90 1234 5678
+            submit: Sign in using passkey
+        recovery:
+          new:
+            description: Enter one of your saved recovery codes to regain access to your account.
+            page_title: Use a recovery code
+        secret:
+          identifier_label: Email address or phone number
+          invalid: Unable to sign in.
+          label: Secret
+          submit: Sign in
+          title: Secret Sign in
+        secret_credential:
+          create:
+            invalid: Authentication failed. Please check your credentials.
+            success: Signed in successfully.
+          new:
+            hints: Available secret_credential hints
+            page_title: Sign in with a secret_credential
+            pii_label: Email or telephone
+            pii_placeholder: user@example.com or +81 90 1234 5678
+            secret_credential_label: Secret
+        telephone:
+          new:
+            description: This feature is coming soon.
+            page_title: Sign in with telephone
+            you_have_already_logged_in: You are already signed in.
+      common:
+        cancel: "Cancel"
+      in:
+        bulletins:
+          forbidden: You are not authorized to access this page.
+          show:
+            actions:
+              continue: Continue
+              update: Update
+            body: Please enable MFA. Important terms have changed. Do you accept?
+            title: Bulletin
+          timeout: The checkpoint timed out.
+          welcome:
+            body: Your account has been created. Thank you for using the service.
+            title: Welcome
+        checkpoints:
+          show:
+            title: Sign-in check
+        mfa:
+          description: "Choose an authentication method."
+          methods:
+            passkey: Authenticate with passkey
+            totp: "Authenticate with an authenticator app (TOTP)."
+          no_methods_available: "No authentication methods are available. Contact support."
+          passkey:
+            authenticate: "Authenticate with a passkey."
+            back: "Back to authentication methods."
+            description: "Authenticate with a registered passkey."
+            success: Passkey authentication succeeded.
+            title: "Passkey verification"
+          title: "Additional authentication is required."
+          totp:
+            success: Authenticator verification succeeded.
+          turnstile_failed: Verification failed. Please try again.
+          verification_failed: Verification failed.
+        session:
+          cancelled: Session cancelled. Please sign in again.
+          cannot_revoke_current: The current session cannot be revoked.
+          session_revoked: Session revoked.
+          sessions_revoked: Sessions revoked.
+      outs:
+        destroy:
+          success: You have been signed out.
+      preferences:
+        footer:
+          dashboard: DASHBOARD
+          home: home
+          preference: Preferences
+          settings: Settings
+      registration:
+        cancelled_retry_later: Registration cancelled. Please wait a while before registering again.
+        checkpoint:
+          age_restricted: This sign-up method cannot create an account. Please try again after your 13th birthday.
+          age_restricted_retry: You can return to sign up and try again later.
+          show:
+            birthdate:
+              description: Enter your birthdate to continue registration.
+              label: Birthdate
+              submit: Continue
+              title: Confirm your birthdate
+            complete: Registration requirements are complete.
+            page_title: Complete registration
+            passkey:
+              action: Register passkey
+              description: Add a passkey before completing registration.
+              title: Register a passkey
+            social:
+              cancel_if_wrong: Cancel if this is not what you intended.
+              confirm_label: I understand that this creates a new Umaxica Identity.
+              confirm_title: Confirm registration
+              create_identity: A new Umaxica Identity will be created.
+              no_merge: It cannot be merged into an existing account later.
+              unregistered: This %{provider} account is not registered.
+        email:
+          create:
+            contact_held: You can't start a registration with this email address right now. Please try again later.
+            address_required: Please enter an email address.
+            otp_resend_too_soon: Please wait before requesting another code.
+            turnstile_validation_failed: Security verification failed. Please try again.
+            verification_code_sent: Verification code has been sent to your email address.
+          edit:
+            return_page: Back
+            session_expired: Your session has expired. Please start over.
+          flow:
+            invalid: "Your session has expired."
+          new:
+            error_summary: Please check your input.
+            link_to_sign_in: "Sign in?"
+            page_title: Sign up with email
+          update:
+            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
+            code_required: Verification code is required.
+            failed: Registration failed. Please try again.
+            invalid_code: Invalid verification code.
+            sign_in_required: We could not complete registration. Please sign in to continue.
+            success: Email address has been verified.
+        new:
+          links:
+            sign_in: Sign in
+          methods:
+            email:
+              cta: Sign up with email
+              description: Receive a verification link by email and finish registration in a few minutes.
+              title: Email address
+            telephone:
+              cta: Sign up with telephone
+              description: Verify your phone with a one-time SMS code before creating your account.
+              title: Mobile phone number
+            title: Choose how to get started
+          page_description: Choose the sign-up method that works best for your %{product} account.
+          page_title: Create your account
+          social:
+            buttons:
+              apple: Continue with Apple
+              google: Continue with Google
+            description: Link a new %{product} account with the provider you already trust.
+            disclaimer: We will never post or share anything without your permission.
+            title: Use an existing account
+        session_missing: Your registration session has expired. Please start again.
+        telephone:
+          complete:
+            description: Your account registration has been successfully completed. You can now continue to use our services.
+            link_to_home: Back to Home
+            link_to_sign_in: Go to Sign In
+            page_title: Registration Complete
+          create:
+            contact_held: You can't start a registration with this phone number right now. Please try again later.
+            turnstile_validation_failed: Security verification failed. Please try again.
+            verification_code_sent: Verification code has been sent via SMS.
+          edit:
+            code_label: "Verification code"
+            code_placeholder: "Enter the 6-digit code"
+            delivery_help: "If it doesn't arrive within a minute, check the phone number and SMS settings, then try again."
+            page_title: "Enter verification code"
+            session_expired: Your session has expired. Please start over.
+            submit: "Submit"
+          new:
+            link_to_other_methods: "Use another sign-up method?"
+            link_to_sign_in: "Sign in?"
+            page_title: "Sign up with a phone number"
+          resend:
+            rate_limited: Please wait before requesting another code.
+            sent: We resent the verification code via SMS.
+          update:
+            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
+            code_required: Verification code is required.
+            failed: Registration could not be completed. Please start over.
+            invalid_code: Invalid verification code.
+            passkey_required: Phone verified. Please register a passkey to continue.
+            sign_in_required: We could not complete registration. Please sign in to continue.
+            success: Phone number has been verified.
+      settings:
+        activity:
+          events:
+            email_registered: Email address registered
+            email_removed: Email address removed
+            logged_in: Login success
+            logged_out: Logged out
+            login_success: Login success
+            logout: Logged out
+            passkey_registered: Passkey registered
+            recovery_codes_generated: Recovery codes generated
+            session_revoked: Session revoked
+            signed_up_with_apple: Signed up with Apple
+            signed_up_with_email: Signed up with email
+            signed_up_with_google: Signed up with Google
+            signed_up_with_telephone: Signed up with telephone
+            social_linked: Social account linked
+            social_unlinked: Social account unlinked
+            telephone_registered: Telephone number registered
+            telephone_removed: Telephone number removed
+            totp_enabled: Authenticator app registered
+            unknown: Unknown event (%{event_id})
+            user_secret_credential_created: Secret created
+          index:
+            description: View login-related events on your account.
+            empty: No activity logs are available.
+            page_title: Activity
+            table:
+              context: Context
+              event: Event
+              ip_address: IP address
+              occurred_at: Occurred at
+        birthdate:
+          show:
+            birthdate_label: Birthdate
+            change_unavailable: Contact support if this value needs to be changed.
+            description: This birthdate is used for age-gated features.
+            not_set: Not set
+            page_title: Birthdate
+        edit:
+          deactivated_notice: Withdrawal is in progress. Settings cannot be changed.
+          not_deactivated: Your account is active.
+          page_title: Account Status
+          scheduled_purge_notice: Scheduled for deletion on %{date}.
+          withdrawal_link: Review withdrawal details
+        email:
+          destroy:
+            last_method: You must keep at least one login or recovery method.
+            protected: This email address is protected and cannot be deleted.
+            success: Email address deleted.
+          edit:
+            always_on: Important account notifications
+            always_on_description: Security and account-critical messages are always sent.
+            notifiable_description: Receive product updates and operational notifications.
+            notifiable_label: Notification emails
+            promotional_description: Receive campaigns, offers, and event announcements.
+            promotional_label: Promotional emails
+            save: Save email settings
+            title: Email Address Settings
+          index:
+            delete: Delete
+            delete_confirm: Are you sure you want to delete this email address?
+            description: Manage your email addresses
+            edit: Edit
+            new_link: Add Email Address
+            title: Email Addresses
+          new:
+            page_title: "Add an email address"
+          update:
+            failure: Email settings could not be updated.
+            success: Email settings updated.
+        mfa:
+          show:
+            advanced_requires_two_passkeys: Advanced mode requires at least two passkeys.
+            disabled: Disabled
+            enabled: Enabled
+            reset_title: MFA reset
+            reset_unavailable: MFA reset is currently unavailable.
+            switch_to_advanced: Switch to advanced mode
+            switch_to_normal: Return to normal mode
+            title: MFA settings
+            toggle_title: Enable multi-factor authentication
+          update:
+            failure: Failed to update MFA settings.
+            success: MFA settings updated.
+        passkey:
+          index:
+            description: Manage your registered passkeys
+            title: Passkey Management
+        passkeys:
+          edit:
+            description: Update the name for this passkey.
+            title: Edit passkey
+          index:
+            add: Register new passkey
+            back: Back to settings
+            description: Manage your registered passkeys
+            empty: No passkeys registered
+            title: Passkey Management
+          new:
+            description: Register a new passkey to sign in without a password
+            description_label: Passkey name
+            description_placeholder: e.g., MacBook Pro
+            page_title: Register Passkey
+            submit: Register Passkey
+          show:
+            back: Back to list
+            description: Review the details of this registered passkey.
+            title: Passkey details
+        recovery:
+          index:
+            description: Review existing recovery codes and ensure they stay up to date.
+            edit_link: Edit
+            new_link: Create a new recovery code
+          new:
+            confirm_label: I understand a new recovery code will be generated
+            description: Create a fresh recovery code to regain access if you lose your primary factors.
+            page_title: Generate a recovery code
+            submit: Generate recovery code
+        secret_credentials:
+          create:
+            created: Secret has been saved.
+          destroy:
+            destroyed: Secret has been successfully deleted.
+            last_method: You must keep at least one login or recovery method.
+          edit:
+            description: Update secret details.
+            title: Edit secret
+          index:
+            description: Manage registered secrets.
+            new: New secret
+            title: Secret management
+          new:
+            description: Create a new secret.
+            title: New secret
+          show:
+            description: Review secret details.
+            title: Secret details
+          update:
+            last_method: You must keep at least one login or recovery method.
+            updated: Secret has been successfully updated.
+        secrets:
+          missing: The emergency key is no longer available.
+          show:
+            back_to_settings: Back to settings
+            description: We generated an emergency key for account recovery. Store it safely.
+            one_time_notice: This key is shown only once. Save it in a secure place.
+            title: Emergency Key
+        sessions:
+          revoke:
+            all_button: Clear all sessions
+            all_confirm: Clear every session on every device?
+            others_button: Revoke all other sessions
+            others_confirm: Delete all other sessions?
+        show:
+          account_settings: Account Settings
+          apple_desc: Connect Apple ID
+          back: Back
+          description: Manage advanced security controls for your account.
+          email_desc: Manage contact emails
+          external_services: External Services
+          google_desc: Connect Google account
+          logout: Logout
+          logout_desc: Sign out of your account
+          mfa: MFA settings
+          mfa_reset: Request an MFA reset
+          others: Others
+          page_title: Settings
+          passkey_desc: Manage passkeys
+          secret_credential_desc: Manage secret_credential keys
+          security_settings: Security Settings
+          session_desc: Manage active sessions
+          session_header: Session
+          telephone_desc: Manage contact phone numbers
+          totp_desc: Configure 2FA
+          withdrawal: Withdrawal
+          withdrawal_desc: Delete account
+        telephone:
+          destroy:
+            last_method: You must keep at least one login or recovery method.
+            success: Phone number deleted.
+          edit:
+            title: Delete Phone Number
+          index:
+            delete: Delete
+            delete_confirm: Are you sure you want to delete this phone number?
+            description: Manage your phone numbers
+            edit: Edit
+            new_link: Add Phone Number
+            title: Phone Numbers
+          new:
+            title: Add telephone number
+        totp:
+          index:
+            description: Manage time-based one-time passwords linked to your account.
+            new_link: Create a new TOTP credential
+          new:
+            description: "Set up an authenticator app (such as Google Authenticator)."
+            page_title: "Set up TOTP"
+            title_hint: "Example: Work phone"
+        totps:
+          destroy:
+            last_method: This authenticator app cannot be deleted.
+          invalid_code: "Invalid verification code."
+          limit_reached: You cannot register more than %{count} TOTP credentials.
+        withdrawal:
+          deactivate:
+            ack_label: I understand my account will be deactivated today.
+            confirm: Deactivate your account today?
+            submit: Deactivate account
+            success: Your account has been suspended. You can recover it until the deletion date.
+            title: Deactivate today
+          new:
+            already_deactivated: Your account is already deactivated.
+            page_title: Withdraw Account
+          recovery:
+            available: Your account can still be recovered.
+            confirm: Recover this account?
+            deadline: 'Recovery deadline: %{date}'
+            link: Recover account
+            page_title: Withdrawal recovery
+            submit: Recover account
+            unavailable: Recovery period has expired.
+          schedule:
+            ack_label: I understand the account will be scheduled for deletion in 31 days.
+            submit: Continue
+            title: Schedule deletion
+          terminate:
+            available_at: Permanent termination is available from %{date}.
+            confirm: This cannot be undone. Permanently terminate this account?
+            submit: Permanently terminate account
+      social:
+        sessions:
+          continue: Continue
+          create:
+            failure: Authentication failed. Please try again.
+            success: Registered with %{provider}.
+          failure:
+            access_denied: "Access was denied."
+            invalid_client: "Apple sign-in is misconfigured. Please contact support."
+            invalid_credentials: "The credentials are invalid."
+            invalid_grant: "Apple sign-in has expired. Please try again."
+            invalid_redirect_uri: "The Apple sign-in redirect URL is misconfigured."
+            invalid_request: "The request to Apple is invalid. Please try again."
+            timeout: "The request timed out."
+            unknown_error: "An unknown error occurred."
+      step_up:
+        edit:
+          authenticate_with_passkey: Authenticate with Passkey
+          cancel: Cancel
+          code_label: Verification Code
+          code_placeholder: 6 digits
+          confirm_cancel: Are you sure?
+          description: Please enter the code or use passkey authentication for identity verification.
+          submit: Confirm
+          title: Step-up authentication
+        index:
+          empty: No sessions found
+          new: New
+          table:
+            expires: Expires
+            method: Method
+            scope: Scope
+            status: Status
+          title: Step-up authentication Sessions
+        new:
+          back: Back
+          description: Step-up authentication is required to continue. Please select a method.
+          method_legend: Authentication Method
+          methods:
+            email_otp: Email (One-time code)
+            passkey: Passkey
+            totp: Authenticator App (TOTP)
+          submit: Continue
+          title: Step-up authentication
+        show:
+          cancel: Cancel
+          confirm_cancel: Are you sure?
+          list: List
+          title: Step-up authentication Session
+          to_edit: To input screen
+        success:
+          complete: Step-up authentication completed.
+      up:
+        birthdate:
+          title: Confirm your birthdate
+      verification:
+        edit:
+          authenticate_with_passkey: Authenticate with Passkey
+          back: Back
+          code_label: Verification Code
+          code_placeholder: 6 digits
+          description: Please enter the code or use passkey authentication for identity verification.
+          email_delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
+          email_description: Please enter the code for identity verification.
+          submit: Confirm
+          title: Verification
+          totp_help: "Verification codes refresh periodically. If a code doesn't work, enter the latest code shown in your authenticator app."
+        errors:
+          incorrect_code: "The verification code is incorrect."
+          no_passkey: No passkey is registered.
+        index:
+          empty: No sessions found
+          new: New
+          table:
+            expires: Expires
+            method: Method
+            scope: Scope
+            status: Status
+          title: Verification Sessions
+        new:
+          back: Back
+          description: Verification is required to continue. Please select a method.
+          method_legend: Authentication Method
+          methods:
+            email_otp: Email (One-time code)
+            passkey: Passkey
+            totp: Authenticator App (TOTP)
+          submit: Continue
+          title: Verification
+        setup:
+          description: Please register a passkey, an authenticator app, or an email address before continuing.
+          methods:
+            email: Register email
+            passkey: Register passkey
+            totp: Register authenticator app (TOTP)
+          title: Set up verification methods
+        success:
+          complete: Verification completed.
+    com:
+      authentication:
+        email:
+          create:
+            cooldown: Please wait and try again.
+            invalid_format: "Invalid email address format."
+          edit:
+            code_label: "Verification code"
+            code_placeholder: "Enter the 6-digit code"
+            delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
+            description: "Almost done. Enter the 6-digit verification code sent to your email address."
+            page_title: "Enter verification code"
+            return_page: "Back"
+            submit: Register with Email
+          new:
+            page_title: Sign in with email
+            you_have_already_logged_in: You are already signed in.
+          update:
+            invalid_code: "Invalid verification code."
+        new:
+          back: Prefer a different method?
+          description: Select the method that fits your current session.
+          links:
+            email: Email
+            passkey: Passkey
+            registration: Need an account?
+            secret_credential: Secret
+          page_title: Choose how to sign in
+        passkey:
+          new:
+            description: Use your device's security features for a faster and safer login.
+            page_title: Sign in with a passkey
+            pii_label: Email or telephone
+            pii_placeholder: user@example.com or +81 90 1234 5678
+            submit: Sign in using passkey
+      in:
+        bulletins:
+          forbidden: You are not authorized to access this page.
+          show:
+            actions:
+              continue: Continue
+              update: Update
+            body: Please enable MFA. Important terms have changed. Do you accept?
+            title: Bulletin
+          timeout: The checkpoint timed out.
+          welcome:
+            body: Your account has been created. Thank you for using the service.
+            title: Welcome
+        checkpoints:
+          show:
+            title: Sign-in check
+        mfa:
+          description: "Choose an authentication method."
+          methods:
+            passkey: Authenticate with passkey
+          no_methods_available: "No authentication methods are available. Contact support."
+          passkey:
+            authenticate: "Authenticate with a passkey."
+            back: "Back to authentication methods."
+            description: "Authenticate with a registered passkey."
+            title: "Passkey verification"
+          title: "Additional authentication is required."
+      preferences:
+        footer:
+          dashboard: DASHBOARD
+          home: HOME
+          preference: PREFERENCES
+          settings: SETTINGS
+      registration:
+        cancelled_retry_later: Registration cancelled. Please wait a while before registering again.
+        checkpoint:
+          age_restricted: This sign-up method cannot create an account. Please try again after your 16th birthday.
+          show:
+            birthdate:
+              description: Enter your birthdate to continue registration.
+              label: Birthdate
+              submit: Continue
+              title: Confirm your birthdate
+            complete: Registration requirements are complete.
+            page_title: Complete registration
+            passkey:
+              action: Register passkey
+              description: Add a passkey before completing registration.
+              title: Register a passkey
+            social:
+              cancel_if_wrong: Cancel if this is not what you intended.
+              confirm_label: I understand that this creates a new Umaxica Identity.
+              create_identity: A new Umaxica Identity will be created.
+              no_merge: It cannot be merged into an existing account later.
+              unregistered: This %{provider} account is not registered.
+        email:
+          create:
+            contact_held: You can't start a registration with this email address right now. Please try again later.
+            address_required: Please enter an email address.
+            otp_resend_too_soon: Please wait before requesting another code.
+            turnstile_validation_failed: Security verification failed. Please try again.
+            verification_code_sent: Verification code has been sent to your email address.
+          edit:
+            session_expired: Your session has expired. Please start over.
+          new:
+            error_summary: Please check your input.
+            link_to_sign_in: "Sign in?"
+            page_title: Sign up with email
+          update:
+            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
+            code_required: Verification code is required.
+            invalid_code: Invalid verification code.
+        new:
+          links:
+            registration: Need an account?
+            sign_in: Sign in
+          methods:
+            email:
+              cta: Sign up with email
+            telephone:
+              cta: Sign up with telephone
+          page_description: Select how you would like to begin using %{product}.
+          page_title: Registration
+          social:
+            disclaimer: We will never post or share anything without your permission.
+        session_missing: Your registration session has expired. Please start again.
+        telephone:
+          create:
+            contact_held: You can't start a registration with this phone number right now. Please try again later.
+            turnstile_validation_failed: Security verification failed. Please try again.
+            verification_code_sent: Verification code has been sent via SMS.
+          edit:
+            code_label: "Verification code"
+            code_placeholder: "Enter the 6-digit code"
+            delivery_help: "If it doesn't arrive within a minute, check the phone number and SMS settings, then try again."
+            page_title: "Enter verification code"
+            session_expired: Your session has expired. Please start over.
+            submit: "Submit"
+          new:
+            link_to_other_methods: "Use another sign-up method?"
+            link_to_sign_in: "Sign in?"
+            page_title: "Sign up with a phone number"
+          success: Telephone number verified.
+          update:
+            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
+            code_required: Verification code is required.
+            invalid_code: Invalid verification code.
+            passkey_required: Phone verified. Please register a passkey to continue.
+            success: Telephone number verified.
+      settings:
+        birthdate:
+          show:
+            birthdate_label: Birthdate
+            change_unavailable: Contact support if this value needs to be changed.
+            description: This birthdate is used for age-gated features.
+            not_set: Not set
+            page_title: Birthdate
+        email:
+          destroy:
+            last_method: You must keep at least one login or recovery method.
+            success: Email address deleted.
+          edit:
+            always_on: Important account notifications
+            always_on_description: Security and account-critical messages are always sent.
+            notifiable_description: Receive product updates and operational notifications.
+            notifiable_label: Notification emails
+            promotional_description: Receive campaigns, offers, and event announcements.
+            promotional_label: Promotional emails
+            save: Save email settings
+            title: Email Address Settings
+          update:
+            failure: Email settings could not be updated.
+            success: Email settings updated.
+        passkeys:
+          new:
+            description_label: Passkey name
+            description_placeholder: e.g., MacBook Pro
+            submit: Register Passkey
+        show:
+          account_settings: Account Settings
+          logout: Logout
+          mfa: Multi-Factor Authentication
+          others: Others
+          page_title: Settings
+          security_settings: Security Settings
+          withdrawal: Withdrawal
+      verification:
+        edit:
+          authenticate_with_passkey: Authenticate with Passkey
+          back: Back
+          code_label: Verification Code
+          code_placeholder: 6 digits
+          description: Use your passkey to verify your identity.
+          email_delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
+          email_description: Please enter the code for identity verification.
+          submit: Confirm
+          title: Verification
+        errors:
+          incorrect_code: "The verification code is incorrect."
+        index:
+          title: Verification Sessions
+        new:
+          description: Verify your identity before continuing.
+          methods:
+            email_otp: Email (One-time code)
+            passkey: Passkey
+          title: Verification
+        setup:
+          description: Please register a passkey or an email address before continuing.
+          methods:
+            email: Register email
+            passkey: Register passkey
+          title: Set up verification methods
+    common:
+      birthdate_parts:
+        day: DD
+        month: MM
+        year: YYYY
+      cancel: Cancel
+    default_passkey_description: My Passkey
+    default_user_name: User
+    org:
+      authentication:
+        email:
+          create:
+            email_not_found: We couldn't find an account matching that email address.
+            turnstile_error: Security verification failed. Please refresh and try again.
+            verification_code_sent: Verification code has been sent to your email address.
+            you_have_already_logged_in: You are already signed in.
+          new:
+            registration: Need an account?
+            you_have_already_logged_in: You are already signed in.
+        emergency:
+          passkey:
+            new:
+              description: Sign in with the staff ID and your existing passkey. Microsoft sign-in is not used.
+              identifier_label: ID
+              identifier_placeholder: Enter the staff ID
+              page_title: Emergency Access
+              restricted_mode_notice: This sign-in produces a restricted session. Step-up verification and the operations that require it are unavailable until you sign out and sign in normally.
+              submit: Sign in with passkey
+        entra:
+          errors:
+            authentication_method_locked: Microsoft sign-in is locked for this account. Please contact your administrator.
+            client_assertion_unavailable: Microsoft sign-in is not configured correctly. Please contact your administrator.
+            connection_not_found: The specified Microsoft connection was not found.
+            entra_error: An error occurred during Microsoft authentication. Please try again.
+            generic: An error occurred. Please try again.
+            identity_not_found: This account is not registered as a staff member. Please contact your administrator.
+            internal_error: An internal error occurred. Please try again.
+            invalid_callback: The authentication response was invalid. Please start over.
+            missing_id_token: The authentication response was incomplete. Please start over.
+            operator_not_found: Sign-in is not permitted for this account.
+            pkce_verifier_missing: Your sign-in session expired. Please start over.
+            provider_unavailable: Microsoft sign-in is currently unavailable. Please try again later.
+            sign_in_failed: Sign-in failed. Please try again.
+            state_mismatch: Security verification failed. Please start over.
+            tenant_mismatch: This account belongs to a different organization.
+            tenant_not_allowed: This account type cannot be used to sign in. Please use your organization account.
+            token_exchange_failed: Failed to retrieve authentication token. Please try again.
+            token_verification_failed: Authentication token verification failed. Please try again.
+          new:
+            connection_label: Connection ID
+            connection_not_found: That connection ID could not be verified. Check the value and contact your administrator.
+            connection_prompt: Enter the organization connection ID your administrator gave you.
+            connection_submit: Continue
+            connection_unavailable: Microsoft sign-in is not configured for this organization. Please contact your administrator.
+            page_title: Sign in with Microsoft
+            submit: Sign in with Microsoft
+        mode_switch:
+          sign_out_required: You are already signed in. Changing the sign-in mode requires signing out first (%{sign_out_url}).
+        new:
+          back: Back
+          back_link: Back
+          description: Select the method you prefer to access the staff console.
+          links:
+            apple: Apple
+            email: Email
+            emergency: Emergency Access (Restricted Mode)
+            entra: Sign in with Microsoft
+            google: Google
+            passkey: Passkey
+            recovery: Recovery code
+            registration: Need an account?
+            secret_credential: Secret
+            telephone: Telephone
+          page_title: Choose how to sign in
+        passkey:
+          new:
+            description: Use the staff ID and your passkey to sign in securely.
+            identifier_label: ID
+            identifier_placeholder: Enter the staff ID
+            page_title: Sign in with passkey
+            secret_credential: Lost your passkey? Use your secret instead
+            submit: Sign in with passkey
+        recovery:
+          new:
+            description: Enter one of your saved recovery codes to regain access to your account.
+            page_title: Use a recovery code
+        secret_credential:
+          create:
+            invalid: Authentication failed. Please check your credentials.
+            success: Signed in successfully.
+          new:
+            confirm_label: I have saved the secret_credential
+            page_title: Sign in with a secret_credential
+            pii_label: ID
+            pii_placeholder: Enter the staff ID
+            secret_credential_label: Secret
+        telephone:
+          new:
+            description: This feature is coming soon.
+            page_title: Sign in with telephone
+            you_have_already_logged_in: You are already signed in.
+      exits:
+        destroy:
+          success: "Sign out"
+        edit:
+          title: "Do you want to sign out?"
+      in:
+        back: Back to sign in
+        bulletins:
+          forbidden: You are not authorized to access this page.
+          show:
+            actions:
+              continue: Continue
+              update: Update
+            body: Please enable MFA. Important terms have changed. Do you accept?
+            title: Bulletin
+          timeout: The checkpoint timed out.
+          welcome:
+            title: Welcome
+        checkpoints:
+          show:
+            title: Sign-in check
+        session:
+          cancelled: Session cancelled. Please sign in again.
+          cannot_revoke_current: The current session cannot be revoked.
+          invalid_session: Invalid session.
+          login_required: You need to sign in to manage sessions.
+          no_sessions_selected: Please select sessions to revoke.
+          promoted: Session promoted.
+          restricted_notice: The session limit has been reached. Manage your existing sessions.
+          session_revoked: Session revoked.
+          sessions_revoked: Sessions revoked.
+      preferences:
+        footer:
+          dashboard: DASHBOARD
+          home: Home
+          preference: Preference
+          settings: Settings
+        title: Preferences
+      registration:
+        email:
+          create:
+            turnstile_validation_failed: Verification failed. Please try again later.
+            verification_code_sent: Verification code sent by email.
+          edit:
+            session_expired: Session expired.
+          new:
+            error_summary: Please check your input.
+            page_title: Sign up with email
+          update:
+            attempts_exceeded: Too many attempts. Please start over.
+            code_required: Enter the code.
+            failed: Registration could not be completed. Please start over.
+            invalid_code: The verification code is invalid.
+            success: Email address verified.
+        new:
+          links:
+            sign_in_link: Sign in here
+            sign_in_text: Already have an account?
+          methods:
+            email:
+              cta: Sign up with email
+              description: Receive a verification link by email and finish registration in a few minutes.
+              title: Email address
+            telephone:
+              cta: Sign up with telephone
+              description: Verify your phone with a one-time SMS code before creating your account.
+              title: Mobile phone number
+            title: Choose how to get started
+          page_description: Staff registration is currently under development.
+          page_title: Staff Registration
+          social:
+            buttons:
+              apple: Continue with Apple
+              google: Continue with Google
+            description: Link a new %{product} account with the provider you already trust.
+            disclaimer: We will never post or share anything without your permission.
+            title: Use an existing account
+        telephone:
+          create:
+            verification_code_sent: Verification code sent by SMS.
+          edit:
+            session_expired: Session expired.
+          update:
+            attempts_exceeded: Too many attempts. Please start over.
+            code_required: Enter the code.
+            invalid_code: The verification code is invalid.
+            passkey_required: Phone verified. Please register a passkey to continue.
+            success: Telephone number verified.
+      root:
+        authentication: Sign In
+        description: Choose an action below
+        registration: Sign Up
+        title: Welcome
+      settings:
+        activity:
+          events:
+            email_registered: Email address registered
+            email_removed: Email address removed
+            logged_in: Logged in
+            logged_out: Logged out
+            login_success: Login success
+            logout: Logged out
+            passkey_registered: Passkey registered
+            recovery_codes_generated: Recovery codes generated
+            session_revoked: Session revoked
+            signed_up_with_apple: Signed up with Apple
+            signed_up_with_email: Signed up with email
+            signed_up_with_google: Signed up with Google
+            signed_up_with_telephone: Signed up with telephone
+            social_linked: Social account linked
+            social_unlinked: Social account unlinked
+            telephone_registered: Telephone number registered
+            telephone_removed: Telephone number removed
+            totp_enabled: Authenticator app registered
+            unknown: Unknown event (%{event_id})
+            user_secret_credential_created: Secret created
+          index:
+            description: Review your recent sign-in activity.
+            empty: No activity found.
+            page_title: Activity Log
+            table:
+              context: Context
+              event: Event
+              ip_address: IP Address
+              occurred_at: Time
+        birthdate:
+          show:
+            birthdate_label: Birthdate
+            change_unavailable: Contact an operator if this value needs to be changed.
+            description: This birthdate is recorded for the signed-in operator account.
+            not_set: Not set
+            page_title: Birthdate
+        email:
+          destroy:
+            last_method: This email address cannot be deleted.
+            protected: This email address is protected and cannot be deleted.
+            success: Email address deleted.
+          edit:
+            always_on: Important staff notifications
+            always_on_description: Security and staff account-critical messages are always sent.
+            notifiable_description: Receive product updates and operational notifications.
+            notifiable_label: Notification emails
+            promotional_description: Receive campaigns, events, and staff announcements.
+            promotional_label: Promotional emails
+            save: Save email settings
+            title: Verify email address
+          index:
+            delete: Delete
+            delete_confirm: Delete this email address?
+            edit: Edit
+            empty: No email addresses registered.
+            new_link: Add email address
+          new:
+            page_title: Add email address
+          update:
+            failure: Email settings could not be updated.
+            success: Email settings updated.
+        google:
+          destroy:
+            via_email: Change Google sign-in from the email settings page.
+          show:
+            delete_confirm: Review how Google sign-in is configured?
+            description: Google sign-in is available through your verified email addresses.
+            disable: Disable
+            disabled: Google sign-in is unavailable until you verify an email address.
+            email_hint: To disable Google sign-in, update or remove the matching email address from email settings.
+            enabled: Google sign-in is available.
+        mfa:
+          show:
+            disabled: Disabled
+            enabled: Enabled
+        operator_lifecycle_requests:
+          actions:
+            join: Join
+            restore: Restore
+            suspend: Suspend
+            terminate: Terminate
+            withdraw: Withdraw
+          approve:
+            confirm: Approve this request?
+            submit: Approve
+            success: Lifecycle request approved.
+          create:
+            success: Lifecycle request created.
+          execute:
+            confirm: Execute this request?
+            submit: Execute
+            success: Lifecycle request executed.
+          form:
+            action: Action
+            organization_id: Organization ID
+            reason: Reason
+            role_id: Role ID
+            submit: Submit request
+            target_email: Invitation email
+            target_operator_public_id: Target operator ID
+          index:
+            description: Review operational requests for operator join, withdrawal, suspension, termination, and restoration.
+            new: Create request
+            title: Join and withdrawal requests
+          new:
+            description: After submission, another operator approves or executes it after MFA.
+            title: Create lifecycle request
+          reject:
+            reason: Rejection reason
+            submit: Reject
+            success: Lifecycle request rejected.
+          show:
+            invitation_link: Open invitation acceptance
+            status: Status
+            title: Lifecycle request
+        passkeys:
+          edit:
+            title: Edit Passkey
+          index:
+            add: Register new passkey
+            back: Back to settings
+            description: Manage your registered passkeys
+            empty: No passkeys registered
+            title: Passkey Management
+          new:
+            description: Register a new passkey to sign in without a password
+            description_label: Passkey name
+            description_placeholder: e.g., MacBook Pro
+            page_title: Register Passkey
+            submit: Register Passkey
+          show:
+            back: Back to list
+            title: Passkey Details
+        recovery:
+          index:
+            description: Review existing recovery codes and ensure they stay up to date.
+            edit_link: Edit
+            new_link: Create a new recovery code
+          new:
+            confirm_label: I understand a new recovery code will be generated
+            description: Create a fresh recovery code to regain access if you lose your primary factors.
+            page_title: Generate a recovery code
+            submit: Generate recovery code
+        secret_credentials:
+          destroy:
+            last_method: You must keep at least one login or recovery method.
+          index:
+            description: Manage registered secrets.
+            new: New secret
+            title: Secret management
+          new:
+            description: Create a new secret.
+        sessions:
+          revoke:
+            all_button: Clear all sessions
+            all_confirm: Clear every session on every device?
+            others_button: Revoke all other sessions
+            others_confirm: Revoke all other sessions?
+        show:
+          back: Back
+          description: Manage advanced security controls for your account.
+          operator_lifecycle_requests: Join and withdrawal requests
+          page_title: Settings
+          withdrawal: Withdrawal
+        telephone:
+          destroy:
+            last_method: This telephone number cannot be deleted.
+            success: Telephone number deleted.
+          edit:
+            title: Telephone settings
+          index:
+            delete: Delete
+            delete_confirm: Delete this telephone number?
+            edit: Edit
+            empty: No telephone numbers registered.
+            new_link: Add telephone number
+          new:
+            title: Add telephone number
+        totp:
+          index:
+            description: Manage time-based one-time passwords linked to your account.
+            new_link: Create a new TOTP credential
+        withdrawal:
+          show:
+            description: Org withdrawal is not self-service. Another operator must review and execute it.
+            direct_message_unavailable: Direct message is not implemented yet, so this is recorded as an operational lifecycle request.
+            request_link: Create withdrawal request
+            title: Withdrawal
+      sign:
+        up:
+          invitations:
+            create:
+              success: Invitation accepted. Your operator ID is %{public_id}. Use Google sign-in with the invited email address, or ask an operator to help configure another sign-in method.
+              turnstile_failed: Verification failed. Please try again later.
+      social:
+        sessions:
+          continue: Continue
+          create:
+            success: Successfully signed in with %{provider}
+      step_up:
+        edit:
+          authenticate_with_passkey: Authenticate with Passkey
+          cancel: Cancel
+          code_label: Verification Code
+          code_placeholder: 6 digits
+          confirm_cancel: Are you sure?
+          description: Please enter the code or use passkey authentication for identity verification.
+          submit: Confirm
+          title: Step-up authentication
+        index:
+          empty: No sessions found
+          new: New
+          table:
+            expires: Expires
+            method: Method
+            scope: Scope
+            status: Status
+          title: Step-up authentication Sessions
+        new:
+          back: Back
+          description: Step-up authentication is required to continue. Please select a method.
+          method_legend: Authentication Method
+          methods:
+            email_otp: Email (One-time code)
+            passkey: Passkey
+            totp: Authenticator App (TOTP)
+          submit: Continue
+          title: Step-up authentication
+        show:
+          cancel: Cancel
+          confirm_cancel: Are you sure?
+          list: List
+          title: Step-up authentication Session
+          to_edit: To input screen
+        success:
+          complete: Step-up authentication completed.
+      up:
+        invitations:
+          create:
+            success: Invitation accepted. Your operator ID is %{public_id}. Use Google sign-in with the invited email address, or ask an operator to help configure another sign-in method.
+            turnstile_failed: Verification failed. Please try again later.
+          form:
+            invitation_code: Invitation code
+            submit: Accept invitation
+          new:
+            description: Enter the invitation code provided by an existing operator.
+            title: Accept operator invitation
+      ups:
+        new:
+          back_to_root: Back
+          description: Create an account to start the administrative operations reserved for you.
+          heading: Create an account
+          links:
+            sign_in: Already have an account? Sign in
+          recruit_link_text: Contact recruiting
+          recruit_prompt: Careers
+          recruit_prompt_html: Interested in joining the team? %{link}
+      verification:
+        edit:
+          authenticate_with_passkey: Authenticate with Passkey
+          back: Back
+          code_label: Verification Code
+          code_placeholder: 6 digits
+          description: Please enter the code or use passkey authentication for identity verification.
+          submit: Confirm
+          title: Verification
+        errors:
+          no_passkey: No passkey is registered.
+        index:
+          empty: No sessions found
+          new: New
+          table:
+            expires: Expires
+            method: Method
+            scope: Scope
+            status: Status
+          title: Verification Sessions
+        new:
+          back: Back
+          description: Verification is required to continue. Please select a method.
+          method_legend: Authentication Method
+          methods:
+            passkey: Passkey
+          submit: Continue
+          title: Verification
+        setup:
+          description: "Before you continue, register a passkey or an authenticator app."
+          methods:
+            passkey: Register passkey
+          title: Set up verification methods
+        success:
+          complete: Verification completed.
+    recovery_passcodes:
+      required:
+        description: You need at least %{minimum} unused recovery passcodes before registering this MFA method. You currently have %{count}.
+        setup_link: Manage recovery passcodes
+        title: Recovery passcodes required
+      show:
+        back_to_settings: Back to settings
+        description: Save these recovery passcodes now. They are shown only once.
+        inventory_notice: Existing saved recovery passcodes remain valid.
+        missing: These recovery passcodes are no longer available.
+        one_time_notice: Only the newly generated passcodes are shown here.
+        title: Recovery passcodes
+    shared:
+      birthdate:
+        errors:
+          format: Enter your date of birth as YYYY-MM-DD.
+          not_before_today: Enter a date of birth before today.
+      sign_out:
+        already_signed_out: You are already signed out.
+        button: Sign out
+        cleanup_incomplete_description: You have signed out. This service could not finish removing its own sign-in data; it will be cleared the next time you use it.
+        completed_description: You have signed out. Sessions on the other services are no longer valid. Screens that are already open will ask you to sign in the next time they communicate.
+        completed_title: You are signed out
+        confirm_description: Once you log out, you will need to log in again.
+        handoff_button: Continue sign-out
+        handoff_description: This screen will continue automatically.
+        handoff_title: Continuing sign-out
+        home_link: Go to home
+        idp_session_error: We could not confirm the identity-provider session. No session was signed out.
+        indeterminate_description: We could not confirm whether sign-out finished. Open this service again to see your current state.
+        indeterminate_title: Sign-out result is unknown
+        retry_button: Try signing out again
+        title: Do you want to sign out?
+        unavailable_description: Your current session may still be active. Please try signing out again.
+        unavailable_title: Sign-out was not completed
+      verification:
+        cancelled_title: Verification cancelled
+        completed_title: Verification complete
+    telephone_verification:
+      sms_message: 'Verification code: %{code}'
+    token_refresh:
+      errors:
+        invalid_refresh_token: "The refresh token is invalid or expired."
+        missing_refresh_token: "A refresh token is required."
+        withdrawal_required: "The account withdrawal process has not been completed."
+    unknown_authenticator: Unknown authenticator
+    withdrawal:
+      errors:
+        deletion_failed: Withdrawal could not be completed. Please try again later.
+        invalid_state: Withdrawal cannot continue from the current state (%{current_status}).
+        recovery_not_available: This account cannot be recovered.
+  support:
+    array:
+      last_word_connector: ", and "
+      two_words_connector: " and "
+      words_connector: ", "
+  tasks:
+    preference_migration:
+      done_staff: "  Done: %{migrated} migrated, %{skipped} skipped"
+      done_user: "  Done: %{migrated} migrated, %{skipped} skipped"
+      warn_staff: "  WARN: Failed to migrate staff_id=%{staff_id}: %{message}"
+      warn_user: "  WARN: Failed to migrate user_id=%{user_id}: %{message}"
+  tech:
+    org:
+      access_denial:
+        description: You do not have permission to use the Tech workspace.
+        heading: No access
+        return_to_sign_in: Return to sign in
+        sign_out: Sign out
+        title: No access to Tech
+      dashboard:
+        description: This is the protected Tech operator workspace.
+        empty_state: No tools are available yet.
+        heading: Tech
+        sign_out: Sign out
+        title: Tech Org
+        tools_heading: Tools
+      navigation:
+        label: Tech navigation
+      roots:
+        description: Sign in with an authorized operator account to open the Tech workspace.
+        heading: Tech
+        sign_in: Sign in
+        title: Tech Org
+  test:
+    email:
+      com:
+        application_mailer:
+          subject: "Corporate sample"
+      org:
+        application_mailer:
+          subject: "Organization sample"
+    error:
+      key: Test Error
+    support:
+      fix_fk_dependency:
+        apply: Applying FK Dependency Patch...
+  test_data:
+    contact_topic_description: Details about the topic.
+    inquiry_detail: Detail of inquiry.
+  themes:
+    dark: Dark Theme
+    light: Light Theme
+    system: System Theme
+  time:
+    am: am
+    formats:
+      default: "%a, %d %b %Y %H:%M:%S %z"
+      long: "%B %d, %Y %H:%M"
+      short: "%d %b %H:%M"
+    pm: pm
+  trusted_origin:
+    null_origin_error: The browser returned a null Origin header for an origin-protected request.
+  turnstile_error: Security verification failed. Please try again.
+  ui:
+    skip_to_content: Skip to content
+  ui_presentation:
+    body_json: Enter the document as JSON.
+    confirmation_required: Check the confirmation above to enable this action.
+    information: Information
+    navigation:
+      authentication: Authentication
+      footer: Footer navigation
+      pagination: Pagination
+      preferences: Display preferences
+      primary: Primary navigation
+    processing: Processing. Please wait.
+  views:
+    acme:
+      app:
+        roots:
+          index:
+            redirect_prompt: Go to %{preference} immediately.
+      com:
+        roots:
+          index:
+            redirect_prompt: Go to %{preference} immediately.
+      org:
+        roots:
+          index:
+            redirect_prompt: Go to %{preference} immediately.
+    sign:
+      app:
+        emails:
+          registrations:
+            new_fields:
+              confirm_policy_label: I agree to the terms of service
+            verification_fields:
+              submit: Verify
+        settings:
+          apples:
+            show:
+              description: You can sign in to this account using your Apple ID.
+              linked: Linked
+              unlinked: Not linked
+          emails:
+            index:
+              empty: No email addresses registered.
+              unverified: Unverified
+              verified: Verified
+          googles:
+            show:
+              description: You can sign in to this account using your Google account.
+              linked: Linked
+              unlinked: Not linked
+          outs:
+            edit:
+              confirm_label: Do you want to log out?
+          passkeys:
+            index:
+              actions: Actions
+              empty: No passkeys registered.
+          secret_credentials:
+            new:
+              confirm_saved_label: I have saved the secret_credential
+              one_time_notice: This value will only be shown once.
+          telephones:
+            index:
+              actions: Actions
+              empty: No phone numbers registered.
+              unverified: Unverified
+              verified: Verified
+            new:
+              description: Add a new phone number to make your account management more secure.
+              help_text: A verification code will be sent to the entered phone number via SMS.
+            registrations:
+              edit:
+                description: Please enter the verification code sent via SMS.
+                heading: Enter verification code
+                page_title: Enter verification code
+              new:
+                description: Add a new phone number to make your account management more secure.
+                help_text: A verification code will be sent to the entered phone number via SMS.
+          totps:
+            new:
+              first_token_delivery_help: "Verification codes refresh periodically. If a code doesn't work, enter the latest code shown in your authenticator app."
+              first_token_help: Please enter the 6-digit code shown in your authenticator app.
+              first_token_label: Verification code
+              first_token_placeholder: "Enter the 6-digit code"
+              qr_fallback: If you cannot scan the QR code, enter the secret_credential manually into your authenticator app.
+              submit: "Submit"
+        shared:
+          sign_out:
+            confirm_description: Once you log out, you will need to log in again.
+        sign:
+          in:
+            limitations:
+              capacity_still_full: Session capacity is still full. Revoke another session to continue.
+              invalid_or_expired: This sign-in limitation link is invalid or expired.
+              revoke_failed: The selected session could not be revoked.
+        up:
+          emails:
+            edit:
+              submit: Verify
+            new:
+              confirm_policy_label: I agree to the terms of service
+          telephones:
+            edit:
+              submit: Verify
+            new:
+              confirm_policy_label: I agree to the terms of service
+              confirm_using_mfa_label: I confirm MFA usage
+        verifications:
+          show:
+            no_methods: Please register an email, passkey, or TOTP.
+      com:
+        settings:
+          emails:
+            index:
+              empty: No email addresses registered.
+              unverified: Unverified
+              verified: Verified
+          telephones:
+            index:
+              actions: Actions
+              empty: No phone numbers registered.
+              unverified: Unverified
+              verified: Verified
+            registrations:
+              edit:
+                description: Please enter the verification code sent via SMS.
+                heading: Enter verification code
+                page_title: Enter verification code
+              new:
+                description: Add a new phone number to make your account management more secure.
+                help_text: A verification code will be sent to the entered phone number via SMS.
+        shared:
+          sign_out:
+            confirm_description: Once you log out, you will need to log in again.
+        up:
+          emails:
+            edit:
+              submit: Verify
+            new:
+              confirm_policy_label: I agree to the terms of service
+          telephones:
+            edit:
+              submit: Verify
+            new:
+              confirm_policy_label: I agree to the terms of service
+              confirm_using_mfa_label: I confirm MFA usage
+        verifications:
+          show:
+            no_methods: Please register an email, passkey, or TOTP.
+      org:
+        settings:
+          emails:
+            index:
+              unverified: Unverified
+              verified: Verified
+          secret_credentials:
+            new:
+              confirm_secret_credential_saved_label: I have saved the secret_credential
+          telephones:
+            index:
+              unverified: Unverified
+              verified: Verified
+        verifications:
+          show:
+            no_methods: Please register a passkey.
+  withdrawal_ceremony_reentry:
+    generic_message: If an account can continue withdrawal procedures for the information entered, the next step is available here.

@@ -132,7 +132,7 @@ module Base
       end
 
       # D-151: path-only `target_link_uri`; no query is carried.
-      def sign_in_url_with_pt(pt)
+      def sign_in_url_with_target(pt)
         target = pt.present? ? RpTargetLinkUri.normalize(URI.parse(decode_pt(pt)).path) : nil
         base_app_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]), target_link_uri: target)
       rescue URI::InvalidURIError

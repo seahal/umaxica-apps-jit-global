@@ -2,24 +2,25 @@
 
 require "test_helper"
 
-# Boolean snapshots keep retained proof and cookie material out of assertion output.
 class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
   %w(app com org).each do |surface|
-    test "#{surface} genuine OIDC result requires missing-header CSRF fallback and finalizes one root" do
-      previous_protection = ActionController::Base.allow_forgery_protection
+    # One admitted result spans refusals, success and replay to prove refusals never consume it.
+    test "#{surface} Visa result requires a browser navigation and legacy POST cannot issue a root" do # rubocop:disable Minitest/MultipleAssertions
+      protection = ActionController::Base.allow_forgery_protection
       ActionController::Base.allow_forgery_protection = true
-      base_host, auth_host, client_id, realm, actor_model, token_model, owner_key, actor_status_id =
+      client_id, realm, visa_host, auth_host, actor_model, token_model, owner_key, active_status =
         case surface
         when "app"
-          [ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-           "core-app-jp", "client", Client, ClientToken, :user_id, ClientStatus::ACTIVE,]
+          ["core-app-jp", "client", ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), Client,
+           ClientToken, :user_id, ClientStatus::ACTIVE,]
         when "com"
-          [ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-           "core-com-jp", "visitor", Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE,]
+          ["core-com-jp", "visitor", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+           Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE,]
         when "org"
-          [ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-           "core-org-jp", "operator", Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE,]
+          ["core-org-jp", "operator", ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), Operator,
+           OperatorToken, :staff_id, OperatorStatus::ACTIVE,]
         end
+      navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site" }
       parameters = {
         response_type: "code",
         client_id:,
@@ -32,36 +33,11 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
         ri: "jp",
       }
       owner = open_session
-      owner.host!(base_host)
+      owner.host!(visa_host)
       owner.https!
-      base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-      owner.get("/oauth/authorize", params: parameters)
-      csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      owner.post(
-        "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                            headers: base_headers,
-      )
+      owner.get("/oauth/authorize", params: parameters, headers: navigation)
 
       assert_equal 303, owner.response.status
-      # Normalize Rack::Test's encoded multi-value Set-Cookie representation using
-      # public response/CookieJar APIs, without synthesizing a browser session.
-      cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      cookie_value = owner.response.cookies[cookie_name]
-      if cookie_value.nil?
-        raw = owner.response.headers["Set-Cookie"] || owner.response.headers["set-cookie"]
-        lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
-        line =
-          lines.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.start_with?("#{cookie_name}=")
-          end
-
-        assert_withheld("expected the actual Visa session Set-Cookie") { line.present? }
-        cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
-      end
-      owner.cookies.delete(cookie_name)
-      _received_cookie = owner.cookies.merge(
-        "#{cookie_name}=#{Rack::Utils.escape(cookie_value)}", URI.parse("https://#{base_host}/"),
-      )
       parent = OidcAuthorizationTransactionCoordinator.model_for(surface).find_by!(state: parameters.fetch(:state))
       binding = BaseAuthAdmissionCoordinator.admission_binding_model(surface).find_by!(
         authorization_transaction_id: parent.id,
@@ -69,116 +45,120 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
       auth = open_session
       auth.host!(auth_host)
       auth.https!
-      auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
-      auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-      csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      auth.post(
-        "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                              headers: auth_headers,
-      )
+      current_browser = owner
+      current_host = visa_host
+      confirmation = nil
+      jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      12.times do
+        target = URI.parse(current_browser.response.location.to_s)
+        target = URI.parse("https://#{current_host}#{target}") unless target.host
+        if target.host == jump_host
+          namespace = (current_host == visa_host) ? "VISA_#{surface.upcase}" : "AUTH_#{surface.upcase}"
+          issuer = JitSecurityJwtRegistry.surface(namespace)
+          payload, = JWT.decode(
+            Rack::Utils.parse_query(target.query).fetch("rt"),
+            JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{current_host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          target = URI.parse(payload.fetch("url"))
+        end
 
-      assert_equal 303, auth.response.status
-      confirmation = URI.parse(auth.response.location)
-      owner.get(confirmation.request_uri)
-      csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      owner.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+        assert_includes [visa_host, auth_host], target.host
+        if target.host == visa_host
+          confirmation = target
+          break
+        end
+        auth.get(target.request_uri, headers: navigation)
+
+        assert_equal 303, auth.response.status
+        current_browser = auth
+        current_host = auth_host
+      end
+
+      assert confirmation
+      assert_predicate binding.reload, :attached?
+      owner.get(confirmation.request_uri, headers: navigation)
 
       assert_equal 303, owner.response.status
-      auth.get(URI.parse(owner.response.location).request_uri)
-      csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      auth.post(
-        "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                    headers: auth_headers,
-      )
+      assert_predicate binding.reload, :confirmed?
+      auth.get(URI.parse(owner.response.location).request_uri, headers: navigation)
 
       assert_equal 303, auth.response.status
-      assert_withheld { binding.reload.redeemed? }
-      # Real public proof issuance isolates receiver CSRF from credential verification;
-      # neither admission nor opaque result verification/finalization is mocked.
-      actor = actor_model.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: actor_status_id,
-        id: SecureRandom.random_number(1 << 60),
-      )
+      assert_predicate binding.reload, :redeemed?
+      auth.get(URI.parse(auth.response.location).request_uri, headers: navigation)
+
+      assert_equal 200, auth.response.status
+
+      # Public Auth proof issuance isolates the OP receiver from credential verification.
+      actor = actor_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: active_status)
       result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface:, login_challenge: parent.login_challenge, actor:, session_ref: "ceremony-result",
         auth_method: "passkey", authentication_event_at: parent.class.database_now,
         ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
       )
-      ceremony = binding.class.auth_admission_session_class.find(binding.admitted_auth_ceremony_session_id)
+      submission = { result_ref: result.reference, transaction_ref: parent.transaction_id, ri: "jp" }
       before_parent = parent.reload.attributes
       before_binding = binding.reload.attributes
-      before_ceremony = ceremony.reload.attributes
-      submission = { result_ref: result.reference, transaction_ref: parent.transaction_id, ri: "jp" }
-      # Explicit nil opts out of the repository's automatic same-origin metadata.
+      tokens_before = token_model.where(owner_key => actor.id).count
+
+      ceremony = binding.class.auth_admission_session_class.find(binding.admitted_auth_ceremony_session_id)
+      before_ceremony = ceremony.attributes
       owner.post(
         "/oauth/authorize", params: submission, headers: {
-          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => nil,
+          "Origin" => "https://#{visa_host}", "Sec-Fetch-Site" => nil,
         },
       )
 
-      # The pinned Rails header_or_legacy_token strategy uses a token when Fetch
-      # Metadata is absent; a genuine result is not a replacement for that token.
-      assert_nil owner.request.headers["Sec-Fetch-Site"]
-      assert_equal "https://#{base_host}", owner.request.headers["Origin"]
       assert_equal 422, owner.response.status
-      assert_nil owner.response.location
-      assert_withheld("CSRF refusal must leave the parent unchanged") { before_parent == parent.reload.attributes }
-      assert_withheld("CSRF refusal must leave the binding unchanged") { before_binding == binding.reload.attributes }
-      assert_withheld("CSRF refusal must leave Auth authority unchanged") {
-        before_ceremony == ceremony.reload.attributes
-      }
-      assert_equal 0, token_model.where(owner_key => actor.id).count
-      root_reference = nil
-      2.times do |attempt|
-        owner.get(
-          "/oauth/authorize", params: submission,
-          headers: { "Cookie" => owner.request.headers["Cookie"], "HTTP_COOKIE" => owner.request.headers["Cookie"] },
-        )
+      parent_unchanged = before_parent == parent.reload.attributes
 
-        assert_equal 200, owner.response.status
-        csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        # Deliberately omit both Origin and Fetch Metadata, including on the retry.
-        # Obtain a fresh owner-local token after the successful session rotation.
-        owner.post(
-          "/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: {
-            "Origin" => nil, "Sec-Fetch-Site" => nil,
-            "Cookie" => owner.request.headers["Cookie"], "HTTP_COOKIE" => owner.request.headers["Cookie"],
-          },
-        )
+      assert parent_unchanged, "CSRF refusal changed the parent"
+      binding_unchanged = before_binding == binding.reload.attributes
 
-        assert_nil owner.request.headers["Sec-Fetch-Site"]
-        assert_nil owner.request.headers["Origin"]
-        expected_status = attempt.zero? ? 303 : 400
-        assert_equal expected_status, owner.response.status
-        assert_withheld { parent.reload.base_finalized_at.present? } if attempt.zero?
-        root_reference ||= parent.browser_session_ref
+      assert binding_unchanged, "CSRF refusal changed the binding"
+      ceremony_unchanged = before_ceremony == ceremony.reload.attributes
 
-        assert_equal root_reference, parent.browser_session_ref
-        assert_equal 1, token_model.where(owner_key => actor.id).count
-        # Only the first success rotates the browser session. No new Set-Cookie
-        # is required on the exact replay, and no request follows that replay.
-        next unless attempt.zero?
+      assert ceremony_unchanged, "CSRF refusal changed Auth authority"
+      assert_equal tokens_before, token_model.where(owner_key => actor.id).count
 
-        cookie_value = owner.response.cookies[cookie_name]
-        if cookie_value.nil?
-          raw = owner.response.headers["Set-Cookie"] || owner.response.headers["set-cookie"]
-          lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
-          line =
-            lines.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-              entry.split(";", 2).first.start_with?("#{cookie_name}=")
-            end
+      [{}, { "Sec-Fetch-Mode" => "cors", "Sec-Fetch-Dest" => "empty" }].each do |metadata|
+        owner.get("/oidc/result", params: submission, headers: metadata)
 
-          assert_withheld("expected the actual finalized Visa session Set-Cookie") { line.present? }
-          cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
-        end
-        owner.cookies.delete(cookie_name)
-        _received_cookie = owner.cookies.merge(
-          "#{cookie_name}=#{Rack::Utils.escape(cookie_value)}", URI.parse("https://#{base_host}/"),
-        )
+        assert_equal 400, owner.response.status
+        assert_nil owner.response.location
+        parent_unchanged = before_parent == parent.reload.attributes
+
+        assert parent_unchanged, "non-navigation GET changed the parent"
+        binding_unchanged = before_binding == binding.reload.attributes
+
+        assert binding_unchanged, "non-navigation GET changed the binding"
+        assert_equal tokens_before, token_model.where(owner_key => actor.id).count
       end
+      owner.head("/oidc/result", params: submission, headers: navigation)
+
+      assert_equal 400, owner.response.status
+      assert_empty owner.response.body
+      parent_unchanged = before_parent == parent.reload.attributes
+
+      assert parent_unchanged, "HEAD changed the parent"
+      assert_equal tokens_before, token_model.where(owner_key => actor.id).count
+
+      owner.get("/oidc/result", params: submission, headers: navigation)
+
+      assert_equal 303, owner.response.status
+      assert_includes owner.response.headers.fetch("Cache-Control"), "no-store"
+      assert_equal "no-referrer", owner.response.headers.fetch("Referrer-Policy")
+      assert_predicate parent.reload.base_finalized_at, :present?
+      assert_equal tokens_before + 1, token_model.where(owner_key => actor.id).count
+      finalized_root = parent.browser_session_ref
+      owner.get("/oidc/result", params: submission, headers: navigation)
+
+      assert_equal 400, owner.response.status
+      assert_equal finalized_root, parent.reload.browser_session_ref
+      assert_equal tokens_before + 1, token_model.where(owner_key => actor.id).count
     ensure
-      ActionController::Base.allow_forgery_protection = previous_protection
+      ActionController::Base.allow_forgery_protection = protection
     end
   end
 end

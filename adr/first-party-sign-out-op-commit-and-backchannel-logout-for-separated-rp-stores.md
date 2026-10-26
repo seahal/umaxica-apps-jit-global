@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted (2026-10-16); **amended 2026-10-24** (see the last section). The 2026-10-22 owner decisions
+Accepted (2026-10-16); **amended 2026-10-24 and implemented locally 2026-10-25** (see the last
+sections). The 2026-10-22 owner decisions
 are recorded here as the current WU-39 documentation contract. It takes effect only for a
 first-party relying party that has been activated with its own session store under the OP/RP
 persistence separation (release R5). Until a client is so activated, and for every client during
@@ -149,3 +150,28 @@ Owner decisions of the 2026-10 authentication cycle; not implemented yet.
 - **Receiver.** `POST /oidc/closures` keeps `ActionController::API` as its parent (no
   `allow_browser`, forgery protection or session) as a scoped exception, with FQDN gating and rate
   limiting added explicitly; only the Logout Token signature and claims are trusted (D-118).
+
+## Local implementation amendment (2026-10-25)
+
+WU-15, WU-16 and WU-22 implement this contract in the current checkout. Each realm OP now writes a
+cause/scope authority-stop record, target and epoch children, one BCL participant per revoked grant,
+and the optional browser receipt in the same transaction as revocation. The one committer covers the
+nine accepted causes and is the only root/grant revocation writer. Solid Queue enqueue occurs after
+commit; the durable participant is dispatched by a recurring sweep if enqueue is lost. Each of the
+twelve first-party RP cells exposes `POST /oidc/closures`; its receiver verifies the fixed issuer and
+audience, then commits the replay receipt, absorbing `sid` tombstone and matching local-session
+revocation before 200. The sender uses HTTPS, pins a validated public DNS answer, applies bounded
+timeouts and never follows redirects.
+
+**BX-4 implementation choice.** The accepted response table leaves 3xx and 413 unclassified. This
+implementation treats all redirects as permanent endpoint misconfiguration and alerts; it never
+follows the redirect because a registered endpoint is fixed and following it would change the
+security boundary. It treats 413 as permanent endpoint/WAF misconfiguration and alerts because the
+Logout Token request body has a fixed, bounded shape; retrying the unchanged request cannot resolve
+a stable size limit. The existing table remains in force for 200, 400, 401/403, 404/405/410, 429,
+5xx and transport failures. Participant rows retry transient failures until BX-10 and then become
+`expired`; each row otherwise ends as `acknowledged` or `refused`.
+
+The implementation is local code and test-database evidence only. It does not claim deployment,
+external-RP delivery or OIDC conformance. Current verification is recorded in
+`evidence/2026-10-25-wu15-16-22-op-authority-stop-6B3Q.md`.

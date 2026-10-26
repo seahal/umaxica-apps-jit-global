@@ -30,8 +30,6 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
         operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
       )
     end
-    original_token = token.attributes
-
     assert_difference("ClientSecretAuditOutbox.count", 2) do
       ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     end
@@ -43,12 +41,24 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
 
     assert_equal 1, counts.active_count
     assert_equal 0, counts.reserved_count
-    assert_equal original_token, token.reload.attributes
+    assert_nil token.reload.last_step_up_at
     confirmed_at = issuance.confirmed_at
+    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    end
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-again", last_step_up_full_reauthentication: false,
+    )
+    no_op_token = token.reload.attributes
     assert_no_difference("ClientSecretAuditOutbox.count") do
       ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     end
     assert_equal confirmed_at, issuance.reload.confirmed_at
+    assert_equal no_op_token, token.reload.attributes
 
     assert_raises(ActiveRecord::ReadonlyAttributeError) { candidate.update!(confirmed_at: nil) }
     assert_raises(ActiveRecord::ActiveRecordError) { candidate.update_columns(confirmed_at: nil) }

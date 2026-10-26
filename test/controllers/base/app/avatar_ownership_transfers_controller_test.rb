@@ -40,6 +40,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_response :unprocessable_content
     assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
     assert_not AvatarOwnershipCutover.established?
+    assert_predicate @client_token.reload.last_step_up_at, :present?
   end
 
   test "registry request transport replays the same operation for a stable idempotency key" do
@@ -58,7 +59,17 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_equal "registry", first.fetch("transfer_kind")
     assert_equal "pending", first.fetch("status")
+    assert_nil @client_token.reload.last_step_up_at
 
+    post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+         params: request_params,
+         headers: headers,
+         as: :json
+
+    assert_response :unprocessable_content
+    assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
+
+    grant_step_up!("avatar_transfer_request")
     post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
          params: request_params,
          headers: headers,
@@ -69,6 +80,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_equal first.fetch("transfer_public_id"), second.fetch("transfer_public_id")
     assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
+    assert_predicate @client_token.reload.last_step_up_at, :present?
   end
 
   test "registry request refuses a reused idempotency key with different input" do
@@ -2198,7 +2210,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   private
 
   def grant_step_up!(scope, token: @client_token)
-    token.update!(
+    token.reload.update!(
       last_step_up_at: Time.current,
       last_step_up_scope: scope,
       last_step_up_aal: nil,

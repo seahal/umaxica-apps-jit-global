@@ -143,8 +143,10 @@ module SignUpSequenceControllerSupport
       return
     end
 
+    # D-178: the age is decided on the validated, unsaved value, so a birthdate below the minimum age
+    # is never written.
     actor.birthdate = sign_up_birthdate_param
-    unless actor.save
+    unless actor.valid?
       render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
       return
     end
@@ -154,11 +156,17 @@ module SignUpSequenceControllerSupport
       surface: sign_up_surface,
       today: Time.zone.today,
     )
+      actor.restore_attributes([:birthdate])
       sign_up_session_state.age_restricted = true
       result = SignUpTermination.call(cycle: @sign_up_ticket, event: :halt, actor_context: Actor.authn)
       return render_sign_up_result(result) unless result.success? || result.status == :failed
 
       render_sign_up_age_restricted
+      return
+    end
+
+    unless actor.save
+      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
       return
     end
 

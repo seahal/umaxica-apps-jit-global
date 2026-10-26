@@ -120,11 +120,16 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
           )
         end
         assert_equal "consumed", transaction.reload.status
+        # adr/authentication-security-mode.md D3: the registration spent the settings Step-Up.
+        assert_nil token.reload.last_step_up_at
+        assert_not ClientPasskeyPolicy.new(ClientPasskey, user: actor).management_authorized?(
+          token: token, now: ClientToken.database_now,
+        )
       end
     end
   end
 
-  test "passkey policy freshness is exclusive at fifteen minutes and refuses a future event at microsecond precision" do
+  test "passkey freshness ends exactly at the Security Mode window and refuses a future event (microseconds)" do
     [[Client, ClientPasskey, ClientToken, ClientPasskeyPolicy, :user_id, "app"],
      [Visitor, VisitorPasskey, VisitorToken, VisitorPasskeyPolicy, :visitor_id, "com"],
      [Operator, OperatorPasskey, OperatorToken, OperatorPasskeyPolicy, :staff_id, "org"],].each do |
@@ -147,8 +152,10 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
       )
       policy = policy_class.new(key, user: actor)
       microsecond = Rational(1, 1_000_000)
-      [[now - 15.minutes - microsecond, false], [now - 15.minutes, false],
-       [now - 15.minutes + microsecond, true], [now - microsecond, true],
+      # Consolidation ADR 2.3: NORMAL keeps 15 minutes; ADVANCED (every Operator) at most 5.
+      window = actor.security_mode_advanced? ? 5.minutes : 15.minutes
+      [[now - window - microsecond, false], [now - window, false],
+       [now - window + microsecond, true], [now - microsecond, true],
        [now, true], [now + microsecond, false],].each do |event_at, expected|
         token.update!(last_step_up_at: event_at)
 

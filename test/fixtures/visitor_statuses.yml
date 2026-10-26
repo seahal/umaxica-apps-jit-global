@@ -16,3 +16,9 @@ nothing:
 
 reserved:
   id: <%= VisitorStatus::RESERVED %>
+
+unverified_with_sign_up:
+  id: <%= VisitorStatus::UNVERIFIED_WITH_SIGN_UP %>
+
+verified_with_sign_up:
+  id: <%= VisitorStatus::VERIFIED_WITH_SIGN_UP %>

@@ -216,10 +216,11 @@ module Base
             return false unless @user_email.valid?
 
             @user_email.save!
+            bootstrap_transaction = open_email_bootstrap_transaction
             issued = EmailCredentialRegistrationOtpIssuer.call(
               actor: current_visitor, token: current_session_token, email: @user_email,
-              browser_nonce: ensure_base_admission_browser_nonce!,
-              bootstrap_transaction: open_email_bootstrap_transaction,
+              browser_nonce: bootstrap_transaction ? require_base_admission_browser_nonce! : ensure_base_admission_browser_nonce!,
+              bootstrap_transaction: bootstrap_transaction,
             )
             return false unless issued.success?
 

@@ -2,11 +2,10 @@
 
 Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A and Phase B files below are local documentation artifacts.
 
-## Individual diagrams (128)
+## Individual diagrams (125)
 
 - [idp-client-sign-in.mmd](./idp-client-sign-in.mmd) — STATE_MACHINE / client.
 - [idp-client-sign-up.mmd](./idp-client-sign-up.mmd) — STATE_MACHINE / client.
-- [idp-client-sign-out.mmd](./idp-client-sign-out.mmd) — STATE_MACHINE / client.
 - [idp-client-auth-ceremony-session.mmd](./idp-client-auth-ceremony-session.mmd) — STATE_MACHINE / client.
 - [idp-client-email-ceremony.mmd](./idp-client-email-ceremony.mmd) — STATE_MACHINE / client.
 - [idp-client-telephone-ceremony.mmd](./idp-client-telephone-ceremony.mmd) — STATE_MACHINE / client.
@@ -23,7 +22,6 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-client-passkey-credential.mmd](./idp-client-passkey-credential.mmd) — WORKFLOW_STATE / client.
 - [idp-visitor-sign-in.mmd](./idp-visitor-sign-in.mmd) — STATE_MACHINE / visitor.
 - [idp-visitor-sign-up.mmd](./idp-visitor-sign-up.mmd) — STATE_MACHINE / visitor.
-- [idp-visitor-sign-out.mmd](./idp-visitor-sign-out.mmd) — STATE_MACHINE / visitor.
 - [idp-visitor-auth-ceremony-session.mmd](./idp-visitor-auth-ceremony-session.mmd) — STATE_MACHINE / visitor.
 - [idp-visitor-email-ceremony.mmd](./idp-visitor-email-ceremony.mmd) — STATE_MACHINE / visitor.
 - [idp-visitor-telephone-ceremony.mmd](./idp-visitor-telephone-ceremony.mmd) — STATE_MACHINE / visitor.
@@ -39,7 +37,6 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-visitor-passkey-credential.mmd](./idp-visitor-passkey-credential.mmd) — WORKFLOW_STATE / visitor.
 - [idp-operator-sign-in.mmd](./idp-operator-sign-in.mmd) — STATE_MACHINE / operator.
 - [idp-operator-sign-up.mmd](./idp-operator-sign-up.mmd) — STATE_MACHINE / operator.
-- [idp-operator-sign-out.mmd](./idp-operator-sign-out.mmd) — STATE_MACHINE / operator.
 - [idp-operator-auth-ceremony-session.mmd](./idp-operator-auth-ceremony-session.mmd) — STATE_MACHINE / operator.
 - [idp-operator-email-ceremony.mmd](./idp-operator-email-ceremony.mmd) — STATE_MACHINE / operator.
 - [idp-operator-telephone-ceremony.mmd](./idp-operator-telephone-ceremony.mmd) — STATE_MACHINE / operator.

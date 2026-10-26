@@ -57,5 +57,4 @@ module SignInWelcomeGate
     expires_at = gate["expires_at"].to_i
     expires_at <= 0 || Time.current.to_i >= expires_at
   end
-
 end

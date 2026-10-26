@@ -9,6 +9,8 @@ require "timeout"
 # uses only the normal Rails test database; it does not create an isolated
 # database or bypass the ownership guard.
 class SignOutRefreshRaceTest < ActiveSupport::TestCase
+  include AuthorityStopCleanup
+
   self.use_transactional_tests = false
 
   setup do
@@ -37,7 +39,7 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
   end
 
   teardown do
-    ClientSignOutFlow.where(token_id: @root&.id).delete_all
+    delete_authority_stops_for!(realm: "app", root_ids: [@root&.id], grant_ids: [@session&.id])
     OpAppGrant.where(id: @session&.id).delete_all
     device_session_id = @root&.device_session_id
     ClientToken.where(id: @root&.id).delete_all
@@ -55,6 +57,7 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
           ready << pid
           release.pop
           result = AuthenticationLogoutCurrentSession.call(
+            cause: "browser_logout",
             resource: Client.find(@user.id),
             token: ClientToken.find(@root.id),
             reason: "user_logout",

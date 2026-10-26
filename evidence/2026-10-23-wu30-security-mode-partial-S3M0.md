@@ -41,11 +41,31 @@ the fixes had 71 failures and 13 errors, about 60 of them not in G-1. Those incl
 
 Several of these were fixed afterwards, but the fixes were not re-run.
 
+## Completed 2026-10-24 (same worktree, HEAD `ba570a0007b1d40eabe32990a34831317fd98a93`)
+
+The suite repair and the Step-Up window and method sets are recorded in
+`evidence/2026-10-24-wu24-wu30-suite-repair-and-step-up-windows-R9W3.md`. Also done:
+- **COM owner mode update:** `Base::Com::Identity::Mfa::ChallengesController` at
+  `/identity/mfa/challenge` (show, update), mirroring APP. New
+  `test/controllers/base/com/identity/mfa/challenges_controller_test.rb`, 5 runs passed.
+  It covers:
+  - a Step-Up redirect;
+  - no switch offered with one Passkey;
+  - ADVANCED refused with one Passkey and accepted with two, keeping the session;
+  - a downgrade revoking the current session;
+  - unsupported values 0, 5 and "x".
+- **Mode switch UI:** the APP and COM pages render one switch: back to NORMAL, or up to ADVANCED
+  with two active Passkeys. Otherwise they show why no switch is offered. Vitest page cases were
+  updated; `bun run test` gave 1149 passed; `typecheck`, `lint` and `format:check` are clean.
+- **APP social sign-in Passkey requirement:** verified by the existing passing tests
+  `OmniauthCallbacksTest` "social login with MFA enabled enters the ordinary MFA challenge" and
+  "apple social login with MFA enabled …". Social `auth_method` is never in the MFA bypass, and the
+  hub offers only Passkey.
+- **Dead TOTP MFA route:** removed, with its controller, page and tests.
+
 ## Not done
 
-- Step-Up method sets per mode, and the 15/5-minute windows (§2.3).
-- COM owner mode update.
-- APP social sign-in Passkey requirement not verified.
-- UI for switching mode.
-- Removal of the dead TOTP MFA routes.
-- Full-suite comparison with G-1.
+- ADR 2.5's "one-time" consumption of the downgrade Step-Up is not enforced separately; the
+  `settings_mfa` evidence follows the 5 minute ADVANCED window like every other scope.
+- The us/ja locale has no `sign.app.settings.mfa` block at all, so the new switch labels are missing
+  there, as the existing labels already were.

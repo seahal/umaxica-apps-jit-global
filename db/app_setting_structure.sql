@@ -1595,7 +1595,7 @@ ALTER TABLE ONLY public.app_preference_timezones
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.app_preference_binding_methods(id);
+    ADD CONSTRAINT fk_app_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.app_preference_binding_methods(id) NOT VALID;
 
 
 --
@@ -1603,7 +1603,7 @@ ALTER TABLE ONLY public.app_preferences
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id);
+    ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id) NOT VALID;
 
 
 --
@@ -1611,7 +1611,7 @@ ALTER TABLE ONLY public.app_preferences
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.app_preference_statuses(id);
+    ADD CONSTRAINT fk_app_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.app_preference_statuses(id) NOT VALID;
 
 
 --
@@ -1627,7 +1627,7 @@ ALTER TABLE ONLY public.app_preference_motions
 --
 
 ALTER TABLE ONLY public.app_preference_cookies
-    ADD CONSTRAINT fk_rails_1e767a1c3f FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+    ADD CONSTRAINT fk_rails_1e767a1c3f FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
 
 
 --
@@ -1643,7 +1643,7 @@ ALTER TABLE ONLY public.app_preference_motions
 --
 
 ALTER TABLE ONLY public.app_preference_timezones
-    ADD CONSTRAINT fk_rails_3a83164d61 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+    ADD CONSTRAINT fk_rails_3a83164d61 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
 
 
 --
@@ -1651,7 +1651,7 @@ ALTER TABLE ONLY public.app_preference_timezones
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -1683,7 +1683,7 @@ ALTER TABLE ONLY public.app_preference_densities
 --
 
 ALTER TABLE ONLY public.app_preference_languages
-    ADD CONSTRAINT fk_rails_74e24f1ed5 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+    ADD CONSTRAINT fk_rails_74e24f1ed5 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
 
 
 --
@@ -1723,7 +1723,7 @@ ALTER TABLE ONLY public.app_preference_densities
 --
 
 ALTER TABLE ONLY public.app_preference_themes
-    ADD CONSTRAINT fk_rails_b65e40e97b FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+    ADD CONSTRAINT fk_rails_b65e40e97b FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
 
 
 --
@@ -1755,7 +1755,7 @@ ALTER TABLE ONLY public.app_preference_currencies
 --
 
 ALTER TABLE ONLY public.app_preference_regions
-    ADD CONSTRAINT fk_rails_ebeda50e04 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+    ADD CONSTRAINT fk_rails_ebeda50e04 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
 
 
 --

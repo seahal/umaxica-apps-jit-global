@@ -74,7 +74,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/base/com/jwks_controller.rb
     app/controllers/base/org/jwks_controller.rb
     app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb
-    app/controllers/auth/app/sign/in/challenge/totps_controller.rb
     app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb
   ).to_set.freeze
 

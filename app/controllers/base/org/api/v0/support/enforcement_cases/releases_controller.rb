@@ -72,15 +72,21 @@ module Base
                 unless reason.is_a?(String) && OrgEnforcementCasePage::OPERATOR_RELEASE_REASONS.include?(reason)
                   return render_rejection(t("base.org.admin.errors.release_reason"), :unprocessable_content)
                 end
-                unless @enforcement_case.state == "active"
+                unless @enforcement_case.state == "active" && @enforcement_case.ended_at.blank?
                   return render_rejection(t("base.org.admin.errors.conflict"), :conflict)
                 end
 
-                EnforcementCaseEndOperation.call(
-                  enforcement_case: @enforcement_case,
-                  reason: reason,
-                  ended_by_operator_public_id: current_operator.public_id,
-                )
+                with_owner_step_up(STEP_UP_SCOPE) do |requirement|
+                  EnforcementCaseEndOperation.call(
+                    enforcement_case: @enforcement_case,
+                    reason: reason,
+                    ended_by_operator_public_id: current_operator.public_id,
+                    step_up_token: avatar_root,
+                    step_up_requirement: requirement,
+                  )
+                end
+                return if performed?
+
                 respond_to do |format|
                   format.json do
                     render json: { public_id: @enforcement_case.public_id,

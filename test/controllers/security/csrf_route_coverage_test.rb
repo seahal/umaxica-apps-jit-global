@@ -17,12 +17,11 @@ module Security
       %r{\A/oauth/revoke(?:\(\.:format\))?\z},
       # Apple Server Notifications: machine-to-machine from Apple, JWS-signature verified, no browser CSRF token.
       %r{\A/apple/notifications(?:\(\.:format\))?\z},
-      # Server-to-server Base owner APIs, OP back-channel logout and refresh delivery queries:
+      # Server-to-server Base owner APIs and OP back-channel logout:
       # ActionController::API without cookies; private_key_jwt / signed logout tokens replace CSRF.
       %r{\A/api/v0/(?:avatar|membership|iam|support|publishing|tech-capability-checks)/},
       %r{\A/api/v0/tech-capability-checks(?:\(\.:format\))?\z},
       %r{\A/oidc/closures(?:\(\.:format\))?\z},
-      %r{\A/oauth/refresh-deliveries/query(?:\(\.:format\))?\z},
     ].freeze
 
     test "state-changing application routes do not use null-session csrf handling" do

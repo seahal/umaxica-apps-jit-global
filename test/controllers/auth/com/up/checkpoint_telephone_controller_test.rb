@@ -23,27 +23,8 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
     issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
-    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
-    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
-    post(
-      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
-                            headers: admission_headers,
-    )
-
-    assert_response :see_other
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
-
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
-                                       headers: admission_headers,
-    )
+    VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    admit_auth_ceremony_entry!(auth_com_sign_up_path(ri: "jp"), reference: issuance.reference)
 
     assert_response :see_other
 

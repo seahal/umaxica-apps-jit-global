@@ -2,10 +2,12 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../support/oidc_auth_admission_test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
   include AuthEmailMfaHelper
+  include OidcAuthAdmissionTestHelper
 
   fixtures :clients, :client_statuses, :client_passkey_statuses,
            :client_email_statuses, :client_totp_credential_statuses
@@ -27,21 +29,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
       title: "totp",
     )
-    admission = OidcTestEntry.issue!(
-      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-    )
-    get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
-
-    assert_response :see_other
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
-
-    assert_response :see_other
+    bootstrap_auth_sign_in_admission!(surface: "app")
     @primary_sign_in_binding = nil
   end
 
@@ -180,9 +168,9 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_response :success
     # Check for translation key in body - translation may be missing or present
     # assert response.body.include?(I18n.t("sign.app.in.mfa.title")) || response.body.include?("translation missing")
-    # Check that TOTP method link is present
+    # WU-30: the APP sign-in second factor is a Passkey only; TOTP is never offered.
     assert_equal "auth/app/sign/in/challenges/show", inertia_component
-    assert_includes inertia_props.fetch("methods").map { |method| method.fetch("key") }, "totp"
+    assert_not_includes inertia_props.fetch("methods").map { |method| method.fetch("key") }, "totp"
   end
 
   test "show does not display totp method when disabled" do
@@ -233,22 +221,23 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY].presence
   end
 
-  test "a cancelled MFA challenge cannot be resumed or answered" do
+  test "a cancelled MFA challenge cannot be resumed" do
     establish_pending_mfa_via_email!
     delete mfa_challenge_path
 
-    get mfa_totp_path
+    get new_auth_app_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
 
     assert_response :conflict
     assert_equal "戻るはだめです", response.body
+  end
 
-    assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
-      post mfa_totp_submit_path,
-           params: { totp_challenge_form: { token: "123456" }, "cf-turnstile-response": "test_token" }
+  test "no TOTP second-factor route exists" do
+    # WU-30: the APP sign-in second factor is a Passkey only.
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/sign/in/challenge/totp/new", method: :get,
+      )
     end
-
-    assert_response :conflict
-    assert_equal "戻るはだめです", response.body
   end
 
   test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do
@@ -283,23 +272,6 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_predicate inertia_props.fetch("no_methods_notice"), :present?
     assert_not inertia_props.key?("back_link")
     assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
-  end
-
-  test "the TOTP challenge keeps back to method selection separate from cancellation" do
-    establish_pending_mfa_via_email!
-
-    get mfa_totp_path
-
-    assert_response :success
-    assert_equal URI.parse(mfa_challenge_path).path, URI.parse(inertia_props.fetch("back_link").fetch("href")).path
-    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
-    assert_equal URI.parse(mfa_challenge_path).path, URI.parse(inertia_props.fetch("cancel").fetch("action")).path
-
-    # Following Back is a GET and leaves the ceremony running.
-    get mfa_challenge_path
-
-    assert_response :success
-    assert_predicate session[:pending_mfa], :present?
   end
 
   test "cancelling on the com host leaves the app ceremony untouched" do
@@ -370,13 +342,5 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
   def mfa_challenge_path
     auth_app_sign_in_challenge_path(ri: "jp", **mfa_binding_params)
-  end
-
-  def mfa_totp_path
-    new_auth_app_sign_in_challenge_totp_path(ri: "jp", **mfa_binding_params)
-  end
-
-  def mfa_totp_submit_path
-    auth_app_sign_in_challenge_totp_path(ri: "jp", **mfa_binding_params)
   end
 end

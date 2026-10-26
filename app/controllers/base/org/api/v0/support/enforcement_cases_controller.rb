@@ -94,22 +94,30 @@ module Base
               enforcement_case = build_enforcement_case
               find_principal!(enforcement_case.principal_public_id)
 
-              if enforcement_case.requires_approval?
-                enforcement_case.state = "pending_approval"
-                enforcement_case.save!
-                enforcement_case.write_audit_event_once!(
-                  "approval_requested",
-                  actor_operator_public_id: current_operator.public_id,
-                )
-                return respond_created(enforcement_case, :accepted)
+              with_owner_step_up(STEP_UP_SCOPE) do |requirement|
+                if enforcement_case.requires_approval?
+                  enforcement_case.class.transaction do
+                    enforcement_case.state = "pending_approval"
+                    enforcement_case.save!
+                    enforcement_case.write_audit_event_once!(
+                      "approval_requested",
+                      actor_operator_public_id: current_operator.public_id,
+                    )
+                    avatar_root.consume_step_up_evidence!(requirement:)
+                  end
+                else
+                  attach_requested_effects!(enforcement_case)
+                  EnforcementCaseApplyOperation.call(
+                    enforcement_case: enforcement_case,
+                    actor_operator_public_id: current_operator.public_id,
+                    step_up_token: avatar_root,
+                    step_up_requirement: requirement,
+                  )
+                end
               end
+              return if performed?
 
-              attach_requested_effects!(enforcement_case)
-              EnforcementCaseApplyOperation.call(
-                enforcement_case: enforcement_case,
-                actor_operator_public_id: current_operator.public_id,
-              )
-              respond_created(enforcement_case, :created)
+              respond_created(enforcement_case, enforcement_case.requires_approval? ? :accepted : :created)
             rescue ActiveRecord::RecordInvalid, ArgumentError, ActionController::ParameterMissing => e
               respond_rejected(e)
             end

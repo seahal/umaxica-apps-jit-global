@@ -15,9 +15,12 @@ module Security
 
       SEARCH_ROOTS = %w(app lib).freeze
 
-      # The factory names Net::HTTP in its own comments and pins :net_http as
-      # the adapter, which is the one place that is allowed to.
-      ALLOWLIST = %w(app/lib/outbound_http/connection.rb).freeze
+      # The factory selects Faraday's adapter; the adapter subclass is the only place that builds
+      # Net::HTTP directly to pin a DNS answer after validating the complete public address set.
+      ALLOWLIST = %w(
+        app/lib/outbound_http/connection.rb
+        app/lib/outbound_http/connection_adapter_port.rb
+      ).freeze
 
       DIRECT_CLIENTS = /\b(?:Net::HTTP|URI\.open|OpenURI|HTTParty|RestClient|Excon|Typhoeus|HTTPX)\b/
 

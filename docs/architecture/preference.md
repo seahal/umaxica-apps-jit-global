@@ -206,6 +206,15 @@ The sign surfaces use the same request context contract for `app`, `org`, and `c
 `ri`. If `ri` is missing or invalid on a GET or HEAD request, the controller redirects to the same
 route with a valid `ri` value. `ri` is request context, not a preference write path.
 
+Global browser HTML on Base, Auth, Visa, Tech and Edit MUST use this canonicalization contract.
+Base Home/Dashboard and Visa public roots participate alongside ordinary browser pages. A missing
+region uses the existing resolved context, defaulting to `jp`; explicit valid `jp` and `us` stay
+selected. Valid query context survives the same-origin, same-path 302 redirect. Visa roots register
+the shared callback explicitly while retaining their bare, cookie-free presentation boundary.
+Protocol, JSON, metadata and health endpoints retain their existing transport exemptions. Core,
+Palm, Warp and Publishing content retain their own context contracts. This supersedes the former
+Base Home/Dashboard HTML in-place-only normalization and the Visa root exemption (2026-10-25).
+
 `lx`, `ct`, `tz`, `cu`, `df`, `tf`, `mo`, `dn`, and `ps` are optional request context. They are only
 propagated when explicitly present and valid. The runtime preference subset may override the current
 request's locale, theme, timezone, display reflection, or content-gating reflection by applying a

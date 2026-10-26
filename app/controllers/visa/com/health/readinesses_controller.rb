@@ -10,6 +10,8 @@ module Visa
         AUTHENTICATION_MODE = :bare
         HEALTH_PROFILE = ::Health::Profiles::Com
 
+        public
+
         def show
           render_probe(::Health::ReadinessCheck.call(profile: health_profile))
         end

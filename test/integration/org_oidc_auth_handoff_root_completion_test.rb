@@ -74,7 +74,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
         if target.host == jump_host
           rt = Rack::Utils.parse_query(target.query).fetch("rt")
-          namespace = current_host == base_host ? "BASE_ORG" : "VISA_ORG"
+          namespace = (current_host == base_host) ? "BASE_ORG" : "VISA_ORG"
           issuer = JitSecurityJwtRegistry.surface(namespace)
           payload, = JWT.decode(
             rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
@@ -86,6 +86,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
 
         query = Rack::Utils.parse_query(target.query.to_s)
         entry_reference ||= query["entry_ref"] if query["entry_ref"].present?
+
         assert_equal "https", target.scheme
         assert_includes [base_host, visa_host, auth_host], target.host
         browser.host!(target.host)
@@ -94,7 +95,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
           headers: {
             "Sec-Fetch-Mode" => "navigate",
             "Sec-Fetch-Dest" => "document",
-            "Sec-Fetch-Site" => current_host == target.host ? "same-origin" : "cross-site",
+            "Sec-Fetch-Site" => (current_host == target.host) ? "same-origin" : "cross-site",
           },
         )
         visa_session_cookie = browser.cookies[cookie_name] if target.host == visa_host
@@ -123,9 +124,9 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         before_passkey = passkey.reload.attributes
         browser.get(
           "/sign/oidc/handoff", params: { ri: "jp" },
-          headers: auth_headers.merge(
-            "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
-          ),
+                                headers: auth_headers.merge(
+                                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                                ),
         )
 
         assert_equal 400, browser.response.status
@@ -275,9 +276,9 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         end
         browser.get(
           "/sign/oidc/handoff", params: { ri: "jp" },
-          headers: auth_headers.merge(
-            "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
-          ),
+                                headers: auth_headers.merge(
+                                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                                ),
         )
 
         assert_equal 400, browser.response.status
@@ -345,7 +346,9 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       browser.get(
         result.request_uri,
         headers: {
-          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
           "Origin" => "https://#{visa_host}",
           "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
           "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
@@ -367,12 +370,15 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       browser.get(
         result.request_uri,
         headers: {
-          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "same-origin",
           "Origin" => "https://#{visa_host}",
           "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
           "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
         },
       )
+
       assert_equal 400, browser.response.status
       assert_equal 1, OperatorToken.where(staff_id: actor.id).count
       assert_withheld { parent.reload.base_finalized_at.present? }
@@ -383,7 +389,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       # different browser.
       assert_withheld("Base must retain its browser session across the Auth hop") { base_session_cookie.present? }
       browser.cookies.delete(cookie_name)
-      browser.cookies.merge(
+      browser.cookies.merge!(
         "#{cookie_name}=#{Rack::Utils.escape(base_session_cookie)}", URI.parse("https://#{base_host}/"),
       )
       userinfo_result = OidcOpUserInfoClient::Result.new(
@@ -404,6 +410,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       assert_includes [302, 303], browser.response.status
       assert_equal 1, OperatorToken.where(staff_id: actor.id).count
       root = OperatorToken.find_by!(public_id: parent.reload.browser_session_ref)
+
       assert_equal actor.id, root.staff_id
       assert_equal "passkey", root.established_authentication_method
       assert_withheld { root.root_login_established_at.present? }

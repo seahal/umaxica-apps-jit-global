@@ -58,6 +58,8 @@ class OperatorEmailRegistrationOtpFinalizer
                 next false unless current_authority?(session_ref)
 
                 email.finalize_email_registration!(transaction: transaction, code: code, session_ref: session_ref)
+                # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it.
+                token.consume_step_up_evidence!(requirement: requirement)
                 true
               end
             end

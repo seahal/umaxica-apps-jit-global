@@ -296,6 +296,8 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), credential, VisitorPasskeyStatus::DELETED]
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          # D-132: two Passkeys stay after the removal.
+          OperatorPasskeyTestSupport.give_two_active_passkeys!(actor)
           actor.staff_passkeys.create!(
             webauthn_id: SecureRandom.uuid, public_key: "fallback-key",
             uv_verified_at: Time.current,
@@ -402,6 +404,8 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   end
   test "revoked session and ticket failure leave an owned credential active" do
     actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    # D-132: two Passkeys stay after the removal.
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(actor)
     token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     actor.staff_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "fallback-key",

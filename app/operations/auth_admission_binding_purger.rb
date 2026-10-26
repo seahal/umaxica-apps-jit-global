@@ -2,8 +2,8 @@
 # frozen_string_literal: true
 
 # Removes admission bindings only after their parent and referenced Auth
-# continuity have reached the same retention boundary. Bindings are deleted
-# before their parent rows because every parent foreign key is restrictive.
+# continuity have reached the same retention boundary. Retained sign-up Flows
+# are deleted first; the Binding then precedes its own restrictive parent.
 class AuthAdmissionBindingPurger
   PARENT_BINDINGS = {
     ClientOidcAuthorizationTransaction => [ClientAuthAdmissionBinding, :authorization_transaction_id],
@@ -40,6 +40,7 @@ class AuthAdmissionBindingPurger
             retire_expired_unredeemed!(binding)
             binding.reload
             next unless eligible?(binding)
+            next unless purge_sign_up_flows!(binding)
 
             binding_model.where(id: binding.id).delete_all
           end
@@ -92,6 +93,24 @@ class AuthAdmissionBindingPurger
           timestamp.nil? || timestamp <= cutoff
         end
     end
+  end
+
+  def purge_sign_up_flows!(binding)
+    flow_class =
+      case binding
+      when ClientAuthAdmissionBinding then ClientSignUpFlow
+      when VisitorAuthAdmissionBinding then VisitorSignUpFlow
+      when OperatorAuthAdmissionBinding then return true
+      else raise ArgumentError, "unsupported sign-up admission owner"
+      end
+    flows = flow_class.where(auth_admission_binding_id: binding.id).order(:id).lock.to_a
+    return false unless flows.all? do |flow|
+      flow.sign_up_terminal? && flow.purgeable?(now) &&
+        (flow.cleanup_completed? || flow.sign_up_completed?)
+    end
+
+    flow_class.where(id: flows.map(&:id)).delete_all
+    true
   end
 
   def validate_retention_period!

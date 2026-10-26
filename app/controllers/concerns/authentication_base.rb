@@ -330,7 +330,7 @@ module AuthenticationBase
       binding: session_limit_resolution_binding,
     )
     return { status: :access_locked } if administratively_locked_resource?(resource)
-    return { status: :login_forbidden } unless resource.login_allowed?
+    return { status: :login_forbidden } unless resource.sign_in_allowed?
 
     totp_result = check_totp_requirement_before_session_rotation(require_totp_check, resource)
     return totp_result if totp_result
@@ -1113,7 +1113,7 @@ module AuthenticationBase
   def commit_login_session_under_actor_lock(resource, **issuance_attributes)
     with_actor_session_lock(resource) do
       next { status: :access_locked } if administratively_locked_resource?(resource)
-      next { status: :login_forbidden } unless resource.login_allowed?
+      next { status: :login_forbidden } unless resource.sign_in_allowed?
 
       commit_login_session!(resource, **issuance_attributes)
     end
@@ -1917,6 +1917,7 @@ module AuthenticationBase
       token_class: token_record.class,
       session_public_id: token_record.try(:public_id),
       reason: "dbsc_refresh_failed",
+      cause: "risk", # D-173
     )
   end
 
@@ -2188,6 +2189,7 @@ module AuthenticationBase
       token_class: token_class,
       session_public_id: public_id,
       reason: "refresh_token_invalidated",
+      cause: "risk", # D-173
     )
   rescue ActiveRecord::RecordNotDestroyed => e
     Rails.logger.info(
@@ -2941,7 +2943,7 @@ module AuthenticationBase
   def pending_sign_in_result_after_primary!(resource, cycle:, pt:, record_login_audit:, token_kind_id:,
                                             audit_context:, established_authentication_method: nil,
                                             authentication_context: nil, authentication_event_at: nil)
-    return { status: :login_forbidden } unless resource.login_allowed?
+    return { status: :login_forbidden } unless resource.sign_in_allowed?
     # A5: an unknown or missing Security Mode permits no authentication.
     return { status: :login_forbidden } unless resource.security_mode_valid?
 
@@ -3023,7 +3025,7 @@ module AuthenticationBase
 
     resource.class.connection_class_for_self.connected_to(role: :writing) do
       resource.with_lock do
-        return { status: :login_forbidden } unless resource.login_allowed?
+        return { status: :login_forbidden } unless resource.sign_in_allowed?
 
         cycle.class.connection_class_for_self.connected_to(role: :writing) do
           cycle.with_lock do

@@ -151,6 +151,7 @@ module EnforcementCaseApplicable
             resource: principal,
             token: token,
             reason: "enforcement_#{effect.effect}",
+            cause: "administrative", # D-173
           )
         end
     end

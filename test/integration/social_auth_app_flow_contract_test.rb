@@ -90,11 +90,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               visa_host: flow1_visa_host,
               auth_host: flow1_auth_host,
             )
-          switch_social_browser_to_sign_up!(
-            base_browser: @base_browser,
-            auth_host: flow1_auth_host,
-            visa_host: flow1_visa_host,
-          )
+            switch_social_browser_to_sign_up!(
+              base_browser: @base_browser,
+              auth_host: flow1_auth_host,
+              visa_host: flow1_visa_host,
+            )
           end
           flow1_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow1_host)
@@ -206,12 +206,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     surface: "app",
                     transaction_id: flow4_ceremony.authorization_transaction_ref,
                   )
-                  get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                    "Sec-Fetch-Mode" => "navigate",
-                    "Sec-Fetch-Dest" => "document",
-                    "Sec-Fetch-Site" => "same-origin",
-                  })
+                  get(
+                    auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                      "Sec-Fetch-Mode" => "navigate",
+                      "Sec-Fetch-Dest" => "document",
+                      "Sec-Fetch-Site" => "same-origin",
+                    },
+                  )
                   flow4_target = URI.parse(response.location)
                   flow4_principal = Client.find_by!(public_id: flow4_parent.reload.actor_ref)
                   BaseSelectorBootstrapAuthority.call(
@@ -525,12 +527,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 flow6_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                   surface: "app", transaction_id: flow6_ceremony.authorization_transaction_ref,
                 )
-                get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                  "Sec-Fetch-Mode" => "navigate",
-                  "Sec-Fetch-Dest" => "document",
-                  "Sec-Fetch-Site" => "same-origin",
-                })
+                get(
+                  auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document",
+                    "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
                 flow6_target = URI.parse(response.location)
                 flow6_principal = Client.find_by!(public_id: flow6_parent.reload.actor_ref)
                 BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow6_principal)
@@ -760,11 +764,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               visa_host: flow8_visa_host,
               auth_host: flow8_auth_host,
             )
-          switch_social_browser_to_sign_up!(
-            base_browser: @base_browser,
-            auth_host: flow8_auth_host,
-            visa_host: flow8_visa_host,
-          )
+            switch_social_browser_to_sign_up!(
+              base_browser: @base_browser,
+              auth_host: flow8_auth_host,
+              visa_host: flow8_visa_host,
+            )
           end
           flow8_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow8_host)
@@ -876,12 +880,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     surface: "app",
                     transaction_id: flow11_ceremony.authorization_transaction_ref,
                   )
-                  get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                    "Sec-Fetch-Mode" => "navigate",
-                    "Sec-Fetch-Dest" => "document",
-                    "Sec-Fetch-Site" => "same-origin",
-                  })
+                  get(
+                    auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                      "Sec-Fetch-Mode" => "navigate",
+                      "Sec-Fetch-Dest" => "document",
+                      "Sec-Fetch-Site" => "same-origin",
+                    },
+                  )
                   flow11_target = URI.parse(response.location)
                   flow11_principal = Client.find_by!(public_id: flow11_parent.reload.actor_ref)
                   BaseSelectorBootstrapAuthority.call(
@@ -1191,12 +1197,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 flow13_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                   surface: "app", transaction_id: flow13_ceremony.authorization_transaction_ref,
                 )
-                get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                  "Sec-Fetch-Mode" => "navigate",
-                  "Sec-Fetch-Dest" => "document",
-                  "Sec-Fetch-Site" => "same-origin",
-                })
+                get(
+                  auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document",
+                    "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
                 flow13_target = URI.parse(response.location)
                 flow13_principal = Client.find_by!(public_id: flow13_parent.reload.actor_ref)
                 BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow13_principal)
@@ -1535,12 +1543,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 flow17_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                   surface: "app", transaction_id: flow17_ceremony.authorization_transaction_ref,
                 )
-                get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                  "Sec-Fetch-Mode" => "navigate",
-                  "Sec-Fetch-Dest" => "document",
-                  "Sec-Fetch-Site" => "same-origin",
-                })
+                get(
+                  auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document",
+                    "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
                 flow17_target = URI.parse(response.location)
                 flow17_principal = Client.find_by!(public_id: flow17_parent.reload.actor_ref)
                 BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow17_principal)
@@ -1871,12 +1881,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 flow21_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                   surface: "app", transaction_id: flow21_ceremony.authorization_transaction_ref,
                 )
-                get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                  "Sec-Fetch-Mode" => "navigate",
-                  "Sec-Fetch-Dest" => "document",
-                  "Sec-Fetch-Site" => "same-origin",
-                })
+                get(
+                  auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document",
+                    "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
                 flow21_target = URI.parse(response.location)
                 flow21_principal = Client.find_by!(public_id: flow21_parent.reload.actor_ref)
                 BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow21_principal)
@@ -2252,12 +2264,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 flow23_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                   surface: "app", transaction_id: flow23_ceremony.authorization_transaction_ref,
                 )
-                get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                  "Sec-Fetch-Mode" => "navigate",
-                  "Sec-Fetch-Dest" => "document",
-                  "Sec-Fetch-Site" => "same-origin",
-                })
+                get(
+                  auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document",
+                    "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
                 flow23_target = URI.parse(response.location)
                 flow23_principal = Client.find_by!(public_id: flow23_parent.reload.actor_ref)
                 BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow23_principal)
@@ -2625,12 +2639,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 flow25_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                   surface: "app", transaction_id: flow25_ceremony.authorization_transaction_ref,
                 )
-                get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                  "Sec-Fetch-Mode" => "navigate",
-                  "Sec-Fetch-Dest" => "document",
-                  "Sec-Fetch-Site" => "same-origin",
-                })
+                get(
+                  auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                    "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document",
+                    "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
                 flow25_target = URI.parse(response.location)
                 flow25_principal = Client.find_by!(public_id: flow25_parent.reload.actor_ref)
                 BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow25_principal)
@@ -3704,12 +3720,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               flow27_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                 surface: "app", transaction_id: flow27_ceremony.authorization_transaction_ref,
               )
-              get(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
-                "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                "Sec-Fetch-Mode" => "navigate",
-                "Sec-Fetch-Dest" => "document",
-                "Sec-Fetch-Site" => "same-origin",
-              })
+              get(
+                auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                  "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                  "Sec-Fetch-Mode" => "navigate",
+                  "Sec-Fetch-Dest" => "document",
+                  "Sec-Fetch-Site" => "same-origin",
+                },
+              )
               flow27_target = URI.parse(response.location)
               flow27_principal = Client.find_by!(public_id: flow27_parent.reload.actor_ref)
               BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow27_principal)
@@ -4970,12 +4988,14 @@ class SocialAuthAppFlowContractTest
 
     base_browser.host!(visa_host)
     base_browser.https!
-    base_browser.get(target.request_uri, headers: {
-      "Host" => visa_host,
-      "Sec-Fetch-Mode" => "navigate",
-      "Sec-Fetch-Dest" => "document",
-      "Sec-Fetch-Site" => "cross-site",
-    })
+    base_browser.get(
+      target.request_uri, headers: {
+        "Host" => visa_host,
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "cross-site",
+      },
+    )
     raise "Visa result continuation did not redirect" unless base_browser.response.redirect?
 
     callback_uri = URI.parse(base_browser.response.location)
@@ -5009,62 +5029,66 @@ class SocialAuthAppFlowContractTest
     protocol_browser = open_session
     protocol_browser.host!(base_host)
     protocol_browser.https!
-    transport = Faraday::Adapter::Test::Stubs.new do |stub|
-      stub.post(/.*/) do |env|
-        outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
-        outer_actor = Actor.context
-        executor_key = Rails.application.executor.active_key
-        outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
-        begin
-          protocol_browser.host!(env.url.authority)
-          protocol_browser.https!(env.url.scheme == "https")
-          protocol_browser.post(
-            env.url.request_uri,
-            params: Rack::Utils.parse_query(env.body),
-            headers: { "Accept" => "application/json" },
-          )
-        ensure
-          ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
-        end
+    transport =
+      Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.post(/.*/) do |env|
+          outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+          outer_actor = Actor.context
+          executor_key = Rails.application.executor.active_key
+          outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+          begin
+            protocol_browser.host!(env.url.authority)
+            protocol_browser.https!(env.url.scheme == "https")
+            protocol_browser.post(
+              env.url.request_uri,
+              params: Rack::Utils.parse_query(env.body),
+              headers: { "Accept" => "application/json" },
+            )
+          ensure
+            ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+          end
 
-        assert_equal [true, true, 200], [
-          ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
-          Actor.context.equal?(outer_actor),
-          protocol_browser.response.status,
-        ]
-        [protocol_browser.response.status, { "Content-Type" => "application/json" }, protocol_browser.response.body]
-      end
-      stub.get(/.*/) do |env|
-        outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
-        outer_actor = Actor.context
-        executor_key = Rails.application.executor.active_key
-        outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
-        begin
-          protocol_browser.host!(env.url.authority)
-          protocol_browser.https!(env.url.scheme == "https")
-          protocol_browser.get(
-            env.url.request_uri,
-            headers: {
-              "Authorization" => env.request_headers.fetch("Authorization"),
-              "Accept" => "application/json",
-            },
-          )
-        ensure
-          ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+          assert_equal [true, true, 200], [
+            ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
+            Actor.context.equal?(outer_actor),
+            protocol_browser.response.status,
+          ]
+          [protocol_browser.response.status, { "Content-Type" => "application/json" },
+           protocol_browser.response.body,]
         end
+        stub.get(/.*/) do |env|
+          outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+          outer_actor = Actor.context
+          executor_key = Rails.application.executor.active_key
+          outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+          begin
+            protocol_browser.host!(env.url.authority)
+            protocol_browser.https!(env.url.scheme == "https")
+            protocol_browser.get(
+              env.url.request_uri,
+              headers: {
+                "Authorization" => env.request_headers.fetch("Authorization"),
+                "Accept" => "application/json",
+              },
+            )
+          ensure
+            ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+          end
 
-        assert_equal [true, true, 200], [
-          ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
-          Actor.context.equal?(outer_actor),
-          protocol_browser.response.status,
-        ]
-        [protocol_browser.response.status, { "Content-Type" => "application/json" }, protocol_browser.response.body]
+          assert_equal [true, true, 200], [
+            ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
+            Actor.context.equal?(outer_actor),
+            protocol_browser.response.status,
+          ]
+          [protocol_browser.response.status, { "Content-Type" => "application/json" },
+           protocol_browser.response.body,]
+        end
       end
-    end
-    connection = Faraday.new do |builder|
-      builder.request(:url_encoded)
-      builder.adapter(:test, transport)
-    end
+    connection =
+      Faraday.new do |builder|
+        builder.request(:url_encoded)
+        builder.adapter(:test, transport)
+      end
 
     OutboundHttp::Connection.stub(
       :build,
@@ -5117,7 +5141,7 @@ class SocialAuthAppFlowContractTest
       target = URI.parse(current_browser.response.location.to_s)
       target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
       if target.host == jump_host
-        namespace = current_host == visa_host ? "VISA_APP" : "AUTH_APP"
+        namespace = (current_host == visa_host) ? "VISA_APP" : "AUTH_APP"
         target, = decode_social_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
       end
 
@@ -5169,7 +5193,7 @@ class SocialAuthAppFlowContractTest
       target = URI.parse(current_browser.response.location.to_s)
       target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
       if target.host == jump_host
-        namespace = current_host == auth_host ? "AUTH_APP" : "VISA_APP"
+        namespace = (current_host == auth_host) ? "AUTH_APP" : "VISA_APP"
         target, = decode_social_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
       end
 

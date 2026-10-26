@@ -19,7 +19,7 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
     test "#{surface} #{channel} signup proof database shape and immutable committed result" do
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       destination =
         (channel == :email) ? "retry-#{SecureRandom.hex(8)}@example.test" :

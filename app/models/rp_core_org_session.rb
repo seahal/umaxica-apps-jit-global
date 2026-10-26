@@ -11,9 +11,6 @@ class RpCoreOrgSession < RpCoreOrgRecord
   include PublicId
 
   belongs_to :op_session_binding, class_name: "RpCoreOrgOpSessionBinding", inverse_of: :sessions
-  has_many :refresh_attempts, class_name: "RpCoreOrgRefreshAttempt", foreign_key: :session_id,
-                              inverse_of: :session,
-                              dependent: :restrict_with_error
 
   # The partial index counts every unrevoked row, including an expired one.
   validates :op_session_binding_id,

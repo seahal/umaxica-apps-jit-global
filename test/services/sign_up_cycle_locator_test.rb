@@ -73,4 +73,74 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
 
     assert_nil locator.current(admission_binding: binding, ceremony_session: ceremony)
   end
+
+  test "an admitted owner without any flow holds no unreleased attempt" do
+    binding = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+
+    assert_not SignUpCycleLocator.new({}, surface: :app)
+      .unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
+  end
+
+  # The predicate reads only status and cleanup, never the clock: a nonterminal flow, including one
+  # past its deadline, is released only by the expiry job. Travelling past the deadline would also
+  # expire the admission parent, which refuses the lookup before the predicate is reached.
+  test "a nonterminal flow stays unreleased until the expiry job ends it" do
+    binding, ceremony, flow = owned_flow
+
+    assert_not_predicate flow, :sign_up_terminal?
+    assert SignUpCycleLocator.new({}, surface: :app)
+      .unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
+  end
+
+  test "a terminal flow stays unreleased while its cleanup is pending, failed, or past the retry cap" do
+    binding, ceremony, flow = owned_flow
+    locator = SignUpCycleLocator.new({}, surface: :app)
+    [
+      { cleanup_status_id: flow.cleanup_status_id_for(:pending), cleanup_attempts_count: 0 },
+      { cleanup_status_id: flow.cleanup_status_id_for(:failed), cleanup_attempts_count: 1 },
+      {
+        cleanup_status_id: flow.cleanup_status_id_for(:failed),
+        cleanup_attempts_count: SignUpArtifactCleanup::MAX_CLEANUP_ATTEMPTS,
+      },
+    ].each do |cleanup|
+      flow.update_columns(cleanup.merge(status_id: ClientSignUpFlowStatus::CANCELLED))
+
+      assert locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony), cleanup.inspect
+    end
+  end
+
+  test "a terminal flow whose cleanup completed, or a completed sign-up, releases the entry" do
+    binding, ceremony, flow = owned_flow
+    locator = SignUpCycleLocator.new({}, surface: :app)
+    flow.update_columns(
+      status_id: ClientSignUpFlowStatus::CANCELLED, cleanup_status_id: flow.cleanup_status_id_for(:completed),
+    )
+
+    assert_not locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
+
+    flow.update_columns(
+      status_id: ClientSignUpFlowStatus::COMPLETED,
+      cleanup_status_id: flow.cleanup_status_id_for(:idle),
+    )
+
+    assert_not locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
+  end
+
+  private
+
+  def owned_flow
+    binding = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+    flow = ClientSignUpFlow.create!(
+      auth_admission_binding: binding,
+      status_id: ClientSignUpFlowStatus::STARTED,
+      step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce("a-nonce"),
+      issued_at: Time.current,
+      expires_at: 15.minutes.from_now,
+      entry_method: "email",
+    )
+    [binding, ceremony, flow]
+  end
 end

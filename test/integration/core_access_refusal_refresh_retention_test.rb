@@ -120,7 +120,10 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
 
       refresh_digest = rp.reload.refresh_token_digest
       refresh_generation = rp.refresh_generation
-      RpSessionRevoker.call(scope: :browser_session, record: token)
+      RpSessionRevoker.call(
+        scope: :browser_session, record: token, cause: "browser_logout",
+        authority_evidence_ref: "test",
+      )
       post(
         "/api/v0/token/refresh",
         headers: {

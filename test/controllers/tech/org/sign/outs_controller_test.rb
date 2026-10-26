@@ -6,6 +6,7 @@ require_relative "../../../../support/oidc_rp_logout_hint_helper"
 
 class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   include OidcRpLogoutHintHelper
+
   fixtures :operators, :operator_statuses
 
   setup do
@@ -85,6 +86,7 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     authority_uri = URI.parse(response.location)
 
     query = Rack::Utils.parse_nested_query(authority_uri.query.to_s)
+
     assert_visa_end_session_redirect(query, authority_uri, client_id: client.client_id, region: "jp")
     assert_predicate root_token.reload, :currently_usable?
     assert_not_predicate rp_session.reload, :active?

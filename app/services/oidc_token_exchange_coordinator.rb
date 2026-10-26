@@ -30,7 +30,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
                  code_verifier: nil,
                  client_assertion_type: nil, client_assertion: nil,
                  dpop_proof: nil, token_endpoint_uri: nil, request_method: "POST",
-                 expected_resource_type:, attempt_ref: nil,
+                 expected_resource_type:,
                  code_store: Valkey::AuthState::AuthorizationCodeStore.new)
     super()
     @grant_type = grant_type
@@ -46,8 +46,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     @token_endpoint_uri = token_endpoint_uri
     @request_method = request_method
     @expected_resource_type = expected_resource_type
-    # R5-WU08: an RP's bounded refresh attempt reference, recorded in the delivery receipt.
-    @attempt_ref = attempt_ref
     @code_store = code_store
   end
 
@@ -269,7 +267,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
       client_id: client_id,
       resource_type: resource_type,
       actor_guard: refresh_actor_guard(resource),
-      attempt_ref: @attempt_ref,
       response_builder: lambda do |usage:, refresh_token:, now:, **_|
         locked_root_token = usage.parent_token
         locked_resource = resource_for_root_token(locked_root_token, resource_type)
@@ -310,10 +307,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   def refresh_rotation_failure(rotation)
     case rotation.reason
-    when :delivery_publication_failed, :coordination_timeout, :delivery_receipt_invalid
-      failure("server_error", "refresh delivery unavailable")
-    when :coordination_unavailable
-      failure("server_error", "refresh coordination unavailable")
     when :refresh_token_reuse_detected
       failure("invalid_grant", "refresh token reuse detected")
     when :client_mismatch, :inactive_token, :invalid_digest
@@ -828,7 +821,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
     connection_owner_for(session_class).connected_to(role: :writing) do
       if rp_ref.present?
         session = session_class.find_by(public_id: rp_ref)
-        RpSessionRevoker.call(scope: :rp_session, record: session, status: "failed") if session
+        # An authenticated authorization-code replay ends the exact grant it issued (RFC 6749
+        # section 4.1.2); `token_revocation` is the matching grant-scoped cause in D-173.
+        if session
+          RpSessionRevoker.call(
+            scope: :rp_session, record: session, cause: "token_revocation",
+            authority_evidence_ref: "authorization_code_replay",
+          )
+        end
       end
     end
   rescue StandardError => e

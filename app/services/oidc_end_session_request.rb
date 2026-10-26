@@ -56,16 +56,17 @@ class OidcEndSessionRequest < ApplicationService
     current_failure = current_session_mismatch(payload)
     return current_failure if current_failure
 
-    # The hint names the RP session the RP wants ended; it is not authority for this browser to end
-    # it. Its sub/sid become the logout target only after matching the verified current session.
-    # Without one, the hint still validates client and redirect, but nothing is revoked or notified.
+    # The hint is not authority for this browser to end a session. Match its subject to the
+    # authenticated OP actor, then use the OP session's sid as the target. An RP ID Token's sid
+    # names its RP Session and is not the OP Root Session identifier. Without an OP session, the
+    # hint still validates client and redirect, but nothing is revoked or notified.
     target_bound = !current_session_missing?
     success(
       source: SOURCE_ID_TOKEN_HINT,
       client: client,
       client_id: client.client_id,
       subject: target_bound ? payload["sub"] : nil,
-      sid: target_bound ? payload["sid"] : nil,
+      sid: target_bound ? current_sid : nil,
       post_logout_redirect_uri: redirect_uri,
       state: param(:state).presence,
       ui_locales: param(:ui_locales).presence,
@@ -106,6 +107,7 @@ class OidcEndSessionRequest < ApplicationService
         resource_type: resource_type,
         jwt_issuer_id: jwt_issuer_id,
         issuer: issuer,
+        allow_expired: true,
       )
       { client: client, payload: payload }
     rescue JWT::DecodeError, JWT::VerificationError, OpenSSL::PKey::PKeyError, ArgumentError, TypeError
@@ -117,14 +119,10 @@ class OidcEndSessionRequest < ApplicationService
     return if current_session_missing?
 
     expected_subject = current_subject
-    if expected_subject.present? && payload["sub"].to_s != expected_subject
-      return invalid_request("id_token_hint subject does not match current session")
-    end
+    return unless expected_subject.present? && payload["sub"].to_s != expected_subject
 
-    expected_sid = current_sid
-    return if expected_sid.blank? || payload["sid"].blank? || payload["sid"].to_s == expected_sid
+    invalid_request("id_token_hint subject does not match current session")
 
-    invalid_request("id_token_hint sid does not match current session")
   end
 
   def current_session_missing?

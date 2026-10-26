@@ -23,11 +23,15 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
     auth_routes = file_content("config/routes/auth.rb")
     base_routes = file_content("config/routes/base.rb")
     core_routes = file_content("config/routes/core.rb")
+    visa_routes = Rails.root.join("config/routes/visa.rb").read.gsub(/\s+/, " ").strip
 
     assert_source_includes auth_routes, 'resource :status, only: :show, path: "check", controller: :checks'
-    assert_source_includes base_routes, 'resource :status, only: :show, path: "check", controller: :checks'
+    # Root-cookie transport belongs to Visa after the OP/Base host split.
+    assert_includes visa_routes, 'resource :status, only: :show, path: "check", controller: :checks'
+    assert_not_includes base_routes, 'path: "check", controller: :checks'
     assert_source_includes core_routes, "resource :refresh, only: :create"
-    assert_source_includes base_routes, "resource :refresh, only: :create"
+    assert_includes visa_routes, "resource :refresh, only: :create"
+    assert_not_includes base_routes, "resource :refresh, only: :create"
     assert_source_excludes base_routes, "resource :renewal"
     assert_source_includes base_routes, "resource :customization, only: %i(edit destroy)"
     assert_source_excludes base_routes, 'path: "reset", as: :reset, controller: :resets'
@@ -90,21 +94,6 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
     assert_source_includes link, "token.with_lock"
     assert_source_includes concern, "resolve_social_auth_callback_result"
     assert_source_includes concern, "sign_up_entry: current_social_auth_entry == \"sign_up\""
-  end
-
-  test "social completion uses a receiver-local POST carrying only the opaque result reference" do
-    form = file_content("app/views/base/shared/result_continuation.html.erb")
-    receiver = file_content("app/controllers/base/app/social/authentication/completions_controller.rb")
-
-    assert_source_includes form, "url: action_url, method: :post, local: true"
-    assert_source_includes form, "hidden_field_tag :result_ref, result_ref"
-    assert_source_includes receiver, 'render "base/shared/result_continuation"'
-    assert_source_includes receiver, "SocialCeremonyResultAdapter.new.read(reference: result_reference)"
-    assert_source_includes receiver, "IdentitySocialCeremonyFinalCommitter.call!"
-    assert_no_match(/\bsocial_ceremony_result\b/, form)
-    assert_no_match(/\baccess_token\b/, form)
-    assert_no_match(/\brefresh_token\b/, form)
-    assert_no_match(/\breturn_to\b/, form)
   end
 
   test "sign email signup checkpoint uses the shared finalize boundary" do

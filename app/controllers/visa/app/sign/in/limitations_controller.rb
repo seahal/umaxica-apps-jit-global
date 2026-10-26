@@ -20,6 +20,8 @@ module Visa
 
           before_action :load_resolution
 
+          public
+
           def show
             return render_invalid_resolution unless resolution_loaded?
 

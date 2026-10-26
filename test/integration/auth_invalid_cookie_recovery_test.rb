@@ -649,7 +649,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   # --- Refresh and DBSC cookies (JSON refresh endpoint) ------------------------------------------
 
   test "the issued auth cookies and their deletions share name, path, host-only scope, Secure, and SameSite" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
 
@@ -683,7 +683,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       ->(token) { "#{token.public_id}.#{SecureRandom.urlsafe_base64(32)}" },
   }.each do |label, forge|
     test "refresh: #{label} is refused with the shared JSON body and every auth cookie is deleted" do
-      host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      host! visa_host_for_test_surface(:app)
       token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
       token.rotate_refresh_token!
 
@@ -696,7 +696,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   end
 
   test "refresh: a credential at its discard boundary is refused as a lifecycle end" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(discard_at: token.class.database_now)
@@ -711,7 +711,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   # BVA exception: the rotation lock compares discard_at with the database clock, which travel_to
   # cannot freeze, so "just before" is the nearest value that stays ahead of real elapsed time.
   test "refresh: a credential shortly before its discard boundary refreshes" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(discard_at: 1.minute.from_now)
@@ -722,7 +722,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   end
 
   test "refresh: reuse keeps the family revocation policy and deletes every auth cookie" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     first = token.rotate_refresh_token!
     post_refresh(first)
@@ -734,10 +734,15 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     assert_invalid_refresh_response
     assert_cookie_deleted(REFRESH)
     assert_not_predicate token.reload.discard_at, :future?, "reuse must revoke the token family"
+    stop = OpAppAuthorityStop.find_by!(authority_evidence_ref: "refresh_token_invalidated")
+
+    assert_equal "risk", stop.cause_name
+    assert_equal OpAuthorityStopReference.scope_id("root"), stop.scope_id
+    assert OpAppAuthorityStopRootTarget.exists?(stop:, root: token)
   end
 
   test "refresh: a DBSC-bound session presented without its bound cookie is refused and the DBSC cookie deleted" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
@@ -752,12 +757,17 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     [REFRESH, DBSC].each { |name| assert_cookie_deleted(name) }
     assert_equal %w(dbsc_cookie binding_denied credential_rejection),
                  auth_rejection_events(logs).sole.values_at("credential_kind", "reason", "category")
+    stop = OpAppAuthorityStop.find_by!(authority_evidence_ref: "dbsc_refresh_failed")
+
+    assert_equal "risk", stop.cause_name
+    assert_equal OpAuthorityStopReference.scope_id("root"), stop.scope_id
+    assert OpAppAuthorityStopRootTarget.exists?(stop:, root: token)
   end
 
   # --- Observability and oracle ------------------------------------------------------------------
 
   test "refusal reasons share status, body, and cookie writes, and the log carries no credential" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     token.rotate_refresh_token!
     secret_verifier = SecureRandom.urlsafe_base64(32)
@@ -841,7 +851,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   end
 
   test "an issuer failure during refresh propagates instead of becoming an invalid credential" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
 
@@ -851,7 +861,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   end
 
   test "a database failure in the DBSC endpoint's refresh lookup propagates" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
 

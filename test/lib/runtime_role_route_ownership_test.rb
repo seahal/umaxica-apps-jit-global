@@ -50,10 +50,10 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
     assert_equal "op-base-org", RuntimeRole.route_owner("visa/org/oauth/tokens")
   end
 
-  test "receipt recovery logout completion and root credential endpoints are OP owned in every realm" do
+  test "Visa roots and logout completion and credential endpoints are OP owned in every realm" do
     %w(app com org).each do |realm|
-      %w(oauth/refresh_delivery_queries sign_byes edge/v0/token/checks edge/v0/token/refreshes).each do |path|
-        controller = "base/#{realm}/#{path}"
+      %w(roots sign_byes edge/v0/token/checks edge/v0/token/refreshes).each do |path|
+        controller = "visa/#{realm}/#{path}"
 
         assert_equal "op-base-#{realm}", RuntimeRole.route_owner(controller)
         assert RuntimeRole.serves?(controller, "op-base-#{realm}")

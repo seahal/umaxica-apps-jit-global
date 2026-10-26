@@ -29,7 +29,6 @@ class RetentionPurgeJob < ApplicationJob
     ClientSessionLimitResolutionTransaction VisitorSessionLimitResolutionTransaction
     OperatorSessionLimitResolutionTransaction
     ClientSignInFlow VisitorSignInFlow OperatorSignInFlow
-    ClientSignOutFlow VisitorSignOutFlow OperatorSignOutFlow
     ClientWithdrawalFlow VisitorWithdrawalFlow
     ClientProcessorErasureNotification VisitorProcessorErasureNotification
     ClientPrivacyRequest VisitorPrivacyRequest
@@ -57,6 +56,7 @@ class RetentionPurgeJob < ApplicationJob
   # schedule (config/recurring.yml, every 15 minutes) as the retry mechanism;
   # raising would only requeue work that is deliberately paused.
   FEATURE_NAME = :retention_purge_suspended
+  SIGN_UP_REPORT_SURFACES = %i(app com).freeze
 
   def perform(batch_size: DEFAULT_BATCH_SIZE)
     limit = normalized_batch_size(batch_size)
@@ -66,6 +66,7 @@ class RetentionPurgeJob < ApplicationJob
 
     if FeatureFlags.enabled?(FEATURE_NAME)
       Rails.logger.warn(JitLogEvent.format("retention.purge.suspended"))
+      report_stuck_sign_up_registrations
       return
     end
 
@@ -87,18 +88,64 @@ class RetentionPurgeJob < ApplicationJob
       )
     end
 
+    report_stuck_sign_up_registrations
     raise failures.first if failures.any?
   end
 
   private
+
+  def report_stuck_sign_up_registrations
+    registrations = []
+    failures = []
+    SIGN_UP_REPORT_SURFACES.each do |surface|
+      registrations.concat(SignUpStuckRegistrationReportQuery.call(surface:))
+    rescue StandardError => e
+      failures << { surface: surface.to_s, error_class: e.class.name }
+    end
+
+    reports =
+      registrations.group_by { |row| [row.fetch(:surface), row.fetch(:case)] }
+        .sort_by { |(surface, case_name), _rows| [surface, case_name] }
+        .map do |(surface, case_name), rows|
+          {
+            surface:,
+            case: case_name,
+            count: rows.length,
+            registrations: rows.map do |row|
+              row.slice(:principal_public_id, :contact_public_id, :flow_public_id, :cleanup_attempts_count)
+            end,
+          }
+        end
+    payload = { total_count: registrations.length, groups: reports }
+
+    if failures.empty?
+      Rails.logger.info(JitLogEvent.format("sign_up.stuck_registrations.reported", **payload))
+    else
+      Rails.logger.error(
+        JitLogEvent.format("sign_up.stuck_registrations.report_failed", **payload, failures:),
+      )
+    end
+  end
 
   def purge_retained_model(klass, batch_size:)
     now = klass.database_now
     return if klass == ClientSecretCredential
     return if purge_special_retained_model(klass, now: now, batch_size: batch_size)
     return unless klass.column_names.include?("purge_eligible_at")
+    return purge_root_tokens(klass, now: now, batch_size: batch_size) if [VisitorToken, OperatorToken].include?(klass)
 
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size).delete_all
+  end
+
+  # Authority-stop records referencing a root go first (D-172 S-2); a root whose stop still has an
+  # undelivered participant stays until the next run.
+  def purge_root_tokens(klass, now:, batch_size:)
+    realm = { VisitorToken => "com", OperatorToken => "org" }.fetch(klass)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      ids = batch.pluck(:id)
+      held = OpAuthorityStopPurger.release_roots!(realm:, root_ids: ids)
+      klass.where(id: ids - held).delete_all
+    end
   end
 
   def purge_special_retained_model(klass, now:, batch_size:)
@@ -116,6 +163,8 @@ class RetentionPurgeJob < ApplicationJob
       purge_sign_in_flows(klass, now: now, batch_size: batch_size)
     elsif klass == ClientSignUpFlow
       purge_client_authentication_flows(klass, now: now, batch_size: batch_size)
+    elsif klass == VisitorSignUpFlow
+      purge_visitor_sign_up_flows(klass, now: now, batch_size: batch_size)
     elsif klass == ClientToken
       purge_client_tokens(klass, now: now, batch_size: batch_size)
     elsif [ClientPasskey, VisitorPasskey].include?(klass)
@@ -176,11 +225,25 @@ class RetentionPurgeJob < ApplicationJob
               end
             end
           end
-        elsif !client_sign_up_flow_source_hold?(flow)
+        elsif !sign_up_flow_retention_hold?(flow) && !client_sign_up_flow_source_hold?(flow)
           klass.where(id: flow.id).delete_all
         end
       end
     end
+  end
+
+  def purge_visitor_sign_up_flows(klass, now:, batch_size:)
+    completed_status_id = klass.status_id_for("COMPLETED")
+    completed_cleanup_status_id = klass.cleanup_status_id_for(:completed)
+    cleanup_required_status_ids = SignUpArtifactCleanup.cleanup_status_ids(klass) - [completed_status_id]
+    eligible_scope = klass.where(purge_eligible_at: ..now)
+    completed_scope = eligible_scope.where(status_id: completed_status_id)
+    cleaned_terminal_scope = eligible_scope.where(
+      status_id: cleanup_required_status_ids,
+      cleanup_status_id: completed_cleanup_status_id,
+    )
+
+    completed_scope.or(cleaned_terminal_scope).in_batches(of: batch_size).delete_all
   end
 
   def purge_client_tokens(klass, now:, batch_size:)
@@ -194,12 +257,14 @@ class RetentionPurgeJob < ApplicationJob
                 current = klass.lock.find_by(id: token.id, public_id: token.public_id)
                 next unless current
                 next if client_token_source_hold?(current, owner)
+                next if OpAuthorityStopPurger.release_roots!(realm: "app", root_ids: [current.id]).any?
 
                 klass.where(id: current.id).delete_all
               end
             end
           end
-        elsif !client_token_source_hold?(token)
+        elsif !client_token_source_hold?(token) &&
+            OpAuthorityStopPurger.release_roots!(realm: "app", root_ids: [token.id]).empty?
           klass.where(id: token.id).delete_all
         end
       end
@@ -272,10 +337,15 @@ class RetentionPurgeJob < ApplicationJob
   end
 
   def client_sign_up_flow_protected?(flow)
-    ClientSecretIssuance.exists?(
-      sign_up_flow_ref: flow.public_id,
-      client_id: flow.principal_id,
-    ) || client_sign_up_flow_source_hold?(flow)
+    sign_up_flow_retention_hold?(flow) ||
+      ClientSecretIssuance.exists?(
+        sign_up_flow_ref: flow.public_id,
+        client_id: flow.principal_id,
+      ) || client_sign_up_flow_source_hold?(flow)
+  end
+
+  def sign_up_flow_retention_hold?(flow)
+    !flow.sign_up_completed? && (!flow.sign_up_terminal? || !flow.cleanup_completed?)
   end
 
   def client_sign_up_flow_source_hold?(flow)

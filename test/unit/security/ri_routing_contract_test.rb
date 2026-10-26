@@ -22,8 +22,10 @@ require "test_helper"
 #      chain (catches a leaf that loses the mechanism through inheritance rather than through a
 #      visible `skip_before_action`).
 #
-# Tests 1-3 read source files, so they run without booting a full request stack. Test 4 resolves the
-# real classes, because that is the only way to see a chain assembled across a parent controller.
+# Tests 1-3 mostly read source files. Visa is the deliberate exception: its protocol authority
+# inherits the shared root-session authority rather than defining a second RP application base, so
+# its effective callback chain is the contract. Test 4 resolves the real classes for every target,
+# because that is the only way to see a chain assembled across a parent controller.
 class RiRoutingContractTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -39,7 +41,14 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     warp/app warp/com warp/org
     palm/app
     tech/org
+    visa/app visa/com visa/org
   ).freeze
+
+  # Visa's browser-facing authority pages intentionally reuse the root-session Authority base from
+  # the matching Base realm. They must inherit PreferenceGlobal and set_region, but do not own a
+  # second ApplicationController: creating one would blur the OP/RP boundary described by two.md
+  # V3. The source-level contract below therefore resolves AuthorityController for these targets.
+  RI_SHARED_AUTHORITY_TARGETS = %w(visa/app visa/com visa/org).freeze
 
   # Targets deliberately outside the contract. An unexplained absence is indistinguishable from the
   # oversight this test exists to catch, so every exemption is grouped under a stated reason.
@@ -75,13 +84,10 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/auth/org/edge/v0/token/checks_controller.rb
     app/controllers/auth/org/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
-    app/controllers/base/app/oauth/authorizations_controller.rb
     app/controllers/base/app/oidc/callbacks_controller.rb
     app/controllers/base/app/sign/interruptions_controller.rb
-    app/controllers/base/com/oauth/authorizations_controller.rb
     app/controllers/base/com/oidc/callbacks_controller.rb
     app/controllers/base/com/sign/interruptions_controller.rb
-    app/controllers/base/org/oauth/authorizations_controller.rb
     app/controllers/base/org/oidc/callbacks_controller.rb
     app/controllers/base/org/sign/interruptions_controller.rb
     app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
@@ -99,6 +105,9 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/palm/app/sign/interruptions_controller.rb
     app/controllers/tech/org/oidc/callbacks_controller.rb
     app/controllers/tech/org/sign/interruptions_controller.rb
+    app/controllers/visa/app/authorization_base_controller.rb
+    app/controllers/visa/com/authorization_base_controller.rb
+    app/controllers/visa/org/authorization_base_controller.rb
     app/controllers/warp/app/oidc/callbacks_controller.rb
     app/controllers/warp/app/sign/interruptions_controller.rb
     app/controllers/warp/com/oidc/callbacks_controller.rb
@@ -145,15 +154,23 @@ class RiRoutingContractTest < ActiveSupport::TestCase
   test "every participating target wires up the ri mechanism on its ApplicationController" do
     offenders =
       RI_PARTICIPATING_TARGETS.filter_map do |target|
-        relative_path = "#{CONTROLLER_ROOT}/#{target}/application_controller.rb"
-        absolute_path = Rails.root.join(relative_path)
+        if RI_SHARED_AUTHORITY_TARGETS.include?(target)
+          controller = "#{target.camelize}::AuthorityController".constantize
+          missing = []
+          missing << "PreferenceGlobal" unless controller.ancestors.include?(PreferenceGlobal)
+          missing << "set_region" unless before_action_filters(controller).include?(:set_region)
+          relative_path = "#{CONTROLLER_ROOT}/#{target}/authority_controller.rb"
+        else
+          relative_path = "#{CONTROLLER_ROOT}/#{target}/application_controller.rb"
+          absolute_path = Rails.root.join(relative_path)
 
-        next "#{relative_path}: missing" unless absolute_path.exist?
+          next "#{relative_path}: missing" unless absolute_path.exist?
 
-        content = read_source(absolute_path)
-        missing = []
-        missing << "include ::PreferenceGlobal" unless content.match?(INCLUDE_PREFERENCE_GLOBAL_PATTERN)
-        missing << "before_action :set_region" unless content.match?(BEFORE_ACTION_SET_REGION_PATTERN)
+          content = read_source(absolute_path)
+          missing = []
+          missing << "include ::PreferenceGlobal" unless content.match?(INCLUDE_PREFERENCE_GLOBAL_PATTERN)
+          missing << "before_action :set_region" unless content.match?(BEFORE_ACTION_SET_REGION_PATTERN)
+        end
         next if missing.empty?
 
         "#{relative_path}: missing #{missing.join(" and ")}"

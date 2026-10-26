@@ -124,12 +124,6 @@ module SignEmailRegistrable
     )
   end
 
-  # Hook for subclasses to clean up a pending actor before starting a new registration attempt.
-  # The base implementation is a no-op; controllers that track the pending actor through a
-  # sign-up flow ticket should override this to use the ticket's principal_id instead.
-  def cleanup_pending_signup!
-  end
-
   def pending_email_status_id
     ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
   end

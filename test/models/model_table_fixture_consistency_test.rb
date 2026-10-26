@@ -17,20 +17,8 @@ class ModelTableFixtureConsistencyTest < ActiveSupport::TestCase
     "OpAppConsumedJti" => "op_consumed_jtis",
     "OpComConsumedJti" => "op_consumed_jtis",
     "OpOrgConsumedJti" => "op_consumed_jtis",
-    "OpAppLogoutFlow" => "logout_flows",
-    "OpAppLogoutFlowParticipant" => "logout_flow_participants",
-    "OpAppLogoutReceipt" => "logout_receipts",
-    "OpAppOutboxEvent" => "op_outbox_events",
     "OpAppInboundEventReceipt" => "op_inbound_event_receipts",
-    "OpComLogoutFlow" => "logout_flows",
-    "OpComLogoutFlowParticipant" => "logout_flow_participants",
-    "OpComLogoutReceipt" => "logout_receipts",
-    "OpComOutboxEvent" => "op_outbox_events",
     "OpComInboundEventReceipt" => "op_inbound_event_receipts",
-    "OpOrgLogoutFlow" => "logout_flows",
-    "OpOrgLogoutFlowParticipant" => "logout_flow_participants",
-    "OpOrgLogoutReceipt" => "logout_receipts",
-    "OpOrgOutboxEvent" => "op_outbox_events",
     "OpOrgInboundEventReceipt" => "op_inbound_event_receipts",
   }.merge(
     RpCellBinding::CELLS.values.each_with_object({}) do |cell, mapping|
@@ -40,7 +28,6 @@ class ModelTableFixtureConsistencyTest < ActiveSupport::TestCase
         "#{cell.record_prefix}OpSessionBinding" => "rp_op_session_bindings",
         "#{cell.record_prefix}Session" => "rp_sessions",
         "#{cell.record_prefix}CallbackState" => "rp_callback_states",
-        "#{cell.record_prefix}RefreshAttempt" => "rp_refresh_attempts",
         "#{cell.record_prefix}EventReceipt" => "rp_event_receipts",
       }.each { |model, table| mapping[model] = table }
     end,

@@ -179,25 +179,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: nil,
     )
-    get auth_app_sign_in_url(ri: "jp", entry_ref: @local_admission.reference), headers: { "Host" => @host }
-    admission_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post "/ceremony_bindings",
-         params: { entry_ref: @local_admission.reference, authenticity_token: admission_csrf, ri: "jp" },
-         headers: { "Host" => @host }
-
-    assert_response :see_other
-
-    # Independent Base HTTP tests cover confirmation; isolate OTP behavior after public binding transitions.
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-      surface: "app",
+    admit_auth_ceremony_entry!(
+      auth_app_sign_in_path,
       reference: @local_admission.reference,
+      params: { ri: "jp" },
     )
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get auth_app_sign_in_url(ri: "jp", entry_ref: @local_admission.reference), headers: { "Host" => @host }
-    admission_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_in_url(ri: "jp"),
-         params: { entry_ref: @local_admission.reference, authenticity_token: admission_csrf },
-         headers: { "Host" => @host }
 
     assert_response :see_other
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -262,28 +248,19 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     missing_session = open_session
     browser_bindings = {}
     [existing_session, missing_session].each do |browser|
+      browser.host!(@host)
+      browser.https!
       admission = OidcTestEntry.issue!(
         surface: "app",
         intent: "sign_in",
         base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
         base_token: nil,
       )
-      browser.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host })
-      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }, headers: { "Host" => @host },
-      )
-
-      assert_equal 303, browser.response.status
-      # Public confirmation isolates parity; the Base browser boundary is covered independently.
-      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      browser.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host })
-      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      browser.post(
-        auth_app_sign_in_url(ri: "jp"),
-        params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: { "Host" => @host },
+      admit_auth_ceremony_entry!(
+        auth_app_sign_in_path,
+        reference: admission.reference,
+        params: { ri: "jp" },
+        browser: browser,
       )
 
       assert_equal 303, browser.response.status
@@ -351,7 +328,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
                  pass_code_field.fetch("placeholder")
     assert_equal "client_email[pass_code]", pass_code_field.fetch("name")
     assert_equal "one-time-code", pass_code_field.fetch("autocomplete")
-    assert_includes inertia_props.fetch("description"), "メールアドレス"
+    assert_equal I18n.t("sign.app.authentication.email.edit.description"), inertia_props.fetch("description")
     assert_equal I18n.t("sign.app.authentication.email.edit.delivery_help"),
                  inertia_props.fetch("delivery_help")
   end
@@ -378,25 +355,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     refused_admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
-    refused_browser.get("/sign/in", params: { entry_ref: refused_admission.reference, ri: "jp" })
-    csrf = refused_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    refused_browser.post(
-      "/ceremony_bindings", params: {
-        entry_ref: refused_admission.reference, authenticity_token: csrf, ri: "jp",
-      },
-    )
-
-    assert_equal 303, refused_browser.response.status
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-      surface: "app",
-      reference: refused_admission.reference,
-    )
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    refused_browser.get("/sign/in", params: { entry_ref: refused_admission.reference, ri: "jp" })
-    csrf = refused_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    refused_browser.post(
-      "/sign/in",
-      params: { entry_ref: refused_admission.reference, authenticity_token: csrf, ri: "jp" },
+    admit_auth_ceremony_entry!(
+      "/sign/in", reference: refused_admission.reference, params: { ri: "jp" }, browser: refused_browser,
     )
 
     assert_equal 303, refused_browser.response.status
@@ -529,14 +489,10 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: "m" * 43, base_token: nil,
     )
-    other.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference))
-    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    other.post("/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+    admit_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: admission.reference, params: { ri: "jp" }, browser: other,
+    )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    other.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference))
-    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    other.post(auth_app_sign_in_url(ri: "jp"), params: { entry_ref: admission.reference, authenticity_token: csrf })
     other_binding = nil
     other_ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     other.post(

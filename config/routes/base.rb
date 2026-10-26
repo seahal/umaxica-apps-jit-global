@@ -158,7 +158,7 @@ scope(module: :base, as: :base) do
       scope path: :sign do
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
-        resource :out_completion, only: %i(show create), path: "out/completion",
+        resource :out_completion, only: :show, path: "out/completion",
                                   controller: :sign_outs, as: :sign_out_completion
       end
 
@@ -184,29 +184,6 @@ scope(module: :base, as: :base) do
             get :theme, to: "themes#show"
             patch :theme, to: "themes#update"
           end
-        end
-      end
-
-      # Edge compatibility API: token lifecycle management. These are Base authority and DBSC
-      # protocol paths, so they require a client/authority review before any `/api/v0` migration.
-      # FIXME: [routing] Keep this protocol namespace until its token-management contract and
-      # clients are reviewed; renaming it alone risks breaking existing clients. See
-      # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
-      namespace :edge do
-        namespace :v0 do
-          namespace :token do
-            resource :status, only: :show, path: "check", controller: :checks, as: :check
-            resource :dbsc, only: :create
-            resource :refresh, only: :create
-          end
-        end
-      end
-
-      # Base resolves session-limit remediation before resuming OIDC/social flows.
-      namespace :sign do
-        namespace :in do
-          resource :limitation, only: %i(show update destroy), controller: :limitations
-          post "limitation", to: "limitations#update", as: :limitation_continue
         end
       end
 
@@ -439,7 +416,7 @@ scope(module: :base, as: :base) do
       scope path: :sign do
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
-        resource :out_completion, only: %i(show create), path: "out/completion",
+        resource :out_completion, only: :show, path: "out/completion",
                                   controller: :sign_outs, as: :sign_out_completion
       end
 
@@ -467,17 +444,6 @@ scope(module: :base, as: :base) do
         end
       end
 
-      # Edge compatibility API: token lifecycle management.
-      namespace :edge do
-        namespace :v0 do
-          namespace :token do
-            resource :status, only: :show, path: "check", controller: :checks, as: :check
-            resource :dbsc, only: :create
-            resource :refresh, only: :create
-          end
-        end
-      end
-
       # Step-up verification.
       resource :verification, only: %i(show create)
       namespace :verification do
@@ -497,6 +463,7 @@ scope(module: :base, as: :base) do
         resources :passkeys, only: %i(index show new create update destroy)
         namespace :mfa do
           resource :reset, only: :show
+          resource :challenge, only: %i(show update)
         end
         resource :recovery, only: :show do
           resource :completion, only: :create, module: :recovery
@@ -772,7 +739,7 @@ scope(module: :base, as: :base) do
       scope path: :sign do
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
-        resource :out_completion, only: %i(show create), path: "out/completion",
+        resource :out_completion, only: :show, path: "out/completion",
                                   controller: :sign_outs, as: :sign_out_completion
       end
 
@@ -796,17 +763,6 @@ scope(module: :base, as: :base) do
             patch :cookie, to: "cookies#update"
             get :theme, to: "themes#show"
             patch :theme, to: "themes#update"
-          end
-        end
-      end
-
-      # Edge compatibility API: token lifecycle management.
-      namespace :edge do
-        namespace :v0 do
-          namespace :token do
-            resource :status, only: :show, path: "check", controller: :checks, as: :check
-            resource :dbsc, only: :create
-            resource :refresh, only: :create
           end
         end
       end

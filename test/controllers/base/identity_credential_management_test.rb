@@ -44,7 +44,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       name: "removable", visitor_id: visitor.id,
       visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN, uses: 10, status: :active,
     )
-    VisitorSecretCredential.issue!(
+    keeper, = VisitorSecretCredential.issue!(
       name: "keeper", visitor_id: visitor.id,
       visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN, uses: 10, status: :active,
     )
@@ -119,6 +119,12 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    request_headers = {
+      "Authorization" => "Bearer #{access_token}",
+      "Client-Agent" => "Mozilla/5.0",
+      "Host" => host,
+      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+    }
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
     begin
       rp_cookie_pairs =
@@ -165,16 +171,30 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
     end
     post base_com_identity_secret_removal_url(removable.public_id, ri: "jp", host: host),
-         headers: {
-           "Authorization" => "Bearer #{access_token}",
-           "Client-Agent" => "Mozilla/5.0",
-           "Host" => host,
-           "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-         }
+         headers: request_headers
 
     assert_response :see_other
     assert_equal VisitorSecretCredential.status_id_for(:deleted),
                  removable.reload.visitor_secret_credential_status_id
+    assert_nil token.reload.last_step_up_at
+
+    post base_com_identity_secret_removal_url(keeper.public_id, ri: "jp", host: host), headers: request_headers
+
+    assert_includes [401, 302, 303], response.status
+    assert_equal VisitorSecretCredentialStatus::ACTIVE, keeper.reload.visitor_secret_credential_status_id
+
+    token.update!(
+      last_step_up_at: VisitorToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_aal: "aal2", last_step_up_method: "passkey", last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:com", last_step_up_session_public_id: token.public_id,
+      last_step_up_credential_ref: visitor_passkey.public_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+    post base_com_identity_secret_removal_url(keeper.public_id, ri: "jp", host: host), headers: request_headers
+
+    assert_response :see_other
+    assert_equal VisitorSecretCredential.status_id_for(:deleted), keeper.reload.visitor_secret_credential_status_id
   end
 
   test "org secret credential removal discards the credential when another remains" do

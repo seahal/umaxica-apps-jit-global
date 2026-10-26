@@ -9,7 +9,6 @@ class IdentityCeremonyResultNumericDateTest < ActiveSupport::TestCase
     IdentityEmailCeremonyResult,
     IdentityPasskeyCeremonyResult,
     IdentitySecretCredentialCeremonyResult,
-    IdentitySocialCeremonyResult,
     IdentityStepUpCeremonyResult,
     IdentityTelephoneCeremonyResult,
     IdentityTotpCeremonyResult,

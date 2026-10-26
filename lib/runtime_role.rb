@@ -115,7 +115,7 @@ module RuntimeRole
   ).freeze
 
   VISA_OP_PREFIXES = %w(
-    ceremony_binding_confirmations oauth oidc sign_byes sign/in well_known
+    ceremony_binding_confirmations edge/v0/token oauth oidc roots sign_byes sign/in well_known
   ).freeze
   VISA_ANY_PREFIXES = %w(
     health healths revisions robots csp_violation_reports api/v0/healths api/v0/revisions

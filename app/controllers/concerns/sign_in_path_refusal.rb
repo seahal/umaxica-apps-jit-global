@@ -7,8 +7,8 @@
 module SignInPathRefusal
   private
 
-  def refuse_sign_in_path!(reason, body: nil, status: nil)
-    refusal = record_sign_in_path_refusal!(reason)
+  def refuse_sign_in_path!(reason, body: nil, status: nil, clear_continuity: true)
+    refusal = record_sign_in_path_refusal!(reason, clear_continuity:)
     return refusal if performed?
 
     render plain: body || refusal_body(refusal),
@@ -16,7 +16,7 @@ module SignInPathRefusal
            status: status || refusal_response_status(refusal)
   end
 
-  def record_sign_in_path_refusal!(reason)
+  def record_sign_in_path_refusal!(reason, clear_continuity: true)
     refusal = SignInPathRefusalValue.for(reason)
     return refusal if @sign_in_path_refusal_logged
 
@@ -29,7 +29,7 @@ module SignInPathRefusal
       ),
     )
     @sign_in_path_refusal_logged = true
-    clear_sign_in_path_continuity! if refusal.clears_continuity?
+    clear_sign_in_path_continuity! if clear_continuity && refusal.clears_continuity?
     refusal
   end
 

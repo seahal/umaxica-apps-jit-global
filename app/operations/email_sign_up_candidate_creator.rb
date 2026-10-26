@@ -20,7 +20,7 @@ class EmailSignUpCandidateCreator
 
             email.visitor_email_status_id = VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
             email.visitor = Visitor.create!(
-              status_id: VisitorStatus::ACTIVE,
+              status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
               security_mode_id: VisitorSecurityMode::NORMAL, visibility_id: VisitorVisibility::VISITOR,
             )
           else raise ArgumentError, "unsupported Email signup candidate realm"

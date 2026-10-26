@@ -26,7 +26,7 @@ surface it names.
 ## (b) Registration
 
 - Discoverable credentials on every surface (`RegistrationVerifier::RESIDENT_KEY_BY_SURFACE`,
-  `resident_key: "required"`), attestation `none`, User Verification required
+  `resident_key: "required"` for sign-up, Identity bootstrap and Base management), attestation `none`, User Verification required
   (`Webauthn::UvPolicy`). Registration options request the `credProps` extension; ORG refuses a
   credential the client does not report as discoverable (`rk: true`) with
   `DiscoverableCredentialRequiredError`, and a UV=false attestation is refused on every surface.
@@ -44,14 +44,16 @@ surface it names.
 
 - APP and COM are identifier-first: the options request carries `identifier` (an Email or
   Telephone). `PasskeySignInIdentityResolverQuery` selects the Identity only through an effective
-  contact binding of that surface. A missing identifier is refused with 422. An unknown,
-  unfinalized, released or other-surface identifier is not distinguished in the response: the
-  challenge is bound to an actor key no credential owns (`<surface>:0`).
+  contact binding of that surface. A missing or empty identifier is refused with 422. An unknown,
+  malformed, unverified, unfinalized, released, expired or other-surface identifier is not
+  distinguished in the response: the challenge is bound to an actor key no credential owns
+  (`<surface>:0`).
 - `allowCredentials` is always empty on APP and COM; the authenticator offers its discoverable
   credentials.
 - Verification requires the presenting credential's owner to equal the Identity the challenge was
-  bound to. The `userHandle` the client sends is not used for selection. A credential of another
-  Identity is refused with the same 401 as a missing credential.
+  bound to. The `userHandle` the client sends is not used for selection; when present, its decoded
+  bytes must equal that Identity's immutable opaque handle. A credential of another Identity or a
+  mismatched returned handle is refused with the same 401 as a missing credential.
 - ORG Normal runs after the Entra sign-in and binds to the Operator that the Entra transaction
   names. ORG Emergency selects by Employee Number, sends no descriptors, and produces a Standby
   context.
@@ -81,7 +83,7 @@ surface it names.
 
 | ADR | Effect today |
 |---|---|
-| `adr/passkey-identifier-first-sign-in.md` | Identity selection before the ceremony; four-slot capacity and the ORG non-discoverable paragraph superseded by the account-label ADR |
+| `adr/passkey-identifier-first-sign-in.md` | Identity selection before the ceremony; ten-Passkey capacity and discoverable ORG credentials, with the account-label amendment |
 | `adr/passkey-authenticator-account-label.md` | Non-identifying label; ORG discoverable; capacity ten |
 | `adr/credential-response-nondisclosure.md` | ORG discoverable + UV; Emergency without descriptors; one refusal message |
 | `adr/webauthn-discoverable-direct-sign-in.md` | Usernameless APP/COM selection superseded by identifier-first |

@@ -46,7 +46,37 @@ module SignSocialAuthenticationEndpoint
   def disconnect_social_authentication(provider:)
     return redirect_social_unlink_turnstile_failure(provider) unless cloudflare_turnstile_stealth_validation["success"]
 
-    ExternalAuthenticationUnlinkUseCase.call(provider: provider, user: current_client)
+    token = current_session_token
+    unless token.is_a?(ClientToken) && token.user_id == current_client.id
+      raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in")
+    end
+
+    requirement = social_auth_step_up_requirement(
+      token, ttl: SocialAuth::STEP_UP_TTL, scope: verification_scope,
+    )
+    result = nil
+    current_client.with_lock do
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          device_session = token.device_session_record!
+          device_session.with_lock do
+            token.with_lock do
+              now = ClientToken.database_now
+              unless current_client.login_allowed? && token.active_status?(now) && device_session.usable? &&
+                  device_session.current_refresh_token_id == token.id &&
+                  StepUpResolver.call(token:, requirement:, now:).satisfied?
+                raise SocialAuth::StepUpRequiredError.new("errors.social_auth.step_up_required")
+              end
+
+              result = ExternalAuthenticationUnlinkUseCase.call(provider: provider, user: current_client)
+              if result.status == :unlinked
+                token.consume_step_up_evidence!(requirement:, now:)
+              end
+            end
+          end
+        end
+      end
+    end
     redirect_to(
       social_unlink_success_path(provider),
       status: :see_other,

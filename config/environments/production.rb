@@ -142,14 +142,6 @@ Rails.application.configure do
     read_timeout: 10,
   }
 
-  # config/initializers/locale.rb is the single source of truth for the load path, available
-  # locales, and the fallback chain itself; setting config.i18n.fallbacks here as well would be
-  # overwritten by that initializer and hide which value actually applies. These two settings are
-  # what it reads: production keeps the en <-> ja chain and serves the other language silently, so
-  # a visitor is never shown an error page for a missing translation.
-  config.x.locale.fallbacks_enabled = true
-  config.x.locale.raise_on_fallback = false
-
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false
 
@@ -271,6 +263,7 @@ Rails.application.configure do
   # Raise on email delivery errors (immediate detection of SES failures)
   config.action_mailer.raise_delivery_errors = true
 
-  # Raise on missing translation keys (quality assurance for i18n)
-  config.i18n.raise_on_missing_translations = true
+  # Render Rails' normal missing-translation output in production and log the key and locale.
+  # Development and test keep raising so missing copy is caught before deployment.
+  config.i18n.raise_on_missing_translations = false
 end

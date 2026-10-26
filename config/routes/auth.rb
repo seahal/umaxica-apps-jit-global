@@ -43,7 +43,7 @@ scope(module: :auth, as: :auth) do
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
       resource(
         :ceremony_binding,
-        only: %i(show create), path: "ceremony_bindings",
+        only: :show, path: "ceremony_bindings",
         controller: :ceremony_bindings, as: :ceremony_bindings,
       )
 
@@ -60,8 +60,8 @@ scope(module: :auth, as: :auth) do
 
       # Canonical ceremony entrypoints and authed-out confirmation/cleanup.
       namespace :sign do
-        resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
-        resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
+        resource :registration, only: :show, path: "up", controller: :ups, as: :up
+        resource :session, only: :show, path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: :show, path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
@@ -171,7 +171,6 @@ scope(module: :auth, as: :auth) do
           # `destroy` cancels the pending second-factor ceremony.
           resource :challenge, only: %i(show destroy)
           namespace :challenge do
-            resource :totp, only: %i(new create)
             resource :passkey, only: %i(new create)
           end
         end
@@ -220,12 +219,12 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: %i(show create)
+      resource :verification, only: :show
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: %i(new create)
+        resource :setup, only: :new
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
@@ -297,7 +296,7 @@ scope(module: :auth, as: :auth) do
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
       resource(
         :ceremony_binding,
-        only: %i(show create), path: "ceremony_bindings",
+        only: :show, path: "ceremony_bindings",
         controller: :ceremony_bindings, as: :ceremony_bindings,
       )
 
@@ -310,8 +309,8 @@ scope(module: :auth, as: :auth) do
 
       # Canonical ceremony entrypoints and authed-out confirmation.
       namespace :sign do
-        resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
-        resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
+        resource :registration, only: :show, path: "up", controller: :ups, as: :up
+        resource :session, only: :show, path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: :show, path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
@@ -412,12 +411,12 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: %i(show create)
+      resource :verification, only: :show
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: %i(new create)
+        resource :setup, only: :new
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
@@ -475,7 +474,7 @@ scope(module: :auth, as: :auth) do
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
       resource(
         :ceremony_binding,
-        only: %i(show create), path: "ceremony_bindings",
+        only: :show, path: "ceremony_bindings",
         controller: :ceremony_bindings, as: :ceremony_bindings,
       )
 
@@ -497,8 +496,8 @@ scope(module: :auth, as: :auth) do
 
       # Canonical ceremony entrypoints and authed-out confirmation.
       namespace :sign do
-        resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
-        resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
+        resource :registration, only: :show, path: "up", controller: :ups, as: :up
+        resource :session, only: :show, path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: :show, path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D09: first-page Cancel to the RP. Org has no public Sign Up, so no Switch.
@@ -603,12 +602,12 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: %i(show create)
+      resource :verification, only: :show
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: %i(new create)
+        resource :setup, only: :new
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)

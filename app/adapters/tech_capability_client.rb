@@ -16,7 +16,8 @@ class TechCapabilityClient
     def allowed?(access_token:)
       return false if access_token.blank?
 
-      endpoint = "#{OidcIssuer.for_resource_type("operator")}/api/v0/tech-capability-checks"
+      base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type("operator")
+      endpoint = "#{base_origin}/api/v0/tech-capability-checks"
       assertion = OidcClientAssertionJwt.issue(client_id: CLIENT_ID, token_url: endpoint)
       return false if assertion.blank?
 

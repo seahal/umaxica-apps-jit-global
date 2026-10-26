@@ -6,6 +6,7 @@ require "test_helper"
 # Mass unit tops for still-cold raise/return arms that do not need the request stack.
 class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
+  GateControllerBoundary = Struct.new(:session, :params, :current_sign_up_flow_ticket)
 
   test "Withdrawable recovery and early-termination blank arms" do
     client = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
@@ -22,11 +23,7 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
   end
 
   test "SignUpStepGate refuses mismatched family unusable tickets and unknown steps" do
-    controller = ApplicationController.new
-    request = ActionDispatch::TestRequest.create
-    request.set_header("rack.session", ActionController::TestSession.new)
-    controller.set_request!(request)
-    controller.set_response!(ActionDispatch::TestResponse.new)
+    controller = GateControllerBoundary.new({}, {})
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
       auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
@@ -37,6 +34,7 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
     controller.params = ActionController::Parameters.new(
       AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: flow, surface: :app),
     )
+    controller.current_sign_up_flow_ticket = flow
     mismatch = SignUpStepGate.for_show(controller: controller, surface: :app, family: "email", step: :otp)
 
     assert_equal :invalid, mismatch.status
@@ -51,8 +49,8 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
     flow.expire_sign_up!
     expired = SignUpStepGate.for_show(controller: controller, surface: :app, family: "telephone", step: :otp)
 
-    assert_equal :refused, expired.status
-    assert_equal :no_active_flow, expired.refusal
+    assert_equal :invalid, expired.status
+    assert_equal ["ticket is not usable"], expired.errors
   end
 
   test "AuthenticationBulletinGate treats blank bulletin state as expired" do
