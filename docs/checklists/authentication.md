@@ -10,8 +10,10 @@ surface-specific. These are durable requirements, not current verification resul
 - AUTH-2: A browser-bound ceremony refuses stale, mismatched, cross-browser and replayed admission.
   A Design D continuation GET requires Fetch Metadata navigation/document, verifies the host-only
   browser binding before touching the one-time record, consumes atomically, returns the same next
-  redirect for a same-browser repeat within issuance + 10 s, sends `no-store` and `no-referrer`, and
-  leaves a clean final URL. HEAD and all other non-navigation requests are refused.
+  redirect for a same-browser repeat only within 10 seconds of the original issuance, sends
+  `no-store` and `no-referrer`, and leaves a clean final URL. The deadline is absolute for both
+  redemption and every same-browser repeat; `redeemed_at` does not open or extend a repeat window.
+  HEAD and all other non-navigation requests are refused.
 - AUTH-3: Missing or contradictory authentication evidence produces an explicit refusal, without
   inferring another actor, credential, browser or assurance level.
 - AUTH-4: Auth supplies ceremony continuity, not an independent general login session or authority

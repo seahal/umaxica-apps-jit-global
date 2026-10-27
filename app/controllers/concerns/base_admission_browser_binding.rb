@@ -9,6 +9,8 @@ require "base64"
 module BaseAdmissionBrowserBinding
   extend ActiveSupport::Concern
 
+  include FrameDenyingContentSecurityPolicy
+
   BROWSER_NONCE_SESSION_KEY = "auth_admission_browser_nonce"
   BROWSER_NONCE_BYTES = 32
 
@@ -72,7 +74,7 @@ module BaseAdmissionBrowserBinding
   def apply_base_browser_continuation_headers!
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    deny_framing!
   end
 
   # cancellation: the Cancel exit stays open after the curfew; it is how the attempt ends (WU-06).

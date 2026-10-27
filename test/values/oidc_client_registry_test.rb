@@ -46,24 +46,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     end
   end
 
-  test "each registered RP coordinator destination is an exact registered completion URI" do
-    AuthBoundaryAuthorityMap.first_party_rp_client_ids.each do |client_id|
-      metadata = AuthBoundaryAuthorityMap.rp_faces.fetch(client_id)
-      client = OidcClientRegistry.find!(client_id)
-
-      RequestContextContract.allowed_regions.each do |region|
-        completion_uri = AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: metadata.fetch(:surface),
-          surface: metadata.fetch(:face),
-          ri: region,
-        )
-
-        assert_includes client.post_logout_redirect_uris, completion_uri,
-                        "#{client_id} does not register its #{region} completion URI"
-      end
-    end
-  end
-
   test "find returns nil for unknown client" do
     client = OidcClientRegistry.find("unknown-client")
 

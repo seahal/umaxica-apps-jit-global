@@ -57,9 +57,9 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
                      Valkey::AuthState::OpaqueAdmissionStore.new.read_reference!(reference: issuance.reference)
         assert_nil binding.admitted_auth_ceremony_session_id
 
-        # rubocop:disable Lint/Void -- Rack::Test::CookieJar#merge mutates the jar; it has no merge!.
-        browser.cookies.merge("#{sid_key}=#{Rack::Utils.escape(retained_sid)}", URI.parse("https://#{host}/"))
-        # rubocop:enable Lint/Void
+        _merged_cookie_jar = browser.cookies.merge(
+          "#{sid_key}=#{Rack::Utils.escape(retained_sid)}", URI.parse("https://#{host}/"),
+        )
         if attack == "unattached"
           attach_auth_ceremony_entry!("/sign/in", reference: issuance.reference, params: { ri: "jp" }, browser:)
         end

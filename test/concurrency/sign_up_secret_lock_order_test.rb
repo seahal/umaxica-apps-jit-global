@@ -79,4 +79,83 @@ class SignUpSecretLockOrderTest < ActiveSupport::TestCase
   ensure
     worker&.join(5)
   end
+
+  test "A35-2 replayed termination waits behind cleanup job without a cross-store lock cycle" do
+    @flow.update!(cleanup_status_id: ClientSignUpFlowCleanupStatus::PENDING)
+
+    assert_not FeatureFlags.enabled?(RetentionPurgeJob::FEATURE_NAME), "cleanup must be enabled"
+    selected = ClientSignUpFlow.where(
+      cleanup_status_id: [ClientSignUpFlowCleanupStatus::PENDING, ClientSignUpFlowCleanupStatus::FAILED],
+      status_id: SignUpArtifactCleanup.cleanup_status_ids(ClientSignUpFlow),
+    ).order(:id).first
+
+    assert_equal @flow.id, selected.id, "cleanup must select the test Flow in its first batch"
+    cleanup_pid = Queue.new
+    replay_pid = Queue.new
+    cleanup = nil
+    replay = nil
+    Client.transaction do
+      Client.lock.find(@actor.id)
+      cleanup =
+        Thread.new do
+          AppZenithRecord.connection_pool.with_connection do |connection|
+            cleanup_pid << Integer(connection.select_value("SELECT pg_backend_pid()"))
+            OpBaseAppRecord.connection_pool.with_connection do
+              RetentionPurgeJob.perform_now(batch_size: 1)
+            end
+          end
+        end
+      pid = Timeout.timeout(5) { cleanup_pid.pop }
+      waited = false
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+      loop do
+        event =
+          Client.uncached do
+            Client.connection.select_value("SELECT pg_stat_clear_snapshot()::text")
+            Client.connection.select_value("SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(pid)}")
+          end
+        waited = event == "Lock"
+        break if waited || !cleanup.alive? || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+        sleep 0.01
+      end
+
+      assert waited, "The cleanup job must hold the Flow while waiting for the principal"
+      replay =
+        Thread.new do
+          OpBaseAppRecord.connection_pool.with_connection do |connection|
+            replay_pid << Integer(connection.select_value("SELECT pg_backend_pid()"))
+            SignUpTermination.call(cycle: ClientSignUpFlow.find(@flow.id), event: :cancel)
+          end
+        end
+      pid = Timeout.timeout(5) { replay_pid.pop }
+      waited = false
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+      loop do
+        event =
+          OpBaseAppRecord.uncached do
+            OpBaseAppRecord.connection.select_value("SELECT pg_stat_clear_snapshot()::text")
+            OpBaseAppRecord.connection.select_value(
+              "SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(pid)}",
+            )
+          end
+        waited = event == "Lock"
+        break if waited || !replay.alive? || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+        sleep 0.01
+      end
+
+      assert waited, "The replay must wait for the cleanup job's Flow lock"
+    end
+    Timeout.timeout(15) { cleanup.value }
+    result = Timeout.timeout(10) { replay.value }
+
+    assert_equal :ok, result.status
+    assert_equal ClientSignUpFlowStatus::CANCELLED, @flow.reload.status_id
+    assert_predicate @flow, :cleanup_completed?
+    assert_equal 1, @flow.cleanup_attempts_count
+  ensure
+    cleanup&.join(5)
+    replay&.join(5)
+  end
 end

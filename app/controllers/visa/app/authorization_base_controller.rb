@@ -158,9 +158,9 @@ module Visa
       def login_for_oidc(resource, transaction)
         secret_options =
           if transaction.secret_sign_in_flow_id
-            unless transaction.auth_method == "passcode"
-              raise AuthenticationBase::SignInFlowIssuanceRejected, "Secret OIDC authentication method mismatch"
-            end
+            # A transaction that names another method is a refusal like the other unusable-flow
+            # cases below, not an exception that escapes the continuation as a 500.
+            return { status: :login_failed } unless transaction.auth_method == "passcode"
 
             flow = ClientSignInFlow.find(transaction.secret_sign_in_flow_id)
             flow.with_lock do

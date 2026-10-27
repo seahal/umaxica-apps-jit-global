@@ -26,22 +26,28 @@ module AuthCeremonyContext
 
   def auth_social_admission_binding!
     record = admitted_auth_ceremony_session
-    unless record&.active? && record.admission_purpose == "authentication_handoff"
-      raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
-    end
+    social_admission_refusal!("ceremony_session_missing") unless record
+    social_admission_refusal!("ceremony_session_inactive") unless record.active?
+    social_admission_refusal!("ceremony_purpose_mismatch") unless
+      record.admission_purpose == "authentication_handoff"
 
     binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
-      .find_by!(admitted_auth_ceremony_session_id: record.id)
+      .find_by(admitted_auth_ceremony_session_id: record.id)
+    social_admission_refusal!("binding_missing") unless binding
+    social_admission_refusal!("binding_not_redeemed") unless binding.redeemed?
+    social_admission_refusal!("binding_retired") if binding.retired?
     # F5 (WU-06): the 60-second acceptance expiry bounded only the redemption; after it, the
     # attempt's curfew (AuthAdmissionCurfewGate) is the limit.
-    unless binding.redeemed? && !binding.retired? && AdmissionCurfewValue.for(binding).within? &&
-        (auth_ceremony_matches_intent?("sign_in") || auth_ceremony_matches_intent?("sign_up"))
-      raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
-    end
+    social_admission_refusal!("curfew_passed") unless AdmissionCurfewValue.for(binding).within?
+    social_admission_refusal!("intent_mismatch") unless
+      %w(sign_in sign_up).include?(auth_ceremony_handoff_intent(record))
 
     binding
-  rescue ActiveRecord::RecordNotFound
-    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+  end
+
+  # `check` names the failed condition for the log only; people see the same refusal for all.
+  def social_admission_refusal!(check)
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent", check: check)
   end
 
   def auth_sign_up_admission_binding!
@@ -82,8 +88,7 @@ module AuthCeremonyContext
     record if record&.admitted?
   end
 
-  def auth_ceremony_authorization_transaction
-    record = admitted_auth_ceremony_session
+  def auth_ceremony_authorization_transaction(record = admitted_auth_ceremony_session)
     return nil unless record&.admission_purpose == "authentication_handoff"
 
     transaction_ref = record&.authorization_transaction_ref
@@ -202,20 +207,22 @@ module AuthCeremonyContext
       return auth_ceremony_ticket_transaction([expected_intent.to_s])&.purpose == expected_intent.to_s
     end
 
-    transaction = auth_ceremony_authorization_transaction
-    return false if transaction.nil?
+    auth_ceremony_handoff_intent(admitted_auth_ceremony_session) == expected_intent.to_s
+  end
 
-    record = admitted_auth_ceremony_session
-    return false unless record
+  # Resolves the effective Sign In / Sign Up intent of an already-loaded admitted session, so a
+  # caller holding the record does not look the session up again for every intent it compares.
+  def auth_ceremony_handoff_intent(record)
+    return nil unless record
+
+    transaction = auth_ceremony_authorization_transaction(record)
+    return nil if transaction.nil?
 
     binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
       .find_by(admitted_auth_ceremony_session_id: record.id)
-    return false unless binding&.purpose == "authentication_handoff" &&
+    return nil unless binding&.purpose == "authentication_handoff" &&
       binding.authorization_transaction_id == transaction.id
 
-    AuthEntryIntentResolver.call(
-      prompt: transaction.oidc_prompt,
-      entry_intent: binding.entry_intent,
-    ) == expected_intent.to_s
+    AuthEntryIntentResolver.call(prompt: transaction.oidc_prompt, entry_intent: binding.entry_intent)
   end
 end

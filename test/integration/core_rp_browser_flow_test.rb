@@ -9,19 +9,19 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
     {
       host: ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
       client_id: "core-app-jp",
-      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      acme_host: ENV.fetch("PUBLIC_VISA_SERVICE_URL"), # WU-02: the OP is on Visa
       resource: -> { clients(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL"),
       client_id: "core-org-jp",
-      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+      acme_host: ENV.fetch("PUBLIC_VISA_STAFF_URL"),
       resource: -> { operators(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
       client_id: "core-com-jp",
-      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+      acme_host: ENV.fetch("PUBLIC_VISA_CORPORATE_URL"),
       resource: -> { create_visitor! },
     },
   ].freeze

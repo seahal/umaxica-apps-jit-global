@@ -67,13 +67,16 @@ module Auth
                        }
               end
 
-              # The template posted back to `request.path`; the signed target rides in the query so
-              # it never becomes a separate prop.
+              # The template posts back to `request.path`. The flow binding and the signed target ride
+              # in the query so the step gate can tell which flow the page was served for (an unbound
+              # update is refused as `flow_binding`) and neither becomes a separate prop.
               def sign_up_confirmation_action_path
+                query = sign_up_flow_binding_params
                 pt = signed_pt_param
-                return request.path if pt.blank?
+                query = query.merge(pt: pt) if pt.present?
+                return request.path if query.empty?
 
-                "#{request.path}?#{{ pt: pt }.to_query}"
+                "#{request.path}?#{query.to_query}"
               end
 
               def sign_up_surface = :app

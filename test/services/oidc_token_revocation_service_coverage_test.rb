@@ -5,7 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
-  self.fixture_table_names = []
+  fixtures :clients
 
   Token =
     Struct.new(:oidc_client_id, :oidc_jti) do
@@ -72,35 +72,42 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
   end
 
   test "revokes refresh token when the digest matches" do
-    token = Token.new("client-1", nil)
+    root = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
+    token = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: root,
+      client_device_session: root.device_session, oidc_client_id: "core-app-jp",
+      oidc_scope: "openid", last_used_at: Time.current,
+      refresh_token_expires_at: 1.day.from_now,
+    )
+    refresh_token = token.issue_refresh_token!
     service = ::OidcTokenRevoker.new(
-      token: "refresh.public.verifier",
-      client_id: "client-1",
+      token: refresh_token,
+      client_id: "core-app-jp",
       client_secret: "secret",
       host: "app.example.test",
     )
 
     OidcClientRegistry.stub(:authenticate, true) do
-      ClientToken.stub(:parse_refresh_token, ["public", "verifier"]) do
-        service.stub(:client_resource_type, "client") do
-          service.stub(:find_rp_session_by_public_id, token) do
-            token.define_singleton_method(:refresh_token_digest_matches?) { |verifier| verifier == "verifier" }
+      service.stub(:client_resource_type, "client") do
+        result = service.call
 
-            result = service.call
-
-            assert_predicate result, :success?
-            assert_predicate token, :revoked?
-          end
-        end
+        assert_predicate result, :success?
+        assert_predicate token.reload, :revoked?
       end
     end
   end
 
   test "revokes access token when refresh token parsing fails" do
-    token = Token.new("client-1", "jti-1")
+    root = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
+    token = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: root,
+      client_device_session: root.device_session, oidc_client_id: "core-app-jp",
+      oidc_scope: "openid", oidc_jti: "jti-1", last_used_at: Time.current,
+      refresh_token_expires_at: 1.day.from_now,
+    )
     service = ::OidcTokenRevoker.new(
       token: "access-token",
-      client_id: "client-1",
+      client_id: "core-app-jp",
       client_secret: "secret",
       host: "app.example.test",
     )
@@ -119,7 +126,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
                       result = service.call
 
                       assert_predicate result, :success?
-                      assert_predicate token, :revoked?
+                      assert_predicate token.reload, :revoked?
                     end
                   end
                 end

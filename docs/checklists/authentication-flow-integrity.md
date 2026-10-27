@@ -33,8 +33,11 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   admitted ceremony by changing its path or parameters.
 - Every APP/COM/ORG Binding has a required immutable OP-issued 30-minute curfew and an explicit,
   purpose-constrained intent. Switch copies its original curfew across repeated switches. A
-  re-verification Binding records `not_applicable`; NULL does not select an intent. The acceptance
-  code's shorter lifetime remains independent of curfew storage.
+  re-verification Binding records `not_applicable`; NULL does not select an intent. For an
+  `authentication_handoff`, the Auth ceremony expires at the exact stored Binding curfew and is
+  active immediately before it, but expired at and after it. The 60-second Binding expiry governs
+  redemption only; it does not shorten the ceremony or replace the curfew. The acceptance code's
+  shorter lifetime remains independent of curfew storage.
 - APP/COM sign-up Flows have one immutable Admission owner. Concurrent creation admits at most
   one in-progress Flow per Binding, while terminal history remains distinct. Binding collection
   retains every child until it is terminal, physically purgeable and either cleanup completed or
@@ -54,7 +57,7 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
 - Basis: F02/F03/F08/F11. Scope: each actual phase-bound GET/HEAD endpoint.
 - Given a valid current phase, reload succeeds without new proof/session artifacts. Given the same
   flow at another phase, request a past or unauthorized future phase: GET returns 409, text/plain,
-  exact body `戻るはだめです`, no Location and preserved Auth no-store; HEAD retains status/headers
+  exact body `この画面は古くなっています。最初からやり直してください。`, no Location and preserved Auth no-store; HEAD retains status/headers
   without a body. The Japanese phrase is required customer copy, not repository prose.
 - Flow and session workflow state remain unchanged: no halt/advance/cancel, OTP/challenge/provider
   creation or session issuance. No HTML/current-step recovery redirect. Non-phase errors keep their

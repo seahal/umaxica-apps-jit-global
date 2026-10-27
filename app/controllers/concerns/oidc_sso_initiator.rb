@@ -149,10 +149,13 @@ module OidcSsoInitiator
   end
 
   def oidc_token_url
-    public_token_endpoint = oidc_acme_service_origin.token_endpoint
-    return public_token_endpoint unless Rails.env.local?
+    oidc_back_channel_url(oidc_acme_service_origin.token_endpoint)
+  end
 
-    local_oidc_token_endpoint(public_token_endpoint)
+  # Server-to-server calls to the OP (token, UserInfo) reach this same Rails process. Locally the
+  # public HTTPS origin is served by the tunnel, not by this host, so the call goes to the local port.
+  def oidc_back_channel_url(public_endpoint)
+    OutboundHttp::LocalBackChannel.url(public_endpoint)
   end
 
   def encoded_pt(pt)
@@ -163,41 +166,6 @@ module OidcSsoInitiator
     Base64.urlsafe_decode64(pt.to_s)
   rescue ArgumentError
     "/"
-  end
-
-  def local_oidc_token_endpoint(public_token_endpoint)
-    uri = URI.parse(public_token_endpoint)
-    return public_token_endpoint unless uri.is_a?(URI::HTTP)
-    return public_token_endpoint unless public_acme_development_host?(uri.host)
-
-    uri.scheme = "http"
-    uri.port = local_oidc_token_endpoint_port
-    uri.to_s
-  rescue URI::InvalidURIError
-    public_token_endpoint
-  end
-
-  def public_acme_development_host?(host)
-    configured_acme_hosts.include?(host.to_s.downcase)
-  end
-
-  def configured_acme_hosts
-    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    [
-      hosts.acme_service.host,
-      hosts.acme_corporate.host,
-      hosts.acme_staff.host,
-      hosts.base_service.host,
-      hosts.base_corporate.host,
-      hosts.base_staff.host,
-      hosts.visa_service.host,
-      hosts.visa_corporate.host,
-      hosts.visa_staff.host,
-    ].map { |configured_host| configured_host.to_s.downcase }
-  end
-
-  def local_oidc_token_endpoint_port
-    Integer(ENV.fetch("PORT"), exception: false) || 3000
   end
 
   def oidc_client_id

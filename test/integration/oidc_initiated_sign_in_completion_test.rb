@@ -81,7 +81,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_predicate ceremony.authentication_event_at, :present?
   end
 
-  test "saved Secret records OIDC authentication evidence without issuing an Auth session" do
+  test "A12-6: a repeated final result after Root issuance is an error without a second Root" do
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
     credential = client_secret_credentials(:one)
 
@@ -109,7 +109,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal ["secret", nil, nil],
                  [ceremony.authentication_method, credential.consumed_at,
                   ClientSecretLookupQuery.call(client: @user, secret: "a" * 32),]
-    follow_redirect_to_oidc_handoff!
+    # This origin's service worker re-fetches navigations, which arrive with destination `empty`.
+    follow_redirect_to_oidc_handoff!(destination: "empty")
     post_oidc_handoff!
 
     assert_response :see_other
@@ -209,6 +210,28 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_equal [false, ClientTokenStatus::ACTIVE],
                  [ClientSecretSignInReceipt.exists?(receipt.id), ClientToken.find(flow.token_id).user_token_status_id]
+  end
+
+  test "a Secret flow whose transaction method is not passcode is refused without a Root" do
+    credential = client_secret_credentials(:one)
+    start_oidc_authorization!(oidc_authorize_params(realm: "client").merge(ri: "jp"))
+    get new_auth_app_sign_in_secret_path(ri: "jp")
+    post auth_app_sign_in_secret_path(ri: "jp"), params: {
+      identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
+    }
+
+    assert_response :see_other
+    follow_redirect_to_oidc_handoff!
+    post_oidc_handoff!
+
+    assert_response :see_other
+    # A transaction that names another method must not be completed by the Secret flow.
+    @transaction.reload.update_columns(auth_method: "email")
+    assert_no_difference(%w(ClientToken.count ClientSecretSignInReceipt.count)) do
+      get_oidc_result!
+    end
+    assert_operator response.status, :<, 500
+    assert_nil credential.reload.consumed_at
   end
 
   test "expired OIDC Secret flow rejects a delayed result without releasing its claim" do
@@ -495,6 +518,19 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), result_uri.host
     assert_predicate @oidc_result_ref, :present?
     assert_equal @transaction.transaction_id, @oidc_result_transaction_ref
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    before = [@transaction.reload.attributes, binding.attributes, ClientToken.count]
+    host!(result_uri.host)
+    https!
+    navigation = oidc_navigation_headers(result_uri.host, site: "cross-site").merge(base_result_headers)
+    head(result_uri.request_uri, headers: navigation)
+
+    assert_response :bad_request
+    assert_equal before, [@transaction.reload.attributes, binding.reload.attributes, ClientToken.count]
+    get(result_uri.request_uri, headers: navigation.merge("Sec-Fetch-Dest" => "iframe"))
+
+    assert_response :bad_request
+    assert_equal before, [@transaction.reload.attributes, binding.reload.attributes, ClientToken.count]
   end
 
   test "the checkpoint clears the login challenge from the session" do
@@ -668,14 +704,17 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     }
   end
 
-  def follow_redirect_to_oidc_handoff!
+  def follow_redirect_to_oidc_handoff!(destination: "document")
     target = URI.parse(response.location)
     3.times do
       raise "OIDC handoff redirect is not on Auth" unless target.host == @host
 
       host!(@host)
       https!
-      get(target.request_uri, headers: oidc_navigation_headers(@host, site: "same-origin"))
+      get(
+        target.request_uri,
+        headers: oidc_navigation_headers(@host, site: "same-origin").merge("Sec-Fetch-Dest" => destination),
+      )
       break unless response.redirect?
 
       next_target = URI.parse(response.location)

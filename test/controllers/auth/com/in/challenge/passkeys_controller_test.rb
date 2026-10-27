@@ -137,7 +137,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     get mfa_passkey_path
 
     assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
     assert_predicate session[:pending_mfa], :present?
     assert_nil session[:passkey_challenges]
     assert_predicate mfa_flow.reload, :sign_in_guardrail_pending?
@@ -151,7 +151,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     get mfa_passkey_path
 
     assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
     assert_predicate session[:pending_mfa], :present?
     assert_nil session[:passkey_challenges]
     assert_nil mfa_flow.reload.authentication_event_at

@@ -385,17 +385,11 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_includes invalid.errors.details[:auth_hash], { error: "is invalid" }
   end
 
-  test "signup and acme logout no-op predicates use their configured entry states" do
+  test "signup social-entry predicates use their configured entry state" do
     flow = ClientSignUpFlow.new(entry_method: "google")
 
     assert_includes ClientSignUpFlow.social_entry_methods, "google"
     assert_predicate flow, :social_entry_method?
-
-    failed = AcmeLogoutTransaction.new(status: "failed")
-    finalized = AcmeLogoutTransaction.new(status: "finalized")
-
-    assert_same failed, failed.fail!
-    assert_same finalized, finalized.fail!
   end
 
   test "model scopes and unlink predicate remain queryable" do
@@ -441,16 +435,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     end
 
     assert_same preference, chronicle.actor
-  end
-
-  test "acme logout failure records the failed transition" do
-    transaction = AcmeLogoutTransaction.new(status: "initiated")
-    updates = []
-    transaction.stub(:update!, ->(attributes) { updates << attributes }) do
-      transaction.fail!(now: Time.zone.parse("2026-07-18 08:00:00"))
-    end
-
-    assert_equal "failed", updates.last[:status]
   end
 
   test "step up transaction exposes scopes claims and valid state transitions" do

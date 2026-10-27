@@ -24,15 +24,19 @@ module AuthCeremonySession
   module ClassMethods
     public
 
-    def issue!(ttl: DEFAULT_TTL, now: nil)
+    def issue!(ttl: DEFAULT_TTL, expires_at: nil, now: nil)
       raw_sid = SecureRandom.random_bytes(SID_BYTES)
       digest = digest_for(raw_sid)
       record =
         writing_connection do
           decision_time = now || database_now
+          if expires_at && expires_at <= decision_time
+            raise InvalidTransition, "auth ceremony expiry must follow issuance"
+          end
+
           create!(
             sid_digest: digest,
-            expires_at: decision_time + ttl,
+            expires_at: expires_at || (decision_time + ttl),
             created_at: decision_time,
             updated_at: decision_time,
           )
@@ -44,7 +48,7 @@ module AuthCeremonySession
     # database transaction. The old row is never revoked unless the new row
     # can also be created successfully.
     def rotate_and_admit!(admission_purpose:, previous_raw_sid: nil, authorization_transaction_ref: nil,
-                          step_up_ceremony_transaction_ref: nil, ttl: DEFAULT_TTL, now: nil)
+                          step_up_ceremony_transaction_ref: nil, ttl: DEFAULT_TTL, expires_at: nil, now: nil)
       unless ADMISSION_PURPOSES.include?(admission_purpose)
         raise InvalidTransition, "unsupported admission purpose"
       end
@@ -58,6 +62,10 @@ module AuthCeremonySession
           transaction do
             previous = lock.find_by(sid_digest: previous_digest) if previous_digest
             decision_time = now || database_now
+            if expires_at && expires_at <= decision_time
+              raise InvalidTransition, "auth ceremony expiry must follow issuance"
+            end
+
             if previous_digest && (previous.nil? || !previous.active?(now: decision_time))
               replacement = find_by(previous_sid_digest: previous_digest)
               raise InvalidTransition, "auth ceremony session was already replaced" if replacement
@@ -73,7 +81,7 @@ module AuthCeremonySession
               step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
               admission_purpose: admission_purpose,
               admitted_at: decision_time,
-              expires_at: decision_time + ttl,
+              expires_at: expires_at || (decision_time + ttl),
               created_at: decision_time,
               updated_at: decision_time,
             )

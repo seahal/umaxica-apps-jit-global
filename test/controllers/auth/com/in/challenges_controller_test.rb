@@ -40,7 +40,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
       assert_response :conflict
       assert_equal "text/plain", response.media_type
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_nil response.headers["Location"]
       assert_includes response.headers["Cache-Control"], "no-store"
       assert_equal before, flow.reload.attributes
@@ -67,7 +67,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       end
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_equal before, flow.reload.attributes
     end
   end
@@ -81,7 +81,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       delete path
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_equal VisitorSignInFlowState::HALTED, flow.reload.state_id
       terminal = flow.attributes
 
@@ -170,7 +170,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     get mfa_passkey_path
 
     assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
   end
 
   test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do

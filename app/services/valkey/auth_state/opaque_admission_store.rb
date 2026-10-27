@@ -364,15 +364,6 @@ module Valkey
       end
       public_class_method :digest_for
 
-      def self.reference_digest(reference:)
-        unless reference.is_a?(String) && reference.present?
-          raise ArgumentError, "admission reference is blank"
-        end
-
-        Digest::SHA256.hexdigest("reference:#{reference}")
-      end
-      public_class_method :reference_digest
-
       def consume!(purpose:, raw_code:, expected: {}, now: Time.current, tombstone_ttl: CODE_TTL)
         expected = normalize_expected(expected)
         key = storage_key(purpose, raw_code)
@@ -454,7 +445,10 @@ module Valkey
       end
 
       def reference_storage_key(reference)
-        digest = self.class.reference_digest(reference: reference.to_s)
+        reference = reference.to_s
+        raise ArgumentError, "admission reference is blank" if reference.blank?
+
+        digest = Digest::SHA256.hexdigest("reference:#{reference}")
         @connection.key("admission-reference:#{digest}")
       end
 

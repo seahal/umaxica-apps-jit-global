@@ -389,8 +389,8 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       # different browser.
       assert_withheld("Base must retain its browser session across the Auth hop") { base_session_cookie.present? }
       browser.cookies.delete(cookie_name)
-      browser.cookies.merge!(
-        "#{cookie_name}=#{Rack::Utils.escape(base_session_cookie)}", URI.parse("https://#{base_host}/"),
+      store_raw_cookies(
+        browser.cookies, "#{cookie_name}=#{Rack::Utils.escape(base_session_cookie)}", URI.parse("https://#{base_host}/"),
       )
       userinfo_result = OidcOpUserInfoClient::Result.new(
         success: true,

@@ -15,6 +15,8 @@ module OidcDiscoveryDocument
       jwks_uri: OidcIssuer.jwks_uri(resource_type),
       revocation_endpoint: OidcIssuer.revocation_endpoint(resource_type),
       end_session_endpoint: OidcIssuer.end_session_endpoint(resource_type),
+      backchannel_logout_supported: true,
+      backchannel_logout_session_supported: true,
       response_types_supported: ["code"],
       # RFC 9207. The authorization response carries `iss`; advertising it lets a
       # conforming client require the parameter and reject a response that omits it.

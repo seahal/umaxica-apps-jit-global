@@ -19,6 +19,10 @@ class Visa::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
     )
     @session_public_id = @token.public_id
+    @logout_grant = OpComGrant.create!(
+      authentication_epoch: 0, visitor_token: @token, oidc_client_id: @client.client_id,
+      oidc_scope: "openid", oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 10.minutes.from_now,
+    )
     # Cookies only reach the request when the integration session's host matches it.
     host! @host
     https!
@@ -403,6 +407,197 @@ class Visa::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "xyz", query["state"]
   end
 
+  test "no-hint logout shows a single-use OP completion page" do
+    http_headers_5 =
+      begin
+        fx2_harness =
+          begin
+            f2_headers = as_visitor_headers(@visitor, host: @host, session_public_id: @session_public_id)
+            f2_host = f2_headers["Host"]
+            f2_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f2_host}/") if f2_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f2_family, f2_surface = f2_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f2_family) && f2_surface == "com"
+              f2_client_id =
+                case f2_family
+                when "base" then "base-#{f2_surface}-ww"
+                when "edit" then "edit-org-ww"
+                else "#{f2_family}-#{f2_surface}"
+                end
+              f2_token = VisitorToken.find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f2_client = OidcClientRegistry.find!(f2_client_id)
+              f2_key = [f2_client.client_id, f2_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
+                  !(f2_token.device_session_id && OpComGrant.exists?(
+                    device_session_id: f2_token.device_session_id,
+                    oidc_client_id: f2_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
+                f2_now = Time.current
+                f2_session = OpComGrant.create!(
+                  authentication_epoch: 0,
+                  visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
+                  refresh_token_expires_at: f2_now + 10.minutes,
+                )
+                f2_access = AuthenticationTokenService.encode(
+                  f2_token.actor_record, host: f2_host, resource_type: "visitor",
+                                         session_public_id: f2_token.public_id,
+                                         base_session_public_id: f2_token.public_id,
+                                         oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                         expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                         subject: OidcSubject.for(
+                                           f2_token.actor_record,
+                                           resource_type: "visitor",
+                                         ), client_id: f2_client.client_id,
+                )
+                @base_browser_rp_credentials[f2_key] =
+                  [f2_access, f2_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f2_key]
+                f2_access, f2_refresh = @base_browser_rp_credentials.fetch(f2_key)
+                f2_cookie = [
+                  f2_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f2_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f2_refresh)}",
+                ].join("; ")
+                f2_headers = f2_headers.merge(
+                  "Cookie" => f2_cookie,
+                  "HTTP_COOKIE" => f2_cookie,
+                )
+              end
+            end
+            f2_headers
+          end
+        fx2_harness.fetch("Cookie").split("; ").each do |pair|
+          name, value = pair.split("=", 2)
+          cookies[name] = Rack::Utils.unescape(value)
+        end
+        browser_headers.merge(fx2_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+      end
+    get visa_com_oidc_logout_url(host: @host),
+        params: { ri: "jp" },
+        headers: http_headers_5
+
+    assert_response :ok
+    assert_equal visa_com_oidc_logout_confirmation_path(ri: "jp"), inertia_props.dig("form", "action")
+
+    http_headers_4 =
+      begin
+        fx3_harness =
+          begin
+            f3_headers = as_visitor_headers(@visitor, host: @host, session_public_id: @session_public_id)
+            f3_host = f3_headers["Host"]
+            f3_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f3_host}/") if f3_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f3_family, f3_surface = f3_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f3_family) && f3_surface == "com"
+              f3_client_id =
+                case f3_family
+                when "base" then "base-#{f3_surface}-ww"
+                when "edit" then "edit-org-ww"
+                else "#{f3_family}-#{f3_surface}"
+                end
+              f3_token = VisitorToken.find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f3_client = OidcClientRegistry.find!(f3_client_id)
+              f3_key = [f3_client.client_id, f3_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f3_key] && f3_token.currently_usable? &&
+                  !(f3_token.device_session_id && OpComGrant.exists?(
+                    device_session_id: f3_token.device_session_id,
+                    oidc_client_id: f3_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
+                f3_now = Time.current
+                f3_session = OpComGrant.create!(
+                  authentication_epoch: 0,
+                  visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
+                  refresh_token_expires_at: f3_now + 10.minutes,
+                )
+                f3_access = AuthenticationTokenService.encode(
+                  f3_token.actor_record, host: f3_host, resource_type: "visitor",
+                                         session_public_id: f3_token.public_id,
+                                         base_session_public_id: f3_token.public_id,
+                                         oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
+                                         expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
+                                         subject: OidcSubject.for(
+                                           f3_token.actor_record,
+                                           resource_type: "visitor",
+                                         ), client_id: f3_client.client_id,
+                )
+                @base_browser_rp_credentials[f3_key] = [f3_access, f3_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f3_key]
+                f3_access, f3_refresh = @base_browser_rp_credentials.fetch(f3_key)
+                f3_cookie = [
+                  f3_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f3_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f3_refresh)}",
+                ].join("; ")
+                f3_headers = f3_headers.merge(
+                  "Cookie" => f3_cookie,
+                  "HTTP_COOKIE" => f3_cookie,
+                )
+              end
+            end
+            f3_headers
+          end
+        fx3_harness.fetch("Cookie").split("; ").each do |pair|
+          name, value = pair.split("=", 2)
+          cookies[name] = Rack::Utils.unescape(value)
+        end
+        browser_headers.merge(fx3_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+      end
+    post visa_com_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_4
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+    assert_equal "/oidc/logout/completion", URI.parse(response.location).path
+
+    stop_target = OpComAuthorityStopRootTarget.find_by!(root: @token)
+    stop = OpComAuthorityStop.find(stop_target.stop_id)
+
+    assert_predicate stop, :persisted?
+
+    stops_after_commit = OpComAuthorityStop.count
+
+    follow_redirect!
+
+    assert_response :ok
+    assert_nil inertia_props.fetch("form")
+    assert_equal I18n.t("sign.shared.sign_out.completed_description"), inertia_props.fetch("description")
+    assert_equal stops_after_commit, OpComAuthorityStop.count
+
+    get "/oidc/logout/completion", params: { ri: "jp" }
+
+    assert_response :not_found
+    assert_equal stops_after_commit, OpComAuthorityStop.count
+  end
+
+  test "a confirmation POST with no pending request is refused without a signed-out page" do
+    post "/oidc/logout/confirmation", params: { ri: "jp" }
+
+    assert_response :unprocessable_entity
+    assert_equal I18n.t("sign.shared.sign_out.stale_description"), response.body
+    assert_equal 0, OpComAuthorityStop.count
+  end
+
   test "invalid post_logout_redirect_uri never redirects externally" do
     http_headers_3 =
       begin
@@ -494,10 +689,10 @@ class Visa::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
          },
          headers: http_headers_3
 
-    assert_response :success
+    assert_response :bad_request
     assert_not_predicate @token.reload, :revoked?
     assert_nil response.location
-    assert_not_includes inertia_props.to_json, "xyz"
+    assert_not_includes response.body, "xyz"
   end
 
   test "post_logout_redirect_uri registered for another realm never redirects externally" do
@@ -590,7 +785,7 @@ class Visa::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
          params: { id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz", ri: "jp" },
          headers: http_headers_2
 
-    assert_response :success
+    assert_response :bad_request
     assert_not_predicate @token.reload, :revoked?
     assert_nil response.location
     assert_not_includes response.body, "xyz"
@@ -1011,7 +1206,7 @@ class Visa::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   # logout request in the session), so the harness-issued token is placed in the jar instead.
 
   def id_token(resource: @visitor, subject: OidcSubject.for(@visitor, resource_type: "visitor"),
-               sid: @session_public_id)
+               sid: @logout_grant.public_id)
     OidcIdTokenIssuer.call(
       resource: resource,
       client: @client,

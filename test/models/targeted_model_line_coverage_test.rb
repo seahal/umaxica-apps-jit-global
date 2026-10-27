@@ -183,24 +183,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     end
   end
 
-  test "acme logout predicates and origin validation cover unsupported states" do
-    assert_raises(ArgumentError) { AcmeLogoutTransaction.step_sequence_for("unsupported") }
-    assert_predicate AcmeLogoutTransaction.new(status: "initiated"), :initiated?
-    assert_predicate AcmeLogoutTransaction.new(status: "in_progress"), :in_progress?
-
-    transaction = AcmeLogoutTransaction.new(
-      origin_surface: "sign",
-      expected_step: "sign_cleared",
-      initiating_client_id: "client-id",
-      completion_url: "/done",
-      status: "initiated",
-      expires_at: 1.minute.from_now,
-    )
-
-    assert_not transaction.valid?
-    assert_includes transaction.errors[:expected_step], "is not valid for the logout workflow"
-  end
-
   test "unsupported email verification outcome is reported" do
     transaction = ClientEmailCeremonyTransaction.new(
       evp_outcome: "unsupported",

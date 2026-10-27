@@ -15,12 +15,10 @@ class OpOrgAuthorityStop < OpBaseOrgRecord
                          dependent: :restrict_with_exception
   has_many :participants, class_name: "OpOrgAuthorityStopParticipant", foreign_key: :stop_id, inverse_of: :stop,
                           dependent: :restrict_with_exception
-  has_one :browser_logout, class_name: "OpOrgAuthorityStopBrowserLogout", foreign_key: :stop_id, inverse_of: :stop,
-                           dependent: :restrict_with_exception
 
   validates :public_id, :principal_public_id, :authority_evidence_ref, :idempotency_digest, :occurred_at,
             presence: true
-  validates :realm, inclusion: { in: [REALM] }
+  validates :realm, inclusion: { in: [REALM] }, length: { maximum: 3 }
   validates :public_id, length: { maximum: 21 }
   validates :authority_evidence_ref, length: { maximum: 128 }
   validates :principal_public_id, length: { maximum: 255 }

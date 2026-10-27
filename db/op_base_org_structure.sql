@@ -148,41 +148,6 @@ ALTER SEQUENCE public.op_inbound_event_receipts_id_seq OWNED BY public.op_inboun
 
 
 --
--- Name: op_org_authority_stop_browser_logouts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.op_org_authority_stop_browser_logouts (
-    id bigint CONSTRAINT op_authority_stop_browser_logouts_id_not_null NOT NULL,
-    stop_id bigint CONSTRAINT op_authority_stop_browser_logouts_stop_id_not_null NOT NULL,
-    browser_binding_digest bytea CONSTRAINT op_authority_stop_browser_logou_browser_binding_digest_not_null NOT NULL,
-    receipt_nonce_digest bytea CONSTRAINT op_authority_stop_browser_logouts_receipt_nonce_digest_not_null NOT NULL,
-    receipt_expires_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_receipt_expires_at_not_null NOT NULL,
-    receipt_consumed boolean DEFAULT false CONSTRAINT op_authority_stop_browser_logouts_receipt_consumed_not_null NOT NULL,
-    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_created_at_not_null NOT NULL,
-    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_updated_at_not_null NOT NULL
-);
-
-
---
--- Name: op_org_authority_stop_browser_logouts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.op_org_authority_stop_browser_logouts_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: op_org_authority_stop_browser_logouts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.op_org_authority_stop_browser_logouts_id_seq OWNED BY public.op_org_authority_stop_browser_logouts.id;
-
-
---
 -- Name: op_org_authority_stop_causes; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1807,13 +1772,6 @@ ALTER TABLE ONLY public.op_inbound_event_receipts ALTER COLUMN id SET DEFAULT ne
 
 
 --
--- Name: op_org_authority_stop_browser_logouts id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_org_authority_stop_browser_logouts ALTER COLUMN id SET DEFAULT nextval('public.op_org_authority_stop_browser_logouts_id_seq'::regclass);
-
-
---
 -- Name: op_org_authority_stop_causes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2110,14 +2068,6 @@ ALTER TABLE ONLY public.op_consumed_jtis
 
 ALTER TABLE ONLY public.op_inbound_event_receipts
     ADD CONSTRAINT op_inbound_event_receipts_pkey PRIMARY KEY (id);
-
-
---
--- Name: op_org_authority_stop_browser_logouts op_org_authority_stop_browser_logouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_org_authority_stop_browser_logouts
-    ADD CONSTRAINT op_org_authority_stop_browser_logouts_pkey PRIMARY KEY (id);
 
 
 --
@@ -2674,13 +2624,6 @@ CREATE UNIQUE INDEX idx_operator_resolution_waiting_actor ON public.operator_ses
 --
 
 CREATE INDEX idx_operator_session_limit_resolution_txns_on_state_id ON public.operator_session_limit_resolution_transactions USING btree (state_id);
-
-
---
--- Name: index_op_org_authority_stop_browser_logouts_on_stop_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_op_org_authority_stop_browser_logouts_on_stop_id ON public.op_org_authority_stop_browser_logouts USING btree (stop_id);
 
 
 --
@@ -3575,14 +3518,6 @@ ALTER TABLE ONLY public.op_org_authority_stop_participants
 
 
 --
--- Name: op_org_authority_stop_browser_logouts fk_org_stop_restrict_11; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_org_authority_stop_browser_logouts
-    ADD CONSTRAINT fk_org_stop_restrict_11 FOREIGN KEY (stop_id) REFERENCES public.op_org_authority_stops(id) ON DELETE RESTRICT;
-
-
---
 -- Name: operator_sign_in_flows fk_rails_0451f7d1d6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3773,6 +3708,7 @@ ALTER TABLE ONLY public.operator_email_ceremony_transactions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261026190831'),
 ('20261025120400'),
 ('20261025120301'),
 ('20261025120300'),

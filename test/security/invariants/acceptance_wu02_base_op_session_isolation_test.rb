@@ -10,15 +10,24 @@ class AcceptanceWu02BaseOpSessionIsolationTest < ActiveSupport::TestCase
     auth_files = Dir.glob("app/controllers/auth/**/*.rb")
     base_files = Dir.glob("app/controllers/base/**/*.rb") + Dir.glob("app/views/base/**/*")
     auth_session_keys = auth_files.flat_map do |path|
-      File.read(path).scan(/\bsession\s*(?:\[|\.dig\s*\()\s*:(\w+)/).flatten
+      File.read(path).scan(/\bsession\s*\[\s*:(\w+)\s*\]\s*(?:\|\|=|(?<!=)=(?!=))/).flatten
     end.uniq
+    base_session_keys =
+      base_files.select { |path| File.file?(path) }.flat_map do |path|
+        File.read(path).scan(/\bsession\s*\[\s*:(\w+)\s*\]\s*(?:\|\|=|(?<!=)=(?!=))/).flatten
+      end
+    auth_session_keys -= base_session_keys
+
+    assert_includes auth_session_keys, "auth_app_up_sequence_id"
+
     offenders = base_files.flat_map do |path|
       next unless File.file?(path)
 
       File.read(path).lines.each_with_index.filter_map do |line, index|
-        key = auth_session_keys.find do |session_key|
-          line.match?(/\bsession\s*(?:\[\s*:(?:#{Regexp.escape(session_key)})\b|\.dig\s*\(\s*:(?:#{Regexp.escape(session_key)})\b)/)
-        end
+        key =
+          auth_session_keys.find do |session_key|
+            line.match?(/\bsession\s*(?:\[\s*:(?:#{Regexp.escape(session_key)})\b|\.dig\s*\(\s*:(?:#{Regexp.escape(session_key)})\b)/)
+          end
         "#{path}:#{index + 1}: Rails session key :#{key}" if key
       end
     end.compact

@@ -58,8 +58,7 @@ Each RP host exposes the same route contract:
   does not choose sign-in or sign-up; Auth owns that choice.
 - `GET /oidc/callback` is the exact registered `redirect_uri`.
 - `/sign/out/completion?ri=jp|us` is the registered post-logout return URI.
-- `POST /oidc/closures` receives back-channel logout for a separated RP cell, and
-  `POST /sign/out/purge` purges only the matching RP cookies after OP logout.
+- `POST /oidc/closures` receives back-channel logout for a separated RP cell.
 
 `sign-rp` and `base-rails-rp` are deprecated shared registrations. `side-rails-rp`, `app-ios-rp`,
 `app-android-rp`, and the `palm-api` audience are retired. Do not add new registrations from those

@@ -427,7 +427,7 @@ current flow nor a binding is present, and a supplied binding without a current 
 
 Same-phase reload and re-entry are allowed. A GET or HEAD request whose binding is missing,
 malformed, expired, for another surface or flow, or for a different phase is refused with HTTP
-`409 Conflict`, `text/plain`, and the exact body `戻るはだめです`. The refusal does not redirect,
+`409 Conflict`, `text/plain`, and the exact body `この画面は古くなっています。最初からやり直してください。`. The refusal does not redirect,
 change lifecycle state, issue an OTP or challenge, create a session, or perform another workflow
 side effect. The authentication no-store response policy remains in force. A GET refusal is an
 observation and is not a lifecycle transition.

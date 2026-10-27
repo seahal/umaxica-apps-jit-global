@@ -6,7 +6,7 @@
 # first (children before the stop), but never while a participant has not reached a final state.
 # Returns the root ids that stay held because a stop referencing them is not final yet.
 class OpAuthorityStopPurger
-  CHILDREN = %i(browser_logout participant epoch_cutoff grant_target root_target).freeze
+  CHILDREN = %i(participant epoch_cutoff grant_target root_target).freeze
 
   class << self
     public

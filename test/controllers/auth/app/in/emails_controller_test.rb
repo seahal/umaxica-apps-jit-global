@@ -538,7 +538,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
                      "the repeated code was accepted again"
   end
 
-  test "patch with a correct otp and missing or invalid Turnstile does not authenticate" do
+  test "A07-1c: Turnstile rejection keeps the Flow and OTP challenge unconsumed" do
     user = clients(:one)
     email = user.client_emails.create!(
       address: "turnstile-update-#{SecureRandom.hex(4)}@example.com",
@@ -720,7 +720,28 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal "auth/app/sign/in/emails/edit", inertia_component
   end
 
-  test "patch update is rejected when the account stopped allowing login after the code was sent" do
+  test "A34-2: an unfinished APP registration is answered like an unknown address and gets no OTP" do
+    user = clients(:one)
+    test_email = user.client_emails.create!(
+      address: "unfinished_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
+    user.reload.update!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: {
+           :user_email => { address: test_email.address },
+           "cf-turnstile-response" => "test_token",
+         },
+         headers: { "Host" => @host }
+
+    # Same shape as an unknown address: no existing contact is named and only the fake OTP exists.
+    assert_response :found
+    assert_nil SignAppInEmailAuthenticationState.load(session).id
+    assert_equal ["fake", nil],
+                 @current_auth_ceremony.reload.email_otp_context.values_at("mode", "contact_ref")
+  end
+
+  test "A34-2: an unfinished APP registration cannot complete a valid email OTP sign-in" do
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "blocked_#{SecureRandom.hex(4)}@example.com",
@@ -737,7 +758,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
     valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
-    user.reload.update!(status_id: ClientStatus::RESERVED)
+    token_count = ClientToken.count
+    user.reload.update!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
 
     patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
@@ -745,6 +767,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :unprocessable_content
     assert_equal "auth/app/sign/in/emails/edit", inertia_component
+    assert_equal token_count, ClientToken.count
   end
 
   test "patch update with a malformed pass code answers json requests with the error body" do

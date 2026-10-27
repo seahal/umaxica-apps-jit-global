@@ -212,6 +212,34 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
     end
   end
 
+  test "A02-10: the Visa handoff table matches the signed Jump edge catalog" do
+    document = Rails.root.join("docs/operations/jump-rt-visa-edges.md").read
+    rows = document.scan(/^\| `([A-Z_]+)` \| `([^`]+)` \| `([A-Z_]+)` \| `([^`]+)` \| ([^|]+) \|$/)
+    expected =
+      JumpRtReturnPolicy::EDGE_CATALOG.filter_map do |edge|
+        issuer = edge.fetch(:issuer_namespace)
+        destination = edge.fetch(:destination_namespace)
+        next unless issuer.start_with?("VISA_") || destination.start_with?("VISA_")
+
+        [issuer, JumpRtSurface.issuer_origin(issuer), destination, JumpRtSurface.issuer_origin(destination),
+         edge.fetch(:purpose).tr("_", " "),]
+      end
+
+    assert_equal expected.sort, rows.map { |row| row.map(&:strip) }.sort
+    expected.each do |namespace, source, _destination, destination_origin, _purpose|
+      token = JumpRtIssuer.call(namespace: namespace, url: "#{destination_origin}/", dst: "internal")
+      issuer = JitSecurityJwtRegistry.surface(namespace)
+      payload, = JWT.decode(
+        token, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: source, verify_aud: true,
+        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+
+      assert_equal destination_origin, URI.parse(payload.fetch("url")).origin
+      assert JumpRtReturnPolicy.allowed_source?(destination_origin: destination_origin, source: source)
+    end
+  end
+
   test "the Jump edge catalog is the source of the allowed graph and names Visa origins" do
     projected =
       JumpRtReturnPolicy::EDGE_CATALOG.map do |edge|

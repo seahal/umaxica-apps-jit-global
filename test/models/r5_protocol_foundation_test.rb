@@ -12,7 +12,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
       consumed_jti: OpAppConsumedJti,
       stop: OpAppAuthorityStop,
       participant: OpAppAuthorityStopParticipant,
-      browser_logout: OpAppAuthorityStopBrowserLogout,
       inbound: OpAppInboundEventReceipt,
     },
     {
@@ -20,7 +19,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
       consumed_jti: OpComConsumedJti,
       stop: OpComAuthorityStop,
       participant: OpComAuthorityStopParticipant,
-      browser_logout: OpComAuthorityStopBrowserLogout,
       inbound: OpComInboundEventReceipt,
     },
     {
@@ -28,7 +26,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
       consumed_jti: OpOrgConsumedJti,
       stop: OpOrgAuthorityStop,
       participant: OpOrgAuthorityStopParticipant,
-      browser_logout: OpOrgAuthorityStopBrowserLogout,
       inbound: OpOrgInboundEventReceipt,
     },
   ].freeze
@@ -40,7 +37,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
 
       assert_equal "op_#{realm}_authority_stops", entry.fetch(:stop).table_name
       assert_equal "op_#{realm}_authority_stop_participants", entry.fetch(:participant).table_name
-      assert_equal "op_#{realm}_authority_stop_browser_logouts", entry.fetch(:browser_logout).table_name
       assert_equal "op_inbound_event_receipts", entry.fetch(:inbound).table_name
     end
   end

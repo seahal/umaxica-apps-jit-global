@@ -6,6 +6,7 @@ module Visa
     class CeremonyBindingConfirmationsController < ::Visa::Org::AuthorityController
       include ::BaseCeremonyBindingConfirmation
 
+      REJECT_FRAMED_CONFIRMATION = true
       AUTHENTICATION_MODE = :open
       declare_authentication_mode! :open
 
@@ -20,10 +21,7 @@ module Visa
       private
 
       def automatic_ceremony_binding_confirmation?
-        return false unless request.get? && !request.head?
-
-        request.headers["Sec-Fetch-Mode"].to_s == "navigate" &&
-          request.headers["Sec-Fetch-Dest"].to_s == "document"
+        browser_navigation_request?
       end
     end
   end

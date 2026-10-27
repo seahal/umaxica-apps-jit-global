@@ -8,8 +8,9 @@ require "test_helper"
 # (adr/global-and-publishing-default-no-store-policy.md), so error responses carry
 # `Cache-Control: no-store` too, and existing protocol headers stay in place.
 class DefaultNoStoreStandaloneEndpointsTest < ActionDispatch::IntegrationTest
-  test "Base OAuth token endpoint error response is no-store and keeps Pragma no-cache" do
-    host!("base.app.localhost")
+  # The token endpoint moved from Base to the Visa OP host (WU-02).
+  test "Visa OAuth token endpoint error response is no-store and keeps Pragma no-cache" do
+    host!(ENV.fetch("PUBLIC_VISA_SERVICE_URL"))
 
     post("/oauth/token", params: { grant_type: "unsupported" })
 

@@ -161,13 +161,6 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
     assert_match(/reason must be one of/, error.message)
   end
 
-  test "AcmeLogoutTransactionCoordinator local host scheme" do
-    assert_equal "http", AcmeLogoutTransactionCoordinator.http_or_https("localhost")
-    assert_equal "https", AcmeLogoutTransactionCoordinator.http_or_https("example.test")
-    assert AcmeLogoutTransactionCoordinator.local_host?("app.localhost")
-    assert_not AcmeLogoutTransactionCoordinator.local_host?("example.test")
-  end
-
   test "LocalEnvironment load fallbacks with missing UMAXICA_ENV_FILE" do
     assert_nil LocalEnvironment.parse("# comment")[0]
     assert_nil LocalEnvironment.parse("")[0]

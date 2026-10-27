@@ -70,60 +70,6 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: acme_logout_transactions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.acme_logout_transactions (
-    id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    origin_surface character varying NOT NULL,
-    initiating_client_id character varying NOT NULL,
-    completion_url text NOT NULL,
-    actor_ref character varying,
-    session_ref character varying,
-    callback_state character varying,
-    status character varying DEFAULT 'initiated'::character varying NOT NULL,
-    expected_step character varying DEFAULT 'origin_cleared'::character varying NOT NULL,
-    completed_steps jsonb DEFAULT '[]'::jsonb NOT NULL,
-    expires_at timestamp(6) with time zone NOT NULL,
-    finalized_at timestamp(6) with time zone,
-    failed_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    workflow character varying DEFAULT 'legacy'::character varying NOT NULL,
-    binding_version integer DEFAULT 0 NOT NULL,
-    realm character varying,
-    parent_session_ref character varying,
-    captured_root_ref character varying,
-    root_refresh_family_ref character varying,
-    captured_root_generation integer,
-    origin_intent_digest bytea,
-    CONSTRAINT acme_logout_transactions_binding_version CHECK ((binding_version = ANY (ARRAY[0, 1]))),
-    CONSTRAINT acme_logout_transactions_browser_rp_binding_shape CHECK (((binding_version = 0) OR (((realm)::text = ANY ((ARRAY['app'::character varying, 'com'::character varying, 'org'::character varying])::text[])) AND (NULLIF(btrim((parent_session_ref)::text), ''::text) IS NOT NULL) AND (NULLIF(btrim((captured_root_ref)::text), ''::text) IS NOT NULL) AND (NULLIF(btrim((root_refresh_family_ref)::text), ''::text) IS NOT NULL) AND (captured_root_generation >= 0) AND (origin_intent_digest IS NOT NULL) AND (octet_length(origin_intent_digest) = 32)))),
-    CONSTRAINT chk_acme_logout_transactions_pid CHECK ((char_length((public_id)::text) = 21))
-);
-
-
---
--- Name: acme_logout_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.acme_logout_transactions_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: acme_logout_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.acme_logout_transactions_id_seq OWNED BY public.acme_logout_transactions.id;
-
-
---
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1714,41 +1660,6 @@ ALTER SEQUENCE public.logout_transactions_id_seq OWNED BY public.logout_transact
 
 
 --
--- Name: op_app_authority_stop_browser_logouts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.op_app_authority_stop_browser_logouts (
-    id bigint CONSTRAINT op_authority_stop_browser_logouts_id_not_null NOT NULL,
-    stop_id bigint CONSTRAINT op_authority_stop_browser_logouts_stop_id_not_null NOT NULL,
-    browser_binding_digest bytea CONSTRAINT op_authority_stop_browser_logou_browser_binding_digest_not_null NOT NULL,
-    receipt_nonce_digest bytea CONSTRAINT op_authority_stop_browser_logouts_receipt_nonce_digest_not_null NOT NULL,
-    receipt_expires_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_receipt_expires_at_not_null NOT NULL,
-    receipt_consumed boolean DEFAULT false CONSTRAINT op_authority_stop_browser_logouts_receipt_consumed_not_null NOT NULL,
-    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_created_at_not_null NOT NULL,
-    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_updated_at_not_null NOT NULL
-);
-
-
---
--- Name: op_app_authority_stop_browser_logouts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.op_app_authority_stop_browser_logouts_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: op_app_authority_stop_browser_logouts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.op_app_authority_stop_browser_logouts_id_seq OWNED BY public.op_app_authority_stop_browser_logouts.id;
-
-
---
 -- Name: op_app_authority_stop_causes; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2311,13 +2222,6 @@ ALTER SEQUENCE public.user_verifications_user_token_id_seq OWNED BY public.clien
 
 
 --
--- Name: acme_logout_transactions id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.acme_logout_transactions ALTER COLUMN id SET DEFAULT nextval('public.acme_logout_transactions_id_seq'::regclass);
-
-
---
 -- Name: client_auth_admission_bindings id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2563,13 +2467,6 @@ ALTER TABLE ONLY public.logout_transactions ALTER COLUMN id SET DEFAULT nextval(
 
 
 --
--- Name: op_app_authority_stop_browser_logouts id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_app_authority_stop_browser_logouts ALTER COLUMN id SET DEFAULT nextval('public.op_app_authority_stop_browser_logouts_id_seq'::regclass);
-
-
---
 -- Name: op_app_authority_stop_causes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2672,14 +2569,6 @@ ALTER TABLE ONLY public.security_one_time_reveals ALTER COLUMN id SET DEFAULT ne
 --
 
 ALTER TABLE ONLY public.turnstile_replays ALTER COLUMN id SET DEFAULT nextval('public.turnstile_replays_id_seq'::regclass);
-
-
---
--- Name: acme_logout_transactions acme_logout_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.acme_logout_transactions
-    ADD CONSTRAINT acme_logout_transactions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2984,14 +2873,6 @@ ALTER TABLE ONLY public.identity_totp_ceremony_candidates
 
 ALTER TABLE ONLY public.logout_transactions
     ADD CONSTRAINT logout_transactions_pkey PRIMARY KEY (id);
-
-
---
--- Name: op_app_authority_stop_browser_logouts op_app_authority_stop_browser_logouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_app_authority_stop_browser_logouts
-    ADD CONSTRAINT op_app_authority_stop_browser_logouts_pkey PRIMARY KEY (id);
 
 
 --
@@ -3484,41 +3365,6 @@ CREATE UNIQUE INDEX idx_op_app_consumed_jtis_scope ON public.op_consumed_jtis US
 --
 
 CREATE UNIQUE INDEX idx_op_app_inbound_event_receipts_identity ON public.op_inbound_event_receipts USING btree (event_id, issuer, realm, client_id);
-
-
---
--- Name: index_acme_logout_transactions_on_expires_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_acme_logout_transactions_on_expires_at ON public.acme_logout_transactions USING btree (expires_at);
-
-
---
--- Name: index_acme_logout_transactions_on_origin_surface; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_acme_logout_transactions_on_origin_surface ON public.acme_logout_transactions USING btree (origin_surface);
-
-
---
--- Name: index_acme_logout_transactions_on_public_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_acme_logout_transactions_on_public_id ON public.acme_logout_transactions USING btree (public_id);
-
-
---
--- Name: index_acme_logout_transactions_on_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_acme_logout_transactions_on_status ON public.acme_logout_transactions USING btree (status);
-
-
---
--- Name: index_acme_logout_transactions_on_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_acme_logout_transactions_on_workflow ON public.acme_logout_transactions USING btree (workflow);
 
 
 --
@@ -4313,13 +4159,6 @@ CREATE UNIQUE INDEX index_logout_transactions_on_token_digest ON public.logout_t
 
 
 --
--- Name: index_op_app_authority_stop_browser_logouts_on_stop_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_op_app_authority_stop_browser_logouts_on_stop_id ON public.op_app_authority_stop_browser_logouts USING btree (stop_id);
-
-
---
 -- Name: index_op_app_authority_stop_epoch_cutoffs_on_stop_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4573,14 +4412,6 @@ ALTER TABLE ONLY public.op_app_authority_stop_participants
 
 ALTER TABLE ONLY public.op_app_authority_stop_participants
     ADD CONSTRAINT fk_app_stop_restrict_10 FOREIGN KEY (status_id) REFERENCES public.op_app_authority_stop_participant_statuses(id) ON DELETE RESTRICT;
-
-
---
--- Name: op_app_authority_stop_browser_logouts fk_app_stop_restrict_11; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_app_authority_stop_browser_logouts
-    ADD CONSTRAINT fk_app_stop_restrict_11 FOREIGN KEY (stop_id) REFERENCES public.op_app_authority_stops(id) ON DELETE RESTRICT;
 
 
 --
@@ -4870,6 +4701,8 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261026190823'),
+('20261026185751'),
 ('20261025120400'),
 ('20261025120301'),
 ('20261025120300'),

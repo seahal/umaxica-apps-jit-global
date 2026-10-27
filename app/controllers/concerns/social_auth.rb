@@ -18,6 +18,8 @@
 module SocialAuth
   extend ActiveSupport::Concern
 
+  include FrameDenyingContentSecurityPolicy
+
   SOCIAL_INTENT_SESSION_KEY = :social_auth_intent
   SOCIAL_USER_ID_SESSION_KEY = :social_auth_user_id
   SOCIAL_STARTED_AT_SESSION_KEY = :social_auth_started_at
@@ -405,6 +407,7 @@ module SocialAuth
     reason = classify_social_auth_error_reason(error)
 
     log_social_auth_error_details(error, intent, provider, reason)
+    return refuse_social_sign_path!(social_sign_path_refusal_reason(error)) if social_sign_path_intent?(intent)
 
     respond_to do |format|
       format.html do
@@ -418,6 +421,31 @@ module SocialAuth
     end
   end
 
+  # D-47 / D-198: on the Sign In / Sign Up path ("login" intent) every social refusal ends the
+  # attempt with the one Sign-in path response; the reason reaches only the server log. Linking from
+  # settings keeps its own redirect.
+  def social_sign_path_intent?(intent)
+    intent.to_s != "link"
+  end
+
+  def refuse_social_sign_path!(reason)
+    clear_social_auth_intent!
+    refuse_sign_in_path!(reason)
+  end
+
+  def social_sign_path_refusal_reason(error)
+    check = error.context[:check]
+    case error.i18n_key.to_s
+    when "errors.social_auth.identity_conflict" then "intent_crossing"
+    when "errors.social_auth.invalid_intent" then check ? "ownership_mismatch" : "intent_crossing"
+    when "errors.social_auth.unauthorized" then (check == "enforced_subject") ? "subject_enforced" : "credential_failed"
+    when "errors.social_auth.state_expired" then "state_expired"
+    when "errors.social_auth.state_missing" then "state_invalid"
+    when "errors.social_auth.provider_error" then "provider_failed"
+    else "credential_failed"
+    end
+  end
+
   def handle_record_not_unique(error)
     intent = @social_auth_intent_snapshot || current_social_auth_intent
     provider = @social_auth_provider_snapshot || omniauth_provider
@@ -428,6 +456,8 @@ module SocialAuth
         error_class: error.class.name,
       ),
     )
+    # D-198 (3): the unique index is the last guard against a second start in one attempt.
+    return refuse_social_sign_path!("phase_violation") if social_sign_path_intent?(intent)
 
     respond_to do |format|
       format.html do
@@ -605,7 +635,7 @@ module SocialAuth
     session[SOCIAL_LINK_COMPLETION_SESSION_KEY] = [candidate.ref, token.public_id]
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; form-action 'self'"
+    deny_framing!(form_action_self: true)
     render "auth/shared/social_link_completion", layout: false,
                                                  locals: { candidate_ref: candidate.ref, ri: params[:ri] }
     nil
@@ -653,6 +683,7 @@ module SocialAuth
         "social_auth.error",
         error_class: error.class.name,
         status_code: error.status_code,
+        check: error.respond_to?(:context) ? error.context[:check] : nil,
       ),
     )
 

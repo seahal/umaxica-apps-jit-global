@@ -250,18 +250,24 @@ module Jit
         mock_response_body = response
 
         JitSecurityTurnstileConfig.stub(:visible_secret_key, "visible-secret") do
-          stub_turnstile_response(mock_response_body) do
-            failure = JitSecurityTurnstileVerifier.verify_for_ceremony(
-              token: "tok",
-              remote_ip: "1.2.3.4",
-              ceremony_id: "ceremony-123",
-              expected_action: "social_signup_confirmation",
-              expected_hostname: "wrong.host",
-              expected_cdata: "ceremony-123",
-            )
+          [
+            ["wrong.host", "social_signup_confirmation", "ceremony-123"],
+            ["id.app.localhost", "wrong_action", "ceremony-123"],
+            ["id.app.localhost", "social_signup_confirmation", "another-ceremony"],
+          ].each do |hostname, action, cdata|
+            stub_turnstile_response(mock_response_body) do
+              failure = JitSecurityTurnstileVerifier.verify_for_ceremony(
+                token: "tok",
+                remote_ip: "1.2.3.4",
+                ceremony_id: "ceremony-123",
+                expected_action: action,
+                expected_hostname: hostname,
+                expected_cdata: cdata,
+              )
 
-            assert_not failure["success"]
-            assert_equal "turnstile binding mismatch", failure["error"]
+              assert_not failure["success"]
+              assert_equal "turnstile binding mismatch", failure["error"]
+            end
           end
         end
       end

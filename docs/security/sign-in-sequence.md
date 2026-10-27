@@ -243,7 +243,7 @@ row, actor binding, expiry, provider correlation, or the existing session-issuan
 
 Same-phase reload is allowed. A GET or HEAD with a missing, malformed, expired, cross-surface,
 cross-flow, or contradictory phase binding returns HTTP `409 Conflict` as plain text with the exact
-body `戻るはだめです`. It does not redirect, mutate the flow, issue an OTP or WebAuthn challenge,
+body `この画面は古くなっています。最初からやり直してください。`. It does not redirect, mutate the flow, issue an OTP or WebAuthn challenge,
 create a session, or perform another side effect. The authentication no-store response policy is
 preserved. This refusal is not a lifecycle edge.
 

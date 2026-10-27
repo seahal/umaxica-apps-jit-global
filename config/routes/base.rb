@@ -165,7 +165,6 @@ scope(module: :base, as: :base) do
       # Base is a first-party browser RP on this host; Visa is the OIDC authority.
 
       # The Base RP callback and back-channel logout receiver stay on this host.
-      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
@@ -422,7 +421,6 @@ scope(module: :base, as: :base) do
 
       # Base is a first-party browser RP on this host; Visa is the OIDC authority.
 
-      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
@@ -745,7 +743,6 @@ scope(module: :base, as: :base) do
 
       # Base is a first-party browser RP on this host; Visa is the OIDC authority.
 
-      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.

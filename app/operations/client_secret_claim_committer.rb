@@ -74,7 +74,7 @@ class ClientSecretClaimCommitter
               credential.lock!
               ticket_now = ClientSignInFlow.database_now
               source_now = Client.database_now
-              unless actor.login_allowed? && flow.sign_in_primary_pending? && !flow.expired?(ticket_now) &&
+              unless actor.sign_in_allowed? && flow.sign_in_primary_pending? && !flow.expired?(ticket_now) &&
                   (flow.principal_id.nil? || flow.principal_id == actor.id) && ceremony.active?(now: ticket_now) &&
                   ceremony.admitted? && claim_admission_matches?(
                     actor, credential, flow, ceremony, authorization_transaction, ticket_now,
@@ -115,7 +115,7 @@ class ClientSecretClaimCommitter
     end
 
     def oidc_binding_admitted?(actor, credential, transaction, ceremony, now)
-      credential.available_at?(at: Client.database_now) && actor.login_allowed? &&
+      credential.available_at?(at: Client.database_now) && actor.sign_in_allowed? &&
         transaction.status == "pending" && !transaction.expired?(now: now) &&
         !transaction.login_challenge_expired?(now: now) && ceremony.admitted? && ceremony.active?(now: now) &&
         ceremony.admission_purpose == "authentication_handoff" && !ceremony.authentication_evidence_recorded? &&

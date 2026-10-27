@@ -37,6 +37,37 @@ class OutboundHttpConnectionAdapterPortTest < ActiveSupport::TestCase
     end
   end
 
+  {
+    "IPv4 private" => "10.0.0.1",
+    "IPv4 loopback" => "127.0.0.1",
+    "IPv4 link-local" => "169.254.1.1",
+    "cloud metadata" => "169.254.169.254",
+    "IPv6 private" => "fd00::1",
+    "IPv6 loopback" => "::1",
+    "IPv6 link-local" => "fe80::1",
+    "IPv4-mapped IPv6" => "::ffff:127.0.0.1",
+  }.each do |label, address|
+    test "public endpoint rejects #{label} DNS answers before connecting" do
+      adapter = OutboundHttp::ConnectionAdapterPort.new(->(_env) { }, require_public_address: true)
+
+      Addrinfo.stub(:getaddrinfo, [Addrinfo.tcp(address, 443)]) do
+        assert_raises(OutboundHttp::Connection::InsecureEndpointError) do
+          adapter.net_http_connection(url: URI("https://rp.example/closures"), request: { proxy: nil })
+        end
+      end
+    end
+  end
+
+  test "connection setup accepts and pins a global IPv6 address" do
+    adapter = OutboundHttp::ConnectionAdapterPort.new(->(_env) { }, require_public_address: true)
+    Addrinfo.stub(:getaddrinfo, [Addrinfo.tcp("2606:4700:4700::1111", 443)]) do
+      connection = adapter.net_http_connection(url: URI("https://rp.example/closures"), request: { proxy: nil })
+
+      assert_equal "rp.example", connection.address
+      assert_equal "2606:4700:4700::1111", connection.ipaddr
+    end
+  end
+
   test "DNS failure remains a transport failure" do
     adapter = OutboundHttp::ConnectionAdapterPort.new(->(_env) { }, require_public_address: true)
 

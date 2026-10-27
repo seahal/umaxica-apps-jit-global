@@ -7,11 +7,13 @@
 module OidcAuthorizationContinuation
   extend ActiveSupport::Concern
 
+  include BrowserNavigationRequest
+
   public
 
   def show
     apply_base_browser_continuation_headers!
-    return render_continuation_refusal! unless continuation_navigation_request?
+    return render_continuation_refusal! unless browser_navigation_request?
 
     @oidc_continuation_request = true
     case self.class::OIDC_CONTINUATION_KIND
@@ -45,12 +47,6 @@ module OidcAuthorizationContinuation
   end
 
   private
-
-  def continuation_navigation_request?
-    request.get? && !request.head? &&
-      request.headers["Sec-Fetch-Mode"].to_s == "navigate" &&
-      request.headers["Sec-Fetch-Dest"].to_s == "document"
-  end
 
   def render_continuation_refusal!
     render json: {

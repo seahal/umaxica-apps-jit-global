@@ -14,7 +14,10 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
     @token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
-  test "RP Welcome renders with the configured dashboard as its default next link" do
+  test "A29-8: authenticated RP Welcome remains available while Sign In is blocked" do
+    feature = FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name
+    previous_availability = Flipper.enabled?(feature)
+    Flipper.disable(feature)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
 
@@ -79,11 +82,17 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
-    get base_app_welcome_url(ri: "jp", host: @host),
-        headers: http_headers_0
+    token_count = ClientToken.count
+    get(
+      base_app_welcome_url(ri: "jp", host: @host),
+      headers: http_headers_0,
+    )
 
     assert_response :success
     assert_includes response.body, base_app_dashboard_path(ri: "jp")
+    assert_equal token_count, ClientToken.count
+  ensure
+    previous_availability ? Flipper.enable(feature) : Flipper.disable(feature)
   end
 
   private

@@ -572,6 +572,29 @@ module Auth::App::In
       assert_empty ClientToken.where(user_id: @user.id)
     end
 
+    test "A34-2: Passkey verification refuses an unfinished APP registration" do
+      @user.update!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding), params: options_params
+      options = response.parsed_body
+
+      assert_response :ok
+      before_use = @passkey.reload.attributes.slice("sign_count", "last_used_at")
+      assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+        post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+             params: assertion_params_for(
+               challenge_id: options.fetch("challenge_id"), challenge: options.dig("options", "challenge"),
+             )
+      end
+      # The refusal is decided before the assertion is recorded (A-7 follow-up).
+      assert_equal before_use, @passkey.reload.attributes.slice("sign_count", "last_used_at")
+
+      # A34-2 requires a refusal with no token or cookie, not a specific status; the account is now
+      # refused before the assertion is recorded, with the generic verification failure (401).
+      assert_response :unauthorized
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+
     test "verification returns 422 when login result status is unknown" do
       post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
            params: options_params(identifier: @user_email.address)

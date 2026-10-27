@@ -1,0 +1,12 @@
+# Full-suite repair: partial continuation
+
+- Commit: `aeb09ca9fb97ef1ca24c0195b2fa1d28d21245df`; the worktree was dirty with the cycle changes and the work described here.
+- C-1: extracted the APP, COM and ORG Visa logout implementation into realm-local concerns; the logout, confirmation and completion controllers now directly inherit their realm's authority controller. The previously failing inheritance guard was not changed or given exceptions.
+- `PARALLEL_WORKERS=1 bin/rails test test/controllers/controller_inheritance_invariant_test.rb test/integration/oidc_current_device_logout_test.rb test/integration/oidc_logout_enqueue_failure_test.rb`: 84 runs, 922 assertions, 0 failures, 0 errors.
+- `bundle exec rubocop` on the 12 changed controller and concern files reported three `Umaxica/NoConcernInclusionHooks` offenses: C-1 requires layout configuration inside each concern, but the repository prohibits registering layout using an inclusion hook. This conflict is unresolved; no cop or baseline was weakened.
+- WU-02: the APP Visa root is a public landing page under the bare boundary. Added `Visa::App::RootsController` to the exact required descendant list after checking the controller and page.
+- D-182 / D-191, ten.md section 3: the Palm forged-challenge completion request specifies the region so it reaches the completion rather than the region redirect; it continues to assert 404.
+- `PARALLEL_WORKERS=1 bin/rails test test/controllers/base/app/bare_controller_test.rb test/controllers/palm/app/sign/out/completions_controller_test.rb test/controllers/base/{app,com,org}/oidc/logouts_controller_test.rb test/integration/preference_logout_downgrade_test.rb`: 75 runs, 420 assertions, 2 failures, 0 errors. Both failures were in the known `preference_logout_downgrade` file: a 422 before logout and a missing CSRF token after a 302. No expectation was changed there.
+- The 302 observed in the step-up retry tests redirects to passive `/sign` via `OidcSsoInitiator#authenticate!`; the tests expect completion and preserved verification state. Changing 303 to 302 alone would conceal the changed destination and leave the subsequent assertions unsatisfied. This item remains unresolved.
+- The architecture baseline was not regenerated: doing so while the three new concern offenses exist would record new violations, contrary to the requested ratchet.
+- Batches 1–3 and the final full suite remain incomplete. The baseline comparison was not run.

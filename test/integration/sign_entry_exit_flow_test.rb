@@ -14,6 +14,24 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
     @redirect_uri = @client.redirect_uris_by_realm.fetch("client").first
   end
 
+  test "a pending authorization continuation returns a generic refusal without issuing a code" do
+    transaction = start_at_auth_sign_in!
+    before = transaction.reload.attributes
+    host! @visa_host
+    OidcAuthorizationCodeIssuer.stub(:call, ->(**) { flunk("pending transaction must not issue a code") }) do
+      get "/oidc/result", params: { transaction_ref: transaction.transaction_id, result_ref: SecureRandom.uuid },
+                          headers: browser_navigation_headers
+    end
+
+    assert_response :bad_request
+    assert_equal(
+      { "error" => "invalid_request", "error_description" => "invalid continuation request" },
+      response.parsed_body,
+    )
+    assert_nil response.location
+    assert_equal before, transaction.reload.attributes
+  end
+
   test "Cancel on the first Sign In page returns access_denied with state and iss to the RP" do
     transaction = start_at_auth_sign_in!
 
@@ -26,11 +44,32 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
     assert_equal "/oidc/cancellation", visa_location.path
     assert_predicate ceremony_session_for(transaction).reload, :cancelled?
 
+    continuation = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    before = [transaction.reload.attributes,
+              ClientAuthAdmissionBinding.where(
+                authorization_transaction_id: transaction.id,
+              ).order(:id).map(&:attributes),]
+    host!(continuation.host)
+    head(continuation.request_uri, headers: browser_navigation_headers)
+
+    assert_response :bad_request
+    assert_equal before, [transaction.reload.attributes,
+                          ClientAuthAdmissionBinding.where(
+                            authorization_transaction_id: transaction.id,
+                          ).order(:id).map(&:attributes),]
+    get(continuation.request_uri, headers: browser_navigation_headers.merge("Sec-Fetch-Dest" => "iframe"))
+
+    assert_response :bad_request
+    assert_equal before, [transaction.reload.attributes,
+                          ClientAuthAdmissionBinding.where(
+                            authorization_transaction_id: transaction.id,
+                          ).order(:id).map(&:attributes),]
     location = commit_visa_continuation!(visa_location)
     rp = URI.parse(location)
     query = Rack::Utils.parse_nested_query(rp.query)
 
     assert_equal @redirect_uri, "#{rp.scheme}://#{rp.host}#{rp.path}"
+    assert_equal %w(error iss state), query.keys.sort
     assert_equal "access_denied", query.fetch("error")
     assert_equal "state", query.fetch("state")
     assert_predicate query.fetch("iss"), :present?
@@ -88,7 +127,27 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_predicate old_ceremony.reload, :cancelled?
 
-    location = commit_visa_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location)))
+    continuation = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    before = [transaction.reload.attributes,
+              ClientAuthAdmissionBinding.where(
+                authorization_transaction_id: transaction.id,
+              ).order(:id).map(&:attributes),]
+    host!(continuation.host)
+    head(continuation.request_uri, headers: browser_navigation_headers)
+
+    assert_response :bad_request
+    assert_equal before, [transaction.reload.attributes,
+                          ClientAuthAdmissionBinding.where(
+                            authorization_transaction_id: transaction.id,
+                          ).order(:id).map(&:attributes),]
+    get(continuation.request_uri, headers: browser_navigation_headers.merge("Sec-Fetch-Dest" => "iframe"))
+
+    assert_response :bad_request
+    assert_equal before, [transaction.reload.attributes,
+                          ClientAuthAdmissionBinding.where(
+                            authorization_transaction_id: transaction.id,
+                          ).order(:id).map(&:attributes),]
+    location = commit_visa_continuation!(continuation)
     target = URI.parse(jump_rt_url_from_location_for_test(location))
 
     assert_equal @auth_host, target.host

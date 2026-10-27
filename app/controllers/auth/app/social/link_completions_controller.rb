@@ -16,7 +16,7 @@ module Auth
           authorize!(current_client, to: :update?)
           response.headers["Cache-Control"] = "private, no-store"
           response.headers["Referrer-Policy"] = "no-referrer"
-          response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; form-action 'self'"
+          deny_framing!(form_action_self: true)
           reference = params[:candidate_ref]
           unless IdentitySocialCeremonyCandidate.valid_reference?(reference)
             raise ActionController::BadRequest

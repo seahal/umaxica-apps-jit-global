@@ -31,6 +31,7 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
         resource: resource,
         client: client,
         nonce: "",
+        sid: PublicId.generate,
         issued_at: Time.current,
         expires_at: 1.minute.from_now,
       ).call
@@ -40,6 +41,7 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
         resource: resource,
         client: client,
         nonce: "n",
+        sid: PublicId.generate,
         issued_at: 1.minute.from_now,
         expires_at: Time.current,
       ).call

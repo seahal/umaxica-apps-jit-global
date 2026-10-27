@@ -19,6 +19,12 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     ClientSecurityMode.insert_missing_fixed_ids!(ClientSecurityMode::DEFAULTS)
     @protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
+    @turnstile_state = [
+      TurnstileVerifierStub.enabled,
+      TurnstileVerifierStub.response,
+      TurnstileVerifierStub.challenge_enabled,
+      TurnstileVerifierStub.challenge_response,
+    ]
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @parent = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app", intent: "authentication",
@@ -112,8 +118,8 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
 
     assert_equal 200, @browser.response.status
     options = @browser.response.parsed_body
-    fake_client = WebAuthn::FakeClient.new("https://#{@host}", encoding: :base64url)
-    @registration = fake_client.create(
+    @fake_client = WebAuthn::FakeClient.new("https://#{@host}", encoding: :base64url)
+    @registration = @fake_client.create(
       challenge: options.fetch("options").fetch("challenge"),
       rp_id: options.fetch("options").fetch("rp").fetch("id"), user_verified: true,
     )
@@ -127,10 +133,51 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     @worker&.join(5)
     @replay_workers&.each { |worker| worker.join(5) }
     if @actor
+      identity = ClientIdentity.find_by(source_record_id: @actor.id)
+      persona = ClientPersona.find_by(client_identity_id: identity.id) if identity
+      if persona
+        binding = AvatarPersonaBinding.find_by(persona_id: persona.id)
+        avatar = Avatar.find_by(id: binding.avatar_id) if binding
+        AvatarRecord.connected_to(role: :writing) do
+          connection = AvatarRecord.lease_connection
+          begin
+            # This teardown removes only rows created by this test; production ownership history stays immutable.
+            connection.execute("SET session_replication_role = replica")
+            AvatarPersonaBinding.where(persona_id: persona.id).delete_all
+            if avatar
+              AvatarOwnershipPeriod.where(avatar_id: avatar.id).delete_all
+              AvatarEnterpriseOwnershipPeriod.where(avatar_id: avatar.id).delete_all
+              AvatarMoniker.where(avatar_id: avatar.id).delete_all
+              active_handle_id = avatar.active_handle_id
+              Avatar.where(id: avatar.id).delete_all
+              Handle.where(id: active_handle_id).delete_all
+            end
+          ensure
+            connection.execute("SET session_replication_role = origin")
+          end
+        end
+        membership = PersonaMembership.where(persona_id: persona.id)
+        enterprise_ids = membership.pluck(:enterprise_id).uniq
+        unit_ids = membership.pluck(:enterprise_unit_id).uniq
+        membership.delete_all
+        EnterpriseUnitClosure.where(ancestor_id: unit_ids).or(
+          EnterpriseUnitClosure.where(descendant_id: unit_ids),
+        ).delete_all
+        EnterpriseUnit.where(id: unit_ids).delete_all
+        Enterprise.where(id: enterprise_ids).delete_all
+        ClientPersonaOwnership.where(client_persona_id: persona.id).delete_all
+        ClientPersonaLifecycle.where(client_persona_id: persona.id).delete_all
+        PersonaAssignment.where(persona_id: persona.id).delete_all
+        ClientPersona.where(id: persona.id).delete_all
+      end
+      ClientAccount.where(user_id: @actor.id).delete_all
+      ClientIdentity.where(id: identity.id).delete_all if identity
+      ClientSecretCredential.where(client_id: @actor.id).delete_all
       ClientSecretIssuance.where(client_id: @actor.id).delete_all
       ClientPasskey.where(user_id: @actor.id).delete_all
       ClientSecretAuditOutbox.where(client_ref: @actor.public_id).delete_all
       ClientPasskeyAuditOutbox.where(actor_ref: @actor.public_id).delete_all
+      ClientAuthorityLock.where(client_id: @actor.id).delete_all
     end
     @otp_transaction&.reload&.delete
     @flow&.reload&.delete
@@ -140,6 +187,10 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     @attached&.reload&.delete
     @telephone&.reload&.delete
     @actor&.reload&.delete
+    if @turnstile_state
+      TurnstileVerifierStub.enabled, TurnstileVerifierStub.response,
+        TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response = @turnstile_state
+    end
     ActionController::Base.allow_forgery_protection = @protection
   end
 
@@ -327,5 +378,152 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
         assert_equal 0, ClientToken.where(user_id: @actor.id).count
       end
     end
+  end
+
+  test "A06-6b: a real principal lock wait crossing curfew keeps registration and refuses handoff" do
+    @browser.patch("/sign/up/check/telephone/passkey", params: @submission, headers: @headers, as: :json)
+
+    assert_equal 201, @browser.response.status
+    secret_uri = URI.parse(@browser.response.parsed_body.fetch("redirect_url"))
+    @browser.get(secret_uri.to_s, headers: @headers)
+
+    assert_equal 200, @browser.response.status
+    issuance = ClientSecretIssuance.find_by!(sign_up_flow_ref: @flow.public_id)
+    if issuance.planned_count.positive?
+      @browser.post(secret_uri.to_s, headers: @headers)
+
+      assert_equal 200, @browser.response.status
+    end
+    confirmation = { checkpoint_version: @flow.reload.checkpoint_version }
+    confirmation[:stored] = "1" if issuance.planned_count.positive?
+    @browser.patch(secret_uri.to_s, params: confirmation, headers: @headers)
+
+    assert_equal 303, @browser.response.status
+    birthdate_uri = URI.parse(@browser.response.location)
+    @browser.get(birthdate_uri.to_s, headers: @headers)
+
+    assert_equal 200, @browser.response.status
+    curfew_at = ClientAuthAdmissionBinding.database_now + 2.seconds
+    @binding.update_columns(curfew_at: curfew_at)
+    checkpoint_version = @flow.reload.checkpoint_version
+    pid_queue = Queue.new
+    waited = false
+    nil
+
+    OpBaseAppRecord.transaction do
+      ClientTelephoneCeremonyTransaction.lock.find(@otp_transaction.id)
+      @worker =
+        Thread.new do
+          OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+            pid_queue << Integer(connection.select_value("SELECT pg_backend_pid()"))
+            @browser.patch(
+              auth_app_sign_up_check_telephone_birthdate_path(
+                ri: "jp", fb: Rack::Utils.parse_query(
+                  birthdate_uri.query,
+                ).fetch("fb"),
+              ),
+              params: { requirement: "birthdate", birthdate: "2000-01-01", checkpoint_version: },
+              headers: @headers,
+            )
+            [@browser.response.status, @browser.response.location, @browser.response.body]
+          end
+        rescue StandardError => e
+          e
+        ensure
+          ActiveRecord::Base.connection_handler.clear_active_connections!
+        end
+      worker_pid = Timeout.timeout(10) { pid_queue.pop }
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+
+      OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |observer|
+        loop do
+          wait_event =
+            OpBaseAppRecord.uncached do
+              observer.select_value("SELECT pg_stat_clear_snapshot()::text")
+              observer.select_value(
+                "SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(worker_pid)}",
+              )
+            end
+          waited = wait_event == "Lock"
+          break if waited || !@worker.alive? || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+          sleep 0.01
+        end
+      end
+
+      assert waited, "the HTTP finalizer waits on the separately held principal row"
+      Timeout.timeout(5) do
+        sleep 0.01 while ClientAuthAdmissionBinding.database_now <= curfew_at
+      end
+    end
+
+    request_status, request_location, request_body = Timeout.timeout(10) { @worker.value }
+
+    assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, @actor.reload.status_id,
+                 "late finalization returned #{request_status} to #{request_location}: #{request_body}"
+    assert_predicate @flow.reload, :sign_up_completed?
+    assert_equal 0, ClientToken.where(user_id: @actor.id).count
+    assert_empty OpAppGrant.where(client_token_id: ClientToken.where(user_id: @actor.id).select(:id))
+    assert_nil @browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil @browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+
+    client = OidcClientRegistry.find!("core-app-jp")
+    later_admission = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
+      surface: "app", intent: "sign_in", params: {
+        client_id: client.client_id,
+        response_type: "code",
+        scope: "openid profile",
+        redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+        state: SecureRandom.urlsafe_base64(24),
+        nonce: SecureRandom.urlsafe_base64(24),
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+      }, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    ).handoff
+    later_binding = ClientAuthAdmissionBinding.find_by!(entry_ref: later_admission.reference)
+    later_attached, later_sid = ClientAuthCeremonySession.issue!
+    later_binding.attach_auth_session!(auth_session: later_attached, confirmation_ref: SecureRandom.uuid)
+    later_binding.confirm_base!(base_token: nil, browser_digest: later_binding.base_browser_digest)
+    sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    @browser.cookies[sid_key] = later_sid
+    @browser.get("/sign/in", params: { entry_ref: later_admission.reference, ri: "jp" }, headers: @headers)
+
+    assert_equal 303, @browser.response.status
+    @browser.get(@browser.response.location, headers: @headers)
+
+    assert_equal 200, @browser.response.status
+    assert_includes @browser.response.body, "auth/app/sign_ins/new"
+    assert_equal 0, ClientToken.where(user_id: @actor.id).count
+
+    turnstile_response = { "success" => true }
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = turnstile_response
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = turnstile_response
+    @browser.get(new_auth_app_sign_in_passkey_path(ri: "jp"), headers: @headers)
+
+    assert_equal 200, @browser.response.status
+    csrf = Nokogiri::HTML(@browser.response.body).at_css('meta[name="csrf-token"]')["content"]
+    login_headers = @headers.merge("X-CSRF-Token" => csrf)
+    @browser.post(
+      auth_app_sign_in_passkey_options_path(ri: "jp"),
+      params: { :identifier => @telephone.raw_number, "cf-turnstile-response" => "synthetic" },
+      headers: login_headers, as: :json,
+    )
+
+    assert_equal 200, @browser.response.status
+    login_options = @browser.response.parsed_body
+    assertion = @fake_client.get(
+      challenge: login_options.fetch("options").fetch("challenge"),
+      user_present: true, user_verified: true, sign_count: 1,
+    )
+    @browser.post(
+      auth_app_sign_in_passkey_verification_path(ri: "jp"),
+      params: { challenge_id: login_options.fetch("challenge_id"), credential: assertion },
+      headers: login_headers, as: :json,
+    )
+
+    assert_equal 200, @browser.response.status
+    assert_equal 303, request_status
   end
 end

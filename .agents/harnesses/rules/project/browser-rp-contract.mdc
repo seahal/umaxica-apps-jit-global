@@ -16,6 +16,8 @@ description: Preserve the shared Browser RP credential, refresh, cookie, and aut
 - Credential failure and dependency failure have distinct observable outcomes. A credential failure
   clears invalid RP cookies; a dependency failure preserves them and returns an explicit failure.
   No silent refresh, fallback cookie, retry or grace protocol is permitted.
-- Logout is authority-first; revoking the parent does not imply synchronous sibling RP revocation.
+- Logout clears the originating RP's own browser state before it redirects to the OP; the OP then
+  commits the authority stop (D-188). Sibling RPs learn of it through back-channel logout, never
+  synchronously.
   Browser history clearing uses official Inertia primitives only and never stores one-time secrets in
   page history.

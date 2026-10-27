@@ -1135,12 +1135,6 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     base.https!
     flow = ClientSignInFlow.find(authorization.reload.secret_sign_in_flow_id)
     root = ClientToken.find_by!(id: flow.reload.token_id, user_id: actor.id)
-    id_token = OidcIdTokenIssuer.call(
-      resource: actor,
-      client: OidcClientRegistry.find!("base-app-ww"),
-      nonce: authorization.reload.nonce,
-      auth_time: authorization.authenticated_at,
-    )
     rp_client = OidcClientRegistry.find!("base-app-ww")
     rp_session = OpAppGrant.create!(
       authentication_epoch: 0,
@@ -1151,6 +1145,13 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: authorization.authenticated_at,
       refresh_token_expires_at: 10.minutes.from_now,
+    )
+    id_token = OidcIdTokenIssuer.call(
+      resource: actor,
+      client: OidcClientRegistry.find!("base-app-ww"),
+      nonce: authorization.reload.nonce,
+      sid: rp_session.public_id,
+      auth_time: authorization.authenticated_at,
     )
     rp_access_token = AuthenticationTokenService.encode(
       actor,

@@ -52,7 +52,7 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
         query = Rack::Utils.parse_nested_query(target.query)
 
         assert_equal "https://#{host}", payload.fetch("iss")
-        assert_equal "www.umaxica.#{tld}", target.host
+        assert_equal "visa.umaxica.#{tld}", target.host # WU-02: the OP is on Visa
         assert_equal "https", target.scheme
         assert_equal "/oauth/authorize", target.path
         assert_equal "https://#{host}/oidc/callback", query.fetch("redirect_uri")
@@ -72,7 +72,7 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
     target = URI.parse(response.location)
 
     assert_equal "https", target.scheme
-    assert_equal "www.umaxica.org", target.host
+    assert_equal "visa.umaxica.org", target.host # WU-02: the OP is on Visa
     assert_equal "/oauth/authorize", target.path
     assert_equal "edit-org-ww", Rack::Utils.parse_nested_query(target.query).fetch("client_id")
   end

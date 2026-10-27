@@ -7,26 +7,30 @@
 module AuthOidcResultHandoff
   extend ActiveSupport::Concern
 
+  include FrameDenyingContentSecurityPolicy
+  include BrowserNavigationRequest
+
   public
 
   def show
     apply_oidc_result_handoff_headers!
-    return reject_oidc_result_handoff! unless oidc_continuation_navigation_request?
+    return reject_oidc_result_handoff!("not_navigation") unless browser_navigation_request?
 
     complete_oidc_result_handoff!
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
-         AuthCeremonySession::InvalidTransition, ArgumentError, KeyError
-    reject_oidc_result_handoff!
+         AuthCeremonySession::InvalidTransition, ArgumentError, KeyError => e
+    reject_oidc_result_handoff!("raised", error: e)
   end
 
   private
 
   def complete_oidc_result_handoff!
     challenge = oidc_authorization_login_challenge
-    return reject_oidc_result_handoff! if challenge.blank?
+    return reject_oidc_result_handoff!("login_challenge_missing") if challenge.blank?
 
     evidence = oidc_result_authentication_evidence
-    return reject_oidc_result_handoff! if evidence.nil? || current_resource.nil?
+    return reject_oidc_result_handoff!("evidence_missing") if evidence.nil?
+    return reject_oidc_result_handoff!("actor_missing") if current_resource.nil?
 
     issuance = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: oidc_result_handoff_surface,
@@ -53,16 +57,25 @@ module AuthOidcResultHandoff
   def apply_oidc_result_handoff_headers!
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    deny_framing!
   end
 
-  def oidc_continuation_navigation_request?
-    request.get? && !request.head? &&
-      request.headers["Sec-Fetch-Mode"].to_s == "navigate" &&
-      request.headers["Sec-Fetch-Dest"].to_s == "document"
-  end
-
-  def reject_oidc_result_handoff!
+  # `check` names the failed condition for the log only; people see the same refusal for all.
+  def reject_oidc_result_handoff!(check = "cycle_not_ready", error: nil)
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.oidc_result_handoff.refused",
+        surface: oidc_result_handoff_surface,
+        check: check,
+        error_class: error&.class&.name,
+        denied_code: error.respond_to?(:code) ? error.code : nil,
+        request_method: request.request_method,
+        sec_fetch_mode: request.headers["Sec-Fetch-Mode"],
+        sec_fetch_dest: request.headers["Sec-Fetch-Dest"],
+        sec_fetch_site: request.headers["Sec-Fetch-Site"],
+        sec_purpose: request.headers["Sec-Purpose"],
+      ),
+    )
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 

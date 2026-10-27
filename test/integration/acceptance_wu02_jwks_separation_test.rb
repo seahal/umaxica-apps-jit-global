@@ -8,9 +8,9 @@ class AcceptanceWu02JwksSeparationTest < ActionDispatch::IntegrationTest
 
   test "A02-6: Visa and Base JWKS have disjoint kids and public key material in every realm" do
     realms = [
-      ["app", "PUBLIC_VISA_SERVICE_URL", "PUBLIC_BASE_SERVICE_URL", "VISA_APP", "BASE_APP"],
-      ["com", "PUBLIC_VISA_CORPORATE_URL", "PUBLIC_BASE_CORPORATE_URL", "VISA_COM", "BASE_COM"],
-      ["org", "PUBLIC_VISA_STAFF_URL", "PUBLIC_BASE_STAFF_URL", "VISA_ORG", "BASE_ORG"],
+      %w(app PUBLIC_VISA_SERVICE_URL PUBLIC_BASE_SERVICE_URL VISA_APP BASE_APP),
+      %w(com PUBLIC_VISA_CORPORATE_URL PUBLIC_BASE_CORPORATE_URL VISA_COM BASE_COM),
+      %w(org PUBLIC_VISA_STAFF_URL PUBLIC_BASE_STAFF_URL VISA_ORG BASE_ORG),
     ]
 
     realms.each do |realm, visa_host_key, base_host_key, visa_namespace, base_namespace|

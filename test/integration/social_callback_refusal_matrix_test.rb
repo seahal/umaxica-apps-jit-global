@@ -3,6 +3,8 @@
 require "test_helper"
 
 class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   # The database FK prevents orphan rows. Only that impossible storage boundary is replaced;
   # admission, provider state, resolution, HTTP handling and allocation checks remain real.
   OrphanIdentity =
@@ -13,6 +15,12 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
     end
 
   setup do
+    [
+      ClientStatus, ClientVisibility, ClientMfaStatus,
+      OperatorStatus, OperatorVisibility, OperatorMfaStatus,
+    ].each(&:ensure_defaults!)
+    ClientSecurityMode.insert_missing_fixed_ids!(ClientSecurityMode::DEFAULTS)
+    OperatorSecurityMode.insert_missing_fixed_ids!(OperatorSecurityMode::DEFAULTS)
     @previous_protection = ActionController::Base.allow_forgery_protection
     @previous_omniauth_mode = OmniAuth.config.test_mode
     ActionController::Base.allow_forgery_protection = true
@@ -32,7 +40,7 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "A08 callbacks across both intents and providers allocate no Flow pending Client identity or Root" do
+  test "A07-1e/A08/A34-2: inconsistent and unfinished callbacks refuse with no authority" do
     %w(google apple).product(
       %w(sign_in sign_up),
       %w(unknown registered unusable orphan released unfinished revoked deleted
@@ -125,10 +133,15 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
         identity.release! if state == "released"
       end
       if state == "banned"
+        actor = Client.create!(security_mode_id: ClientSecurityMode::NORMAL, status_id: ClientStatus::ACTIVE)
+        operator = Operator.create!(
+          security_mode_id: OperatorSecurityMode::ADVANCED, status_id: OperatorStatus::ACTIVE,
+          visibility_id: OperatorVisibility::STAFF,
+        )
         enforcement_case = AppEnforcementCase.create!(
           kind: "permanent_ban", duration_mode: "permanent", visibility: "visible", release_mode: "break_glass_only",
-          effective_at: 1.minute.ago, reason_code: "abuse", principal_public_id: clients(:one).public_id,
-          applied_by_operator_public_id: operators(:one).public_id,
+          effective_at: 1.minute.ago, reason_code: "abuse", principal_public_id: actor.public_id,
+          applied_by_operator_public_id: operator.public_id,
         )
         digest = EnforcementIdentifierDigest.for_social_subject(
           realm: "app", identifier_kind: "#{provider}_subject",
@@ -163,14 +176,19 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
           303
         elsif state == "unusable" && intent == "sign_in"
           403
-        else
+        elsif state == "unknown" && intent == "sign_up"
           302
+        else
+          # D-47 / D-198: a refused sign-path callback ends in place with the uniform 400.
+          400
         end
 
       assert_equal expected_status, browser.response.status, "#{provider}/#{intent}/#{state} callback"
       if state == "orphan"
         assert_equal 1, fatal_events.count { |event| event.include?("social_auth.identity_without_client") }
         assert_not_includes fatal_events.join, subject
+        assert_not_includes fatal_events.join, "provider-fixture"
+        assert_not_includes fatal_events.join, "@example.test"
         assert_predicate continuity, :present?
         assert_equal continuity, browser.cookies[sid_cookie]
       end

@@ -24,3 +24,4 @@ implementation took its shape.
 | Generation | Archive                                             |
 | ---------- | --------------------------------------------------- |
 | 0001       | [OP/RP separation](0001-op-rp-separation/README.md) |
+| 0002       | [Authentication cycle 2026-10](0002-authentication-cycle-2026-10/README.md) |

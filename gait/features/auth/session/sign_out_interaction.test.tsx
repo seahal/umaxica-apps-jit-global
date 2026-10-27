@@ -6,7 +6,7 @@ import { present } from "../../../support/present";
 
 // Sign-out is destructive, so these tests mount the components and inspect the forms the browser
 // would submit. They are document submissions, not Inertia visits: the confirmation answers with a
-// cross-origin 303, so the form itself must carry the verb, the CSRF token and the ceremony proofs.
+// cross-origin 303, so the form itself must carry the verb, the CSRF token.
 const { default: SignOutConfirmation } =
   await import("@/features/auth/session/SignOutConfirmation");
 const { default: SignOutUnavailable } = await import("@/features/auth/session/SignOutUnavailable");
@@ -49,17 +49,13 @@ const confirmationProps = {
   confirm_description: "一度ログアウトすると、再度ログインが必要になります。",
   already_signed_out: "すでにサインアウトしています。",
   submit_label: "ログアウトします",
-  form: {
-    action: "/sign/out?ri=jp",
-    logout_challenge: "challenge-value",
-    logout_intent_proof: "proof-value",
-  },
+  form: { action: "/sign/out?ri=jp" },
   cancel: { label: "キャンセル", action: "/sign/out?ri=jp" },
   home_link: { label: "ホームへ戻る", href: "/?ri=jp" },
 };
 
 describe("SignOutConfirmation interaction", () => {
-  it("confirms with a document POST carrying the token and both ceremony proofs", () => {
+  it("confirms with a document POST carrying the CSRF token", () => {
     mount(<SignOutConfirmation {...confirmationProps} />);
 
     const forms = [...container.querySelectorAll("form")];
@@ -72,8 +68,6 @@ describe("SignOutConfirmation interaction", () => {
     expect(confirmation.getAttribute("method")).toBe("post");
     expect(fields(confirmation)).toEqual({
       authenticity_token: "csrf-value",
-      logout_challenge: "challenge-value",
-      logout_intent_proof: "proof-value",
     });
   });
 
@@ -87,31 +81,7 @@ describe("SignOutConfirmation interaction", () => {
     expect(fields(cancellation)).toEqual({ authenticity_token: "csrf-value", _method: "delete" });
   });
 
-  it("carries no challenge or proof when the ceremony did not start with one", () => {
-    mount(
-      <SignOutConfirmation
-        {...confirmationProps}
-        form={{ action: "/sign/out?ri=jp", logout_challenge: null, logout_intent_proof: null }}
-      />,
-    );
 
-    const confirmation = present(container.querySelectorAll("form")[0], "the sign-out form");
-
-    expect(fields(confirmation)).toEqual({ authenticity_token: "csrf-value" });
-  });
-
-  it("omits empty-string proofs rather than posting blank values", () => {
-    mount(
-      <SignOutConfirmation
-        {...confirmationProps}
-        form={{ action: "/sign/out?ri=jp", logout_challenge: "", logout_intent_proof: "" }}
-      />,
-    );
-
-    const confirmation = present(container.querySelectorAll("form")[0], "the sign-out form");
-
-    expect(fields(confirmation)).toEqual({ authenticity_token: "csrf-value" });
-  });
 });
 
 describe("SignOutUnavailable interaction", () => {

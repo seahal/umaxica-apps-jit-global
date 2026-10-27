@@ -62,6 +62,11 @@ module AppSocialCeremonyEntry
     end
 
     auth_social_admission_binding! if intent.to_s == "login"
+    # D-198 (3): one Sign-up Flow per admission; a second social start in the same attempt is refused.
+    if social_auth_entry == "sign_up" && sign_up_flow_issued_for_admission?
+      refuse_social_sign_path!("phase_violation")
+      return false
+    end
 
     # Prepare session with intent context (OmniAuth manages OAuth state)
     prepare_social_auth_intent!(
@@ -77,6 +82,12 @@ module AppSocialCeremonyEntry
     issue_sign_up_flow!(provider) if social_auth_entry == "sign_up"
 
     true
+  end
+
+  def sign_up_flow_issued_for_admission?
+    OpBaseAppRecord.connected_to(role: :writing) do
+      ClientSignUpFlow.exists?(auth_admission_binding: auth_sign_up_admission_binding!)
+    end
   end
 
   # --- App-surface ceremony state -------------------------------------------

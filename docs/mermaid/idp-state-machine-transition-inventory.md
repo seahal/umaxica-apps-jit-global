@@ -1,5 +1,31 @@
 # Current transition inventory
 
+## Visa logout request and completion transport (2026-10-26)
+
+Axis: the per-realm Rails session fields managed by `SignOidcLogout`; the completed marker is
+presentation/retry state, not an authority record. Diagram: [Visa logout session](./idp-shared-oidc-logout-session.mmd).
+The pending payload contains the device public ID, the verified grant public ID when a hint was
+provided, the optional registered return URI and state, and a five-minute expiry. A stored payload
+at or past expiry is treated as stale; expiry does not mutate the cookie by itself.
+
+| From | To | Public boundary and effect |
+|---|---|---|
+| empty | pending | A validated end-session GET/POST with the current device stages a request; a hint must identify a grant of that device. |
+| pending | pending | Refusal, rolled-back stop or unknown commit preserves the request; a repeated valid request keeps the original. |
+| pending | expired | The stored expiry is reached; the parser no longer accepts the pending payload. |
+| pending | completed | A committed stop or an already-revoked stored device clears browser state and records the completion marker. |
+| pending | empty | Browser session reset or expiry removes its transport fields. |
+| expired | expired | A stale confirmation is refused without changing authority. |
+| expired | pending | A new valid end-session request replaces the expired payload. |
+| expired | empty | Browser session reset or expiry removes its transport fields. |
+| completed | completed | A repeated confirmation without a current session reports already signed out. |
+| completed | pending | A new valid request clears the completion marker before staging. |
+| completed | empty | Browser session reset or expiry removes the marker. |
+
+Sources: `app/controllers/concerns/sign_oidc_logout.rb`, `app/services/oidc_end_session_request.rb`.
+Public coverage: `test/integration/oidc_current_device_logout_test.rb` and the three Visa logout
+controller test files. The marker does not authorize a stop or identify a device.
+
 ## OP Back-Channel Logout participant (2026-10-25)
 
 Axis: the durable per-grant delivery participant created by an OP authority stop. Diagram:
@@ -549,7 +575,7 @@ realm-specific `ClientSignInFlow`, `VisitorSignInFlow`, or `OperatorSignInFlow`.
 | Transition ID                    | Request class                             | Binding condition                                                                                         | Result                                                           | Lifecycle effect                                               | Side-effect rule                                                           |
 | -------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | idp-sign-in-phase-admission:T001 | Same-phase GET/HEAD or mutation           | Signed binding names the current flow, surface, phase, and immutable generation                           | Request proceeds through the existing public controller boundary | Unchanged or the controller's ordinary advance                 | Existing OTP, challenge, and session rules apply                           |
-| idp-sign-in-phase-admission:T002 | Contradictory GET/HEAD                    | Missing, malformed, expired, cross-surface, cross-flow, or wrong-phase binding                            | HTTP 409 `text/plain` with `戻るはだめです`                      | None; this is not a lifecycle edge                             | No redirect, state write, OTP/challenge, session, or provider side effect  |
+| idp-sign-in-phase-admission:T002 | Contradictory GET/HEAD                    | Missing, malformed, expired, cross-surface, cross-flow, or wrong-phase binding                            | HTTP 409 `text/plain` with `この画面は古くなっています。最初からやり直してください。`                      | None; this is not a lifecycle edge                             | No redirect, state write, OTP/challenge, session, or provider side effect  |
 | idp-sign-in-phase-admission:T003 | Attributable state-changing mismatch      | Binding identifies the original flow, but the locked/reloaded flow has moved away from the expected phase | Request refused and halt recorded                                | `HALTED = 930`, reason `phase_regression` or `phase_violation` | No revival, second terminal transition, session issuance, or new challenge |
 | idp-sign-in-phase-admission:T004 | Invalid or unbound state-changing request | Binding cannot identify an attributable flow                                                              | HTTP 409 refusal                                                 | No current-locator substitution and no unrelated flow halt     | No new side effect                                                         |
 
@@ -4392,47 +4418,6 @@ transitions UNKNOWN. Client default NOTHING and explicit ordinary ACTIVE creatio
 states, no inferred transition. Visitor/Operator ACTIVE/NOTHING/RESERVED are creation
 classifications with no production existing-row status mutation found, recorded as excluded lookup
 candidates in discovery.
-
-## idp-shared-acme-logout
-
-Implementation: `AcmeLogoutTransactionable / AcmeLogoutTransactionCoordinator`. Storage:
-`acme_logout_transactions` / `status / expected_step / completed_steps`.
-
-Sources: `app/models/concerns/acme_logout_transactionable.rb`,
-`app/models/acme_logout_transaction.rb`, and `app/services/acme_logout_transaction_coordinator.rb`.
-
-Tests read: `test/models/acme_logout_transaction_test.rb`,
-`test/models/acme_logout_race_branch_coverage_test.rb`, and
-`test/services/acme_logout_transaction_coordinator_test.rb`. D-33 RP-Initiated Logout is a separate
-OIDC path; current focused coverage is in `test/services/oidc/end_session_request_test.rb`,
-`test/controllers/base/app/oidc/logouts_controller_test.rb`, and
-`test/integration/oidc_rp_logout_registered_rp_matrix_test.rb`.
-
-| Transition ID               | Mutation kind         | From        | Event / Trigger              | To          | Guard                                                                                      | Side effect                                                            | Source file                                          | Confidence |
-| --------------------------- | --------------------- | ----------- | ---------------------------- | ----------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------- | ---------- |
-| idp-shared-acme-logout:T001 | DOCUMENTED_TRANSITION | initiated   | advance expected logout step | in_progress | Row lock; expected step; live TTL; failed/finalized refuse; completed step replay no-op    | Append completed_steps and move expected_step                          | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T002 | DOCUMENTED_TRANSITION | in_progress | advance expected logout step | in_progress | Row lock; expected step; live TTL; failed/finalized refuse; completed step replay no-op    | Append completed_steps and move expected_step                          | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T003 | DOCUMENTED_TRANSITION | expired     | advance expected logout step | in_progress | Row lock; expected step; live TTL; failed/finalized refuse; completed step replay no-op    | Append completed_steps and move expected_step                          | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T004 | DOCUMENTED_TRANSITION | initiated   | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T005 | DOCUMENTED_TRANSITION | in_progress | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T006 | DOCUMENTED_TRANSITION | failed      | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T007 | DOCUMENTED_TRANSITION | expired     | finalize!                    | finalized   | Row lock; live TTL; expected_step finalized; no failed source guard                        | Append finalized and finalized_at                                      | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T008 | DOCUMENTED_TRANSITION | initiated   | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T009 | DOCUMENTED_TRANSITION | in_progress | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-| idp-shared-acme-logout:T010 | DOCUMENTED_TRANSITION | expired     | fail!                        | failed      | Not finalized or failed; no own row lock                                                   | failed_at and status                                                   | app/models/concerns/acme_logout_transactionable.rb   | CONFIRMED  |
-
-Legacy ordered step sequences: sign origin_cleared->acme_cleared; acme/base
-origin_cleared->sign_cleared; core/side/palm origin_cleared->acme_cleared->sign_cleared; then
-finalize. D-33 RP-Initiated Logout uses the OIDC end-session request, Visa confirmation, OP authority
-stop and one-use RP callback; it does not write or advance this transaction. Steps are exact runtime
-events, not target external_result. Status EXPIRED declared but no writer; clock expiry refuses calls
-without writing. Edges from declared expired require a future expires_at (public API tests/model-
-permitted only); no invented clock transition to stored expired.
-finalize! lacks failed guard and can finalize failed row when expected step ready/live; failed is
-therefore not absorbing. fail! not serialized. Duplicate completed step is no-op; locked
-advance/finalize recheck. TTL10m. SQL status, expected_step and completed_steps duplicate progress
-authority, and SQL/model constraints recorded.
-
 ## idp-shared-webauthn-challenge
 
 Implementation: `Webauthn::ChallengeStore`. Storage: `None (Rails session)` /

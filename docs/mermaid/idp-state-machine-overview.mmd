@@ -129,13 +129,17 @@ flowchart TB
         M68["idp-shared-sequence-carrier"]
         M69["idp-shared-authorization-code"]
         M70["idp-shared-opaque-admission"]
-        M114["idp-shared-acme-logout"]
         M115["idp-shared-webauthn-challenge"]
         M122["idp-shared-sign-out-notice"]
+        M150["idp-shared-oidc-logout-session"]
     end
     subgraph security_machines["security machine inventory"]
         M94["idp-security-one-time-reveal"]
     end
+    M14 -->|"current device gates Visa request"| M150
+    M30 -->|"current device gates Visa request"| M150
+    M47 -->|"current device gates Visa request"| M150
+    M150 -->|"committed OP completion issues notice"| M122
     M0 -->|"Auth admits Base-issued local flow"| M3
     M3 -->|"Auth evidence / generation delivery"| M11
     M11 -->|"Base commit rechecks flow and finalizes login"| M0
@@ -157,7 +161,6 @@ flowchart TB
     M100 -->|"contact row owns OTP proof and lock"| M77
     M12 -->|"token owns device binding registration axis"| M13
     M12 -->|"root usability gates RP authority"| M15
-    M15 -->|"RP logout launcher issues ordered boundary"| M114
     M101 -->|"deactivation revokes root sessions"| M12
     M116 -->|"apply/end locks or refcount-unlocks actor"| M73
     M116 -->|"method/principal eligibility query gates proof"| M0
@@ -189,7 +192,6 @@ flowchart TB
     M106 -->|"contact row owns OTP proof and lock"| M84
     M28 -->|"token owns device binding registration axis"| M29
     M28 -->|"root usability gates RP authority"| M31
-    M31 -->|"RP logout launcher issues ordered boundary"| M114
     M107 -->|"deactivation revokes root sessions"| M28
     M118 -->|"apply/end locks or refcount-unlocks actor"| M80
     M118 -->|"method/principal eligibility query gates proof"| M17
@@ -219,7 +221,6 @@ flowchart TB
     M111 -->|"contact row owns OTP proof and lock"| M91
     M45 -->|"token owns device binding registration axis"| M46
     M45 -->|"root usability gates RP authority"| M48
-    M48 -->|"RP logout launcher issues ordered boundary"| M114
     M112 -->|"deactivation revokes root sessions"| M45
     M120 -->|"apply/end locks or refcount-unlocks actor"| M87
     M120 -->|"method/principal eligibility query gates proof"| M33

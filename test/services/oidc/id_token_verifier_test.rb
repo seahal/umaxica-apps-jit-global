@@ -23,6 +23,14 @@ class OidcIdTokenVerifierTest < ActiveSupport::TestCase
     assert_equal result.payload.fetch("iat"), result.payload.fetch("nbf")
   end
 
+  test "issuing an ID token requires a session identifier" do
+    [nil, "", " "].each do |sid|
+      assert_raises(ArgumentError) do
+        OidcIdTokenIssuer.call(resource: @user, client: @client, nonce: @nonce, sid: sid)
+      end
+    end
+  end
+
   test "rejects wrong issuer audience nonce and actor type" do
     assert_invalid id_token(issuer: "https://evil.example")
 
@@ -118,6 +126,7 @@ class OidcIdTokenVerifierTest < ActiveSupport::TestCase
       issued_at: issued_at,
       expires_at: expires_at,
       jwt_issuer_id: @jwt_issuer_id,
+      sid: PublicId.generate,
     )
   end
 

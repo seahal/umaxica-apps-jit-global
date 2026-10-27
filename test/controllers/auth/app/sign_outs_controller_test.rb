@@ -18,6 +18,28 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal edit_auth_app_sign_out_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
+  test "legacy logout challenge on GET does not change the Base sign-out redirect" do
+    get auth_app_sign_out_url(host: @host, ri: "jp", logout_challenge: "legacy-challenge")
+
+    assert_response :see_other
+    target = jump_target(response.location)
+
+    assert_equal @base_host, target.host
+    assert_equal "/sign/out", target.path
+    assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(target.query.to_s))
+  end
+
+  test "legacy logout challenge on POST does not change the Base sign-out redirect" do
+    post auth_app_sign_out_url(host: @host, ri: "jp", logout_challenge: "legacy-challenge")
+
+    assert_response :see_other
+    target = jump_target(response.location)
+
+    assert_equal @base_host, target.host
+    assert_equal "/sign/out", target.path
+    assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(target.query.to_s))
+  end
+
   test "edit renders confirmation and post redirects to Base without an Auth RP logout" do
     user = create_verified_user_with_email(email_address: "auth-app-sign-out-#{SecureRandom.hex(4)}@example.com")
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -52,109 +74,40 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
-  test "post sign out with a coordinated challenge clears this host and hands off to Visa" do
-    user = create_verified_user_with_email(email_address: "auth-app-coordinated-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "core",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "core",
-          ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(
-      logout_challenge: transaction.logout_challenge,
-      step: "origin_cleared",
-    )
-    AcmeLogoutTransactionCoordinator.advance!(
-      logout_challenge: transaction.logout_challenge,
-      step: "acme_cleared",
-    )
-
-    post auth_app_sign_out_url(ri: "jp", host: @host, logout_challenge: transaction.logout_challenge),
-         headers: rp_session_headers(user, token)
-
-    # The continuation hop must not start a second RP ceremony; it only clears this host and
-    # redirects to Visa's authoritative end-session endpoint.
-    assert_response :see_other
-    location = URI.parse(response.location)
-
-    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host, location.host
-    assert_equal "/oidc/logout", location.path
-    assert_equal transaction.logout_challenge,
-                 Rack::Utils.parse_query(location.query).fetch("logout_challenge")
-    assert_predicate token.reload, :currently_usable?
-  end
-
   test "destroy cancels the pending logout and keeps the current session" do
     user = create_verified_user_with_email(email_address: "sign-cancel@example.com")
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign",
-          ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-
-    delete auth_app_sign_out_url(ri: "jp", host: @host, logout_challenge: transaction.logout_challenge),
+    delete auth_app_sign_out_url(ri: "jp", host: @host),
            headers: browser_headers.merge("Host" => @host)
 
     assert_response :see_other
     assert_equal auth_app_root_url(ri: "jp", host: @host), response.location
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
 
-    delete auth_app_sign_out_url(ri: "jp", host: @host, logout_challenge: transaction.logout_challenge),
+    delete auth_app_sign_out_url(ri: "jp", host: @host),
            headers: browser_headers.merge("Host" => @host)
 
     assert_response :see_other
     assert_equal auth_app_root_url(ri: "jp", host: @host), response.location
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
   end
 
   test "destroy returns no content for json without revoking the current session" do
     user = create_verified_user_with_email(email_address: "sign-json-cancel@example.com")
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-app-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign",
-          ri: "jp",
-          surface: "app",
-        ),
-        surface: "app",
-        ri: "jp",
-      ).transaction
-
-    delete auth_app_sign_out_url(ri: "jp", host: @host, format: :json, logout_challenge: transaction.logout_challenge),
+    delete auth_app_sign_out_url(ri: "jp", host: @host, format: :json),
            headers: browser_headers.merge("Host" => @host)
 
     assert_response :no_content
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
 
-    delete auth_app_sign_out_url(ri: "jp", host: @host, format: :json, logout_challenge: transaction.logout_challenge),
+    delete auth_app_sign_out_url(ri: "jp", host: @host, format: :json),
            headers: browser_headers.merge("Host" => @host)
 
     assert_response :no_content
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
   end
 
   private
@@ -168,6 +121,14 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
         jwt_access_token_for(user, host: @host, session_public_id: token.public_id, resource_type: "client")
       }",
     }
+  end
+
+  def jump_target(location)
+    gateway = URI.parse(location)
+
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    URI.parse(payload.fetch("url"))
   end
 
   def bearer_headers(token, host: nil, headers: {})

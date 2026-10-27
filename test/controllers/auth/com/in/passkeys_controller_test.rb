@@ -499,6 +499,29 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 
+  test "A34-2: Passkey verification refuses an unfinished COM registration" do
+    @visitor.reload.update!(status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP)
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+         params: com_options_params, headers: @origin_headers
+    options = response.parsed_body
+
+    assert_response :ok
+    assertion = @fake.get(
+      challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 1,
+    )
+    assert_no_difference -> { VisitorToken.where(visitor_id: @visitor.id).count } do
+      post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: { challenge_id: options.fetch("challenge_id"), credential: assertion },
+           headers: @origin_headers
+    end
+
+    # A34-2 requires a refusal with no token or cookie, not a specific status; the account is now
+    # refused before the assertion is recorded, with the generic verification failure (401).
+    assert_response :unauthorized
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
   test "verification rejects a credential id that exists only on the app surface" do
     client = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,

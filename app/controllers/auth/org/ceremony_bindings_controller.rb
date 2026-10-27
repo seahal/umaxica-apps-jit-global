@@ -6,6 +6,7 @@ module Auth
     class CeremonyBindingsController < ::Auth::Org::ApplicationController
       include ::AuthCeremonySidCookie
       include ::AdmissionReferenceParameters
+      include ::BrowserNavigationRequest
 
       AUTHENTICATION_MODE = :open
       declare_authentication_mode! :open
@@ -14,7 +15,7 @@ module Auth
 
       def show
         apply_admission_transport_headers!
-        return render_invalid_admission_request! if request.head?
+        return render_invalid_admission_request! if request.head? || framed_destination_request?
 
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
         if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
@@ -67,8 +68,8 @@ module Auth
           unless binding.attached?
             if session_record.nil?
               now = model.database_now
-              ttl = auth_ceremony_ttl_for_binding(binding, now, model)
-              session_record, raw_sid = model.issue!(ttl:, now:)
+              expires_at = auth_ceremony_expires_at_for_binding(binding, now)
+              session_record, raw_sid = model.issue!(expires_at:, now:)
             end
             binding.attach_auth_session!(auth_session: session_record, confirmation_ref: SecureRandom.uuid)
           end
@@ -81,15 +82,15 @@ module Auth
         raw_sid
       end
 
-      def auth_ceremony_ttl_for_binding(binding, now, model)
-        return model::DEFAULT_TTL unless binding.purpose == "authentication_handoff"
+      def auth_ceremony_expires_at_for_binding(binding, now)
+        return unless binding.purpose == "authentication_handoff"
 
-        remaining = binding.curfew_at - now
+        curfew_at = binding.curfew_at
         raise BaseAuthAdmissionCoordinator::Denied.new(
           "sign-in path curfew has passed", code: "expired_admission",
-        ) unless remaining.positive?
+        ) unless curfew_at && curfew_at > now
 
-        [model::DEFAULT_TTL, remaining].min
+        curfew_at
       end
 
       def entry_ref

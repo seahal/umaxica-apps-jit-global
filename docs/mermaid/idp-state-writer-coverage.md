@@ -1,5 +1,8 @@
 # State writer coverage
 
+The 2026-10-26 Visa logout session transport is documented in the transition inventory and its
+own diagram; it is not included in this earlier mechanical extraction.
+
 The Ruby Prism scan parses every Ruby file under `app/`, `config/`, `lib/`, and `db/`. It records mutation APIs even when the state key is dynamic, state-bearing setter calls, and construction calls. This is a conservative **candidate** inventory: constructors, HTTP result objects, local hashes and unrelated domain updates are included until dispositioned. No tests were executed. Ruby source parsed with zero Prism errors.
 
 `LINKED_BY_LOCAL_CALL_GRAPH` means a transition trigger names a method that reaches the writer through implicit-receiver/self calls in the same file and owner. It is **PARTIAL correspondence**, not proof of the guard, concrete receiver, written value, or all callers. Matching a file alone is never treated as covered. Dynamic dispatch, cross-file calls, SQL/Lua writes, callbacks, default initialization and metaprogramming remain manual obligations.
@@ -138,7 +141,6 @@ Counts refer to candidates with a potential axis, not a complete resolved receiv
 | idp-operator-telephone-credential | 11 | 0 | 11 | None |
 | idp-operator-actor-withdrawal | 8 | 0 | 8 | None |
 | idp-client-actor-provisioning | 22 | 0 | 22 | None |
-| idp-shared-acme-logout | 17 | 2 | 15 | idp-shared-acme-logout:T004, idp-shared-acme-logout:T005, idp-shared-acme-logout:T006, idp-shared-acme-logout:T007, idp-shared-acme-logout:T008, idp-shared-acme-logout:T009, idp-shared-acme-logout:T010 |
 | idp-shared-webauthn-challenge | 3 | 3 | 0 | idp-shared-webauthn-challenge:T001, idp-shared-webauthn-challenge:T002, idp-shared-webauthn-challenge:T003 |
 | idp-client-enforcement-case | 18 | 0 | 18 | None |
 | idp-client-enforcement-appeal | 5 | 3 | 2 | idp-client-enforcement-appeal:T001, idp-client-enforcement-appeal:T002, idp-client-enforcement-appeal:T003, idp-client-enforcement-appeal:T004, idp-client-enforcement-appeal:T005, idp-client-enforcement-appeal:T006, idp-client-enforcement-appeal:T007, idp-client-enforcement-appeal:T008, idp-client-enforcement-appeal:T009 |

@@ -138,6 +138,13 @@ module Auth
               strategy: logged_strategy,
             ),
           )
+          # D-47 / D-198 (2): a provider-side failure ends a sign-path attempt. Without a stored intent
+          # there is no attempt to end. A cancelled or refused provider step is a definitive refusal,
+          # not a dependency outage (503 would tell the person to retry later).
+          intent = current_social_auth_intent
+          if intent.present? && social_sign_path_intent?(intent)
+            return refuse_social_sign_path!((message == "csrf_detected") ? "state_invalid" : "credential_failed")
+          end
 
           # Try to find a specific translation, fall back to generic
           failure_key = ["sign.app.social.sessions.failure", message].join(".")

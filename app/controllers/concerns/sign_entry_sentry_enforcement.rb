@@ -77,7 +77,10 @@ module SignEntrySentryEnforcement
     response.headers["Referrer-Policy"] = "no-referrer"
     message_key = (flow.to_s == "sign_up") ? "sign_up_unavailable" : "sign_in_unavailable"
     record_sign_in_path_refusal!("sentry_blocked")
-    render plain: I18n.t(message_key, scope: "errors.messages"),
+    # The Sentry runs before `set_locale`; the requested language (already resolved into
+    # `requested_context`) decides the text so `lx=en` is not answered in Japanese (A29-12).
+    locale = normalized_locale(requested_context[:lx]) || I18n.locale
+    render plain: I18n.t(message_key, scope: "errors.messages", locale: locale),
            content_type: "text/plain", status: :service_unavailable
   end
 end

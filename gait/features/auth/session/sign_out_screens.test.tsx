@@ -26,7 +26,7 @@ const confirmationProps = {
   confirm_description: "一度ログアウトすると、再度ログインが必要になります。",
   already_signed_out: "すでにサインアウトしています。",
   submit_label: "ログアウトします",
-  form: { action: "/sign/out?ri=jp", logout_challenge: null, logout_intent_proof: null },
+  form: { action: "/sign/out?ri=jp" },
   cancel: { label: "キャンセル", action: "/sign/out?ri=jp" },
   home_link: { label: "ホームへ戻る", href: "/?ri=jp" },
 };

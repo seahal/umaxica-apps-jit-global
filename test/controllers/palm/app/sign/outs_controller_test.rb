@@ -14,22 +14,20 @@ module Palm
         end
 
         test "GET sign-out shows the shared confirmation without mutating sessions" do
-          before = [ClientToken.count, OpAppGrant.count, AcmeLogoutTransaction.count]
+          before = [ClientToken.count, OpAppGrant.count]
 
           get edit_palm_app_sign_out_url(ri: "jp")
 
           assert_response :success
           assert_equal "palm/app/sign/outs/edit", inertia_component
           assert_equal I18n.t("sign.shared.sign_out.title"), inertia_props.fetch("heading")
-          assert_equal before, [ClientToken.count, OpAppGrant.count, AcmeLogoutTransaction.count]
+          assert_equal before, [ClientToken.count, OpAppGrant.count]
         end
 
         test "POST sign-out without Palm RP credentials is refused before transaction creation" do
           with_forgery_protection do
             get edit_palm_app_sign_out_url(ri: "jp")
             csrf_token = css_select('meta[name="csrf-token"]').first["content"]
-            before = AcmeLogoutTransaction.count
-
             post palm_app_sign_out_url(ri: "jp"), headers: {
               "Origin" => "http://#{HOST}",
               "Sec-Fetch-Site" => "same-origin",
@@ -37,7 +35,6 @@ module Palm
             }
 
             assert_response :unauthorized
-            assert_equal before, AcmeLogoutTransaction.count
           end
         end
 

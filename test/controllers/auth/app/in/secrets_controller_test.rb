@@ -83,6 +83,61 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     assert_nil query["fb"]
   end
 
+  test "A34-2: a valid Secret cannot authenticate an unfinished APP registration" do
+    now = ClientSecretIssuance.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: @client, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: SecureRandom.urlsafe_base64(24), planned_count: 1,
+      expires_at: now + 1.hour, presented_at: now, confirmed_at: now,
+    )
+    credential = ClientSecretCredential.create!(
+      client: @client, issuance:, name: "A34 unfinished", password: "a" * 32, confirmed_at: now,
+    )
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! host
+    https!
+    headers = {
+      "REMOTE_ADDR" => "192.0.2.41", "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
+    }
+    admission = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil, browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: binding.entry_ref, nonce: "n" * 43,
+      ),
+    )
+    sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    cookies[sid_key] = raw_sid
+    # Design D: the entry GET redeems the reference and redirects to the clean sign-in page.
+    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
+
+    assert_response :see_other
+    follow_redirect!(headers: headers)
+
+    assert_response :ok
+    phase_binding = nil
+    get new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers
+    csrf = inertia_props.fetch("authenticity_token")
+    token_count = ClientToken.where(user_id: @client.id).count
+    @client.reload.update!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+
+    post auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding),
+         params: { :identifier => @identifier, :secret => "a" * 32, "cf-turnstile-response" => "synthetic" },
+         as: :json, headers: headers.merge("X-CSRF-Token" => csrf)
+
+    assert_response :unprocessable_content
+    assert_nil credential.reload.claimed_at
+    assert_equal token_count, ClientToken.where(user_id: @client.id).count
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    assert_nil ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).secret_sign_in_flow_id
+  end
+
   test "known and unknown identifiers reach the same limit across request addresses" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
@@ -103,12 +158,13 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     )
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     cookies[cookie_name] = raw_sid
+    # Design D: the entry GET redeems the reference and redirects to the clean sign-in page.
     get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_in_path(ri: "jp"),
-         params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: headers
 
     assert_response :see_other
+    follow_redirect!(headers: headers)
+
+    assert_response :ok
     phase_binding = nil
     get new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers
     csrf = inertia_props.fetch("authenticity_token")
@@ -194,15 +250,14 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     )
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     cookies[cookie_name] = raw_auth_sid
+    # Design D: the entry GET redeems the reference and redirects to the clean sign-in page; there is
+    # no form POST of the entry reference.
     get(auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      auth_app_sign_in_path(ri: "jp"), params: {
-        entry_ref: admission.reference, authenticity_token: csrf,
-      }, headers: headers,
-    )
 
     assert_response :see_other
+    follow_redirect!(headers: headers)
+
+    assert_response :ok
     phase_binding = nil
     get(new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers)
     [admission, phase_binding]

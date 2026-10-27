@@ -14,6 +14,29 @@ class Auth::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "legacy logout challenge on GET and POST uses the ordinary Base handoff" do
+    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    base_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
+    host! host
+
+    [
+      -> { get(auth_com_sign_out_url(ri: "jp", host: host, logout_challenge: "legacy-challenge")) },
+      -> { post(auth_com_sign_out_url(ri: "jp", host: host, logout_challenge: "legacy-challenge")) },
+    ].each do |request|
+      request.call
+
+      assert_response :see_other
+      gateway = URI.parse(response.location)
+
+      assert_equal "jump.umaxica.net", gateway.host
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      target = URI.parse(payload.fetch("url"))
+
+      assert_equal [base_host, "/sign/out", { "ri" => "jp" }],
+                   [target.host, target.path, Rack::Utils.parse_nested_query(target.query.to_s)]
+    end
+  end
+
   test "get sign out renders confirmation and post redirects to Base without an Auth RP logout" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
@@ -60,21 +83,9 @@ class Auth::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     visitor = create_verified_visitor_with_email(email_address: "sign-com-cancel-#{SecureRandom.hex(4)}@example.com")
     token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     satisfy_visitor_verification(token)
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-com-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign",
-          ri: "jp",
-          surface: "com",
-        ),
-        surface: "com",
-        ri: "jp",
-      ).transaction
     host! host
 
-    delete auth_com_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge), headers: {
+    delete auth_com_sign_out_url(ri: "jp", host: host), headers: {
       "X-TEST-CURRENT-RESOURCE" => visitor.id.to_s,
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
       "Authorization" => "Bearer #{
@@ -85,9 +96,8 @@ class Auth::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal auth_com_root_url(ri: "jp", host: host), response.location
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
 
-    delete auth_com_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge), headers: {
+    delete auth_com_sign_out_url(ri: "jp", host: host), headers: {
       "X-TEST-CURRENT-RESOURCE" => visitor.id.to_s,
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
       "Authorization" => "Bearer #{
@@ -98,7 +108,6 @@ class Auth::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal auth_com_root_url(ri: "jp", host: host), response.location
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
   end
 end
 

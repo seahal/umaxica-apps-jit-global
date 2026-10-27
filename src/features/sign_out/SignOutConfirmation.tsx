@@ -10,7 +10,6 @@ import { csrfToken } from "@/lib/csrf";
 export type SignOutConfirmationForm = {
   action: string;
   submit: string;
-  logout_challenge: string | null;
   confirm_description: string;
 };
 
@@ -61,14 +60,6 @@ export default function SignOutConfirmation(props: SignOutConfirmationProps) {
             name="authenticity_token"
             value={csrfToken()}
           />
-          {form.logout_challenge ? (
-            <input
-              type="hidden"
-              name="logout_challenge"
-              value={form.logout_challenge}
-              readOnly
-            />
-          ) : null}
           <div>
             <Button
               type="submit"

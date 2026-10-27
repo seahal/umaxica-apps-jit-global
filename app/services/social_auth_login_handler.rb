@@ -21,7 +21,9 @@ class SocialAuthLoginHandler
   # D-48 with D-72 (WU-08). L8 (an enforcement effect on the provider subject) is decided before any
   # identity lookup, for sign-in and sign-up alike.
   def call
-    raise SocialAuth::UnauthorizedError.new("errors.social_auth.unauthorized") if enforced_subject?
+    if enforced_subject?
+      raise SocialAuth::UnauthorizedError.new("errors.social_auth.unauthorized", check: "enforced_subject")
+    end
 
     ClientExternalIdentity.with_subject_lock(
       provider: provider, issuer: principal.issuer, subject: uid,
@@ -56,7 +58,8 @@ class SocialAuthLoginHandler
 
   def login_existing_identity(identity)
     # L7: a revoked or deleted provider account stops both intents with the fixed message.
-    raise SocialAuth::UnauthorizedError.new("errors.social_auth.unauthorized") unless identity.state == "active"
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.unauthorized", check: "identity_inactive") unless
+      identity.state == "active"
 
     user = identity.association(:client).scope.take
     if user.blank?

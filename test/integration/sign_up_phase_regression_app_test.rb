@@ -10,7 +10,7 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
   include ActiveSupport::Testing::TimeHelpers
   include ActiveJob::TestHelper
 
-  REFUSAL_BODY = "戻るはだめです"
+  REFUSAL_BODY = "この画面は古くなっています。最初からやり直してください。"
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")

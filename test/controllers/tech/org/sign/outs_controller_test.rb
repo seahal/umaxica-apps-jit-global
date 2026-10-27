@@ -73,6 +73,7 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     authenticity_token = css_select('input[name="authenticity_token"]').first["value"]
     cookies.delete(OidcRpBrowserCredentialContract::ACCESS_COOKIE)
 
+    stops_before = OpOrgAuthorityStop.count
     post(
       tech_org_sign_out_path(ri: "jp"),
       params: { authenticity_token: authenticity_token },
@@ -83,13 +84,14 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     )
 
     assert_response :see_other
+    assert_equal stops_before, OpOrgAuthorityStop.count
     authority_uri = URI.parse(response.location)
 
     query = Rack::Utils.parse_nested_query(authority_uri.query.to_s)
 
     assert_visa_end_session_redirect(query, authority_uri, client_id: client.client_id, region: "jp")
     assert_predicate root_token.reload, :currently_usable?
-    assert_not_predicate rp_session.reload, :active?
+    assert_predicate rp_session.reload, :active?
     assert_equal "no-store", response.headers["Cache-Control"]
   ensure
     ActionController::Base.allow_forgery_protection = previous_forgery_protection
@@ -98,7 +100,6 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "sign-out without a valid authenticity token is refused before transaction creation" do
     previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    transactions_before = AcmeLogoutTransaction.count
 
     post(
       tech_org_sign_out_path(ri: "jp"), headers: {
@@ -108,7 +109,6 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     )
 
     assert_response :unprocessable_content
-    assert_equal transactions_before, AcmeLogoutTransaction.count
   ensure
     ActionController::Base.allow_forgery_protection = previous_forgery_protection
   end

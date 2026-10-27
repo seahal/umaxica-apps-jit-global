@@ -58,6 +58,7 @@ class AcceptanceWu02BaseRpStateTest < ActionDispatch::IntegrationTest
         assert_equal base_host, URI.parse(browser.response.location).host
         assert_equal "/dashboard", URI.parse(browser.response.location).path
       end
+
       assert_nil browser.cookies["__Host-auth_sid"], "Base must not need the Auth ceremony cookie"
       assert_nil browser.cookies["auth_sid"], "Base must not need the Auth ceremony cookie"
     end

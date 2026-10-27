@@ -7,6 +7,8 @@ require "test_helper"
 # a real token for a real Base Browser Session / RP Session and changes exactly one fact about it,
 # so a refusal can only come from the check that owns that fact.
 class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   test "a well-formed client Access JWT for an active Base Browser Session authenticates" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
@@ -70,6 +72,130 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
       assert_predicate result, :success?
       assert_equal user, result.resource
     end
+  end
+
+  test "A44-4: writer epoch rejects a stale actor from a reading-role context" do
+    client = OidcClientRegistry.find!("core-app-jp")
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(
+      authentication_epoch: 0,
+      user: user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    grant = OpAppGrant.create!(
+      authentication_epoch: 0,
+      client_token: root,
+      oidc_client_id: client.client_id,
+      oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid,
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    access_token = AuthenticationTokenService.encode(
+      user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: root.public_id,
+      base_session_public_id: root.public_id,
+      oidc_sid: grant.public_id,
+      oidc_jti: grant.oidc_jti,
+      expires_at: 5.minutes.from_now,
+      scopes: %w(openid),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [client.aud],
+      subject: OidcSubject.for(user, resource_type: "client"),
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
+      client_id: client.client_id,
+    )
+    # The query boundary simulates a replica that still returns the pre-stop actor.
+    assert_equal 0, user.authentication_epoch
+    Client.connection_class_for_self.connected_to(role: :writing) do
+      Client.where(id: user.id).update_all(authentication_epoch: 1)
+
+      assert_equal 1, Client.uncached { Client.find(user.id).authentication_epoch }
+    end
+    assert_equal 0, user.authentication_epoch
+
+    lagging_lookup =
+      lambda do |**attributes|
+        (Client.current_role == :reading) ? user : Client.where(**attributes).sole
+      end
+    Client.stub(:find_by, lagging_lookup) do
+      Client.connection_class_for_self.connected_to(role: :reading) do
+        assert_equal 0, Client.find_by(public_id: user.public_id).authentication_epoch
+        access_result = OidcAccessTokenAuthenticator.call(
+          access_token: access_token,
+          resource_type: "client",
+          host: OidcIssuer.host_for_resource_type("client"),
+        )
+
+        assert_not_predicate access_result, :success?
+        assert_equal "invalid_token", access_result.error
+
+        browser_result = AuthenticationCurrentResourceResolver.new(
+          access_token: jwt_access_token_for(
+            user,
+            host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+            session_public_id: root.public_id,
+            resource_type: "client",
+          ),
+          request_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+          resource_type: "client",
+          resource_class: Client,
+          token_class: ClientToken,
+          jwt_issuer_id: "surface:BASE_APP",
+        ).call
+
+        assert_equal :authentication_epoch_stale, browser_result.failure_reason
+      end
+    end
+  end
+
+  test "A44-5 writer epoch outage propagates for access and browser authentication without replica fallback" do
+    client = OidcClientRegistry.find!("core-app-jp")
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    grant = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+    )
+    access_token = AuthenticationTokenService.encode(
+      user, host: OidcIssuer.host_for_resource_type("client"), resource_type: "client",
+            session_public_id: root.public_id, base_session_public_id: root.public_id,
+            oidc_sid: grant.public_id, oidc_jti: grant.oidc_jti,
+            expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type("client"),
+            audiences: [client.aud], subject: OidcSubject.for(user, resource_type: "client"),
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
+    )
+    browser_token = jwt_access_token_for(
+      user, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), session_public_id: root.public_id, resource_type: "client",
+    )
+    roles = []
+    lookup =
+      lambda do |**_attributes|
+        roles << Client.current_role
+        raise ActiveRecord::ConnectionNotEstablished, "writer unavailable" if Client.current_role == :writing
+
+        user
+      end
+    Client.stub(:find_by, lookup) do
+      Client.connection_class_for_self.connected_to(role: :reading) do
+        assert_raises(ActiveRecord::ConnectionNotEstablished) do
+          OidcAccessTokenAuthenticator.call(
+            access_token: access_token, resource_type: "client", host: OidcIssuer.host_for_resource_type("client"),
+          )
+        end
+        assert_raises(ActiveRecord::ConnectionNotEstablished) do
+          AuthenticationCurrentResourceResolver.new(
+            access_token: browser_token, request_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+            resource_type: "client", resource_class: Client, token_class: ClientToken,
+            jwt_issuer_id: "surface:BASE_APP",
+          ).call
+        end
+      end
+    end
+
+    assert_equal %i(writing writing), roles
   end
 
   test "operator and visitor Access JWTs resolve against their own Base Session and actor" do

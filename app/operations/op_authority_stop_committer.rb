@@ -7,8 +7,8 @@
 # database (joined when the caller already holds one) it records the stop with its cause, scope and
 # principal, revokes the targets under the Device Session -> root -> grant lock order that every
 # issuance path takes, and writes the target rows, an epoch cutoff child for principal-wide stops,
-# one durable Back-Channel Logout participant row per revoked grant (D-117) and, for a browser
-# logout, the browser-bound one-time receipt. After the commit the outbox job is enqueued (D-121).
+# one durable Back-Channel Logout participant row per revoked grant (D-117). After the commit the
+# outbox job is enqueued (D-121).
 #
 # A re-run with the same idempotency key returns the stored stop and revokes or notifies nothing
 # again (D-123). A legacy-revoked root with live grants is repaired by recording those grant stops
@@ -17,7 +17,7 @@ class OpAuthorityStopCommitter
   class Refused < StandardError; end
 
   Result =
-    Data.define(:stop, :replayed, :receipt_nonce) do
+    Data.define(:stop, :replayed) do
       def replayed? = replayed
 
       def stopped? = !stop.nil?
@@ -30,7 +30,6 @@ class OpAuthorityStopCommitter
       grant_target: OpAppAuthorityStopGrantTarget,
       epoch_cutoff: OpAppAuthorityStopEpochCutoff,
       participant: OpAppAuthorityStopParticipant,
-      browser_logout: OpAppAuthorityStopBrowserLogout,
       root: ClientToken,
       grant: OpAppGrant,
       device: ClientDeviceSession,
@@ -43,7 +42,6 @@ class OpAuthorityStopCommitter
       grant_target: OpComAuthorityStopGrantTarget,
       epoch_cutoff: OpComAuthorityStopEpochCutoff,
       participant: OpComAuthorityStopParticipant,
-      browser_logout: OpComAuthorityStopBrowserLogout,
       root: VisitorToken,
       grant: OpComGrant,
       device: VisitorDeviceSession,
@@ -56,7 +54,6 @@ class OpAuthorityStopCommitter
       grant_target: OpOrgAuthorityStopGrantTarget,
       epoch_cutoff: OpOrgAuthorityStopEpochCutoff,
       participant: OpOrgAuthorityStopParticipant,
-      browser_logout: OpOrgAuthorityStopBrowserLogout,
       root: OperatorToken,
       grant: OpOrgGrant,
       device: OperatorDeviceSession,
@@ -76,7 +73,6 @@ class OpAuthorityStopCommitter
     "administrative" => %w(root all_roots_of_principal).freeze,
     "risk" => %w(root all_roots_of_principal).freeze,
   }.freeze
-  RECEIPT_TTL = 10.minutes
   # BX-10: a participant is retried until the grant's absolute expiry plus the longest Access JWT
   # lifetime plus clock skew (D-111: ten minutes and thirty seconds).
   DELIVERY_GRACE = CoreBrowserCredentialContract::ACCESS_TTL + 30.seconds
@@ -85,10 +81,10 @@ class OpAuthorityStopCommitter
     public
 
     # A single root and every grant under its Device Session (`root` scope).
-    def stop_root(root:, cause:, principal_public_id:, authority_evidence_ref:, browser_binding: nil)
+    def stop_root(root:, cause:, principal_public_id:, authority_evidence_ref:)
       new(
         realm: realm_for_root(root), cause:, scope: "root", principal_public_id:, authority_evidence_ref:,
-        roots: [root], idempotency_key: "root:#{root.public_id}", browser_binding:,
+        roots: [root], idempotency_key: "root:#{root.public_id}",
       ).call
     end
 
@@ -123,7 +119,7 @@ class OpAuthorityStopCommitter
   end
 
   def initialize(realm:, cause:, scope:, principal_public_id:, authority_evidence_ref:, idempotency_key:,
-                 roots: [], grant: nil, cutoff_epoch: nil, browser_binding: nil)
+                 roots: [], grant: nil, cutoff_epoch: nil)
     @realm = realm.to_s
     @config = REALMS.fetch(@realm)
     @cause = cause.to_s
@@ -134,7 +130,6 @@ class OpAuthorityStopCommitter
     @roots = Array(roots)
     @grant = grant
     @cutoff_epoch = cutoff_epoch
-    @browser_binding = browser_binding
     validate!
   end
 
@@ -148,7 +143,7 @@ class OpAuthorityStopCommitter
         existing = stop_class.lock.find_by(realm:, idempotency_digest:)
         result =
           if existing
-            Result.new(stop: existing, replayed: true, receipt_nonce: nil)
+            Result.new(stop: existing, replayed: true)
           else
             commit_stop
           end
@@ -161,14 +156,13 @@ class OpAuthorityStopCommitter
   private
 
   attr_reader :realm, :config, :cause, :scope, :principal_public_id, :authority_evidence_ref, :idempotency_digest,
-              :roots, :grant, :cutoff_epoch, :browser_binding
+              :roots, :grant, :cutoff_epoch
 
   def validate!
     validate_cause_and_scope!
     validate_authority_evidence!
     validate_scope_arguments!
     validate_target_realms!
-    validate_browser_binding!
   end
 
   def validate_cause_and_scope!
@@ -217,16 +211,6 @@ class OpAuthorityStopCommitter
 
   end
 
-  def validate_browser_binding!
-    return if browser_binding.nil?
-
-    raise Refused,
-          "browser binding must be a non-empty string" unless browser_binding.is_a?(String) && browser_binding.present?
-    return if BROWSER_CAUSES.include?(cause)
-
-    raise ArgumentError, "only a browser logout carries a browser binding"
-  end
-
   def lock_idempotency_key
     high, low = idempotency_digest.unpack("l>l>")
     stop_class.connection_pool.with_connection do |connection|
@@ -237,11 +221,11 @@ class OpAuthorityStopCommitter
   def commit_stop
     now = stop_class.database_now
     targets = revoke_targets(now)
-    return Result.new(stop: nil, replayed: false, receipt_nonce: nil) unless targets
+    return Result.new(stop: nil, replayed: false) unless targets
 
     revoked_roots, revoked_grants = targets
     if scope == "root" && revoked_roots.empty?
-      return Result.new(stop: nil, replayed: false, receipt_nonce: nil)
+      return Result.new(stop: nil, replayed: false)
     end
 
     persist_stop!(now:, revoked_roots:, revoked_grants:)
@@ -284,7 +268,7 @@ class OpAuthorityStopCommitter
     revoked_grants.each { |live| model(:GrantTarget).create!(stop:, grant: live) }
     model(:EpochCutoff).create!(stop:, cutoff_epoch:) if scope == "all_roots_of_principal"
     revoked_grants.each { |live| record_participant!(stop, live, now) }
-    Result.new(stop:, replayed: false, receipt_nonce: browser_binding ? issue_receipt!(stop, now) : nil)
+    Result.new(stop:, replayed: false)
   end
 
   # Device Session -> root -> grants (id order); the order of RpSession#with_parent_and_self_lock.
@@ -332,17 +316,6 @@ class OpAuthorityStopCommitter
     )
   end
 
-  # Only the nonce digest is stored; the nonce goes back to the browser once.
-  def issue_receipt!(stop, now)
-    nonce = SecureRandom.urlsafe_base64(32)
-    model(:BrowserLogout).create!(
-      stop:, browser_binding_digest: Digest::SHA256.digest(browser_binding.to_s),
-      receipt_nonce_digest: Digest::SHA256.digest(nonce), receipt_expires_at: now + RECEIPT_TTL,
-      receipt_consumed: false,
-    )
-    nonce
-  end
-
   def grant_status
     BROWSER_CAUSES.include?(cause) ? "success" : "failed"
   end
@@ -369,7 +342,6 @@ class OpAuthorityStopCommitter
     when :GrantTarget then config.fetch(:grant_target)
     when :EpochCutoff then config.fetch(:epoch_cutoff)
     when :Participant then config.fetch(:participant)
-    when :BrowserLogout then config.fetch(:browser_logout)
     else raise ArgumentError, "unsupported authority-stop child #{suffix.inspect}"
     end
   end

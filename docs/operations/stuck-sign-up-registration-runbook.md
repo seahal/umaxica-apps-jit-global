@@ -20,14 +20,8 @@ The event does not contain email addresses, telephone numbers, names or birthdat
 runs every 15 minutes and reports after its cleanup and retention work. A query failure is logged
 without stopping that work.
 
-The query can be run directly for a current read-only view:
-
-```sh
-bin/rails runner 'pp SignUpStuckRegistrationReportQuery.call(surface: :app)'
-bin/rails runner 'pp SignUpStuckRegistrationReportQuery.call(surface: :com)'
-```
-
-The query uses the reading role and refuses an explicit writing role. It reports:
+The report comes from `SignUpStuckRegistrationReportQuery`, which uses the reading role and refuses
+an explicit writing role. It reports:
 
 - `flow_missing`: an unfinished principal or pending contact has no matching sign-up Flow. The
   attempt count is not applicable because no Flow exists.
@@ -35,66 +29,23 @@ The query uses the reading role and refuses an explicit writing role. It reports
   `SignUpArtifactCleanup::MAX_CLEANUP_ATTEMPTS` attempts (currently 10). Nine attempts are below the
   report threshold; ten and above are reported.
 
-## Diagnose Before a Release
+## What an Operator Does
 
-Use the `surface` and `flow_public_id` from the report. For a Flow, inspect the existing WU-26
-diagnosis inventory:
+Do not run Ruby on a production host to inspect or repair sign-up attempts (no `bin/rails runner`,
+rake task or console session for this purpose; owner decision D-196, 2026-10-26). For either case,
+open an incident with the surface, case, public identifiers and `cleanup_attempts_count` from the
+event, and escalate to the sign-up owner. Do not copy contact values into logs, tickets or evidence.
+Do not infer current state from an old event; later reports show whether the registration is still
+stuck.
 
-```sh
-bin/rails runner 'pp SignUpAttemptDiagnosisInventory.call(surface: :app, flow_public_id: "FLOW_PUBLIC_ID")'
-```
-
-Use `:com` for a Visitor Flow. A `flow_missing` record has no Flow id, so the WU-26 Flow inventory
-cannot inspect it; use a fresh `SignUpStuckRegistrationReportQuery` result to confirm the current
-public identifiers. Do not infer current state from an old event. Do not copy contact values into
-logs, tickets or evidence.
-
-WU-26 also accepts one of these surface-local selectors:
-
-```sh
-bin/rails runner 'pp SignUpAttemptDiagnosisInventory.call(surface: :app, entry_reference_digest: "DIGEST")'
-bin/rails runner 'pp SignUpAttemptDiagnosisInventory.call(surface: :app, principal_public_id: "PRINCIPAL_PUBLIC_ID")'
-bin/rails runner 'pp SignUpAttemptDiagnosisInventory.call(surface: :app, provider: "google", subject_digest: "DIGEST")'
-```
-
-Use `:com` for COM Flow or principal lookup. Social subject lookup is APP-only because COM has no
-social sign-up Candidate. The entry digest uses the existing SHA-256 reference algorithm over
-`reference:<entry-reference>`; the social digest is produced by
-`IdentitySocialCeremonyContract.provider_subject_digest`. These commands accept only the digests,
-never the raw entry reference or provider subject. Each call requires exactly one selector. A
-well-formed unknown selector returns `flow_not_found`; a selector that matches multiple Flows
-returns every diagnosis under `multiple_attempts_found`. The report includes OIDC transaction and
-result state, ceremony session lifecycle timestamps, social Candidate ids/states, audit event ids
-and names, request ids, and a structured-log search key. It omits contact references, raw provider
-subjects, transaction secrets, session digests, and outbox payloads.
-
-## Release Case `cleanup_attempts_exhausted`
-
-An operator may retry cleanup once, after all of these checks pass:
-
-1. A fresh report query still returns the Flow as `cleanup_attempts_exhausted`.
-2. The WU-26 diagnosis confirms the Flow is terminal and its cleanup status is pending or failed.
-3. The current principal is still unfinished. If the principal is registered, stop; registered
-   identities must be preserved.
-4. The Flow and the public identifiers match the incident being handled.
-
-Run the existing cleanup operation once with the matching surface model:
-
-```sh
-bin/rails runner 'flow = ClientSignUpFlow.find_by!(public_id: "FLOW_PUBLIC_ID"); SignUpArtifactCleanup.call(cycle: flow)'
-```
-
-For COM, use `VisitorSignUpFlow` instead of `ClientSignUpFlow`. `SignUpArtifactCleanup.call` locks
-and reloads the Flow, checks that it is still terminal, and re-evaluates the principal before
-removing pending artifacts. After the call, inspect the Flow's cleanup status and run the report
-query again. If cleanup remains failed or any state differs from the diagnosis, do not invoke it
-again; escalate to the sign-up owner with the public identifiers and error class.
+A `cleanup_attempts_exhausted` Flow is not retried by hand. Changing the cleanup itself is a
+reviewed code change.
 
 ## `flow_missing` Has No Safe Release Entry Point
 
-There is no Flow to pass to the existing cleanup operation. Do not create or restore a Flow, write
-status values directly, or delete the principal/contact manually. Keep the contact held and escalate
-to the sign-up owner for a separately reviewed remediation path. The current implementation
+There is no Flow for the cleanup operation to act on. Do not create or restore a Flow, write status
+values directly, or delete the principal/contact manually. Keep the contact held and escalate to the
+sign-up owner for a separately reviewed remediation path. The current implementation
 deliberately leaves this case unresolved rather than guessing which dependent artifacts are safe to
 remove.
 

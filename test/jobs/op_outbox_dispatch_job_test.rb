@@ -9,7 +9,7 @@ class OpOutboxDispatchJobTest < ActiveSupport::TestCase
   setup do
     client = clients(:one)
     root = ClientToken.create!(authentication_epoch: 0, user: client)
-    OpAppGrant.create!(
+    @grant = OpAppGrant.create!(
       authentication_epoch: 0,
       client_token: root, client_device_session: root.device_session, device_session_id: root.device_session_id,
       oidc_client_id: "core-app-jp", oidc_scope: "openid", oidc_jti: SecureRandom.uuid, last_used_at: Time.current,
@@ -57,6 +57,14 @@ class OpOutboxDispatchJobTest < ActiveSupport::TestCase
     ).call
 
     assert_predicate result, :success?
+    id_token = OidcIdTokenIssuer.call(
+      resource: clients(:one), client: OidcClientRegistry.find!("core-app-jp"), nonce: "nonce",
+      sid: @grant.public_id,
+    )
+    id_claims, = JWT.decode(id_token, nil, false)
+
+    assert_equal @grant.public_id, id_claims.fetch("sid")
+    assert_equal id_claims.fetch("sid"), result.payload.fetch("sid")
     assert_equal @event.sid, result.payload.fetch("sid")
   end
 
@@ -91,6 +99,25 @@ class OpOutboxDispatchJobTest < ActiveSupport::TestCase
       OidcBackchannelLogoutClient.stub(:call, outcome) { OpOutboxDispatchJob.perform_now }
 
       assert_equal [status(expected), outcome], [@event.reload.status_id, @event.last_outcome], outcome
+    end
+  end
+
+  test "BX-4 alert outcomes log an error event for each misconfiguration class" do
+    %w(http_401 http_403 http_404 http_405 http_410 http_413).each do |outcome|
+      @event.update!(
+        status_id: status("pending"), next_attempt_at: 1.second.ago, lease_expires_at: 1.second.ago,
+        last_outcome: "none",
+      )
+      errors = []
+      Rails.logger.stub(:error, ->(message) { errors << message }) do
+        OidcBackchannelLogoutClient.stub(:call, outcome) { OpOutboxDispatchJob.perform_now }
+      end
+
+      assert_equal 1, errors.length, outcome
+      assert_includes errors.sole, "oidc.backchannel_logout.delivery"
+      assert_includes errors.sole, outcome
+      assert_includes errors.sole, @event.client_id
+      assert_equal outcome, @event.reload.last_outcome
     end
   end
 

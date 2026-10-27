@@ -28,7 +28,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
-  test "sign-out launch revokes the RP session before the Visa authority phase" do
+  test "sign-out launch leaves the RP grant active before the Visa authority phase" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
@@ -38,7 +38,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_nil response.headers["Clear-Site-Data"]
     assert_predicate token.reload, :currently_usable?
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "the sign-out confirmation page does not clear site data" do
@@ -63,7 +63,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_visa_end_session_redirect(query, location, client_id: "core-app-jp", region: "jp")
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "sign-out launch uses the server-side hint without issuing an OP transaction" do
@@ -71,18 +71,16 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
-    before_count = AcmeLogoutTransaction.count
     post core_app_sign_out_url(ri: "jp")
 
     assert_response :see_other
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
-    assert_equal before_count, AcmeLogoutTransaction.count
     assert_visa_end_session_redirect(query, location, client_id: "core-app-jp", region: "jp")
   end
 
-  test "post sign out revokes only the initiating RP session before authority confirmation" do
+  test "post sign out keeps the initiating grant active before authority confirmation" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     oidc_client = OidcClientRegistry.find!("core-app-jp")
@@ -120,7 +118,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     post core_app_sign_out_url(ri: "jp")
 
     assert_response :see_other
-    assert_not_predicate rp_session.reload, :active?
+    assert_predicate rp_session.reload, :active?
     assert_predicate token.reload, :currently_usable?
   end
 
@@ -185,7 +183,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_visa_end_session_redirect(query, location, client_id: "core-app-jp", region: "us")
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "post sign out canonicalizes unsupported region to default" do

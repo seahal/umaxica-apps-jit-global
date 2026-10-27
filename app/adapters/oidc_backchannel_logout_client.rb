@@ -3,8 +3,8 @@
 
 # Delivers a signed Logout Token to one registered RP back-channel endpoint (R5-WU10, one.md 7.6).
 # The endpoint comes from the frozen client registration recorded on the outbox row. The connection
-# pins a public DNS result for the request, and redirects are never followed. Only HTTP 200 is an
-# acknowledgement; OpOutboxDispatchJob classifies every other response.
+# pins a public DNS result for the request, and redirects are never followed. HTTP 200 and 204 are
+# acknowledgements; OpOutboxDispatchJob classifies every other response.
 class OidcBackchannelLogoutClient
   OPEN_TIMEOUT = 2
   READ_TIMEOUT = 3
@@ -20,7 +20,7 @@ class OidcBackchannelLogoutClient
         require_public_address: true,
       )
       response = connection.post(uri, { logout_token: })
-      (response.status.to_i == 200) ? :acknowledged : "http_#{response.status.to_i}"
+      [200, 204].include?(response.status.to_i) ? :acknowledged : "http_#{response.status.to_i}"
     rescue Faraday::Error
       "transport_failure"
     rescue OutboundHttp::Connection::InsecureEndpointError, URI::InvalidURIError

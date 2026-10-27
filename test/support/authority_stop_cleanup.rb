@@ -3,7 +3,7 @@
 # Committed-transaction tests delete their own rows in teardown. A sign-out there writes OP
 # authority-stop rows that reference its roots and grants ON DELETE RESTRICT, so they go first.
 module AuthorityStopCleanup
-  CHILDREN = %w(BrowserLogout Participant EpochCutoff GrantTarget RootTarget).freeze
+  CHILDREN = %w(Participant EpochCutoff GrantTarget RootTarget).freeze
 
   def delete_authority_stops_for!(realm:, root_ids: [], grant_ids: [], stop_ids: [])
     prefix = "Op#{realm.to_s.capitalize}AuthorityStop"

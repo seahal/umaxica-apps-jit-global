@@ -5,6 +5,12 @@ module SignOidcLogout
   extend ActiveSupport::Concern
 
   OIDC_LOGOUT_REQUEST_SESSION_KEY = :oidc_logout_request
+  OIDC_LOGOUT_COMPLETED_SESSION_KEY = :oidc_logout_completed
+  OIDC_LOGOUT_REALMS = {
+    "app" => { device: ClientDeviceSession, grant: OpAppGrant, root: :client_token, resource_type: "client" },
+    "com" => { device: VisitorDeviceSession, grant: OpComGrant, root: :visitor_token, resource_type: "visitor" },
+    "org" => { device: OperatorDeviceSession, grant: OpOrgGrant, root: :operator_token, resource_type: "operator" },
+  }.freeze
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
@@ -25,9 +31,32 @@ module SignOidcLogout
 
   def confirm_oidc_end_session_logout
     pending_request = oidc_logout_pending_request
-    return render_oidc_end_session_failure unless pending_request
+    unless pending_request
+      if session[OIDC_LOGOUT_COMPLETED_SESSION_KEY] == true && current_session_public_id.blank?
+        clear_oidc_logout_browser!
+        return render_oidc_already_signed_out
+      end
+      return render_oidc_end_session_failure
+    end
 
-    perform_oidc_end_session_logout(pending_request)
+    device_class = oidc_logout_realm.fetch(:device)
+    device =
+      device_class.connection_class_for_self.connected_to(role: :writing) do
+        device_class.find_by(public_id: pending_request.device_session_public_id)
+      end
+    return render_oidc_end_session_failure unless device
+
+    current_root = current_session
+    current_device = current_root&.device_session_record
+    return render_oidc_end_session_forbidden if current_device && current_device.id != device.id
+
+    if device.revoked?
+      clear_oidc_logout_browser!
+      return render_oidc_already_signed_out
+    end
+    return render_oidc_end_session_forbidden unless current_device && current_device.id == device.id
+
+    perform_oidc_end_session_logout(pending_request, device: device, root: current_root)
   end
 
   def handle_oidc_end_session_request
@@ -36,23 +65,22 @@ module SignOidcLogout
     @oidc_end_session_request = OidcEndSessionRequest.call(params: params, request: request)
     return render_oidc_end_session_error(@oidc_end_session_request) if @oidc_end_session_request.error?
 
-    # A verified hint without the captured IdP session identifies an RP's requested target, but it
-    # does not authorize this browser to mutate anything. Stop before storing a pending request or
-    # redirecting to an origin: the IdP-session-absent contract is a plain error with no state
-    # change (REQ-009 / DEC-074).
-    if @oidc_end_session_request.source == OidcEndSessionRequest::SOURCE_ID_TOKEN_HINT &&
-        @oidc_end_session_request.requires_confirmation?
-      return render_oidc_end_session_session_missing_error
-    end
+    device = current_session&.device_session_record
+    hinted = @oidc_end_session_request.source == OidcEndSessionRequest::SOURCE_ID_TOKEN_HINT
+    return render_oidc_end_session_forbidden if hinted && !device&.usable?
+    return render_oidc_already_signed_out unless device&.usable?
 
-    if oidc_logout_pending_request_present?
+    grant = oidc_logout_hint_grant(@oidc_end_session_request, device) if hinted
+    return render_oidc_end_session_forbidden if hinted && !grant
+
+    pending = oidc_logout_pending_request
+    if pending
+      return render_oidc_end_session_forbidden unless pending.device_session_public_id == device.public_id
+
       return render_oidc_end_session_confirmation
     end
 
-    session_public_id = current_session_public_id
-    return render_oidc_end_session_confirmation if session_public_id.blank?
-
-    store_oidc_logout_request!(@oidc_end_session_request, session_public_id:)
+    store_oidc_logout_request!(@oidc_end_session_request, device: device, grant: grant)
     if @oidc_end_session_request.post_logout_redirect_uri.present?
       return redirect_to(sign_out_edit_path, status: :see_other)
     end
@@ -60,20 +88,97 @@ module SignOidcLogout
     render_oidc_end_session_confirmation
   end
 
-  def perform_oidc_end_session_logout(result)
-    prepare_sign_out_completion_notice!
-    logout_oidc_current_session!(result)
-    issue_sign_out_notice!
-    session[OpLogoutReceiptSession::KEY] = @op_logout_receipt_session if @op_logout_receipt_session
+  # Errors the authority stop can raise from storage or from its own refusal. Anything else is a
+  # programming error and propagates.
+  OIDC_LOGOUT_STOP_ERRORS = [ActiveRecord::ActiveRecordError, OpAuthorityStopCommitter::Refused].freeze
 
-    if result.post_logout_redirect_uri.present?
-      redirect_to_jump_url(post_logout_redirect_uri_with_state(result), status: :see_other)
-    else
-      redirect_to(
-        oidc_logout_completed_path(ri: result.legacy_ri || params[:ri]),
-        status: :see_other,
+  def perform_oidc_end_session_logout(result, device:, root:)
+    prepare_sign_out_completion_notice!
+    resource = current_resource
+    precondition_failed = false
+    begin
+      logout = AuthenticationLogoutCurrentSession.new(
+        current: Actor, resource: resource, token: root, token_class: token_class,
+        session_public_id: device.public_id, reason: "oidc_rp_initiated_logout", cause: "rp_initiated_logout",
+        cascade_device_session_tokens: true,
+        precondition: -> { device.reload.usable? && device.public_id == result.device_session_public_id },
       )
+      logout.call
+      record_logout_audit(resource)
+    rescue AuthenticationLogoutCurrentSession::CommitOutcomeUnknown => e
+      log_oidc_logout_failure("commit_unknown", e)
+      return render_sign_out_indeterminate!
+    rescue AuthenticationLogoutCurrentSession::PreconditionFailed => e
+      log_oidc_logout_failure("precondition_failed", e)
+      precondition_failed = true
+    rescue ActiveRecord::ActiveRecordError, OpAuthorityStopCommitter::Refused, PG::Error => e
+      log_oidc_logout_failure("stop_failed", e)
     end
+
+    case persisted_oidc_device_state(device)
+    when :revoked
+      if precondition_failed
+        clear_oidc_logout_browser!
+        return render_oidc_already_signed_out
+      end
+      finish_oidc_committed_logout(result)
+    when :active
+      precondition_failed ? render_oidc_end_session_forbidden : render_oidc_stop_failure
+    when :unknown
+      render_sign_out_indeterminate!
+    else
+      raise RuntimeError, "unexpected logout device state"
+    end
+  end
+
+  def finish_oidc_committed_logout(result)
+    clear_oidc_logout_browser!
+    if result.grant_public_id.present? && result.post_logout_redirect_uri.present?
+      redirect_to_jump_url(post_logout_redirect_uri_with_state(result), strict: true, status: :see_other)
+    else
+      issue_sign_out_notice!
+      redirect_to(oidc_logout_completed_path(ri: result.legacy_ri || params[:ri]), status: :see_other)
+    end
+  rescue ActiveRecord::ActiveRecordError, PG::Error, Umaxica::Valkey::Error,
+         CommonRedirect::JumpRedirectFailure, JumpRtConfigurationError => e
+    log_oidc_logout_failure("committed_presentation_failed", e)
+    render_oidc_signed_out
+  end
+
+  def clear_oidc_logout_browser!
+    clear_auth_cookies!
+    Actor.clear
+    reset_session_and_clear_inertia_history!
+    session[OIDC_LOGOUT_COMPLETED_SESSION_KEY] = true
+  end
+
+  def persisted_oidc_device_state(device)
+    device.class.connection_class_for_self.connected_to(role: :writing) do
+      persisted = device.class.find_by(id: device.id)
+      raise ActiveRecord::RecordNotFound, "logout device no longer exists" unless persisted
+
+      persisted.revoked? ? :revoked : :active
+    end
+  rescue ActiveRecord::ActiveRecordError => e
+    log_oidc_logout_failure("device_state_unreadable", e)
+    :unknown
+  end
+
+  def render_oidc_stop_failure
+    render_oidc_logout_result_page(
+      title: I18n.t("sign.shared.sign_out.unavailable_title"),
+      description: I18n.t("sign.shared.sign_out.unavailable_description"),
+      status: :internal_server_error,
+    )
+  end
+
+  def log_oidc_logout_failure(outcome, error)
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "oidc.logout", realm: sign_surface_name, outcome: outcome,
+                       error_class: error.class.name,
+      ),
+    )
   end
 
   def render_oidc_logout_completion
@@ -85,41 +190,44 @@ module SignOidcLogout
     render :show, status: :ok
   end
 
+  def render_oidc_already_signed_out
+    render_oidc_logout_result_page(
+      title: I18n.t("sign.shared.sign_out.completed_title"),
+      description: I18n.t("sign.shared.sign_out.already_signed_out"),
+      status: :ok,
+    )
+  end
+
   def oidc_logout_completion_template
     :show
   end
 
   def render_oidc_end_session_error(result)
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "oidc.logout.request_refused", realm: sign_surface_name, error: result.error_code,
+                                       error_description: result.error_description,
+      ),
+    )
     if request.format.json?
       render json: { error: result.error_code, error_description: result.error_description },
              status: :bad_request
-    elsif result.error_description.to_s.start_with?("id_token_hint ") &&
-        result.error_description.to_s.end_with?("does not match current session")
-      render_oidc_end_session_session_error
     else
-      render_oidc_logout_completion
+      Rails.logger.info(
+        JitLogEvent.format(
+          "oidc.logout", realm: sign_surface_name, outcome: "invalid_request", error_code: result.error_code,
+        ),
+      )
+      render plain: I18n.t("sign.shared.sign_out.invalid_request"), status: :bad_request
     end
   end
 
-  def render_oidc_end_session_session_missing_error
-    render_oidc_end_session_session_error(
-      error_code: "login_required",
-      error_description: I18n.t("sign.shared.sign_out.idp_session_error"),
-    )
-  end
-
-  def render_oidc_end_session_session_error(error_code: "invalid_request", error_description: nil)
+  def render_oidc_end_session_forbidden
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     response.headers["Referrer-Policy"] = SignOutNotice::SIGN_OUT_REFERRER_POLICY
-    description = error_description.presence || I18n.t("sign.shared.sign_out.idp_session_error")
-
-    if request.format.json?
-      render json: { error: error_code, error_description: description }, status: :bad_request
-    else
-      render plain: description, status: :bad_request
-    end
+    render plain: I18n.t("sign.shared.sign_out.forbidden_description"), status: :forbidden
   end
 
   def render_oidc_end_session_failure
@@ -127,7 +235,7 @@ module SignOidcLogout
       render json: { error: "unprocessable_content", error_description: "logout completion is stale" },
              status: :unprocessable_content
     else
-      render_oidc_logout_completion
+      render plain: I18n.t("sign.shared.sign_out.stale_description"), status: :unprocessable_content
     end
   end
 
@@ -136,7 +244,7 @@ module SignOidcLogout
   end
 
   OidcLogoutPendingRequest = Struct.new(
-    :client_id, :subject, :sid, :post_logout_redirect_uri, :state, :ui_locales, :legacy_ri,
+    :client_id, :device_session_public_id, :grant_public_id, :post_logout_redirect_uri, :state, :ui_locales, :legacy_ri,
     :expires_at,
     keyword_init: true,
   )
@@ -151,15 +259,16 @@ module SignOidcLogout
     OidcLogoutPendingRequest.new(**payload.symbolize_keys)
   end
 
-  def store_oidc_logout_request!(result, session_public_id:)
-    session[OIDC_LOGOUT_REQUEST_SESSION_KEY] = oidc_logout_request_payload(result, session_public_id:)
+  def store_oidc_logout_request!(result, device:, grant:)
+    session.delete(OIDC_LOGOUT_COMPLETED_SESSION_KEY)
+    session[OIDC_LOGOUT_REQUEST_SESSION_KEY] = oidc_logout_request_payload(result, device: device, grant: grant)
   end
 
-  def oidc_logout_request_payload(result, session_public_id:)
+  def oidc_logout_request_payload(result, device:, grant:)
     {
       "client_id" => result.client_id,
-      "subject" => result.subject,
-      "sid" => result.sid.presence || session_public_id,
+      "device_session_public_id" => device.public_id,
+      "grant_public_id" => grant&.public_id,
       "post_logout_redirect_uri" => result.post_logout_redirect_uri,
       "state" => result.state,
       "ui_locales" => result.ui_locales,
@@ -174,62 +283,22 @@ module SignOidcLogout
     nil
   end
 
-  def logout_oidc_current_session!(result)
-    begin
-      resource = current_resource if respond_to?(:current_resource, true)
-      session_public_id = result.sid.presence || current_session_public_id
-      token_record = oidc_current_session_token(session_public_id)
-      browser_binding = SecureRandom.urlsafe_base64(32)
-      logout = AuthenticationLogoutCurrentSession.new(
-        current: Actor,
-        resource: resource,
-        token: token_record,
-        token_class: token_class,
-        session_public_id: session_public_id,
-        reason: "oidc_rp_initiated_logout",
-        cause: "rp_initiated_logout",
-        browser_binding: browser_binding,
-      )
-      logout.call
-      stop_result = logout.stop_results.first
-      if stop_result&.stop && stop_result.receipt_nonce
-        @op_logout_receipt_session = {
-          "realm" => sign_surface_name,
-          "stop" => stop_result.stop.public_id,
-          "nonce" => stop_result.receipt_nonce,
-          "browser_binding" => browser_binding,
-        }
+  def oidc_logout_realm
+    OIDC_LOGOUT_REALMS.fetch(sign_surface_name)
+  end
+
+  def oidc_logout_hint_grant(result, device)
+    realm = oidc_logout_realm
+    grant_class = realm.fetch(:grant)
+    grant =
+      grant_class.connection_class_for_self.connected_to(role: :writing) do
+        grant_class.includes(realm.fetch(:root)).find_by(public_id: result.sid, oidc_client_id: result.client_id)
       end
-      record_logout_audit(resource) if respond_to?(:record_logout_audit, true)
-    ensure
-      clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
-      Actor.clear if defined?(Actor)
-      reset_session_and_clear_inertia_history!
-    end
-  end
+    root = grant&.public_send(realm.fetch(:root))
+    return unless root && root.device_session_id == device.id
+    return unless result.subject == OidcSubject.for(root.actor_record, resource_type: realm.fetch(:resource_type))
 
-  def oidc_current_session_token(session_public_id)
-    return if session_public_id.blank?
-
-    token_class.includes(:device_session).find_by(public_id: session_public_id) ||
-      oidc_current_session_token_by_device_session(session_public_id) ||
-      oidc_current_session_token_by_sid(session_public_id)
-  end
-
-  def oidc_current_session_token_by_device_session(session_public_id)
-    return unless token_class.column_names.include?("device_session_id")
-
-    device_session = token_class.reflect_on_association(:device_session)
-      &.klass&.active&.find_by(public_id: session_public_id)
-    return if device_session.blank?
-
-    token_class.currently_usable_at.where(device_session_id: device_session.id).order(created_at: :desc).first
-  end
-
-  def oidc_current_session_token_by_sid(session_public_id)
-    return unless token_class.column_names.include?("oidc_sid")
-
-    token_class.includes(:device_session).find_by(oidc_sid: session_public_id)
+    grant
   end
 
   def sign_out_confirmation_form_path

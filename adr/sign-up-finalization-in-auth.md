@@ -89,7 +89,8 @@ Turnstile remains the documented stronger exception.
 
 - A person who reaches Finalization seconds before the curfew may have to start again (D-105).
 - A crash after the decisive commit leaves a registered principal with an unfinished Flow. The next
-  access is an ordinary sign-in, and `SignUpAttemptDiagnosisInventory` (WU-26) classifies the state.
+  access is an ordinary sign-in. (The hand-run `SignUpAttemptDiagnosisInventory` of WU-26 was
+  withdrawn on 2026-10-26, D-196; the automatic stuck-registration report remains.)
 - The social sign-up gains the Sign In screens (MFA, checkpoint) that email and telephone sign-up
   already show.
 

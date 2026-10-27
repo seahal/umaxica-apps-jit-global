@@ -127,6 +127,10 @@ ExternalAuthentication::FlipperProviderAvailabilityAdapter::PROVIDER_FEATURE_NAM
 # public FQDN on stays an explicit operator decision made through the Flipper UI.
 FqdnAvailabilityRegistry.flag_names.each { |feature_name| Flipper.enable(feature_name) }
 
+# Sign Entry Sentry switches have the same polarity: an unwritten flag answers every Sign In and
+# Sign Up entry with 503 `sentry_blocked`. Open all six so local sign-in and sign-up work.
+SignEntrySentryResolver::ENTRY_FLAGS.each_value { |feature_name| Flipper.enable(feature_name) }
+
 # Deterministic development CMS documents so all twelve public content cells have
 # a published entry. Uses the normal draft -> promote -> publish lifecycle.
 # Keep this out of test: `db:prepare` seeds newly created test databases, and the

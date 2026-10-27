@@ -17,7 +17,6 @@ class OpAuthorityStopPurgerTest < ActiveSupport::TestCase
     )
     @stop = OpAuthorityStopCommitter.stop_root(
       root: @root, cause: "browser_logout", principal_public_id: @client.public_id, authority_evidence_ref: "test",
-      browser_binding: "browser-1",
     ).stop
   end
 
@@ -39,7 +38,6 @@ class OpAuthorityStopPurgerTest < ActiveSupport::TestCase
     assert_empty OpAuthorityStopPurger.release_roots!(realm: "app", root_ids: [@root.id])
     assert_not OpAppAuthorityStop.exists?(@stop.id)
     assert_not OpAppAuthorityStopRootTarget.exists?(stop_id: @stop.id)
-    assert_not OpAppAuthorityStopBrowserLogout.exists?(stop_id: @stop.id)
   end
 
   test "an all-roots stop stays until every target root reaches its own retention deadline" do

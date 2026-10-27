@@ -66,7 +66,6 @@ scope module: :core, as: :core do
 
       # RP callback. Browser entry is the neutral /sign contract.
       # R5-WU16 matching-session RP cookie purge after OP logout.
-      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show
@@ -153,7 +152,6 @@ scope module: :core, as: :core do
 
       # RP callback. Browser entry is the neutral /sign contract.
       # R5-WU16 matching-session RP cookie purge after OP logout.
-      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show
@@ -240,7 +238,6 @@ scope module: :core, as: :core do
 
       # RP callback. Browser entry is the neutral /sign contract.
       # R5-WU16 matching-session RP cookie purge after OP logout.
-      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show

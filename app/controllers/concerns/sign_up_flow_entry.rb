@@ -50,6 +50,6 @@ module SignUpFlowEntry
   # rather than localizing it.
   def render_sign_flow_phase_refusal
     no_store
-    render plain: I18n.t("errors.messages.phase_violation_refused", locale: :ja), status: :conflict
+    render plain: I18n.t("errors.messages.phase_violation_refused"), status: :conflict
   end
 end

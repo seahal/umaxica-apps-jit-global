@@ -62,16 +62,13 @@ scope(module: :visa, as: :visa) do
           resource(:logout, only: %i(show create), controller: :logouts)
           scope(module: :logouts, path: :logout, as: :logout) do
             resource :confirmation, only: :create
+            resource :completion, only: :show
           end
           resource(:result, only: :show, controller: :results)
           resource(:cancellation, only: :show, controller: :cancellations)
           if surface_namespace != :org
             resource(:switch, only: :show, controller: :switches)
           end
-        end
-
-        scope path: :sign do
-          resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         end
 
         namespace :sign do

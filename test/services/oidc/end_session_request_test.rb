@@ -32,7 +32,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal :no_hint, result.source
   end
 
-  test "accepts a verified RP hint whose sid identifies its grant and targets the current OP session" do
+  test "returns the grant sid from a verified RP hint for the Visa boundary to authorize" do
     install_actor_context!
 
     result = call(id_token_hint: id_token(sid: "rp-grant-public-id"))
@@ -42,7 +42,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal :id_token_hint, result.source
     assert_equal @client.client_id, result.client_id
     assert_equal OidcSubject.for(@user, resource_type: "client"), result.subject
-    assert_equal @sid, result.sid
+    assert_equal "rp-grant-public-id", result.sid
   end
 
   test "id_token_hint takes precedence over legacy logout_request" do
@@ -93,23 +93,23 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal "client_id mismatch", result.error_description
   end
 
-  test "rejects subject mismatch with current session" do
+  test "returns a verified hint for Visa to authorize against the current session" do
     other = clients(:two)
     install_actor_context!(actor: other)
 
     result = call(id_token_hint: id_token)
 
-    assert_predicate result, :error?
-    assert_equal "id_token_hint subject does not match current session", result.error_description
+    assert_predicate result, :success?
+    assert_equal OidcSubject.for(@user, resource_type: "client"), result.subject
   end
 
-  test "declines the hint sid and targets the authenticated OP session" do
+  test "returns the hint sid rather than substituting the authenticated session" do
     install_actor_context!(sid: "op-root-session-public-id")
 
     result = call(id_token_hint: id_token(sid: "unrelated-rp-grant-public-id"))
 
     assert_predicate result, :success?
-    assert_equal "op-root-session-public-id", result.sid
+    assert_equal "unrelated-rp-grant-public-id", result.sid
   end
 
   test "requires confirmation for valid id_token_hint without current session" do
@@ -126,8 +126,8 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
     assert_predicate result, :success?
     assert_predicate result, :requires_confirmation?
-    assert_nil result.subject
-    assert_nil result.sid
+    assert_equal OidcSubject.for(@user, resource_type: "client"), result.subject
+    assert_equal @sid, result.sid
   end
 
   test "accepts exact registered post logout redirect uri and state" do

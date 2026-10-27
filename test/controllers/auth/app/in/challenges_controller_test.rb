@@ -44,7 +44,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
       assert_response :conflict
       assert_equal "text/plain", response.media_type
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_nil response.headers["Location"]
       assert_includes response.headers["Cache-Control"], "no-store"
       assert_equal before, flow.reload.attributes
@@ -71,7 +71,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       end
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_equal before, flow.reload.attributes
     end
   end
@@ -85,7 +85,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       delete path
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_equal ClientSignInFlowState::HALTED, flow.reload.state_id
       terminal = flow.attributes
 
@@ -117,8 +117,9 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
         translation_called = true
 
-        assert_equal :ja, options.fetch(:locale)
-        "戻るはだめです"
+        # The refusal follows the request locale; it no longer forces Japanese (owner, 2026-10-27).
+        assert_not options.key?(:locale)
+        "この画面は古くなっています。最初からやり直してください。"
       },
     ) do
       get auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
@@ -126,7 +127,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
     assert_response :conflict
     assert translation_called
-    assert_equal "戻るはだめです", response.body
+    assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
     assert_equal ClientSignInFlowState::MFA_PENDING, flow.reload.state_id
   end
 
@@ -142,7 +143,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       get auth_app_sign_in_challenge_path(ri: "jp", fb: expired_binding)
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
+      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
       assert_equal ClientSignInFlowState::MFA_PENDING, flow.reload.state_id
     end
   end
@@ -154,7 +155,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     delete auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
     assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
     assert_equal ClientSignInFlowState::HALTED, flow.reload.state_id
   end
 
@@ -228,10 +229,10 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     get new_auth_app_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
 
     assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
   end
 
-  test "no TOTP second-factor route exists" do
+  test "A34-2: TOTP is not an APP sign-in method and has no sign-in route" do
     # WU-30: the APP sign-in second factor is a Passkey only.
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(

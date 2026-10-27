@@ -28,7 +28,7 @@ class PublishingAuthorityClient
 
   def initialize(surface:, audience:, access_token:)
     base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type("operator")
-    @base = "#{base_origin}/api/v0/publishing/#{surface}/#{audience}"
+    @base = OutboundHttp::LocalBackChannel.url("#{base_origin}/api/v0/publishing/#{surface}/#{audience}")
     @access_token = access_token.to_s
   end
 
@@ -65,7 +65,7 @@ class PublishingAuthorityClient
 
     uri = URI.parse(url)
     connection = OutboundHttp::Connection.build(
-      url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: true,
+      url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: OutboundHttp::LocalBackChannel.require_https?(url),
     )
     headers = { "Authorization" => "Bearer #{access_token}",
                 "X-Client-Assertion" => assertion,

@@ -118,41 +118,6 @@ ALTER SEQUENCE public.customer_verifications_customer_token_id_seq OWNED BY publ
 
 
 --
--- Name: op_com_authority_stop_browser_logouts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.op_com_authority_stop_browser_logouts (
-    id bigint CONSTRAINT op_authority_stop_browser_logouts_id_not_null NOT NULL,
-    stop_id bigint CONSTRAINT op_authority_stop_browser_logouts_stop_id_not_null NOT NULL,
-    browser_binding_digest bytea CONSTRAINT op_authority_stop_browser_logou_browser_binding_digest_not_null NOT NULL,
-    receipt_nonce_digest bytea CONSTRAINT op_authority_stop_browser_logouts_receipt_nonce_digest_not_null NOT NULL,
-    receipt_expires_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_receipt_expires_at_not_null NOT NULL,
-    receipt_consumed boolean DEFAULT false CONSTRAINT op_authority_stop_browser_logouts_receipt_consumed_not_null NOT NULL,
-    created_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_created_at_not_null NOT NULL,
-    updated_at timestamp(6) with time zone CONSTRAINT op_authority_stop_browser_logouts_updated_at_not_null NOT NULL
-);
-
-
---
--- Name: op_com_authority_stop_browser_logouts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.op_com_authority_stop_browser_logouts_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: op_com_authority_stop_browser_logouts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.op_com_authority_stop_browser_logouts_id_seq OWNED BY public.op_com_authority_stop_browser_logouts.id;
-
-
---
 -- Name: op_com_authority_stop_causes; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1779,13 +1744,6 @@ ALTER SEQUENCE public.visitor_verifications_id_seq OWNED BY public.visitor_verif
 
 
 --
--- Name: op_com_authority_stop_browser_logouts id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_com_authority_stop_browser_logouts ALTER COLUMN id SET DEFAULT nextval('public.op_com_authority_stop_browser_logouts_id_seq'::regclass);
-
-
---
 -- Name: op_com_authority_stop_causes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2073,14 +2031,6 @@ ALTER TABLE public.visitor_email_ceremony_transactions
 
 ALTER TABLE public.visitor_step_up_sessions
     ADD CONSTRAINT chk_visitor_step_up_sessions_retention_order CHECK ((discard_at <= purge_eligible_at)) NOT VALID;
-
-
---
--- Name: op_com_authority_stop_browser_logouts op_com_authority_stop_browser_logouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_com_authority_stop_browser_logouts
-    ADD CONSTRAINT op_com_authority_stop_browser_logouts_pkey PRIMARY KEY (id);
 
 
 --
@@ -2659,13 +2609,6 @@ CREATE INDEX idx_visitor_sign_up_flows_cleanup_status_purge_eligible_at ON publi
 --
 
 CREATE UNIQUE INDEX idx_visitor_signup_one_in_progress_per_admission ON public.visitor_sign_up_flows USING btree (auth_admission_binding_id) WHERE (status_id = ANY (ARRAY[(10)::bigint, (20)::bigint, (30)::bigint, (35)::bigint, (38)::bigint, (40)::bigint, (60)::bigint]));
-
-
---
--- Name: index_op_com_authority_stop_browser_logouts_on_stop_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_op_com_authority_stop_browser_logouts_on_stop_id ON public.op_com_authority_stop_browser_logouts USING btree (stop_id);
 
 
 --
@@ -3477,14 +3420,6 @@ ALTER TABLE ONLY public.op_com_authority_stop_participants
 
 
 --
--- Name: op_com_authority_stop_browser_logouts fk_com_stop_restrict_11; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.op_com_authority_stop_browser_logouts
-    ADD CONSTRAINT fk_com_stop_restrict_11 FOREIGN KEY (stop_id) REFERENCES public.op_com_authority_stops(id) ON DELETE RESTRICT;
-
-
---
 -- Name: visitor_tokens fk_customer_tokens_on_customer_token_binding_method_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3739,6 +3674,7 @@ ALTER TABLE ONLY public.visitor_email_ceremony_transactions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261026190827'),
 ('20261025120400'),
 ('20261025120301'),
 ('20261025120300'),

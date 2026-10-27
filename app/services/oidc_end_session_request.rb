@@ -27,6 +27,7 @@ class OidcEndSessionRequest < ApplicationService
 
   def call
     return handle_id_token_hint if param_present?(:id_token_hint)
+    return invalid_request("post_logout_redirect_uri is invalid") if invalid_no_hint_redirect_uri?
     return handle_logout_request if param_present?(:logout_request)
 
     success(source: SOURCE_NO_HINT, requires_confirmation: true)
@@ -35,6 +36,14 @@ class OidcEndSessionRequest < ApplicationService
   private
 
   attr_reader :params, :request
+
+  def invalid_no_hint_redirect_uri?
+    return false unless param_present?(:post_logout_redirect_uri)
+
+    !OidcClientRegistry.valid_post_logout_redirect_uri?(
+      client_id: param(:client_id), uri: param(:post_logout_redirect_uri), resource_type: resource_type_for_request,
+    )
+  end
 
   def handle_id_token_hint
     verification = verified_id_token_hint
@@ -53,20 +62,14 @@ class OidcEndSessionRequest < ApplicationService
       return invalid_request("post_logout_redirect_uri is invalid")
     end
 
-    current_failure = current_session_mismatch(payload)
-    return current_failure if current_failure
-
-    # The hint is not authority for this browser to end a session. Match its subject to the
-    # authenticated OP actor, then use the OP session's sid as the target. An RP ID Token's sid
-    # names its RP Session and is not the OP Root Session identifier. Without an OP session, the
-    # hint still validates client and redirect, but nothing is revoked or notified.
-    target_bound = !current_session_missing?
+    # The verified sid identifies a grant; Visa must bind that grant to the current device before
+    # staging a request. Signature validation alone does not authorize a browser to stop it.
     success(
       source: SOURCE_ID_TOKEN_HINT,
       client: client,
       client_id: client.client_id,
-      subject: target_bound ? payload["sub"] : nil,
-      sid: target_bound ? current_sid : nil,
+      subject: payload["sub"],
+      sid: payload["sid"],
       post_logout_redirect_uri: redirect_uri,
       state: param(:state).presence,
       ui_locales: param(:ui_locales).presence,
@@ -115,27 +118,8 @@ class OidcEndSessionRequest < ApplicationService
     end.first
   end
 
-  def current_session_mismatch(payload)
-    return if current_session_missing?
-
-    expected_subject = current_subject
-    return unless expected_subject.present? && payload["sub"].to_s != expected_subject
-
-    invalid_request("id_token_hint subject does not match current session")
-
-  end
-
   def current_session_missing?
     current_actor.blank? || current_actor.is_a?(Unauthenticated) || current_sid.blank?
-  end
-
-  def current_subject
-    actor = current_actor
-    return if actor.blank?
-
-    OidcSubject.for(actor, resource_type: resource_type_for_request)
-  rescue ArgumentError
-    nil
   end
 
   def current_actor

@@ -1,5 +1,8 @@
 # Mechanical analysis of documented transition graphs
 
+The 2026-10-26 Visa logout session transport is documented in the transition inventory and its
+own diagram; it is not included in this earlier mechanical extraction.
+
 This analysis uses CURRENT node declarations and edges, not a Mermaid parser. Guards and time constraints are not solved: reachability is a conservative graph property, not a successful runtime execution claim. Aggregated nodes cannot prove per-value reachability. Terminal markers describe notation, not immutable storage. A nonterminal sink is a `DEAD_END_CANDIDATE`; external waits, unwired states, derived conditions and omitted writers require inspection. Absence of a path proves absence in the documented graph only. Writer coverage must close before this can prove implementation completeness.
 
 The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SCCs and self-loops) and the script that produced this table were held in the removed `verification/` directory; this table cannot currently be regenerated from this directory.
@@ -117,7 +120,6 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | idp-operator-telephone-credential | 7 | 1 | UNVERIFIED | None | ACTIVE, DELETED, INACTIVE, NOTHING, PENDING | ACTIVE, DELETED, INACTIVE, NOTHING, PENDING, VERIFIED | 0 | None |
 | idp-operator-actor-withdrawal | 5 | 16 | active | None | closing, withdrawn | None | 1 | active, suspended, terminated |
 | idp-client-actor-provisioning | 13 | 1 | UNVERIFIED_WITH_SIGN_UP, VERIFIED_WITH_SIGN_UP, NOTHING | None | ACTIVE, DELETED, GHOST, INACTIVE, PENDING, PENDING_DELETION, PRE_WITHDRAWAL_CONDITION, RESERVED, WITHDRAWAL_COMPLETED, WITHDRAWN | ACTIVE, DELETED, GHOST, INACTIVE, NOTHING, PENDING, PENDING_DELETION, PRE_WITHDRAWAL_CONDITION, RESERVED, VERIFIED_WITH_SIGN_UP, WITHDRAWAL_COMPLETED, WITHDRAWN | 0 | None |
-| idp-shared-acme-logout | 5 | 10 | initiated | finalized | expired | None | 1 | in_progress |
 | idp-shared-webauthn-challenge | 2 | 3 | issued | removed | None | None | 0 | None |
 | idp-client-enforcement-case | 6 | 12 | draft, pending_approval | None | ended | None | 2 | active, closed |
 | idp-client-enforcement-appeal | 5 | 9 | submitted | redacted | under_review | None | 1 | redacted |

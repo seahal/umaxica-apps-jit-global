@@ -287,7 +287,7 @@ module PasskeySignInFlow
         .exists?(["discard_at > ?", passkey.class.database_now])
       return reject_passkey_sign_in
     end
-    return reject_passkey_sign_in unless actor&.active?
+    return reject_passkey_sign_in unless actor&.sign_in_allowed?
 
     allow_passkey_sign_in?(passkey)
   end

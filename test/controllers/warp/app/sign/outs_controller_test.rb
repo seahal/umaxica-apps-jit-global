@@ -28,17 +28,19 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
-  test "sign-out launch revokes the RP session before the Visa authority phase" do
+  test "sign-out launch keeps the RP grant active before the Visa authority phase" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
+    stops_before = OpAppAuthorityStop.count
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
     assert_response :see_other
+    assert_equal stops_before, OpAppAuthorityStop.count
     assert_nil response.headers["Clear-Site-Data"]
     assert_predicate token.reload, :currently_usable?
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "a write that creates the browser preference synchronizes the client preference mirror" do
@@ -61,14 +63,16 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
+    stops_before = OpAppAuthorityStop.count
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
     assert_response :see_other
+    assert_equal stops_before, OpAppAuthorityStop.count
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "post sign out accepts us region" do
@@ -76,14 +80,16 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
+    stops_before = OpAppAuthorityStop.count
     post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
     assert_response :see_other
+    assert_equal stops_before, OpAppAuthorityStop.count
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "us")
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "post sign out canonicalizes unsupported region to default" do
@@ -110,9 +116,11 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     authenticate_rp!(user, token)
     @rp_session.logout_hint.destroy!
 
+    stops_before = OpAppAuthorityStop.count
     post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
     assert_response :unprocessable_content
+    assert_equal stops_before, OpAppAuthorityStop.count
     assert_predicate token.reload, :currently_usable?
     assert_predicate @rp_session.reload, :active?
     assert_not_includes response.body, I18n.t("sign.shared.sign_out.completed_title")

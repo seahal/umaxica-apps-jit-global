@@ -14,6 +14,29 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "legacy logout challenge on GET and POST uses the ordinary Base handoff" do
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    base_host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
+    host! host
+
+    [
+      -> { get(auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: "legacy-challenge")) },
+      -> { post(auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: "legacy-challenge")) },
+    ].each do |request|
+      request.call
+
+      assert_response :see_other
+      gateway = URI.parse(response.location)
+
+      assert_equal "jump.umaxica.net", gateway.host
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      target = URI.parse(payload.fetch("url"))
+
+      assert_equal [base_host, "/sign/out", { "ri" => "jp" }],
+                   [target.host, target.path, Rack::Utils.parse_nested_query(target.query.to_s)]
+    end
+  end
+
   test "get sign out renders confirmation and post redirects to Base without an Auth RP logout" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
@@ -65,21 +88,9 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     staff = operators(:one)
     token = OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     satisfy_staff_verification(token)
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-org-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign",
-          ri: "jp",
-          surface: "org",
-        ),
-        surface: "org",
-        ri: "jp",
-      ).transaction
     host! host
 
-    delete auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge), headers: {
+    delete auth_org_sign_out_url(ri: "jp", host: host), headers: {
       "X-TEST-CURRENT-STAFF" => staff.id.to_s,
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
       "Authorization" => "Bearer #{
@@ -90,9 +101,8 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal auth_org_root_url(ri: "jp", host: host), response.location
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
 
-    delete auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge), headers: {
+    delete auth_org_sign_out_url(ri: "jp", host: host), headers: {
       "X-TEST-CURRENT-STAFF" => staff.id.to_s,
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
       "Authorization" => "Bearer #{
@@ -103,7 +113,6 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal auth_org_root_url(ri: "jp", host: host), response.location
     assert_predicate token.reload, :currently_usable?
-    assert_predicate transaction.reload, :failed?
   end
 
   test "show and new send the operator on to the confirmation and Base sign-out pages" do
@@ -127,61 +136,6 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     location = URI.parse(payload.fetch("url"))
 
     assert_equal [acme_host, "/sign/out"], [location.host, location.path]
-  end
-
-  test "post with a coordinated challenge clears this host and hands off to Visa end-session" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "core",
-        initiating_client_id: "core-org-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "core", ri: "jp", surface: "org",
-        ),
-        surface: "org",
-        ri: "jp",
-      ).transaction
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "acme_cleared")
-    host! host
-
-    post auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge)
-
-    assert_response :see_other
-    location = URI.parse(response.location)
-
-    assert_equal [Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host, "/oidc/logout"],
-                 [location.host, location.path]
-    assert_equal transaction.logout_challenge, Rack::Utils.parse_query(location.query).fetch("logout_challenge")
-  end
-
-  test "post with a challenge that has not reached this step renders the unavailable page" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    transaction =
-      AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "sign",
-        initiating_client_id: "core-org-jp",
-        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "sign", ri: "jp", surface: "org",
-        ),
-        surface: "org",
-        ri: "jp",
-      ).transaction
-    host! host
-
-    post auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge)
-
-    assert_response :unprocessable_content
-    assert_empty css_select("form#sign-out-handoff-form")
-  end
-
-  test "post with an unknown challenge is not found" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-
-    post auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: "no-such-challenge")
-
-    assert_response :not_found
   end
 end
 

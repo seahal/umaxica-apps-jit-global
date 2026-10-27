@@ -72,7 +72,6 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
       name, value = pair.split("=", 2)
       cookies[name] = Rack::Utils.unescape(value)
     end
-    transactions_before = AcmeLogoutTransaction.count
     csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"), headers: rp_headers)
     post base_app_sign_out_url(host: @host, ri: "jp"), headers: {
       "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
@@ -96,17 +95,14 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
       end
 
     assert_equal expected_redirect, query.fetch("post_logout_redirect_uri")
-    assert_not_predicate @base_rp_session.reload, :active?
-    assert_equal transactions_before, AcmeLogoutTransaction.count
+    assert_predicate @base_rp_session.reload, :active?
   end
 
   test "sign out without an RP session refuses authority mutation" do
-    before = AcmeLogoutTransaction.count
     post base_app_sign_out_url(host: @host, ri: "jp")
 
     assert_response :unauthorized
     assert_nil response.location
-    assert_equal before, AcmeLogoutTransaction.count
     get base_app_root_url(host: @host, ri: "jp")
 
     assert_response :success

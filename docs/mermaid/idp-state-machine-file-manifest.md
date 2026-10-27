@@ -115,7 +115,6 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-operator-telephone-credential.mmd](./idp-operator-telephone-credential.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-actor-withdrawal.mmd](./idp-operator-actor-withdrawal.mmd) — DERIVED_STATE / operator.
 - [idp-client-actor-provisioning.mmd](./idp-client-actor-provisioning.mmd) — STATUS_AXIS / client.
-- [idp-shared-acme-logout.mmd](./idp-shared-acme-logout.mmd) — STATE_MACHINE / shared.
 - [idp-shared-webauthn-challenge.mmd](./idp-shared-webauthn-challenge.mmd) — WORKFLOW_STATE / shared.
 - [idp-client-enforcement-case.mmd](./idp-client-enforcement-case.mmd) — WORKFLOW_STATE / client.
 - [idp-client-enforcement-appeal.mmd](./idp-client-enforcement-appeal.mmd) — WORKFLOW_STATE / client.
@@ -123,6 +122,7 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-visitor-enforcement-appeal.mmd](./idp-visitor-enforcement-appeal.mmd) — WORKFLOW_STATE / visitor.
 - [idp-operator-enforcement-case.mmd](./idp-operator-enforcement-case.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-enforcement-appeal.mmd](./idp-operator-enforcement-appeal.mmd) — WORKFLOW_STATE / operator.
+- [idp-shared-oidc-logout-session.mmd](./idp-shared-oidc-logout-session.mmd) — WORKFLOW_STATE / shared.
 - [idp-shared-sign-out-notice.mmd](./idp-shared-sign-out-notice.mmd) — WORKFLOW_STATE / shared.
 - [idp-client-mfa-readiness.mmd](./idp-client-mfa-readiness.mmd) — DERIVED_STATE / client.
 - [idp-visitor-mfa-readiness.mmd](./idp-visitor-mfa-readiness.mmd) — DERIVED_STATE / visitor.

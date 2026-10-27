@@ -245,6 +245,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_operator expires_at, :>, Time.iso8601(payload.fetch("issued_at"))
     assert_operator expires_at, :<=, binding.reload.curfew_at
+
+    travel_to(expires_at) do
+      result = with_authenticated_client { exchange_code(code.code) }
+
+      assert_not result.success?
+      assert_equal "invalid_grant", result.error
+      assert_equal "issued", authorization_code_store.read(code.code).fetch("state")
+    end
   end
 
   test "transaction-bound grant claim rolls back when token issuance fails" do

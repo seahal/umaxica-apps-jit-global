@@ -1,8 +1,7 @@
 # Logout suite withdrawn from the 2026-10 authentication cycle
 
-Status: Withdrawn from the cycle by the owner on 2026-10-25 (option A: freeze the current code, do
-not revert). Not accepted. **The current logout code must not be deployed until this entry is
-resolved** (see "Deployment").
+Status: Returned to the cycle 2026-10-26; definition `ten.md`; implemented by SO-1 … SO-4.
+Acceptance and deployment conditions remain subject to the SO-5 evidence below.
 
 Units: `two.md` WU-14 (RP-Initiated Logout), WU-15 (Back-Channel Logout), WU-16 (one OP
 authority-stop primitive), WU-22 (sign-out records SO-1 … SO-7), WU-44 (root issuance re-check,
@@ -62,6 +61,26 @@ A22-*, A44-*.
    are unverified. The concurrency cases (logout vs refresh, logout vs rotation,
    commit-then-disconnect, old logout after-work vs new login) are untested.
 
+## Database consistency findings held by the freeze
+
+The 2026-10-26 development scan reports 39 cycle findings on the new authority-stop and logout-hint
+tables. No model or schema change was made because the logout suite remains withdrawn. These rows
+need an owner decision alongside the design disagreements above:
+
+| Realm | Unique indexes without matching validators | Missing dependent-delete policy | Length finding | Redundant index |
+| ----- | ------------------------------------------- | ------------------------------ | ------------- | --------------- |
+| APP   | AuthorityStop `public_id`, `(realm, idempotency_digest)`; RootTarget `(stop_id, root_id)`; GrantTarget `(stop_id, grant_id)`; EpochCutoff `stop_id`; Participant `(stop_id, grant_id)`; BrowserLogout `stop_id`; GrantLogoutHint `grant_id` | RootTarget `root`; GrantTarget `grant`; Participant `grant` | AuthorityStop `realm` has `varchar(3)` capacity | Participant `stop_id` index is covered by unique `(stop_id, grant_id)` |
+| COM   | Same eight index shapes as APP | Same three associations as APP | Same | Same |
+| ORG   | Same eight index shapes as APP | Same three associations as APP | Same | Same |
+
+The scan proposes model validations for the unique and length findings, but adding them changes the
+failure path before the database constraint runs. The dependent-delete findings do not authorize a
+cascade or retention change. The three single-column participant indexes are physically redundant
+with the composite indexes; a reversible schema migration still needs explicit shape approval. Keep
+all 39 findings visible until those decisions are made. The complete 690-row classification and
+checker output are recorded in
+`evidence/2026-10-26-database-consistency-cycle-findings-X7P4.md`.
+
 ## What to do next (proposed order)
 
 1. Inventory the current implementation: every logout entry point, record, notification and
@@ -88,6 +107,11 @@ A22-*, A44-*.
   code or wait for the redesign.
 
 ## Deployment
+
+SO-1 removed the dead `AcmeLogoutTransaction` readers. The named irreversible drops were approved
+for this undeployed application and applied in development and test; deployment recovery and row-count
+requirements remain owner decisions. The remaining acceptance and full-suite conditions are not yet
+established by this entry.
 
 Do not deploy the current worktree's logout changes as-is. Before any deployment that includes
 them, at least:

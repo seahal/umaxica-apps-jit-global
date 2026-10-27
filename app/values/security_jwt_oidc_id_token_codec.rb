@@ -45,6 +45,8 @@ class SecurityJwtOidcIdTokenCodec
       expires_at = normalize_time!(expires_at)
       raise ArgumentError, "invalid id token time ordering" if issued_at > expires_at
 
+      raise ArgumentError, "sid is required" if sid.blank?
+
       token_resource_type = resource_type_for_resource(resource)
       {
         "iss" => issuer.presence || OidcIssuer.for_client(client),
@@ -56,7 +58,7 @@ class SecurityJwtOidcIdTokenCodec
         "jti" => JitSecurityJwtJtiGenerator.generate,
         "typ" => TOKEN_TYPE,
         "act" => token_resource_type,
-        "sid" => sid.presence || SecureRandom.urlsafe_base64(18),
+        "sid" => sid,
         "nonce" => nonce,
         "acr" => acr.presence || "aal1",
       }.tap do |claims|

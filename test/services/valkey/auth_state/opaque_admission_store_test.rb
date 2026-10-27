@@ -206,15 +206,4 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     assert_equal Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose: "p", raw_code: "c"),
                  @store.digest_for(purpose: "p", raw_code: "c")
   end
-
-  test "reference digest preserves the admission reference blind index" do
-    assert_equal Digest::SHA256.hexdigest("reference:entry-1"),
-                 Valkey::AuthState::OpaqueAdmissionStore.reference_digest(reference: "entry-1")
-    assert_raises(ArgumentError) do
-      Valkey::AuthState::OpaqueAdmissionStore.reference_digest(reference: nil)
-    end
-    assert_raises(ArgumentError) do
-      Valkey::AuthState::OpaqueAdmissionStore.reference_digest(reference: "")
-    end
-  end
 end

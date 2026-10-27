@@ -19,12 +19,21 @@ class OidcDiscoveryDocumentTest < ActiveSupport::TestCase
     assert_equal %w(private_key_jwt client_secret_post none), document.fetch(:token_endpoint_auth_methods_supported)
     assert_equal ["ES384"], document.fetch(:token_endpoint_auth_signing_alg_values_supported)
     assert_equal ["S256"], document.fetch(:code_challenge_methods_supported)
-    assert_not document.key?(:backchannel_logout_supported)
-    assert_not document.key?(:backchannel_logout_session_supported)
+    assert document.fetch(:backchannel_logout_supported)
+    assert document.fetch(:backchannel_logout_session_supported)
     assert_not document.key?(:frontchannel_logout_supported)
     assert_not document.key?(:frontchannel_logout_session_supported)
     assert_not document.key?(:redirect_uris_supported)
     assert_not document.key?(:loopback_redirect_uris_supported)
+  end
+
+  test "each realm advertises session-aware backchannel logout" do
+    %w(client visitor operator).each do |resource_type|
+      document = OidcDiscoveryDocument.for_resource_type(resource_type)
+
+      assert document[:backchannel_logout_supported]
+      assert document[:backchannel_logout_session_supported]
+    end
   end
 
   # `ri` is a localization hint, not part of the OIDC contract. The issuer must

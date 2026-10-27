@@ -120,7 +120,6 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | idp-client-token | root usability gates RP authority | idp-client-rp-session | app/models/concerns/rp_session.rb |
 | idp-client-sign-out | logout logical revocation | idp-client-token | app/controllers/concerns/authentication_logout_current_session.rb |
 | idp-client-sign-out | issue/consume logout transport | idp-shared-sign-out-notice | app/controllers/concerns/sign_out_notice.rb |
-| idp-client-rp-session | RP logout launcher issues ordered boundary | idp-shared-acme-logout | app/controllers/concerns/oidc_rp_logout_launcher.rb |
 | idp-client-actor-withdrawal | deactivation revokes root sessions | idp-client-token | app/services/withdrawal_lifecycle.rb |
 | idp-client-enforcement-case | apply/end locks or refcount-unlocks actor | idp-client-administrative-access | app/operations/enforcement_case_apply_operation.rb / app/operations/enforcement_case_end_operation.rb |
 | idp-client-enforcement-case | method/principal eligibility query gates proof | idp-client-sign-in | app/models/concerns/enforcement_case_applicable.rb |
@@ -154,7 +153,6 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | idp-visitor-token | root usability gates RP authority | idp-visitor-rp-session | app/models/concerns/rp_session.rb |
 | idp-visitor-sign-out | logout logical revocation | idp-visitor-token | app/controllers/concerns/authentication_logout_current_session.rb |
 | idp-visitor-sign-out | issue/consume logout transport | idp-shared-sign-out-notice | app/controllers/concerns/sign_out_notice.rb |
-| idp-visitor-rp-session | RP logout launcher issues ordered boundary | idp-shared-acme-logout | app/controllers/concerns/oidc_rp_logout_launcher.rb |
 | idp-visitor-actor-withdrawal | deactivation revokes root sessions | idp-visitor-token | app/services/withdrawal_lifecycle.rb |
 | idp-visitor-enforcement-case | apply/end locks or refcount-unlocks actor | idp-visitor-administrative-access | app/operations/enforcement_case_apply_operation.rb / app/operations/enforcement_case_end_operation.rb |
 | idp-visitor-enforcement-case | method/principal eligibility query gates proof | idp-visitor-sign-in | app/models/concerns/enforcement_case_applicable.rb |
@@ -186,7 +184,6 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | idp-operator-token | root usability gates RP authority | idp-operator-rp-session | app/models/concerns/rp_session.rb |
 | idp-operator-sign-out | logout logical revocation | idp-operator-token | app/controllers/concerns/authentication_logout_current_session.rb |
 | idp-operator-sign-out | issue/consume logout transport | idp-shared-sign-out-notice | app/controllers/concerns/sign_out_notice.rb |
-| idp-operator-rp-session | RP logout launcher issues ordered boundary | idp-shared-acme-logout | app/controllers/concerns/oidc_rp_logout_launcher.rb |
 | idp-operator-actor-withdrawal | deactivation revokes root sessions | idp-operator-token | app/services/org_operator_lifecycle_execute.rb |
 | idp-operator-enforcement-case | apply/end locks or refcount-unlocks actor | idp-operator-administrative-access | app/operations/enforcement_case_apply_operation.rb / app/operations/enforcement_case_end_operation.rb |
 | idp-operator-enforcement-case | method/principal eligibility query gates proof | idp-operator-sign-in | app/models/concerns/enforcement_case_applicable.rb |
@@ -247,4 +244,4 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 
 ## Phase B verification
 
-Phase B verification results, summarized in the [README](./README.md), supersede Phase A counts:128 axes and130 CURRENT Mermaid files. Real parser validation was deferred by the user; writer coverage remains OPEN. Confirmed additional writers and storage corrections are reflected in the diagrams and inventory. No TARGET design or implementation planning has begun.
+Phase B verification results, summarized in the [README](./README.md), supersede Phase A counts. SO-1 retired one axis from the current inventory. Real parser validation was deferred by the user; writer coverage remains OPEN. Confirmed additional writers and storage corrections are reflected in the diagrams and inventory. No TARGET design or implementation planning has begun.

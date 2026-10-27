@@ -29,7 +29,7 @@ class AvatarAuthorityClient
   def initialize(surface:, access_token:, persona:)
     @client_id, resource_type = CLIENTS.fetch(surface.to_s)
     base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type(resource_type)
-    @base = "#{base_origin}/api/v0/avatar/#{surface}"
+    @base = OutboundHttp::LocalBackChannel.url("#{base_origin}/api/v0/avatar/#{surface}")
     @access_token = access_token.to_s
     @persona = persona.to_s
   end
@@ -70,7 +70,7 @@ class AvatarAuthorityClient
 
     uri = URI.parse(url)
     connection = OutboundHttp::Connection.build(
-      url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: true,
+      url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: OutboundHttp::LocalBackChannel.require_https?(url),
     )
     response = connection.get(
       uri, { persona: }, { "Authorization" => "Bearer #{access_token}",
@@ -130,7 +130,7 @@ class AvatarAuthorityClient
 
     uri = URI.parse(url)
     connection = OutboundHttp::Connection.build(
-      url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: true,
+      url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: OutboundHttp::LocalBackChannel.require_https?(url),
     )
     headers = { "Authorization" => "Bearer #{access_token}",
                 "X-Client-Assertion" => assertion,

@@ -22,10 +22,10 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
       end
   end
 
-  test "a root stop revokes the root and every grant and records targets, participants and the receipt" do
+  test "a root stop revokes the root and every grant and records targets and participants" do
     result = OpAuthorityStopCommitter.stop_root(
       root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
-      authority_evidence_ref: "test", browser_binding: "browser-1",
+      authority_evidence_ref: "test",
     )
     stop = result.stop
 
@@ -46,8 +46,6 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
                    participant.endpoint_identity
       assert_operator participant.deadline_at, :>, participant.next_attempt_at
     end
-    assert_equal Digest::SHA256.digest(result.receipt_nonce),
-                 OpAppAuthorityStopBrowserLogout.find_by!(stop_id: stop.id).receipt_nonce_digest
     assert_not OpAppAuthorityStopEpochCutoff.exists?(stop_id: stop.id)
   end
 
@@ -72,7 +70,6 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
 
     assert_predicate second, :replayed?
     assert_equal first.stop.id, second.stop.id
-    assert_nil second.receipt_nonce
     assert_equal 1, OpAppAuthorityStop.count
     assert_equal 2, OpAppAuthorityStopParticipant.count
   end
@@ -180,20 +177,5 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
 
     assert_not_predicate @root.reload, :revoked?
     assert_equal 0, OpAppAuthorityStop.count
-  end
-
-  test "only a browser logout carries a browser binding" do
-    assert_raises(ArgumentError) do
-      OpAuthorityStopCommitter.stop_root(
-        root: @root, cause: "revoke_others", principal_public_id: @client.public_id,
-        authority_evidence_ref: "test", browser_binding: "browser-1",
-      )
-    end
-    assert_raises(OpAuthorityStopCommitter::Refused) do
-      OpAuthorityStopCommitter.stop_root(
-        root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
-        authority_evidence_ref: "test", browser_binding: " ",
-      )
-    end
   end
 end

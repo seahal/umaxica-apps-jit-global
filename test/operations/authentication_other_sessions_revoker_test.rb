@@ -47,6 +47,30 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
     assert_nil current.last_step_up_at
   end
 
+  # A44-10 (D-167): the revocation is point-in-time. A session that commits after the request was
+  # decided (here: created after the revoker's database clock reading) survives.
+  test "a session created after the revocation request survives" do
+    client = client_without_sessions
+    current = create_client_token(client)
+    existing = create_client_token(client)
+    later = create_client_token(client)
+    later.update_columns(created_at: ClientToken.database_now + 1.minute)
+    requirement = grant_step_up!(client, current)
+
+    result = AuthenticationOtherSessionsRevoker.call(
+      owner: client,
+      sessions: client.client_tokens.session_inventory,
+      current_token: current,
+      current_session_public_id: current.public_id,
+      step_up_requirement: requirement,
+    )
+
+    assert_predicate result, :success?
+    assert_equal [existing.public_id], result.revoked_tokens.map(&:public_id)
+    assert_not_predicate existing.reload, :currently_usable?
+    assert_predicate later.reload, :currently_usable?
+  end
+
   test "revokes every session except the current one for an operator" do
     operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,

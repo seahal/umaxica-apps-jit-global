@@ -93,7 +93,7 @@ class OidcRpLogoutEditReturnTest < ActionDispatch::IntegrationTest
       if scenario.fetch(:client_id) == "edit-org-ww"
         [hosts.visa_service.host, hosts.visa_corporate.host].each do |wrong_op_host|
           [
-            { accept: "text/html", status: 200 },
+            { accept: "text/html", status: 400 },
             { accept: "application/json", status: 400 },
           ].each do |response_case|
             wrong_realm_browser = open_session
@@ -143,7 +143,7 @@ class OidcRpLogoutEditReturnTest < ActionDispatch::IntegrationTest
                           "#{scenario.fetch(:client_id)} must not go through another realm or Auth/Base staff"
       grant_active = grant.reload.active?
 
-      assert_not grant_active, "RP sign-out must revoke only its grant"
+      assert grant_active, "RP sign-out leaves its grant active until Visa confirmation"
       root_usable = root_token.reload.currently_usable?
 
       assert root_usable, "RP sign-out must leave the operator root usable"
@@ -169,7 +169,7 @@ class OidcRpLogoutEditReturnTest < ActionDispatch::IntegrationTest
           assert_equal 404, browser.response.status, "Edit callback requires the issued state"
           grant_active = grant.reload.active?
 
-          assert_not grant_active, "A rejected callback must not restore the RP grant"
+          assert grant_active, "A rejected callback must leave the RP grant active"
           root_usable = root_token.reload.currently_usable?
 
           assert root_usable, "A rejected callback must not revoke the operator root"

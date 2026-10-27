@@ -227,6 +227,32 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal I18n.t("sign.app.authentication.email.edit.code_label"), inertia_props.fetch("field_label")
   end
 
+  test "A34-2: an unfinished COM registration cannot complete a valid email OTP sign-in" do
+    visitor = create_verified_visitor_with_email(email_address: "unfinished-com-otp-#{SecureRandom.hex(4)}@example.test")
+    email = visitor.visitor_emails.last
+    token_count = VisitorToken.count
+
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: {
+           :user_email => { address: email.address },
+           "cf-turnstile-response" => "test",
+         }, headers: { "Host" => @host }
+
+    assert_response :found
+    code = @current_auth_ceremony.issue_email_otp!(contact: email, destination: email.address)
+    challenge_before = @current_auth_ceremony.reload.email_otp_context.deep_dup
+    visitor.update!(status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP)
+
+    patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { visitor_email: { pass_code: code } }, headers: { "Host" => @host }
+
+    assert_response :unprocessable_content
+    assert_equal challenge_before, @current_auth_ceremony.reload.email_otp_context
+    assert_equal token_count, VisitorToken.count
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
   test "post create with invalid email format" do
     post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {

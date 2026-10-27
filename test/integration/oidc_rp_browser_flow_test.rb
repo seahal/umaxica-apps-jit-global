@@ -382,12 +382,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       # The RP's code-for-token exchange is a real outbound HTTP request to the
       # OP's token endpoint, so it must be replaced at the boundary here as it is
       # in the other callback tests.
-      id_token = OidcIdTokenIssuer.call(
-        resource: user,
-        client: OidcClientRegistry.find!("core-app-jp"),
-        nonce: authorize_query.fetch("nonce"),
-        auth_time: transaction.authenticated_at,
-      )
       core_client = OidcClientRegistry.find!("core-app-jp")
       rp_root_token = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).order(created_at: :desc).first
       rp_session = OpAppGrant.create!(
@@ -398,6 +392,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         oidc_jti: SecureRandom.uuid,
         oidc_auth_time: transaction.authenticated_at,
         refresh_token_expires_at: 10.minutes.from_now,
+      )
+      id_token = OidcIdTokenIssuer.call(
+        resource: user,
+        client: OidcClientRegistry.find!("core-app-jp"),
+        nonce: authorize_query.fetch("nonce"),
+        sid: rp_session.public_id,
+        auth_time: transaction.authenticated_at,
       )
       rp_access_token = AuthenticationTokenService.encode(
         user,

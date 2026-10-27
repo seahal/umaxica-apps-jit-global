@@ -60,13 +60,38 @@ class RootIssuanceRecheckTest < ActiveSupport::TestCase
   # A44-2: the stop commits after the Root insert. The Root carries the pre-stop epoch, so the OP
   # apply of the committed stop event revokes it, and the authoritative epoch check (D-165) refuses
   # it at every boundary even before that apply.
-  test "a stop committed after the Root insert revokes that Root through the identity-stop apply" do
+  test "A44-2: a later identity stop revokes and rejects the earlier Root" do
     result = @controller.log_in(
       Client.find(@user.id), establishment: :root_login, require_totp_check: false, sign_in_flow: issuance_flow,
     )
 
     assert_equal :success, result.fetch(:status)
     root = ClientToken.where(user_id: @user.id).sole
+    client = OidcClientRegistry.find!("core-app-jp")
+    grant = OpAppGrant.create!(
+      authentication_epoch: root.authentication_epoch,
+      client_token: root,
+      oidc_client_id: client.client_id,
+      oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid,
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    access_token = AuthenticationTokenService.encode(
+      @user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: root.public_id,
+      base_session_public_id: root.public_id,
+      oidc_sid: grant.public_id,
+      oidc_jti: grant.oidc_jti,
+      expires_at: 5.minutes.from_now,
+      scopes: %w(openid),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [client.aud],
+      subject: OidcSubject.for(@user, resource_type: "client"),
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
+      client_id: client.client_id,
+    )
 
     event =
       Client.transaction do
@@ -74,6 +99,31 @@ class RootIssuanceRecheckTest < ActiveSupport::TestCase
       end
 
     assert_not AuthenticationEpochValue.root_current?(root_token: root.reload, actor: @user.reload)
+    browser_result = AuthenticationCurrentResourceResolver.new(
+      access_token: jwt_access_token_for(
+        @user,
+        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+        session_public_id: root.public_id,
+        resource_type: "client",
+      ),
+      request_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      resource_type: "client",
+      resource_class: Client,
+      token_class: ClientToken,
+      jwt_issuer_id: "surface:BASE_APP",
+    ).call
+
+    assert_equal :authentication_epoch_stale, browser_result.failure_reason
+
+    access_result = OidcAccessTokenAuthenticator.call(
+      access_token: access_token,
+      resource_type: "client",
+      host: OidcIssuer.host_for_resource_type("client"),
+    )
+
+    assert_not_predicate access_result, :success?
+    assert_equal "invalid_token", access_result.error
+
     assert_equal :applied, OpIdentityEventInvalidator.call(event:)
     assert_predicate root.reload, :revoked?
   end

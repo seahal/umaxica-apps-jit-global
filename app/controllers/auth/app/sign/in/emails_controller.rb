@@ -355,7 +355,7 @@ module Auth
             started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             existing_email = find_email_with_timing_protection(normalized_address)
 
-            if existing_email&.user&.login_allowed?
+            if existing_email&.user&.sign_in_allowed?
               SignAppInEmailAuthenticationState.store_existing!(session, existing_email)
 
               otp_code = admitted_auth_ceremony_session.issue_email_otp!(

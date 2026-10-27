@@ -48,7 +48,7 @@ module OidcRpLogoutLauncher
     clear_oidc_rp_logout_cookies!
     reset_session_and_clear_inertia_history!
     issue_sign_out_notice!
-    Actor.clear if defined?(Actor)
+    Actor.clear
     @current_resource = nil
     @oidc_rp_logout_session = nil
     @oidc_rp_logout_access_payload = nil
@@ -316,22 +316,15 @@ module OidcRpLogoutLauncher
   end
 
   def revoke_oidc_rp_session_before_redirect!(session_record)
-    if rp_cell_process?
-      session_record.class.connection_class.connected_to(role: :writing) do
-        session_record.with_lock do
-          if session_record.revoked_at.blank?
-            session_record.update!(revoked_at: session_record.class.database_now)
-          end
+    return unless rp_cell_process?
+
+    session_record.class.connection_class.connected_to(role: :writing) do
+      session_record.with_lock do
+        if session_record.revoked_at.blank?
+          session_record.update!(revoked_at: session_record.class.database_now)
         end
       end
-      return
     end
-
-    result = RpSessionRevoker.call(
-      scope: :rp_session, record: session_record, cause: "token_revocation",
-      authority_evidence_ref: "rp_initiated_logout:grant",
-    )
-    raise RpSession::IssuanceRejected, "RP Session revoke failed" unless result.success?
   end
 
   def registered_rp_logout_redirect_uri(client_id:, resource_type:, region:)

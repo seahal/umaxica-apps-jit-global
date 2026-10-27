@@ -30,7 +30,6 @@ Umaxica/NoConcernInclusionHooks:
   app/controllers/concerns/webauthn_surface_declarable.rb: 1
   app/controllers/concerns/withdrawal_ceremony_reentry.rb: 1
   app/models/concerns/account_assignment.rb: 1
-  app/models/concerns/acme_logout_transactionable.rb: 1
   app/models/concerns/actor_lifecycle_consistency.rb: 1
   app/models/concerns/administrative_access_lockable.rb: 1
   app/models/concerns/avatar_assignment_authority_protection.rb: 1
@@ -705,7 +704,6 @@ Umaxica/ExplicitMethodVisibility:
   app/mailers/email/org/otp_mailer.rb: 1
   app/mailers/email/org/promotional_mailer.rb: 1
   app/mailers/outbound_email_suspension_interceptor.rb: 1
-  app/models/acme_logout_transaction.rb: 1
   app/models/actor.rb: 38
   app/models/actor/authentication.rb: 5
   app/models/actor/configuration.rb: 21
@@ -1110,7 +1108,6 @@ Umaxica/ExplicitMethodVisibility:
   app/serializers/health_status_serializer.rb: 2
   app/serializers/publishing_entry_serializer.rb: 2
   app/services/account_session_revocation.rb: 3
-  app/services/acme_logout_transaction_coordinator.rb: 8
   app/services/acme_selectable_context.rb: 4
   app/services/acme_selector.rb: 1
   app/services/administrative_access_lock.rb: 4

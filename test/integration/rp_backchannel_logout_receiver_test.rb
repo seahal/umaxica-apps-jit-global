@@ -35,6 +35,18 @@ class RpBackchannelLogoutReceiverTest < ActionDispatch::IntegrationTest
     assert_not_nil @local.reload.revoked_at
   end
 
+  test "a valid browserless logout without cookies or User-Agent ends its named local session" do
+    post "/oidc/closures", params: { logout_token: OpLogoutTokenIssuer.call(participant: @participant) },
+                           headers: { "HTTP_USER_AGENT" => nil, "HTTP_COOKIE" => nil }
+
+    assert_nil request.get_header("HTTP_USER_AGENT")
+    assert_empty request.cookies
+    assert_response :ok
+    assert_not_nil @local.reload.revoked_at
+    assert_not_nil RpCoreAppOpSessionBinding.find_by!(sid: @participant.sid).revoked_at
+    assert_equal 1, RpCoreAppEventReceipt.count
+  end
+
   test "a delayed logout for an old sid leaves a newer sign-in session active" do
     newer_session = RpCallbackCommitter.call(
       cell: RpCellBinding.fetch("rp_core_app"), issuer: @participant.issuer, subject: "subject-a",
@@ -86,6 +98,28 @@ class RpBackchannelLogoutReceiverTest < ActionDispatch::IntegrationTest
       assert_response :ok
     end
     assert_equal 1, RpCoreAppEventReceipt.count
+  end
+
+  test "nonce missing or wrong events and absent sid and sub are refused without session changes" do
+    original = JWT.decode(OpLogoutTokenIssuer.call(participant: @participant), nil, false).first
+    invalid = [
+      original.merge("nonce" => "unexpected"),
+      original.except("events"),
+      original.merge("events" => { "wrong-event" => {} }),
+      original.except("sid", "sub"),
+    ]
+    invalid.each do |claims|
+      token = JitSecurityJwtKeyring.encode(
+        claims, typ: OpLogoutTokenIssuer::TOKEN_TYPE,
+                issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
+      )
+      post "/oidc/closures", params: { logout_token: token }
+
+      assert_response :bad_request
+      assert_nil @local.reload.revoked_at
+      assert_nil RpCoreAppOpSessionBinding.find_by!(sid: @grant.public_id).revoked_at
+      assert_equal 0, RpCoreAppEventReceipt.count
+    end
   end
 
   test "an unsigned or foreign-audience token is refused with 400 and changes nothing" do

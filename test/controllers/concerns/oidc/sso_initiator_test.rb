@@ -158,7 +158,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
   end
 
   # D-155: one sign-in per browser and RP; the last start replaces any earlier pending entry.
-  test "the last start replaces every earlier pending entry" do
+  test "A27-3: the last-started RP tab replaces every earlier pending entry" do
     get "/oidc/sso/burst", params: { count: 3 },
                            headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 

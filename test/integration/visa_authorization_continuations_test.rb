@@ -29,6 +29,13 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
         assert_equal "invalid_request", response.parsed_body.fetch("error")
         assert_equal "invalid continuation request", response.parsed_body.fetch("error_description")
 
+        get "/oidc/#{continuation}", headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "iframe",
+        }
+
+        assert_response :bad_request
+        assert_equal "invalid continuation request", response.parsed_body.fetch("error_description")
+
         head "/oidc/#{continuation}", headers: {
           "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
         }

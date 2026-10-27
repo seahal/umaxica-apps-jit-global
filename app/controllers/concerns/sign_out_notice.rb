@@ -17,7 +17,6 @@ module SignOutNotice
   SIGN_OUT_NOTICE_TTL = 5.minutes
   SIGN_OUT_NOTICE_CACHE_CONTROL = "no-store, no-cache, must-revalidate, private"
   SIGN_OUT_REFERRER_POLICY = "no-referrer"
-  SIGN_OUT_HANDOFF_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
   private
 
@@ -57,7 +56,6 @@ module SignOutNotice
     session_token = safe_current_session_for_logout if respond_to?(:safe_current_session_for_logout, true)
     return true if session_token&.currently_usable?
     return true if respond_to?(:oidc_logout_pending_request_present?, true) && oidc_logout_pending_request_present?
-    return true if respond_to?(:params, true) && params[:logout_challenge].present?
 
     false
   end
@@ -67,10 +65,7 @@ module SignOutNotice
   end
 
   def sign_out_route_params
-    # These two are the only params that belong in a sign-out route. `permit` alone would
-    # report every other param on the request as unpermitted - and the request legitimately
-    # carries others (client_id, logout_request) - so narrow the set first, then permit.
-    params.slice(:ri, :logout_challenge).permit(:ri, :logout_challenge).to_h.symbolize_keys
+    params.slice(:ri).permit(:ri).to_h.symbolize_keys
   end
 
   def sign_out_edit_path(**options)
@@ -78,13 +73,6 @@ module SignOutNotice
   end
 
   def sign_out_post_path(**options)
-    if params[:logout_challenge].present?
-      route_params = sign_out_route_params.merge(options.compact)
-      return request.path if route_params.empty?
-
-      return "#{request.path}?#{route_params.to_query}"
-    end
-
     public_send("#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
   end
 
@@ -117,95 +105,6 @@ module SignOutNotice
     else
       render "auth/shared/sign_outs/indeterminate", status: :service_unavailable, layout: false
     end
-  end
-
-  def sign_out_handoff_cache_headers!
-    sign_out_notice_cache_headers!
-    response.headers["Referrer-Policy"] = SIGN_OUT_HANDOFF_REFERRER_POLICY
-  end
-
-  def render_sign_out_handoff(template)
-    sign_out_handoff_cache_headers!
-    log_sign_out_event(
-      "auth.sign_out.cross_origin_handoff.rendered",
-      user_confirmation_required: false,
-      auto_handoff: true,
-      cleanup_performed: false,
-      result: "rendered",
-    )
-    render template, layout: false
-  end
-
-  def render_cross_origin_sign_out_handoff(target_url:, transaction:)
-    uri = URI.parse(target_url.to_s)
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    query["logout_challenge"] = transaction.logout_challenge
-    query["ri"] = params[:ri].to_s if params[:ri].present?
-    uri.query = query.to_query
-    redirect_to(uri.to_s, allow_other_host: true, status: :see_other)
-  rescue URI::InvalidURIError
-    render "auth/shared/sign_outs/unavailable", status: :unprocessable_content, layout: false
-  end
-
-  def log_sign_out_event(event_name, transaction: nil, **payload)
-    Rails.logger.info(JitLogEvent.format(event_name, sign_out_log_payload(transaction: transaction, **payload)))
-  end
-
-  def warn_sign_out_event(event_name, transaction: nil, **payload)
-    Rails.logger.warn(JitLogEvent.format(event_name, sign_out_log_payload(transaction: transaction, **payload)))
-  end
-
-  def sign_out_log_payload(transaction: nil, **payload)
-    transaction ||= @logout_transaction if defined?(@logout_transaction)
-    {
-      request_id: request.request_id,
-      origin_surface: transaction&.origin_surface || logout_origin_surface_for_logs,
-      current_surface: logout_origin_surface_for_logs,
-      next_surface: sign_out_next_surface_for_logs(transaction),
-      region: params[:ri].presence,
-      step_before: transaction&.expected_step,
-      step_after: payload.delete(:step_after),
-      challenge_present: params[:logout_challenge].present?,
-      challenge_valid: payload.delete(:challenge_valid),
-      sec_fetch_site: payload.delete(:sec_fetch_site),
-      origin_host: payload.delete(:origin_host),
-      trusted_origin_match: payload.delete(:trusted_origin_match),
-      user_confirmation_required: payload.delete(:user_confirmation_required),
-      auto_handoff: payload.delete(:auto_handoff),
-      cleanup_performed: payload.delete(:cleanup_performed),
-      redirect_target_surface: payload.delete(:redirect_target_surface),
-      result: payload.delete(:result),
-      reason: payload.delete(:reason),
-    }.merge(payload).compact
-  end
-
-  def logout_origin_surface_for_logs
-    controller_path.split("/").first
-  end
-
-  def sign_out_next_surface_for_logs(transaction)
-    return unless transaction
-
-    case transaction.expected_step
-    when AcmeLogoutTransaction::STEP_ACME_CLEARED then "acme"
-    when AcmeLogoutTransaction::STEP_SIGN_CLEARED then "sign"
-    when AcmeLogoutTransaction::STEP_FINALIZED
-      transaction.origin_surface
-    end
-  end
-
-  def origin_host_for_sign_out_log(origin)
-    URI.parse(origin).host if origin.present?
-  rescue URI::InvalidURIError
-    "invalid"
-  end
-
-  def fetch_metadata_rejection_reason(sec_fetch_site, allowed_origin)
-    return "missing_sec_fetch_site" if sec_fetch_site.blank?
-    return "invalid_sec_fetch_site" unless %w(same-origin same-site).include?(sec_fetch_site)
-    return "untrusted_origin" unless allowed_origin
-
-    "invalid_request"
   end
 
   # REQ-008: completion wording states the global result only. It never states an end time, and an

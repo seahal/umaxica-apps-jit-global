@@ -84,7 +84,7 @@ module SignInPhaseBindingControllerSupport
     response.headers["Cache-Control"] = "private, no-store"
     refuse_sign_in_path!(
       reason_code,
-      body: I18n.t("errors.messages.phase_violation_refused", locale: :ja),
+      body: I18n.t("errors.messages.phase_violation_refused"),
       status: :conflict,
       clear_continuity: false,
     )

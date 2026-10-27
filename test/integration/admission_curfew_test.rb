@@ -8,6 +8,8 @@ require "test_helper"
 # the RP receives access_denied with its unchanged state; a browser without the ceremony gets the
 # uniform error. Boundaries are set relative to the Binding's own OP database clock.
 class AdmissionCurfewTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     ri = "jp"
     @base_browser = open_session
@@ -66,11 +68,106 @@ class AdmissionCurfewTest < ActionDispatch::IntegrationTest
     @transaction = ClientOidcAuthorizationTransaction.find(@binding.authorization_transaction_id)
   end
 
-  test "an admitted page one minute before the curfew is served" do
-    move_curfew!(1.minute)
-    get "/sign/in", params: { ri: "jp" }
+  test "A06-1: an admitted page one second before the curfew is served" do
+    decision_time = ClientAuthAdmissionBinding.database_now
+    @binding.update_columns(curfew_at: decision_time + 1.second)
+    ClientAuthAdmissionBinding.stub(:database_now, decision_time) do
+      get "/sign/in", params: { ri: "jp" }
+    end
 
     assert_response :success
+  end
+
+  test "A06-4: APP, COM and ORG ceremony parents share the exact stored curfew" do
+    cases = [
+      ["app", @binding.reload, @transaction.reload, ClientAuthCeremonySession],
+    ]
+
+    [
+      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+       VisitorAuthAdmissionBinding, VisitorAuthCeremonySession,],
+      ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+       OperatorAuthAdmissionBinding, OperatorAuthCeremonySession,],
+    ].each do |surface, client_id, realm, auth_host, binding_class, ceremony_class|
+      client = OidcClientRegistry.find!(client_id)
+      transaction = OidcAuthorizationTransactionCoordinator.issue!(
+        surface:, intent: "sign_in", params: {
+          client_id:,
+          response_type: "code",
+          scope: "openid profile",
+          redirect_uri: client.redirect_uris_by_realm.fetch(realm).first,
+          state: SecureRandom.urlsafe_base64(24),
+          nonce: SecureRandom.urlsafe_base64(24),
+          code_challenge: SecureRandom.urlsafe_base64(32, padding: false),
+          code_challenge_method: "S256",
+        },
+      ).transaction
+      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction:, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      binding = binding_class.find_by!(entry_ref: issuance.reference)
+      browser = open_session
+      browser.host!(auth_host)
+      browser.https!
+      entry_path = "/sign/in?#{Rack::Utils.build_query(entry_ref: issuance.reference, ri: "jp")}"
+      browser.get(entry_path, headers: navigation_headers(site: "cross-site"))
+
+      assert_equal 303, browser.response.status
+      browser.get(browser.response.location, headers: navigation_headers(site: "cross-site"))
+
+      assert_equal 303, browser.response.status
+      binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      browser.get(entry_path, headers: navigation_headers(site: "cross-site"))
+
+      assert_equal 303, browser.response.status
+      cases << [surface, binding.reload, transaction.reload, ceremony_class]
+    end
+
+    cases.each do |surface, binding, transaction, ceremony_class|
+      curfew_at = binding.curfew_at
+      ceremony = ceremony_class.find(binding.admitted_auth_ceremony_session_id)
+      at_30_01 = curfew_at + 1.second
+
+      # D-36 gives the Binding's 60-second expiry ownership of redemption only.
+      assert_operator transaction.expires_at, :>=, curfew_at, surface
+      assert_equal curfew_at, ceremony.expires_at, "#{surface} ceremony ends at the stored curfew"
+      assert ceremony.active?(now: curfew_at - Rational(1, 1_000_000)),
+             "#{surface} ceremony is active 1µs before curfew"
+      assert_not ceremony.active?(now: curfew_at), "#{surface} ceremony expires at curfew"
+      assert_not ceremony.active?(now: curfew_at + Rational(1, 1_000_000)),
+                 "#{surface} ceremony stays expired after curfew"
+      assert_operator at_30_01, :>, curfew_at
+      assert transaction.class.exists?(id: transaction.id),
+             "#{surface} OIDC transaction row remains present at 30:01"
+      assert_not transaction.class.purgeable_at(at_30_01).exists?(id: transaction.id),
+                 "#{surface} OIDC transaction is outside the configured retention window at 30:01"
+      assert_operator transaction.login_challenge_expires_at, :>=, curfew_at, surface
+    end
+  end
+
+  test "A07-2: a definitive curfew refusal clears only this browser's sign-in continuity" do
+    move_curfew!(-1.second)
+    continuity = {
+      app_sign_in_flow_locator: { "public_id" => "signin-flow", "nonce" => "signin-nonce" },
+      app_sign_up_flow_locator: { "public_id" => "signup-flow", "nonce" => "signup-nonce" },
+      auth_app_up_sequence_id: "signup-sequence",
+      social_auth_intent: "signup",
+      social_auth_flow_id: "social-flow",
+      social_auth_provider: "google",
+      social_auth_state: "social-state",
+      social_auth_state_started_at: 1_761_408_000,
+      social_auth_state_provider: "google",
+    }
+    continuity.each { |key, value| session[key] = value }
+    sid_cookie = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+
+    assert_predicate cookies[sid_cookie], :present?
+
+    get "/sign/in", params: { ri: "jp" }
+
+    assert_response :see_other
+    continuity.each { |key, _value| assert_nil session[key], "#{key} is cleared after a definitive refusal" }
+    assert_empty cookies[sid_cookie]
   end
 
   [0, -1].each do |offset|

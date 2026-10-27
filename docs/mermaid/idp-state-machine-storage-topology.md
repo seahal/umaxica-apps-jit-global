@@ -127,7 +127,6 @@ DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transitio
 | idp-operator-telephone-credential         | operator_telephones                              | staff_identity_telephone_status_id                                                                     | operator_telephone_statuses           | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operator_telephones ADD CONSTRAINT fk_rails_52c0d3ae3b FOREIGN KEY (staff_identity_telephone_status_id) REFERENCES public.operator_telephone_statuses(id);                                |
 | idp-operator-actor-withdrawal             | operators                                        | withdrawal_started_at / deactivated_at / withdrawn_at / discard_at / purge_eligible_at                 | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
 | idp-client-actor-provisioning             | clients                                          | status_id                                                                                              | client_statuses                       | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.clients ADD CONSTRAINT fk_rails_ce4a327a04 FOREIGN KEY (status_id) REFERENCES public.client_statuses(id);                                                                                 |
-| idp-shared-acme-logout                    | acme_logout_transactions                         | status / expected_step / completed_steps                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-shared-webauthn-challenge             | None (Rails session)                             | passkey_challenges entry / expires_at                                                                  | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
 | idp-client-enforcement-case               | app_enforcement_cases                            | state / ended_at                                                                                       | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
 | idp-client-enforcement-appeal             | app_enforcement_appeals                          | state / resolution_code / reviewed_at                                                                  | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
@@ -135,6 +134,7 @@ DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transitio
 | idp-visitor-enforcement-appeal            | com_enforcement_appeals                          | state / resolution_code / reviewed_at                                                                  | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
 | idp-operator-enforcement-case             | org_enforcement_cases                            | state / ended_at                                                                                       | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
 | idp-operator-enforcement-appeal           | org_enforcement_appeals                          | state / resolution_code / reviewed_at                                                                  | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-shared-oidc-logout-session           | None (Rails session)                             | device_session_public_id / grant_public_id / expires_at / completed marker                           | None                                  | Controller session storage          | No state FK; device and grant bindings are rechecked at the owning boundary |
 | idp-shared-sign-out-notice                | None (Valkey)                                    | Key presence / payload expiry                                                                          | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
 | idp-client-mfa-readiness                  | clients                                          | mfa_status_id                                                                                          | client_mfa_statuses                   | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.clients ADD CONSTRAINT fk_rails_67ec2e6839 FOREIGN KEY (mfa_status_id) REFERENCES public.client_mfa_statuses(id);                                                                         |
 | idp-visitor-mfa-readiness                 | visitors                                         | mfa_status_id                                                                                          | visitor_mfa_statuses                  | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitors ADD CONSTRAINT fk_rails_6e2a03b63d FOREIGN KEY (mfa_status_id) REFERENCES public.visitor_mfa_statuses(id);                                                                       |
@@ -149,35 +149,6 @@ here so duplicated state/string/step/timestamp authorities and column defaults c
 against each machine. Primary-key SQL explicitly records the key; column types apply to both flow
 and reference tables. Each FK lists its actual direction, validation status and deletion rule. No
 Ruby association is promoted to an FK.
-
-### acme_logout_transactions
-
-Source: `db/op_base_app_structure.sql:49`. Machines: `idp-shared-acme-logout`.
-
-```sql
-CREATE TABLE acme_logout_transactions (
-    id bigint NOT NULL,
-    public_id character varying NOT NULL,
-    origin_surface character varying NOT NULL,
-    initiating_client_id character varying NOT NULL,
-    completion_url text NOT NULL,
-    actor_ref character varying,
-    session_ref character varying,
-    callback_state character varying,
-    status character varying DEFAULT 'initiated'::character varying NOT NULL,
-    expected_step character varying DEFAULT 'origin_cleared'::character varying NOT NULL,
-    completed_steps jsonb DEFAULT '[]'::jsonb NOT NULL,
-    expires_at timestamp(6) with time zone NOT NULL,
-    finalized_at timestamp(6) with time zone,
-    failed_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
-);
-ALTER TABLE ONLY public.acme_logout_transactions
-    ADD CONSTRAINT acme_logout_transactions_pkey PRIMARY KEY (id);
-```
-
-Migration provenance: `db/op_base_app_migrate/20260621150000_create_acme_logout_transactions.rb`.
 
 ### app_enforcement_appeals
 

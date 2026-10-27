@@ -1,0 +1,18 @@
+stateDiagram-v2
+    %% Visa Rails-session transport; each realm owns its own browser session.
+    state "No pending request" as empty
+    state "Pending device-bound request" as pending
+    state "Expired request" as expired
+    state "Completed marker" as completed
+    [*] --> empty
+    empty --> pending: valid end-session request
+    pending --> pending: refusal or retryable failure
+    pending --> expired: request lifetime ends
+    pending --> completed: committed or already-revoked device
+    pending --> empty: session reset or expiry
+    expired --> expired: stale confirmation refused
+    expired --> pending: new valid request
+    expired --> empty: session reset or expiry
+    completed --> completed: repeat confirmation without a current session
+    completed --> pending: new valid request
+    completed --> empty: session reset or expiry

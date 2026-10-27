@@ -7,12 +7,15 @@
 module BaseCeremonyBindingConfirmation
   extend ActiveSupport::Concern
   include AdmissionReferenceParameters
+  include BrowserNavigationRequest
+
+  REJECT_FRAMED_CONFIRMATION = false
 
   public
 
   def show
     apply_base_browser_continuation_headers!
-    return render_invalid_binding! if request.head?
+    return render_invalid_binding! if refused_confirmation_destination? || request.head?
 
     binding = load_ceremony_binding!
     validate_binding_base_context!(binding)
@@ -30,6 +33,8 @@ module BaseCeremonyBindingConfirmation
 
   def create
     apply_base_browser_continuation_headers!
+    return render_invalid_binding! if refused_confirmation_destination?
+
     binding = load_ceremony_binding!
     confirm_and_redirect!(binding)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
@@ -38,6 +43,12 @@ module BaseCeremonyBindingConfirmation
   end
 
   private
+
+  def refused_confirmation_destination?
+    return false unless self.class::REJECT_FRAMED_CONFIRMATION
+
+    framed_destination_request?
+  end
 
   def confirm_and_redirect!(binding)
     BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|

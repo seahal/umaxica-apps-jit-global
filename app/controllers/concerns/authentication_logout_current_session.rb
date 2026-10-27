@@ -12,11 +12,8 @@ class AuthenticationLogoutCurrentSession
 
   # cause - the two.md 5.8 v2 authority-stop cause (D-172, D-173); every root this sign-out ends is
   #         stopped through OpAuthorityStopCommitter with it (BX-1).
-  # browser_binding - for browser_logout / rp_initiated_logout, binds the one-time receipt of the
-  #         stop of the presented root to this browser.
   def initialize(cause:, current: nil, resource: nil, token: nil, token_class: nil, session_public_id: nil,
-                 reason: "user_logout", cascade_device_session_tokens: true, precondition: nil,
-                 browser_binding: nil)
+                 reason: "user_logout", cascade_device_session_tokens: true, precondition: nil)
     @cause = cause.to_s
     OpAuthorityStopReference.cause_id(@cause)
     @current = current
@@ -27,7 +24,6 @@ class AuthenticationLogoutCurrentSession
     @reason = reason
     @cascade_device_session_tokens = cascade_device_session_tokens
     @precondition = precondition
-    @browser_binding = browser_binding
     @stop_results = []
   end
 
@@ -60,7 +56,7 @@ class AuthenticationLogoutCurrentSession
   end
 
   attr_reader :cause, :current, :resource, :token, :token_class, :session_public_id, :reason,
-              :cascade_device_session_tokens, :precondition, :browser_binding
+              :cascade_device_session_tokens, :precondition
 
   # REQ-002: a caller's authority decision is re-checked inside the revoking transaction after the
   # parent Device Session row is locked, the first lock of the Device -> root -> RP order. A
@@ -183,7 +179,7 @@ class AuthenticationLogoutCurrentSession
   end
 
   def parent_revocation_persisted?(token_record)
-    return false unless token_record&.respond_to?(:id) && token_record.id.present?
+    return false if token_record&.id.blank?
 
     owner = connection_owner_for(token_record.class)
     return false if owner.blank?
@@ -191,7 +187,7 @@ class AuthenticationLogoutCurrentSession
     owner.connected_to(role: :writing) do
       owner.connection_pool.with_connection do
         persisted_token = token_record.class.unscoped.find_by(id: token_record.id)
-        next false unless persisted_token&.respond_to?(:revoked?) && persisted_token.revoked?
+        next false unless persisted_token&.revoked?
 
         device_session =
           case persisted_token
@@ -205,11 +201,9 @@ class AuthenticationLogoutCurrentSession
   end
 
   def connection_owner_for(klass)
-    return unless klass.respond_to?(:connection_class?)
+    return unless klass.respond_to?(:connection_class_for_self)
 
-    owner = klass
-    owner = owner.superclass until owner.connection_class? || owner == ApplicationRecord
-    owner
+    klass.connection_class_for_self
   end
 
   def device_session_class
@@ -224,10 +218,10 @@ class AuthenticationLogoutCurrentSession
   # and every grant under it) -> the Device Session itself.
   def stop_authority!(token_record)
     device_session = device_session_for_token(token_record) || find_device_session
-    stop_roots_for(token_record, device_session).each_with_index do |root, index|
+    stop_roots_for(token_record, device_session).each do |root|
       @stop_results << OpAuthorityStopCommitter.stop_root(
         root:, cause:, principal_public_id: principal_public_id_for(root),
-        authority_evidence_ref: reason.to_s, browser_binding: index.zero? ? browser_binding : nil,
+        authority_evidence_ref: reason.to_s,
       )
     end
     device_session&.revoke!(reason: reason)
@@ -266,9 +260,8 @@ class AuthenticationLogoutCurrentSession
 
   # D-123: the stop names its principal; one that cannot be established is refused by the primitive.
   def principal_public_id_for(root)
-    actor = root.respond_to?(:actor_record) ? root.actor_record : nil
-    actor ||= resource
-    actor.respond_to?(:public_id) ? actor.public_id.to_s : ""
+    actor = root.actor_record || resource
+    actor&.public_id.to_s
   end
 
   def device_session_for_token(token_record)

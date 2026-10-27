@@ -26,7 +26,7 @@ class EditOrgJumpRtSignInTest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query)
 
-    assert_equal "www.umaxica.org", location.host
+    assert_equal "visa.umaxica.org", location.host # WU-02: the OP is on Visa
     assert_equal "/oauth/authorize", location.path
     assert_equal "edit-org-ww", query.fetch("client_id")
     assert_equal "https://edit.umaxica.org/oidc/callback", query.fetch("redirect_uri")

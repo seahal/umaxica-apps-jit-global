@@ -1034,7 +1034,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     assert_not_predicate auth_ceremony_record_for(surface.fetch(:name)), :admitted?
   end
 
-  test "replayed admission is rejected and does not create a Base session token" do
+  test "A12-4: a consumed admission relay is refused without re-minting its next-hop binding" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     issuance = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
@@ -1059,11 +1059,15 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     second = open_session
     second.host!(host)
     second.https!
-    second.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+    bindings_before_replay = binding.class.count
+    assert_no_difference -> { binding.class.count } do
+      second.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+    end
 
     assert_equal 400, second.response.status
     assert_nil second.session[:oidc_authorization_login_challenge]
     assert_equal token_count, ClientToken.count
+    assert_equal bindings_before_replay, binding.class.count
   end
 
   test "wrong-purpose entry relays without attaching continuity" do

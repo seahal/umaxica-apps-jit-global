@@ -61,7 +61,9 @@ module OutboundHttp
         BLOCKED_IPV4_NETWORKS.any? { |network| network.include?(address) }
       else
         # IPAddr provides include? but not the ActiveSupport exclude? method.
-        GLOBAL_IPV6_NETWORK.exclude?(address) || BLOCKED_IPV6_NETWORKS.any? { |network| network.include?(address) }
+        return true unless GLOBAL_IPV6_NETWORK.include?(address)
+
+        BLOCKED_IPV6_NETWORKS.any? { |network| network.include?(address) }
       end
     end
   end

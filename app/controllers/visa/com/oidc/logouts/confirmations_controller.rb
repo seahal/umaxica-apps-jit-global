@@ -5,9 +5,12 @@ module Visa
   module Com
     module Oidc
       module Logouts
-        class ConfirmationsController < ::Visa::Com::Oidc::LogoutsController
+        class ConfirmationsController < ::Visa::Com::AuthorityController
+          include ::VisaComOidcLogoutEndpoint
+
           AUTHENTICATION_MODE = :open
 
+          layout -> { @render_surface_erb_layout ? "visa/com/application" : "visa/com/inertia" }
           declare_authentication_mode! :open
 
           public

@@ -2373,7 +2373,7 @@ en:
       operation_not_permitted: This operation is not permitted.
       other_than: must be other than %{count}
       password_too_long: is too long
-      phase_violation_refused: Going back is not allowed.
+      phase_violation_refused: This page is out of date. Please start again.
       preference_operation_failed: The preference operation failed.
       present: must be blank
       required: must exist
@@ -4491,14 +4491,14 @@ en:
         completed_description: You have signed out. Sessions on the other services are no longer valid. Screens that are already open will ask you to sign in the next time they communicate.
         completed_title: You are signed out
         confirm_description: Once you log out, you will need to log in again.
-        handoff_button: Continue sign-out
-        handoff_description: This screen will continue automatically.
-        handoff_title: Continuing sign-out
+        forbidden_description: This action is not allowed.
         home_link: Go to home
         idp_session_error: We could not confirm the identity-provider session. No session was signed out.
+        invalid_request: This sign-out request is invalid.
         indeterminate_description: We could not confirm whether sign-out finished. Open this service again to see your current state.
         indeterminate_title: Sign-out result is unknown
         retry_button: Try signing out again
+        stale_description: This sign-out request has expired. Start again if you still want to sign out.
         title: Do you want to sign out?
         unavailable_description: Your current session may still be active. Please try signing out again.
         unavailable_title: Sign-out was not completed

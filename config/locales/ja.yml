@@ -2373,7 +2373,7 @@ ja:
       operation_not_permitted: この操作は許可されていません。
       other_than: は%{count}以外の値にしてください
       password_too_long: が長すぎます
-      phase_violation_refused: 戻るはだめです
+      phase_violation_refused: この画面は古くなっています。最初からやり直してください。
       preference_operation_failed: 設定の操作に失敗しました。
       present: は入力しないでください
       required: を入力してください
@@ -4491,14 +4491,14 @@ ja:
         completed_description: サインアウトしました。ほかのサービスのセッションは無効になっています。開いたままの画面は、次に通信したときにサインインを求めます。
         completed_title: サインアウトしました
         confirm_description: 一度ログアウトすると、再度ログインが必要になります。
-        handoff_button: サインアウト処理を続行
-        handoff_description: この画面は自動的に進みます。
-        handoff_title: サインアウト処理を続行しています
+        forbidden_description: 禁止された振る舞いです
         home_link: ホームへ戻る
         idp_session_error: IdP セッションを確認できませんでした。セッションはサインアウトされていません。
+        invalid_request: このサインアウトのリクエストは無効です。
         indeterminate_description: サインアウトが完了したかを確認できませんでした。このサービスを開き直して、現在の状態を確認してください。
         indeterminate_title: サインアウトの結果を確認できません
         retry_button: もう一度サインアウトする
+        stale_description: このサインアウトのリクエストは期限切れです。サインアウトする場合は、もう一度やり直してください。
         title: ログアウトしますか？
         unavailable_description: 現在のセッションがまだ有効な可能性があります。もう一度サインアウトしてください。
         unavailable_title: サインアウトは完了していません

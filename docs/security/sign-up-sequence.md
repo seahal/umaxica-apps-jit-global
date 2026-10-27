@@ -41,22 +41,13 @@ Base admission; a session hint naming the released attempt of an earlier admissi
 `RetentionPurgeJob` reports stuck APP/COM registrations after its cleanup and retention work using
 the read-only `SignUpStuckRegistrationReportQuery`. The structured event contains the surface, case,
 count and public identifiers, never contact values. A report failure is logged without stopping the
-job. The report itself never releases a registration. After diagnosis, an operator may invoke the
-existing cleanup once for a terminal Flow whose cleanup is pending or failed at the ten-attempt cap
-(D-180); the [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md)
-defines the checks and command. Retention preserves a non-completed terminal Flow until its artifact
-cleanup completes, so a capped Flow remains diagnosable. An unfinished principal/contact whose Flow
-is missing has no safe existing release entry point and remains held for escalation. ORG has no
-matching status and cleanup attempt schema, so it is outside this report.
-
-The read-only `SignUpAttemptDiagnosisInventory` accepts exactly one APP/COM Flow public id,
-entry-reference digest, or principal public id, or the APP-only provider plus subject digest pair. A
-digest lookup may resolve multiple Flows; the inventory returns every match. It reports OIDC
-transaction/result lifecycle, ceremony sessions, APP social Candidate state and audit/log
-correlation ids while omitting raw references, contact values, provider subjects and payloads.
-Unknown well-formed inputs return `flow_not_found`; malformed or ambiguous selectors are refused.
-The [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md) lists the
-runner forms.
+job. The report itself never releases a registration, and no operator command inspects or retries
+a sign-up attempt by hand (D-196); the
+[stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md) describes the
+escalation. Retention preserves a non-completed terminal Flow until its artifact cleanup completes.
+An unfinished principal/contact whose Flow is missing has no safe existing release entry point and
+remains held for escalation. ORG has no matching status and cleanup attempt schema, so it is outside
+this report.
 
 A birthdate below the surface's minimum age is decided on the validated, unsaved value and is never
 written (D-178). The refusal ends the attempt as HALTED through `SignUpTermination`, which removes the

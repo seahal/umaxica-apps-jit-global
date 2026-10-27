@@ -9,14 +9,14 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
   test "A02-9: Base refuses Sign-in path bindings before changing their binding, ceremony, or transaction" do
     realms = [
       ["app", "PUBLIC_BASE_SERVICE_URL", "core-app-jp", ClientOidcAuthorizationTransaction,
-       ClientAuthAdmissionBinding, ClientAuthCeremonySession],
+       ClientAuthAdmissionBinding, ClientAuthCeremonySession,],
       ["com", "PUBLIC_BASE_CORPORATE_URL", "core-com-jp", VisitorOidcAuthorizationTransaction,
-       VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
+       VisitorAuthAdmissionBinding, VisitorAuthCeremonySession,],
       ["org", "PUBLIC_BASE_STAFF_URL", "core-org-jp", OperatorOidcAuthorizationTransaction,
-       OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
+       OperatorAuthAdmissionBinding, OperatorAuthCeremonySession,],
     ]
 
-    realms.each do |surface, base_host_key, client_id, transaction_model, binding_model, session_model|
+    realms.each do |surface, base_host_key, client_id, transaction_model, _binding_model, session_model|
       client = OidcClientRegistry.find!(client_id)
       transaction = OidcAuthorizationTransactionCoordinator.issue!(
         surface: surface,
@@ -40,7 +40,8 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface, reference: issuance.reference)
       continuity, = session_model.issue!
       binding.attach_auth_session!(auth_session: continuity, confirmation_ref: SecureRandom.uuid)
-      before = [binding.reload.attributes, continuity.reload.attributes, transaction_model.find(transaction.id).attributes]
+      before = [binding.reload.attributes, continuity.reload.attributes,
+                transaction_model.find(transaction.id).attributes,]
       base_browser = open_session
       base_browser.https!
       base_browser.host!(ENV.fetch(base_host_key))
@@ -60,11 +61,11 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
   test "A02-9: Visa refuses Re-verification bindings before changing their binding, ceremony, or transaction" do
     realms = [
       ["app", "PUBLIC_VISA_SERVICE_URL", Client, ClientToken, ClientAuthAdmissionBinding,
-       ClientAuthCeremonySession, "client", ClientStepUpCeremonyTransaction],
+       ClientAuthCeremonySession, "client", ClientStepUpCeremonyTransaction,],
       ["com", "PUBLIC_VISA_CORPORATE_URL", Visitor, VisitorToken, VisitorAuthAdmissionBinding,
-       VisitorAuthCeremonySession, "visitor", VisitorStepUpCeremonyTransaction],
+       VisitorAuthCeremonySession, "visitor", VisitorStepUpCeremonyTransaction,],
       ["org", "PUBLIC_VISA_STAFF_URL", Operator, OperatorToken, OperatorAuthAdmissionBinding,
-       OperatorAuthCeremonySession, "operator", OperatorStepUpCeremonyTransaction],
+       OperatorAuthCeremonySession, "operator", OperatorStepUpCeremonyTransaction,],
     ]
 
     realms.each do |surface, visa_host_key, actor_class, token_class, binding_class, session_class,
@@ -113,7 +114,8 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
       binding = binding_class.find_by!(entry_ref: issuance.reference)
       continuity, = session_class.issue!
       binding.attach_auth_session!(auth_session: continuity, confirmation_ref: SecureRandom.uuid)
-      before = [binding.reload.attributes, continuity.reload.attributes, transaction_class.find(issuance.transaction.id).attributes]
+      before = [binding.reload.attributes, continuity.reload.attributes,
+                transaction_class.find(issuance.transaction.id).attributes,]
       visa_browser = open_session
       visa_browser.https!
       visa_browser.host!(ENV.fetch(visa_host_key))

@@ -454,6 +454,15 @@ class Auth::Org::Omniauth::OmniauthCallbacksControllerTest < ActionDispatch::Int
     )
   end
 
+  # Wedge before the D-47 controller change: an Entra subject with no provisioned identity (no JIT)
+  # never creates an Operator, an identity or a session token, whatever the refusal response becomes.
+  test "D-48 org: an unprovisioned Entra subject creates no Operator, identity or session token" do
+    assert_no_difference(%w(Operator.count OperatorEntraIdentity.count OperatorToken.count)) do
+      entra_callback_response!(kid: "test-kid-wedge-unprovisioned")
+    end
+    assert_response :unprocessable_content
+  end
+
   private
 
   # Both Rails.logger and ActionController::Base.logger are swapped: the
@@ -506,6 +515,43 @@ class Auth::Org::Omniauth::OmniauthCallbacksControllerTest < ActionDispatch::Int
     yield
   ensure
     strategy_class.define_method(:access_token, original)
+  end
+
+  def entra_callback_response!(kid:)
+    post("/social/entra", params: {})
+    authorize_query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
+    private_key = OpenSSL::PKey::RSA.generate(2048)
+    jwk = JWT::JWK.new(private_key, { "kid" => kid })
+    now = Time.now.to_i
+    id_token = JWT.encode(
+      {
+        "iss" => "https://login.microsoftonline.com/#{TENANT_ID}/v2.0",
+        "aud" => CLIENT_ID,
+        "tid" => TENANT_ID,
+        "oid" => OBJECT_ID,
+        "sub" => "pairwise-sub",
+        "acct" => 0,
+        "ver" => "2.0",
+        "nonce" => authorize_query.fetch("nonce"),
+        "iat" => now,
+        "exp" => now + 3600,
+      },
+      private_key, "RS256", { "kid" => kid },
+    )
+    loader = ->(_opts) { { "keys" => [jwk.export] } }
+    stub_entra_access_token(id_token) do
+      ExternalSignIn::EntraJwksCache.stub(
+        :new, ->(**) {
+                loader_double = Object.new
+                loader_double.define_singleton_method(:loader) { loader }
+                loader_double
+              },
+      ) do
+        get("/social/entra/callback", params: { state: authorize_query.fetch("state"), code: "authorization-code" })
+      end
+    end
+    # The page carries a per-response CSP nonce, so the rendered text stands for the body.
+    [response.status, response.location, response.parsed_body.at_css("body")&.text.to_s.squish]
   end
 
   def stub_entra_access_token(id_token, &)

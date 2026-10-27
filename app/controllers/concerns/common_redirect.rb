@@ -4,6 +4,8 @@
 module CommonRedirect
   extend ActiveSupport::Concern
 
+  class JumpRedirectFailure < StandardError; end
+
   def self.normalize_host(val)
     return nil if val.blank?
 
@@ -45,6 +47,7 @@ module CommonRedirect
     dst: "internal",
     preserve_query_keys: [],
     fallback_internal: false,
+    strict: false,
     **
   )
     preserve_query_keys |= safe_jump_preserved_query_keys(url)
@@ -59,6 +62,8 @@ module CommonRedirect
       result = RedirectsJumpGatewayUrl.call(token)
       return redirect_to(result.value, allow_other_host: true, **) if result.ok?
 
+      raise JumpRedirectFailure, "Jump gateway unavailable" if strict
+
       fallback_path = safe_return_path(url) if fallback_internal
       if fallback_path.present?
         log_jump_rt_fallback_internal(
@@ -72,6 +77,8 @@ module CommonRedirect
       return render plain: I18n.t("errors.messages.invalid_request"),
                     status: :unprocessable_content
     end
+
+    raise JumpRedirectFailure, "Jump ticket unavailable" if strict
 
     fallback_path = safe_return_path(url) if fallback_internal
     if fallback_path.present?

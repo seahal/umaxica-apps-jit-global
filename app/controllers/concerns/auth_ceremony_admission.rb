@@ -6,6 +6,7 @@
 module AuthCeremonyAdmission
   extend ActiveSupport::Concern
 
+  include FrameDenyingContentSecurityPolicy
   include AuthCeremonySidCookie
   include AuthCeremonyContext
   include StepUpCeremonyLogging
@@ -88,7 +89,7 @@ module AuthCeremonyAdmission
     raw_auth_sid = read_auth_ceremony_sid_cookie
     replacement_sid =
       BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|
-        if redeemed_binding_matches_cookie?(
+        if same_browser_redeemed_repeat_allowed?(
           locked_binding,
           raw_auth_sid,
         ) && auth_ceremony_matches_intent?(expected_intent)
@@ -141,12 +142,13 @@ module AuthCeremonyAdmission
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
-  def redeemed_binding_matches_cookie?(binding, raw_auth_sid)
+  def same_browser_redeemed_repeat_allowed?(binding, raw_auth_sid)
     return false unless binding.redeemed? && raw_auth_sid.present?
 
     model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
     current_session = model.find_active_by_raw_sid(raw_auth_sid)
-    current_session&.admitted? && current_session.id == binding.admitted_auth_ceremony_session_id
+    current_session&.admitted? && current_session.id == binding.admitted_auth_ceremony_session_id &&
+      binding.class.database_now < binding.created_at + BaseAuthAdmissionCoordinator::CONTINUATION_TTL
   end
 
   def admit_oidc_payload!(payload, expected_intent:, binding:)
@@ -205,7 +207,7 @@ module AuthCeremonyAdmission
           previous_raw_sid: raw_sid,
           authorization_transaction_ref: authorization_transaction_ref,
           step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
-          ttl: auth_ceremony_ttl_for_binding(admission_binding, now, model), now:,
+          expires_at: auth_ceremony_expires_at_for_binding(locked_binding, now), now:,
         )
         locked_binding.redeem!(auth_session: attached_session, admitted_auth_session: admitted)
         [admitted, admitted_sid]
@@ -219,15 +221,15 @@ module AuthCeremonyAdmission
     auth_ceremony_admission_present?
   end
 
-  def auth_ceremony_ttl_for_binding(binding, now, model)
-    return model::DEFAULT_TTL unless binding.purpose == "authentication_handoff"
+  def auth_ceremony_expires_at_for_binding(binding, now)
+    return unless binding.purpose == "authentication_handoff"
 
-    remaining = binding.curfew_at - now
+    curfew_at = binding.curfew_at
     raise BaseAuthAdmissionCoordinator::Denied.new(
       "sign-in path curfew has passed", code: "expired_admission",
-    ) unless remaining.positive?
+    ) unless curfew_at && curfew_at > now
 
-    [model::DEFAULT_TTL, remaining].min
+    curfew_at
   end
 
   def admission_binding_for_reference
@@ -245,7 +247,7 @@ module AuthCeremonyAdmission
   def apply_admission_transport_headers!
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    deny_framing!
   end
 
   def render_invalid_admission_request!

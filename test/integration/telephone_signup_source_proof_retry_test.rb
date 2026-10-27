@@ -19,7 +19,7 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
      ClientTelephone, ClientToken, ClientContactAuditOutbox, :client_telephone, :user_id,],
     [:com, "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", "BASE_COM", VisitorSignUpFlow,
      VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_telephone, :visitor_id,],
-  ].each do |surface, base_host_key, auth_host_key, issuer_name, flow_class, contact_class, token_class,
+  ].each do |surface, base_host_key, auth_host_key, _issuer_name, flow_class, contact_class, token_class,
     outbox, scope, owner_key|
     %i(verify_contact enter_guardrail enter_checkpoint clear_requirement).each_with_index do |failed_event, index|
       # Splitting fault and retry would lose the same committed proof, browser, and rolled-back Ticket under test.
@@ -49,57 +49,44 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         )
 
         assert_equal 303, browser.response.status
-        issuer = JitSecurityJwtRegistry.surface(issuer_name)
-        2.times do |hop|
+        boot = Rails.configuration.x.boot_config
+        jump_host = URI.parse(boot.fetch(:jump).origin.to_s).host
+        visa_host = (surface == :app) ? boot.fetch(:hosts).visa_service.host : boot.fetch(:hosts).visa_corporate.host
+        12.times do
+          break unless browser.response.redirect?
+
           target = URI.parse(browser.response.location)
-          # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-          unless target.host == base_host
-            rt = Rack::Utils.parse_query(target.query).fetch("rt")
+          target = URI.parse("https://#{browser.host}#{target}") if target.host.blank?
+          if target.host == jump_host
+            token = Rack::Utils.parse_nested_query(target.query.to_s).fetch("rt")
+            source =
+              case browser.host
+              when base_host then "BASE_#{surface.to_s.upcase}"
+              when visa_host then "VISA_#{surface.to_s.upcase}"
+              when auth_host then "AUTH_#{surface.to_s.upcase}"
+              else raise ArgumentError, "unexpected handoff source"
+              end
+            issuer = JitSecurityJwtRegistry.surface(source)
             payload, = JWT.decode(
-              rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              token, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+              algorithms: ["ES384"], verify_iss: true, iss: "https://#{browser.host}",
+              verify_aud: true, aud: boot.fetch(:jump).audience,
             )
             target = URI.parse(payload.fetch("url"))
           end
 
-          assert_equal "https", target.scheme
-          assert_equal(hop.zero? ? base_host : auth_host, target.host)
+          assert_includes [base_host, visa_host, auth_host], target.host
           browser.host!(target.host)
-          browser.get(target.request_uri, params: { ri: "jp" })
-          next if hop == 1
-
-          form = browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-          browser.post(
-            form["action"], params: fields, headers: {
-              "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+          browser.https!
+          browser.get(
+            target.request_uri, headers: {
+              "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
             },
           )
-
-          assert_equal 303, browser.response.status
         end
-        3.times do |step|
-          form = browser.response.parsed_body.at_css("form")
 
-          assert_not_nil form, "Admission step #{step} must render an actual continuation form"
-          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-          browser.post(
-            form["action"], params: fields, headers: {
-              "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
-            },
-          )
-
-          assert_equal 303, browser.response.status
-          next if step == 2
-
-          target = URI.parse(browser.response.location)
-
-          assert_equal "https", target.scheme
-          assert_equal(step.zero? ? base_host : auth_host, target.host)
-          browser.host!(target.host)
-          browser.get(target.request_uri, params: { ri: "jp" })
-        end
+        assert_equal 200, browser.response.status
+        assert_equal auth_host, browser.host
         switch_browser_to_sign_up!(browser, surface: surface.to_s)
         browser.get("/sign/up/telephone/new", params: { ri: "jp" })
 

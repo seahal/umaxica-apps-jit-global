@@ -28,7 +28,9 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "anonymous org Dashboard completes Entra and Passkey on Auth then establishes its Base session" do
+  test "A12-1: org Dashboard completes Entra and Passkey through automatic relays" do
+    automatic_relay_responses = []
+    continue_page_paths = []
     base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     actor = Operator.create!(
@@ -73,43 +75,34 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
         },
       )
     end
-    issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
-    target = URI.parse(response.location)
-    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless target.host == base_host
-      rt = Rack::Utils.parse_query(target.query).fetch("rt")
-      payload, = JWT.decode(
-        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      target = URI.parse(payload.fetch("url"))
-    end
+    automatic_relay_responses << ["POST", "/sign", response.status]
+    visa_host = visa_host_for_test_base_host(base_host)
+    target = URI.parse(jump_rt_url_from_location_for_test(response.location))
 
-    assert_equal base_host, target.host
-    get(target.request_uri)
-    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    post(
-      form["action"], params: fields, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+    assert_equal visa_host, target.host
+    visa_browser = open_session
+    visa_browser.host!(visa_host)
+    visa_browser.https!
+    visa_browser.get(
+      target.request_uri, headers: {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
       },
     )
-    target = URI.parse(response.location)
-    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless target.host == base_host
-      target = target
-      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless target.host == base_host
-        handoff_rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        handoff_payload, = JWT.decode(
-          handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(handoff_payload.fetch("url"))
-      end
+    automatic_relay_responses << ["GET", "/oauth/authorize", visa_browser.response.status]
+    if visa_browser.response.successful?
+      continue_page_paths << "/oauth/authorize" if visa_browser.response.parsed_body.at_css("form")
+      form = visa_browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      visa_browser.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{visa_host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
     end
+    visa_cookie_header = visa_browser.cookies.to_hash.map do |name, value|
+      "#{name}=#{Rack::Utils.escape(value)}"
+    end.join("; ")
+    target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
 
     assert_equal auth_host, target.host
     entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
@@ -119,21 +112,31 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     browser.host!(auth_host)
     browser.https!
     browser.get(target.request_uri)
-    3.times do |index|
-      sender = (index == 1) ? self : browser
-      form = Nokogiri::HTML(sender.response.body).at_css("form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      sender.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-      raise RuntimeError, "Admission failed at step #{index}" unless sender.response.status == 303
-      next if index == 2
+    automatic_relay_responses << ["GET", target.path, browser.response.status]
+    entry_target = URI.parse(browser.response.location)
+    browser.get(entry_target.request_uri)
+    automatic_relay_responses << ["GET", entry_target.path, browser.response.status]
+    attach_target = URI.parse(browser.response.location)
+    browser.get(attach_target.request_uri)
+    automatic_relay_responses << ["GET", attach_target.path, browser.response.status]
+    confirmation_target = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
-      receiver = index.zero? ? self : browser
-      receiver.get(URI.parse(sender.response.location).request_uri)
-    end
+    assert_equal visa_host, confirmation_target.host
+    confirmation_path = confirmation_target.path
+    visa_browser.get(
+      confirmation_target.request_uri, headers: {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+      },
+    )
+    automatic_relay_responses << ["GET", confirmation_path, visa_browser.response.status]
+    auth_target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
+
+    assert_equal auth_host, auth_target.host
+    browser.get(auth_target.request_uri)
+    automatic_relay_responses << ["GET", auth_target.path, browser.response.status]
+    clean_entry_target = URI.parse(browser.response.location)
+    browser.get(clean_entry_target.request_uri)
+    automatic_relay_responses << ["GET", clean_entry_target.path, browser.response.status]
 
     assert_predicate binding.reload, :redeemed?
     passkey_binding = nil
@@ -230,47 +233,41 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
       )
     end
     assert_equal 200, browser.response.status
-    browser.get(browser.response.parsed_body.fetch("redirect_url"))
-    browser.follow_redirect!
-    csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-    browser.post(
-      auth_org_sign_oidc_handoff_path(ri: "jp"), params: { authenticity_token: csrf },
-                                                 headers: { "Origin" => origin, "Sec-Fetch-Site" => "same-origin" },
+    handoff_path = auth_org_sign_oidc_handoff_path(ri: "jp")
+    browser.get(
+      handoff_path, headers: {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+      },
     )
+    automatic_relay_responses << ["GET", URI.parse(handoff_path).path, browser.response.status]
 
     assert_equal 303, browser.response.status
     assert_predicate flow.reload, :authenticated?
-    get(URI.parse(browser.response.location).request_uri)
-    form = response.parsed_body.at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    result_uri = URI.parse(browser.response.location)
+
+    assert_equal visa_host, result_uri.host
     assert_difference("OperatorToken.count", 1) do
-      post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+      visa_browser.get(
+        result_uri.request_uri, headers: {
+          "Origin" => "https://#{visa_host}",
+          "Cookie" => visa_cookie_header,
+          "HTTP_COOKIE" => visa_cookie_header,
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
         },
       )
+
+      assert_equal 303, visa_browser.response.status, visa_browser.response.body
     end
-    assert_response :see_other
     token = OperatorToken.find_by!(public_id: flow.reload.browser_session_ref)
 
     assert_equal ["passkey", true, nil],
                  [token.established_authentication_method, token.root_login_established_at.present?,
                   browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY],]
-    callback_uri = URI.parse(response.location)
-    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless callback_uri.host == base_host
-      callback_uri = callback_uri
-      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless callback_uri.host == base_host
-        callback_rt = Rack::Utils.parse_query(callback_uri.query).fetch("rt")
-        callback_payload, = JWT.decode(
-          callback_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        callback_uri = URI.parse(callback_payload.fetch("url"))
-      end
-    end
+    automatic_relay_responses << ["GET", result_uri.path, visa_browser.response.status]
+
+    callback_uri = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
     protocol_browser = open_session
     protocol_browser.host!(base_host)
     protocol_browser.https!
@@ -331,7 +328,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
       end
     OutboundHttp::Connection.stub(
       :build, ->(**args) {
-        assert_equal base_host, args.fetch(:url).host
+        assert_equal visa_host, args.fetch(:url).host
         connection
       },
     ) do
@@ -339,6 +336,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
         get callback_uri.request_uri
       end
     end
+    automatic_relay_responses << ["GET", callback_uri.path, response.status]
 
     assert_equal [true, true, true],
                  [response.redirect?, cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
@@ -349,7 +347,24 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "selected", response.parsed_body.fetch("status")
     get(response.parsed_body.fetch("next"))
+    follow_redirect! if response.redirect?
 
     assert_response :success
+
+    assert_equal [
+      ["POST", "/sign", 303],
+      ["GET", "/oauth/authorize", 303],
+      ["GET", "/sign/in/sentry", 303],
+      ["GET", "/sign/in", 303],
+      ["GET", "/ceremony_bindings", 303],
+      ["GET", confirmation_path, 303],
+      ["GET", "/sign/in", 303],
+      ["GET", "/sign/in", 200],
+      ["GET", "/sign/oidc/handoff", 303],
+      ["GET", result_uri.path, 303],
+      ["GET", callback_uri.path, 302],
+    ], automatic_relay_responses
+    assert_equal 11, automatic_relay_responses.length
+    assert_empty continue_page_paths
   end
 end

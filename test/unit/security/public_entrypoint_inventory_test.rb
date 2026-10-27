@@ -312,7 +312,7 @@ module Security
     end
 
     def public_sign_out?(entry)
-      entry.path.start_with?("/sign/out", "/sign/bye") || entry.controller_path.end_with?("/sign_outs", "/sign/outs")
+      entry.path.start_with?("/sign/out") || entry.controller_path.end_with?("/sign_outs", "/sign/outs")
     end
 
     def public_auth_step_up?(entry)

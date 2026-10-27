@@ -520,14 +520,14 @@ describe("shared self-service screens", () => {
         form={{
           action: "/sign/out",
           submit: "Sign out",
-          logout_challenge: "abc",
           confirm_description: "Once you log out...",
         }}
         home_link={{ label: "Home", href: "/" }}
       />,
     );
 
-    expect(confirmation).toContain('name="logout_challenge" value="abc"');
+    expect(confirmation).toContain('action="/sign/out" method="post"');
+    expect(confirmation).toContain('name="authenticity_token"');
 
     const signedOut = renderToStaticMarkup(
       <SignOutConfirmation

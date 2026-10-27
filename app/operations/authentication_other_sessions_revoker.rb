@@ -37,7 +37,9 @@ class AuthenticationOtherSessionsRevoker
           raise StepUpUnavailable, "Revoking other sessions requires current scoped Step-Up"
         end
 
-        sessions.find_each do |token|
+        # Point-in-time (D-167): a session committed while this request waited for the lock is not
+        # one the person asked to revoke.
+        sessions.where(created_at: ..now).find_each do |token|
           result = AuthenticationSelectedSessionRevoker.call(
             owner: owner,
             token: token,

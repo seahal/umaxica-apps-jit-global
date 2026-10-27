@@ -57,7 +57,7 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
       operator_workspace_accounts
       org_enforcement_appeals
     ),
-    OpBaseAppRecord => %w(acme_logout_transactions logout_transactions),
+    OpBaseAppRecord => %w(logout_transactions),
     AppSignalRecord => %w(client_notification_records member_notifications),
     ComSignalRecord => %w(visitor_notification_records),
     OrgSignalRecord => %w(operator_notification_records operator_notifications),

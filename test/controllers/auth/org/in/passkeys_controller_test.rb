@@ -184,7 +184,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       get new_auth_org_sign_in_passkey_path, params: { ri: "jp", fb: binding }
 
       assert_equal(
-        { status: 409, media_type: "text/plain", body: "戻るはだめです", location: nil, no_store: true },
+        { status: 409, media_type: "text/plain", body: "この画面は古くなっています。最初からやり直してください。", location: nil, no_store: true },
         {
           status: response.status,
           media_type: response.media_type,
@@ -212,7 +212,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
     end
 
-    assert_equal [409, "戻るはだめです"], [response.status, response.body]
+    assert_equal [409, "この画面は古くなっています。最初からやり直してください。"], [response.status, response.body]
     halt_record = halted_events.call.order(:id).last
 
     assert_equal(

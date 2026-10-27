@@ -13,7 +13,10 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.response = nil
   end
 
-  test "additional TOTP registration starts with a read-only Base form and purpose-bound POST" do
+  test "A29-8: a Step-Up ticket remains available while Sign In is blocked" do
+    sentry_feature = FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name
+    previous_sentry_availability = Flipper.enabled?(sentry_feature)
+    Flipper.disable(sentry_feature)
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -296,6 +299,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     assert_equal ["pending", 0], [replacement_parent.status, ClientTotpCredential.where(user_id: actor.id).count]
   ensure
     ActionController::Base.allow_forgery_protection = protection
+    previous_sentry_availability ? Flipper.enable(sentry_feature) : Flipper.disable(sentry_feature)
   end
 
   test "a Secret session cannot start Base passkey registration without an independent Step-Up" do

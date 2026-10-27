@@ -264,7 +264,7 @@ transaction where applicable, and the existing Auth/Base session-issuance bounda
 authorities.
 
 Same-phase reload is valid. A contradictory GET or HEAD is rejected with HTTP 409 and the exact
-plain-text body `戻るはだめです`, with no redirect, lifecycle mutation, or credential/session
+plain-text body `この画面は古くなっています。最初からやり直してください。`, with no redirect, lifecycle mutation, or credential/session
 side effect. A state-changing request that is bound to the original flow but uses an obsolete or
 otherwise contradictory phase enters `HALTED = 930` with an auditable `phase_regression` or
 `phase_violation` reason. HALTED is absorbing and cannot issue a new session, OTP, challenge, or

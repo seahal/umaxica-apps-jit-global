@@ -11,11 +11,8 @@ class Palm::App::Sign::Out::CompletionsControllerTest < ActionDispatch::Integrat
   end
 
   test "an RP-facing logout challenge cannot complete a Palm sign-out" do
-    transaction_count = AcmeLogoutTransaction.count
-
-    get palm_app_sign_out_completion_path(logout_challenge: "forged-challenge")
+    get palm_app_sign_out_completion_path(logout_challenge: "forged-challenge", ri: "jp")
 
     assert_response :not_found
-    assert_equal transaction_count, AcmeLogoutTransaction.count
   end
 end

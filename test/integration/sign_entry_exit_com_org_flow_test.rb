@@ -28,12 +28,33 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     },
   }.freeze
 
+  %w(com org).each do |surface|
+    test "#{surface} pending authorization continuation returns a generic refusal without issuing a code" do
+      transaction = start_at_auth_sign_in!(surface)
+      before = transaction.reload.attributes
+      host! visa_host_for_test_surface(SURFACES.fetch(surface).fetch(:visa_surface))
+      OidcAuthorizationCodeIssuer.stub(:call, ->(**) { flunk("pending transaction must not issue a code") }) do
+        get "/oidc/result", params: { transaction_ref: transaction.transaction_id, result_ref: SecureRandom.uuid },
+                            headers: browser_navigation_headers
+      end
+
+      assert_response :bad_request
+      assert_equal(
+        { "error" => "invalid_request", "error_description" => "invalid continuation request" },
+        response.parsed_body,
+      )
+      assert_nil response.location
+      assert_equal before, transaction.reload.attributes
+    end
+  end
+
   test "Com Cancel on the first Sign In page returns access_denied to the RP" do
     transaction = start_at_auth_sign_in!("com")
 
     post "https://#{auth_host("com")}/sign/cancellation?ri=jp"
     query = rp_query(commit_visa_continuation!)
 
+    assert_equal %w(error iss state), query.keys.sort
     assert_equal "access_denied", query.fetch("error")
     assert_equal "state", query.fetch("state")
     assert_not query.key?("code")
@@ -64,7 +85,9 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     post "https://#{auth_host("org")}/sign/cancellation?ri=jp"
     query = rp_query(commit_visa_continuation!)
 
+    assert_equal %w(error iss state), query.keys.sort
     assert_equal "access_denied", query.fetch("error")
+    assert_equal "state", query.fetch("state")
     assert_predicate transaction.reload, :canceled?
   end
 

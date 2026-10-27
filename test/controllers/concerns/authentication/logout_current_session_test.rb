@@ -130,7 +130,6 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert_predicate token.reload, :revoked?
     assert_predicate session.reload, :revoked?
     assert_not OpAppAuthorityStopEpochCutoff.exists?(stop_id: stop.id)
-    assert_not OpAppAuthorityStopBrowserLogout.exists?(stop_id: stop.id)
   end
 
   test "risk cause without a root records a principal-wide identity event" do
@@ -147,11 +146,25 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
       refresh_token_expires_at: 1.hour.from_now,
     )
 
-    assert_difference -> { AppIdentityAuthenticationEvent.where(reason: "sign_risk").count }, 1 do
-      assert_difference -> { OpAppAuthorityStop.where(cause_id: OpAuthorityStopReference.cause_id("risk")).count }, 1 do
-        AuthenticationLogoutCurrentSession.call(cause: "risk", resource: user, reason: "risk_decision")
+    inserts = []
+    observer =
+      ->(_name, _start, _finish, _id, payload) do
+        sql = payload.fetch(:sql)
+        inserts << :zenith if sql.match?(/INSERT INTO "identity_authentication_events"/)
+        inserts << :op if sql.match?(/INSERT INTO "op_app_authority_stops"/)
+      end
+
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      assert_difference -> { AppIdentityAuthenticationEvent.where(reason: "sign_risk").count }, 1 do
+        assert_difference -> {
+          OpAppAuthorityStop.where(cause_id: OpAuthorityStopReference.cause_id("risk")).count
+        }, 1 do
+          AuthenticationLogoutCurrentSession.call(cause: "risk", resource: user, reason: "risk_decision")
+        end
       end
     end
+
+    assert_equal [:zenith, :op], inserts
 
     event = AppIdentityAuthenticationEvent.order(:id).last
     stop = OpAppAuthorityStop.find_by!(authority_evidence_ref: event.event_id)
@@ -164,7 +177,6 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert OpAppAuthorityStopRootTarget.exists?(stop:, root: token)
     assert_predicate token.reload, :revoked?
     assert_predicate session.reload, :revoked?
-    assert_not OpAppAuthorityStopBrowserLogout.exists?(stop_id: stop.id)
   end
 
   test "revokes unrevoked RP sessions when the parent token was already revoked" do

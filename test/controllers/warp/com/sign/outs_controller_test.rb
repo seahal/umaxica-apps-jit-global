@@ -42,14 +42,16 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
     authenticate_rp!(visitor, token)
 
+    stops_before = OpComAuthorityStop.count
     post warp_com_sign_out_url(ri: "jp")
 
     assert_response :see_other
+    assert_equal stops_before, OpComAuthorityStop.count
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_visa_end_session_redirect(query, location, client_id: "warp-com-jp", region: "jp")
-    assert_not_predicate @rp_session.reload, :active?
+    assert_predicate @rp_session.reload, :active?
     assert_predicate token.reload, :currently_usable?
     assert_equal auth_refresh_digest, token.refresh_token_digest
     assert_equal auth_refresh_generation, token.refresh_token_generation

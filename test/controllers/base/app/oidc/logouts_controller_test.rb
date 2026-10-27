@@ -19,6 +19,10 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     @session_public_id = @token.public_id
+    @logout_grant = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: @token, oidc_client_id: @client.client_id,
+      oidc_scope: "openid", oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 10.minutes.from_now,
+    )
     # Cookies only reach the request when the integration session's host matches it.
     host! @host
     https!
@@ -310,13 +314,8 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
     stop_target = OpAppAuthorityStopRootTarget.find_by!(root: @token)
     stop = OpAppAuthorityStop.find(stop_target.stop_id)
-    browser_receipt = OpAppAuthorityStopBrowserLogout.find_by!(stop:)
-    stored_receipt = session.fetch(OpLogoutReceiptSession::KEY)
 
-    assert_equal "app", stored_receipt.fetch("realm")
-    assert_equal stop.public_id, stored_receipt.fetch("stop")
-    assert_equal Digest::SHA256.digest(stored_receipt.fetch("nonce")), browser_receipt.receipt_nonce_digest
-    assert_equal Digest::SHA256.digest(stored_receipt.fetch("browser_binding")), browser_receipt.browser_binding_digest
+    assert_predicate stop, :persisted?
 
     location = URI.parse(jump_rt_url_from_location(response.location))
     query = Rack::Utils.parse_nested_query(location.query.to_s)
@@ -324,6 +323,203 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal URI.parse(redirect_uri).host, location.host
     assert_equal URI.parse(redirect_uri).path, location.path
     assert_equal "xyz", query["state"]
+  end
+
+  test "no-hint logout shows a single-use OP completion page" do
+    http_headers_29 =
+      begin
+        fx1_harness =
+          begin
+            f1_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+            f1_host = f1_headers["Host"]
+            f1_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f1_host}/") if f1_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f1_family, f1_surface = f1_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f1_family) && f1_surface == "app"
+              f1_client_id =
+                case f1_family
+                when "base" then "base-#{f1_surface}-ww"
+                when "edit" then "edit-org-ww"
+                else "#{f1_family}-#{f1_surface}"
+                end
+              f1_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f1_client = OidcClientRegistry.find!(f1_client_id)
+              f1_key = [f1_client.client_id, f1_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f1_key] && f1_token.currently_usable? &&
+                  !(f1_token.device_session_id && OpAppGrant.exists?(
+                    device_session_id: f1_token.device_session_id,
+                    oidc_client_id: f1_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
+                f1_now = Time.current
+                f1_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
+                  client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
+                  refresh_token_expires_at: f1_now + 10.minutes,
+                )
+                f1_access = AuthenticationTokenService.encode(
+                  f1_token.actor_record, host: f1_host, resource_type: "client",
+                                         session_public_id: f1_token.public_id,
+                                         base_session_public_id: f1_token.public_id,
+                                         oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                         expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                         subject: OidcSubject.for(
+                                           f1_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f1_client.client_id,
+                )
+                @base_browser_rp_credentials[f1_key] =
+                  [f1_access, f1_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f1_key]
+                f1_access, f1_refresh = @base_browser_rp_credentials.fetch(f1_key)
+                f1_cookie = [
+                  f1_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f1_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f1_refresh)}",
+                ].join("; ")
+                f1_headers = f1_headers.merge(
+                  "Cookie" => f1_cookie,
+                  "HTTP_COOKIE" => f1_cookie,
+                )
+              end
+            end
+            f1_headers
+          end
+        fx1_harness.fetch("Cookie").split("; ").each do |pair|
+          name, value = pair.split("=", 2)
+          cookies[name] = Rack::Utils.unescape(value)
+        end
+        browser_headers.merge(fx1_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+      end
+    get visa_app_oidc_logout_url(host: @host),
+        params: { ri: "jp" },
+        headers: http_headers_29
+
+    assert_response :ok
+    assert_equal visa_app_oidc_logout_confirmation_path(ri: "jp"), inertia_props.dig("form", "action")
+
+    http_headers_28 =
+      begin
+        fx2_harness =
+          begin
+            f2_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+            f2_host = f2_headers["Host"]
+            f2_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f2_host}/") if f2_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f2_family, f2_surface = f2_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f2_family) && f2_surface == "app"
+              f2_client_id =
+                case f2_family
+                when "base" then "base-#{f2_surface}-ww"
+                when "edit" then "edit-org-ww"
+                else "#{f2_family}-#{f2_surface}"
+                end
+              f2_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f2_client = OidcClientRegistry.find!(f2_client_id)
+              f2_key = [f2_client.client_id, f2_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
+                  !(f2_token.device_session_id && OpAppGrant.exists?(
+                    device_session_id: f2_token.device_session_id,
+                    oidc_client_id: f2_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
+                f2_now = Time.current
+                f2_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
+                  client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
+                  refresh_token_expires_at: f2_now + 10.minutes,
+                )
+                f2_access = AuthenticationTokenService.encode(
+                  f2_token.actor_record, host: f2_host, resource_type: "client",
+                                         session_public_id: f2_token.public_id,
+                                         base_session_public_id: f2_token.public_id,
+                                         oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                         expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                         subject: OidcSubject.for(
+                                           f2_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f2_client.client_id,
+                )
+                @base_browser_rp_credentials[f2_key] = [f2_access, f2_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f2_key]
+                f2_access, f2_refresh = @base_browser_rp_credentials.fetch(f2_key)
+                f2_cookie = [
+                  f2_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f2_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f2_refresh)}",
+                ].join("; ")
+                f2_headers = f2_headers.merge(
+                  "Cookie" => f2_cookie,
+                  "HTTP_COOKIE" => f2_cookie,
+                )
+              end
+            end
+            f2_headers
+          end
+        fx2_harness.fetch("Cookie").split("; ").each do |pair|
+          name, value = pair.split("=", 2)
+          cookies[name] = Rack::Utils.unescape(value)
+        end
+        browser_headers.merge(fx2_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+      end
+    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_28
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+    assert_equal "/oidc/logout/completion", URI.parse(response.location).path
+
+    stop_target = OpAppAuthorityStopRootTarget.find_by!(root: @token)
+    stop = OpAppAuthorityStop.find(stop_target.stop_id)
+
+    assert_predicate stop, :persisted?
+
+    stops_after_commit = OpAppAuthorityStop.count
+
+    follow_redirect!
+
+    assert_response :ok
+    assert_nil inertia_props.fetch("form")
+    assert_equal I18n.t("sign.shared.sign_out.completed_description"), inertia_props.fetch("description")
+    assert_equal stops_after_commit, OpAppAuthorityStop.count
+
+    get "/oidc/logout/completion", params: { ri: "jp" }
+
+    assert_response :not_found
+    assert_equal stops_after_commit, OpAppAuthorityStop.count
+  end
+
+  test "a confirmation POST with no pending request is refused without a signed-out page" do
+    post "/oidc/logout/confirmation", params: { ri: "jp" }
+
+    assert_response :unprocessable_entity
+    assert_equal I18n.t("sign.shared.sign_out.stale_description"), response.body
+    assert_equal 0, OpAppAuthorityStop.count
   end
 
   test "D-33 refuses an unknown RP-facing logout_challenge on POST" do
@@ -335,6 +531,18 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal stops_before, OpAppAuthorityStop.count
     assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "an invalid end-session request shows translated text, not the internal description, in HTML" do
+    stops_before = OpAppAuthorityStop.count
+    get visa_app_oidc_logout_path(id_token_hint: "not-a-jwt", ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+
+    assert_response :bad_request
+    assert_equal I18n.t("sign.shared.sign_out.invalid_request"), response.body
+    assert_not_includes response.body, "id_token_hint"
+    assert_equal stops_before, OpAppAuthorityStop.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
   end
 
   test "D-33 refuses logout_challenge on GET" do
@@ -520,7 +728,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
          },
          headers: http_headers_24
 
-    assert_response :success
+    assert_response :bad_request
     assert_not_predicate @token.reload, :revoked?
     assert_nil response.location
     assert_not_includes response.body, "xyz"
@@ -613,7 +821,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
          params: { id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz", ri: "jp" },
          headers: http_headers_23
 
-    assert_response :success
+    assert_response :bad_request
     assert_not_predicate @token.reload, :revoked?
     assert_nil response.location
     assert_not_includes response.body, "xyz"
@@ -1216,7 +1424,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
       post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_14
 
-      assert_response :ok
+      assert_response :unprocessable_entity
       assert_not_predicate @token.reload, :revoked?
     end
   end
@@ -1224,7 +1432,6 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   test "D1 a valid hint without an IdP session stops without staging or redirecting" do
     redirect_uri = @client.post_logout_redirect_uris.first
     cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
-    before_count = AcmeLogoutTransaction.count
 
     with_forgery_protection do
       get visa_app_oidc_logout_url(host: @host),
@@ -1237,19 +1444,17 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           headers: browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
     end
 
-    assert_response :bad_request
-    assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+    assert_response :forbidden
+    assert_equal I18n.t("sign.shared.sign_out.forbidden_description"), response.body
     assert_nil response.location
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
-    assert_equal before_count, AcmeLogoutTransaction.count
     assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
   end
 
-  test "D1 JSON valid hint without an IdP session returns login_required without staging" do
+  test "D1 JSON valid hint without an IdP session returns a plain forbidden response" do
     redirect_uri = @client.post_logout_redirect_uris.first
     cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
-    before_count = AcmeLogoutTransaction.count
 
     with_forgery_protection do
       get visa_app_oidc_logout_url(host: @host, format: :json),
@@ -1257,17 +1462,10 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           headers: browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
     end
 
-    assert_response :bad_request
-    assert_equal(
-      {
-        "error" => "login_required",
-        "error_description" => I18n.t("sign.shared.sign_out.idp_session_error"),
-      },
-      response.parsed_body,
-    )
+    assert_response :forbidden
+    assert_equal I18n.t("sign.shared.sign_out.forbidden_description"), response.body
     assert_nil response.location
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
-    assert_equal before_count, AcmeLogoutTransaction.count
     assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
   end
@@ -1403,8 +1601,8 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             browser_headers.merge(fx20_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
 
-      assert_response :bad_request
-      assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+      assert_response :forbidden
+      assert_equal I18n.t("sign.shared.sign_out.forbidden_description"), response.body
       assert_nil response.location
       assert_includes response.headers["Cache-Control"].to_s, "no-store"
 
@@ -1499,36 +1697,34 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_not_predicate @token.reload, :revoked?
   end
 
-  test "D-33 uses the authenticated OP Root Session when the RP hint carries another sid" do
+  test "a hint for a grant on another device is forbidden" do
     sibling_token = ClientToken.create!(
       authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
+    sibling_grant = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: sibling_token, oidc_client_id: @client.client_id,
+      oidc_scope: "openid", oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 10.minutes.from_now,
+    )
     redirect_uri = @client.post_logout_redirect_uris.first
     headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id).except("Cookie", "HTTP_COOKIE")
 
     get visa_app_oidc_logout_url(host: @host),
         params: {
-          id_token_hint: id_token(sid: sibling_token.public_id),
+          id_token_hint: id_token(sid: sibling_grant.public_id),
           post_logout_redirect_uri: redirect_uri,
           state: "same-subject-rp-hint",
           ri: "jp",
         },
         headers: headers
 
-    assert_response :see_other
+    assert_response :forbidden
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
     assert_not_predicate @token.reload, :revoked?
-    assert_equal @session_public_id, session.dig(SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY, "sid")
     assert_not_predicate sibling_token.reload, :revoked?
-    assert_equal redirect_uri, session.dig(SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY, "post_logout_redirect_uri")
-
-    post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: headers
-
-    assert_response :see_other
-    assert_predicate @token.reload, :revoked?
-    assert_not_predicate sibling_token.reload, :revoked?
+    assert_predicate sibling_grant.reload, :active?
   end
 
   test "D1 access token without sid cannot use its own subject's hint to end a sibling session" do
@@ -1551,8 +1747,8 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           },
           headers: headers
 
-      assert_response :bad_request
-      assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+      assert_response :forbidden
+      assert_equal I18n.t("sign.shared.sign_out.forbidden_description"), response.body
       assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
       post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: headers
     end
@@ -2088,7 +2284,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       end
     post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_10
 
-    assert_response :ok
+    assert_response :unprocessable_entity
     assert_not_predicate @token.reload, :revoked?
   end
 
@@ -2342,7 +2538,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       end
     post visa_app_oidc_logout_confirmation_path(host: @host, ri: "jp"), headers: http_headers_7
 
-    assert_response :ok
+    assert_response :unprocessable_entity
     assert_not_predicate new_token.reload, :revoked?
   end
 
@@ -3606,7 +3802,7 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   # logout request in the session), so the harness-issued token is placed in the jar instead.
 
   def id_token(resource: @user, subject: OidcSubject.for(@user, resource_type: "client"),
-               sid: @session_public_id)
+               sid: @logout_grant.public_id)
     OidcIdTokenIssuer.call(
       resource: resource,
       client: @client,

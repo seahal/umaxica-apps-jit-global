@@ -26,7 +26,8 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
   end
 
   %i(app com).each do |surface|
-    test "#{surface} anonymous Dashboard returns through Auth Passkey and canonical Base login" do
+    test "A12-1: #{surface} Dashboard returns through automatic relays and canonical Base login" do
+      automatic_relay_responses = []
       case surface
       when :app
         actor = Client.create!(
@@ -102,6 +103,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
           "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
         },
       )
+      automatic_relay_responses << ["POST", "/sign", response.status]
       target = URI.parse(response.location)
       target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       visa_host = visa_host_for_test_base_host(base_host)
@@ -115,6 +117,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
           "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
         },
       )
+      automatic_relay_responses << ["GET", "/oauth/authorize", visa_browser.response.status]
       visa_cookie_header = visa_browser.cookies.to_hash.map do |name, value|
         "#{name}=#{Rack::Utils.escape(value)}"
       end.join("; ")
@@ -128,19 +131,39 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       browser.host!(auth_host)
       browser.https!
       browser.get(target.request_uri)
+      automatic_relay_responses << ["GET", target.path, browser.response.status]
       auth_entry_target = URI.parse(browser.response.location)
 
       assert_equal URI.parse(sign_in_entry_path).path, auth_entry_target.path
       entry_params = Rack::Utils.parse_nested_query(auth_entry_target.query)
-      entry_ref = entry_params.fetch("entry_ref")
-      host!(base_host)
-      https!
-      admit_auth_ceremony_entry!(
-        auth_entry_target.path,
-        reference: entry_ref,
-        params: entry_params.except("entry_ref"),
-        browser:,
+      entry_params.fetch("entry_ref")
+      browser.get(auth_entry_target.request_uri)
+      automatic_relay_responses << ["GET", auth_entry_target.path, browser.response.status]
+      attach_target = URI.parse(browser.response.location)
+
+      assert_equal "/ceremony_bindings", attach_target.path
+      browser.get(attach_target.request_uri)
+      automatic_relay_responses << ["GET", attach_target.path, browser.response.status]
+      confirmation_target = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
+
+      assert_equal visa_host, confirmation_target.host
+      confirmation_path = confirmation_target.path
+      visa_browser.get(
+        confirmation_target.request_uri, headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+        },
       )
+      automatic_relay_responses << ["GET", confirmation_path, visa_browser.response.status]
+      auth_target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
+
+      assert_equal auth_host, auth_target.host
+      browser.host!(auth_host)
+      browser.get(auth_target.request_uri)
+      automatic_relay_responses << ["GET", auth_target.path, browser.response.status]
+
+      assert_equal URI.parse(auth_app_sign_in_path(ri: "jp")).path, URI.parse(browser.response.location).path
+      browser.get(browser.response.location)
+      automatic_relay_responses << ["GET", "/sign/in", browser.response.status]
 
       assert_predicate binding.reload, :redeemed?
       browser.get(passkey_page_path)
@@ -171,6 +194,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
           "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
         },
       )
+      automatic_relay_responses << ["GET", URI.parse(handoff_path).path, browser.response.status]
 
       assert_equal 303, browser.response.status
       result_uri = URI.parse(browser.response.location)
@@ -192,6 +216,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
 
         assert_equal 303, visa_browser.response.status, visa_browser.response.body
       end
+      automatic_relay_responses << ["GET", result_uri.path, visa_browser.response.status]
       token = token_model.find_by!(public_id: flow.reload.browser_session_ref)
 
       assert_equal "passkey", token.established_authentication_method
@@ -272,11 +297,28 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
           get callback_uri.request_uri
         end
       end
+      automatic_relay_responses << ["GET", callback_uri.path, response.status]
 
       assert_response :redirect
       assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s, :present?
       assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
       transport.verify_stubbed_calls
+
+      assert_equal [
+        ["POST", "/sign", 303],
+        ["GET", "/oauth/authorize", 303],
+        ["GET", "/sign/in/sentry", 303],
+        ["GET", "/sign/in", 303],
+        ["GET", "/ceremony_bindings", 303],
+        ["GET", confirmation_path, 303],
+        ["GET", "/sign/in", 303],
+        ["GET", "/sign/in", 200],
+        ["GET", URI.parse(handoff_path).path, 303],
+        ["GET", result_uri.path, 303],
+        ["GET", callback_uri.path, 302],
+      ], automatic_relay_responses
+      assert_equal 11, automatic_relay_responses.length
+
       get(selector_path)
 
       if surface == :app

@@ -100,6 +100,8 @@ gem "omniauth-google-oauth2"
 gem "omniauth_openid_connect"
 # OmniAuth CSRF protection for Rails.
 gem "omniauth-rails_csrf_protection"
+# client oauth/oidc connectoer
+gem "openid_connect"
 # JSON Web Token support.
 gem "jwt"
 # Web Push notification support.
