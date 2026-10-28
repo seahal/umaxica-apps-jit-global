@@ -1654,6 +1654,11 @@ ja:
           show_title: com ビジター %{public_id}
           title: com のビジター
       avatars:
+        moniker_validation:
+          blank: 名前を入力してください。
+          invalid: 名前に使用できない文字または前後の空白があります。
+          max_bytes: 名前は UTF-8 で最大 %{count} バイトです。
+          max_graphemes: 名前は最大 %{count} 文字です。
         none_selected: この組織コンテキストでは Avatar が選択されていません。
       identity:
         secret_credentials:
@@ -3388,7 +3393,7 @@ ja:
             success: 登録が完了しました。
         new:
           links:
-            sign_in: ログイン
+            sign_in: ログインはこちら
           methods:
             email:
               cta: メールで登録する
@@ -3994,6 +3999,13 @@ ja:
             turnstile_error: セキュリティ検証に失敗しました。ページを更新して再度お試しください。
             verification_code_sent: 確認コードをメールアドレスに送信しました。
             you_have_already_logged_in: あなたはログインしています
+          edit:
+            code_label: 認証コード
+            code_placeholder: 6桁の数字を入力
+            delivery_help: "※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。"
+            description: 完了まであと少しです。メールに送信された6桁の認証コードを入力してください。
+            page_title: 認証コードの入力
+            submit: 送信する
           new:
             registration: 登録しますか？
             you_have_already_logged_in: あなたはログインしています
@@ -4160,7 +4172,12 @@ ja:
           create:
             verification_code_sent: 確認コードをSMSで送信しました。
           edit:
+            code_label: 認証コード
+            code_placeholder: 6桁の数字を入力
+            delivery_help: "※1分以上待っても届かない場合は、入力内容やSMSの受信設定をご確認の上、再度お試しください。"
+            page_title: 認証コード入力
             session_expired: セッションの有効期限が切れました。最初からやり直してください。
+            submit: 送信する
           update:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
@@ -4250,6 +4267,8 @@ ja:
           show:
             disabled: 無効
             enabled: 有効
+            reset_title: MFA リセット
+            reset_unavailable: MFA のリセットは現在利用できません。
         operator_lifecycle_requests:
           actions:
             join: 入会
@@ -4336,6 +4355,7 @@ ja:
         show:
           back: もどる
           description: アカウントの高度なセキュリティ設定を管理します。
+          logout: ログアウト
           operator_lifecycle_requests: 入退会申請
           page_title: 設定
           withdrawal: 退会

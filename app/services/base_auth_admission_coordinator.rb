@@ -610,19 +610,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     private
 
-    def admitted_ceremony_session(binding)
-      case binding
-      when ClientAuthAdmissionBinding
-        ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
-      when VisitorAuthAdmissionBinding
-        VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
-      when OperatorAuthAdmissionBinding
-        OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
-      else
-        raise Denied.new("Auth continuation is unavailable", code: "invalid_admission")
-      end
-    end
-
     private :handoff_purpose_for, :result_purpose_for
 
     def prepare_result_delivery_with_curfew(transaction:, result_digest:, purpose:)
@@ -717,6 +704,15 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       end
     end
 
+    # One read for every earlier ceremony of the parent, so a Switch costs the same query however many
+    # Switches came before it. A missing ceremony row counts as not cancelled and keeps the refusal.
+    def redeemed_ceremonies_all_cancelled?(redeemed, surface:)
+      ceremonies = ceremony_session_class(surface)
+        .where(id: redeemed.map(&:admitted_auth_ceremony_session_id))
+        .index_by(&:id)
+      redeemed.all? { |binding| ceremonies[binding.admitted_auth_ceremony_session_id]&.cancelled? }
+    end
+
     def create_or_reuse_binding!(transaction:, surface:, purpose:, base_browser_nonce:, base_token:,
                                  restart_of:, now:, after_ended_ceremonies: false, entry_intent: nil)
       model = admission_binding_model(surface)
@@ -742,8 +738,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       end
 
       redeemed = model.where(parent_attributes.merge(purpose: purpose)).where.not(redeemed_at: nil).to_a
-      if redeemed.any? &&
-          !(after_ended_ceremonies && redeemed.all? { |binding| admitted_ceremony_session(binding)&.cancelled? })
+      if redeemed.any? && !(after_ended_ceremonies && redeemed_ceremonies_all_cancelled?(redeemed, surface:))
         raise Denied.new("admission redeemed; explicit cancel-and-start is required", code: "invalid_admission")
       end
 

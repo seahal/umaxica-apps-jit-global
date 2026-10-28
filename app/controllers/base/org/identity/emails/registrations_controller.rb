@@ -163,15 +163,15 @@ module Base
 
           def edit_page_props
             {
-              title: t("sign.app.authentication.email.edit.page_title"),
-              description: t("sign.app.authentication.email.edit.description"),
-              delivery_help: t("sign.app.authentication.email.edit.delivery_help"),
+              title: t("sign.org.authentication.email.edit.page_title"),
+              description: t("sign.org.authentication.email.edit.description"),
+              delivery_help: t("sign.org.authentication.email.edit.delivery_help"),
               form: {
                 action: base_org_identity_emails_registration_path,
                 scope: "staff_email",
-                code_label: t("sign.app.authentication.email.edit.code_label"),
-                code_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
-                submit: t("sign.app.authentication.email.edit.submit"),
+                code_label: t("sign.org.authentication.email.edit.code_label"),
+                code_placeholder: t("sign.org.authentication.email.edit.code_placeholder"),
+                submit: t("sign.org.authentication.email.edit.submit"),
                 turnstile: turnstile_stealth_props,
               },
               cancel_link: {

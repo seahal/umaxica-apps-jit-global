@@ -46,7 +46,7 @@ module Base
             items: [
               identity_hub_link(:withdrawal, base_org_identity_withdrawal_path(ri: params[:ri])),
               {
-                label: t("sign.app.settings.show.logout"),
+                label: t("sign.org.settings.show.logout"),
                 href: new_base_org_sign_out_path(ri: params[:ri]),
               },
             ],

@@ -16,10 +16,10 @@ module Base
           def show
             authorize!(current_operator, to: :show?)
             render inertia: true, props: {
-              title: t("sign.app.settings.mfa.show.reset_title"),
-              reset_unavailable: t("sign.app.settings.mfa.show.reset_unavailable"),
+              title: t("sign.org.settings.mfa.show.reset_title"),
+              reset_unavailable: t("sign.org.settings.mfa.show.reset_unavailable"),
               back_link: {
-                label: t("sign.app.settings.show.back"),
+                label: t("sign.org.settings.show.back"),
                 href: base_org_identity_path(ri: params[:ri]),
               },
             }

@@ -1654,6 +1654,11 @@ en:
           show_title: Com visitor %{public_id}
           title: Com visitors
       avatars:
+        moniker_validation:
+          blank: Name can't be blank.
+          invalid: Name contains unsupported characters or surrounding whitespace.
+          max_bytes: Name must use at most %{count} UTF-8 bytes.
+          max_graphemes: Name must contain at most %{count} visible characters.
         none_selected: No Avatar is selected for this organization context.
       identity:
         secret_credentials:
@@ -3388,7 +3393,7 @@ en:
             success: Email address has been verified.
         new:
           links:
-            sign_in: Sign in
+            sign_in: Sign in here
           methods:
             email:
               cta: Sign up with email
@@ -3994,6 +3999,13 @@ en:
             turnstile_error: Security verification failed. Please refresh and try again.
             verification_code_sent: Verification code has been sent to your email address.
             you_have_already_logged_in: You are already signed in.
+          edit:
+            code_label: "Verification code"
+            code_placeholder: "Enter the 6-digit code"
+            delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
+            description: "Almost done. Enter the 6-digit verification code sent to your email address."
+            page_title: "Enter verification code"
+            submit: Register with Email
           new:
             registration: Need an account?
             you_have_already_logged_in: You are already signed in.
@@ -4160,7 +4172,12 @@ en:
           create:
             verification_code_sent: Verification code sent by SMS.
           edit:
+            code_label: "Verification code"
+            code_placeholder: "Enter the 6-digit code"
+            delivery_help: "If it doesn't arrive within a minute, check the phone number and SMS settings, then try again."
+            page_title: "Enter verification code"
             session_expired: Session expired.
+            submit: "Submit"
           update:
             attempts_exceeded: Too many attempts. Please start over.
             code_required: Enter the code.
@@ -4250,6 +4267,8 @@ en:
           show:
             disabled: Disabled
             enabled: Enabled
+            reset_title: MFA reset
+            reset_unavailable: MFA reset is currently unavailable.
         operator_lifecycle_requests:
           actions:
             join: Join
@@ -4336,6 +4355,7 @@ en:
         show:
           back: Back
           description: Manage advanced security controls for your account.
+          logout: Logout
           operator_lifecycle_requests: Join and withdrawal requests
           page_title: Settings
           withdrawal: Withdrawal

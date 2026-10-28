@@ -142,15 +142,15 @@ module Base
 
           def edit_page_props
             {
-              title: t("sign.app.registration.telephone.edit.page_title"),
-              description: t("sign.app.registration.telephone.create.verification_code_sent"),
-              delivery_help: t("sign.app.registration.telephone.edit.delivery_help"),
+              title: t("sign.org.registration.telephone.edit.page_title"),
+              description: t("sign.org.registration.telephone.create.verification_code_sent"),
+              delivery_help: t("sign.org.registration.telephone.edit.delivery_help"),
               form: {
                 action: base_org_identity_telephones_registration_path,
                 scope: "staff_telephone",
-                code_label: t("sign.app.registration.telephone.edit.code_label"),
-                code_placeholder: t("sign.app.registration.telephone.edit.code_placeholder"),
-                submit: t("sign.app.registration.telephone.edit.submit"),
+                code_label: t("sign.org.registration.telephone.edit.code_label"),
+                code_placeholder: t("sign.org.registration.telephone.edit.code_placeholder"),
+                submit: t("sign.org.registration.telephone.edit.submit"),
                 turnstile: turnstile_stealth_props,
               },
               cancel_link: {

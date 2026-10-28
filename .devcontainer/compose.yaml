@@ -165,13 +165,10 @@ services:
           - base.net.localhost
           - base.dev.localhost
           - visa.app.localhost
-          - visa.com.localhost
           - visa.org.localhost
           - auth.app.localhost
-          - auth.com.localhost
           - auth.org.localhost
           - core.app.localhost
-          - core.com.localhost
           - core.org.localhost
           - core.dev.localhost
           - docs.app.localhost
@@ -202,13 +199,11 @@ services:
           # to `core` here. Only Umaxica-owned names belong in this list.
           # See docs/architecture/cloudflare-request-paths.md.
           - auth.umaxica.app
-          - auth.umaxica.com
           - auth.umaxica.org
           - www.umaxica.app
           - www.umaxica.com
           - www.umaxica.org
           - visa.umaxica.app
-          - visa.umaxica.com
           - visa.umaxica.org
           - edit.umaxica.org
           - tech.umaxica.org
@@ -217,9 +212,6 @@ services:
           - www-jp.umaxica.com
           - www-jp.umaxica.org
           - jp.umaxica.dev
-          - info.umaxica.app
-          - info.umaxica.com
-          - info.umaxica.org
           - guid.umaxica.net
           - palm-jp.umaxica.app
           - mission.core.dev.localhost

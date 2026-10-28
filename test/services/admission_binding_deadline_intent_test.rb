@@ -149,6 +149,94 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
     end
   end
 
+  test "app Switch reads the earlier ceremonies in one query however many Switches the parent has had" do
+    parent = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "authentication",
+      params: {
+        client_id: "core-app-jp",
+        redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch("client").first,
+        response_type: "code",
+        scope: "openid profile",
+        state: SecureRandom.hex(16),
+        nonce: SecureRandom.hex(16),
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+      },
+    ).transaction
+    nonce = SecureRandom.hex(32)
+    issued = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: parent, base_browser_nonce: nonce, base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issued.reference)
+    ceremony_selects = []
+    # Three Switches: the last one runs with three redeemed Bindings behind it.
+    %w(sign_up sign_in sign_up).each do |target|
+      attached, raw_sid = ClientAuthCeremonySession.issue!
+      binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+      binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+        previous_raw_sid: raw_sid, admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: parent.transaction_id,
+      )
+      binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+      admitted.cancel!
+      ceremony_selects.clear
+      counter =
+        lambda do |*, payload|
+          ceremony_selects << payload[:sql] if payload[:sql].match?(/\ASELECT .*FROM "client_auth_ceremony_sessions"/)
+        end
+      replacement =
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          BaseAuthAdmissionCoordinator.issue_switch_admission!(
+            transaction: parent, base_browser_nonce: nonce, base_token: nil, target: target,
+          )
+        end
+      binding = ClientAuthAdmissionBinding.find_by!(entry_ref: replacement.reference)
+    end
+
+    assert_equal 1, ceremony_selects.size, ceremony_selects.join("\n")
+  end
+
+  test "app Switch is refused while an earlier redeemed Binding's ceremony is still live" do
+    parent = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "authentication",
+      params: {
+        client_id: "core-app-jp",
+        redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch("client").first,
+        response_type: "code",
+        scope: "openid profile",
+        state: SecureRandom.hex(16),
+        nonce: SecureRandom.hex(16),
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+      },
+    ).transaction
+    nonce = SecureRandom.hex(32)
+    issued = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: parent, base_browser_nonce: nonce, base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issued.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      previous_raw_sid: raw_sid, admission_purpose: "authentication_handoff",
+      authorization_transaction_ref: parent.transaction_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+
+    assert_no_difference -> { ClientAuthAdmissionBinding.count } do
+      error =
+        assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+          BaseAuthAdmissionCoordinator.issue_switch_admission!(
+            transaction: parent, base_browser_nonce: nonce, base_token: nil, target: "sign_up",
+          )
+        end
+      assert_equal "invalid_admission", error.code
+    end
+    assert_not admitted.reload.cancelled?
+  end
+
   test "re-verification stores not_applicable and rejects authentication intent on all realms" do
     [
       ["app", clients(:one), ClientToken, { user: clients(:one) }, ClientStepUpCeremonyTransaction,

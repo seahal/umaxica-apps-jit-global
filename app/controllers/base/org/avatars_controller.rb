@@ -105,11 +105,11 @@ module Base
           max_bytes: max_bytes,
           max_grapheme_clusters: max_grapheme_clusters,
           client_validation: {
-            blank: t("base.app.avatars.moniker_validation.blank"),
-            invalid: t("base.app.avatars.moniker_validation.invalid"),
-            max_bytes: t("base.app.avatars.moniker_validation.max_bytes", count: max_bytes),
+            blank: t("base.org.avatars.moniker_validation.blank"),
+            invalid: t("base.org.avatars.moniker_validation.invalid"),
+            max_bytes: t("base.org.avatars.moniker_validation.max_bytes", count: max_bytes),
             max_graphemes: t(
-              "base.app.avatars.moniker_validation.max_graphemes", count: max_grapheme_clusters,
+              "base.org.avatars.moniker_validation.max_graphemes", count: max_grapheme_clusters,
             ),
           },
         }

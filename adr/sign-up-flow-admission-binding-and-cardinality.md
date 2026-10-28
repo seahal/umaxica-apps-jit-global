@@ -2,6 +2,10 @@
 
 ## Status
 
+**Amended (2026-10-28):** one in-progress Auth Ceremony per browser and surface (option B); see
+the amendment under the cardinality rule. Not yet implemented beyond the existing replacement on
+redemption.
+
 **Accepted (2026-10-21); partially implemented (2026-10-24).** APP/COM Flow ownership now has a
 required restrictive FK, immutable assignment, one-in-progress index, admitted-owner lookup and
 child-first collection. The duplicate Ceremony reference was removed by WU-01. This does not
@@ -62,11 +66,37 @@ is retained. `redeemed` means the admission was accepted; it proves neither succ
 identity authentication nor Session issuance.
 
 At most one Admission / Ceremony may progress concurrently for the **same parent Transaction**,
-including after Redemption. Different parent Transactions remain independent. This is not a
-browser-wide singleton: independent RP OIDC Authorization Transactions and multiple tabs remain
-supported. Historical rows may coexist, and cancelled Ceremony history may be followed by a new
-Admission for the same parent. A permanent UNIQUE over all historical parent references would
-violate that contract.
+including after Redemption. Historical rows may coexist, and cancelled Ceremony history may be
+followed by a new Admission for the same parent. A permanent UNIQUE over all historical parent
+references would violate that contract.
+
+**Amended (2026-10-28, owner decision; `one.md` OQ-1, option B).** In addition, **one browser
+progresses at most one Auth Ceremony per Auth surface at a time**, across all parent Transactions.
+This replaces the earlier statement that this rule "is not a browser-wide singleton" and that
+independent parents progress side by side in one browser.
+
+- The progressing Ceremony is the one behind the browser's `auth_sid` for that surface. Redeeming
+  a new Admission replaces it: the previous Ceremony in that browser stops progressing, whichever
+  parent it belongs to. This is the existing `AuthCeremonySession.rotate_and_admit!` behaviour,
+  now stated as the contract.
+- Replacement happens only after the new Admission has passed every existing check (reference,
+  browser binding, parent expiry, consumption and intent). A refused, expired, replayed or
+  foreign-browser Admission replaces nothing and leaves the current Ceremony intact.
+- Later requests and provider callbacks for the replaced Ceremony are refused with the fixed
+  state-mismatch response and change nothing (no session reset, no `auth_sid` change, no
+  authentication state change). The replaced parent is not cancelled towards its RP; it stays
+  unfinished until it expires and is purged. Only an explicit Cancel returns `access_denied`.
+- Several tabs may still show the same Ceremony, because they share the browser's cookies and the
+  same server state.
+- Different parent Transactions remain independent rows on the server; this amendment limits only
+  what one browser can progress at once.
+
+Why: the owner wants users not to be confused by several sign-in attempts running at once in one
+browser, and wants the simplest implementation. Per-parent parallel progress in one browser would
+require every single-slot Auth session value (current Flow marker, sign-up state, pending MFA,
+session-limit gate, social intent) to become per-parent, and an authorized Cancel's
+`reset_session` would end all parallel attempts anyway. A browser-wide singleton needs no
+client-side storage such as `sessionStorage`; the shared `auth_sid` cookie already provides it.
 
 Unused Admission uniqueness and admitted Ceremony uniqueness are separate conditions. Existing
 locking and indexes are retained, but are not asserted to prove every case of this broader

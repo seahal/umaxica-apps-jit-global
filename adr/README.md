@@ -118,11 +118,23 @@ Current identity authority decision:
   Google/Apple sign-up ends in canonical Sign In First. Supersedes the social-commit-at-Base parts
   of `adr/sign-up-authentication-handoff-and-social-rt.md`.
 
+- [Sign-up One-Day Minimum Age and Feature-Level Age Restrictions](sign-up-one-day-minimum-age-and-feature-level-age-restrictions.md)
+  — **Accepted (2026-10-28); not implemented.** `.app` and `.org` sign-up accept a birthdate at least
+  one day before the check date and refuse today or later; the identity is the OP's foundation and
+  age-based restrictions move to features such as avatars. Replaces the 16/13 thresholds in
+  `docs/policy/signup-eligibility.md` when implemented. Amended the same day: the Preference
+  adult-content gate is dormant (kept only in the model layer, unused by controllers) and, if used
+  again, is a browser-scoped setting of the consent kind, never in the shared display cookie or the
+  account preference.
+
 - `adr/sign-up-flow-admission-binding-and-cardinality.md` — **Accepted (2026-10-21)**; E1 APP/COM
   Flow-to-Admission authority, parent-scoped concurrency, status-scoped Flow cardinality, restart
   invariants, and explicit Pending evidence/migration/deletion decisions. New association and
   constraints are not implemented. The Base/Auth ADR's 2026-10-21 amendment separately accepts Auth
   OIDC Result GET/POST `/sign/result`; routes remain unchanged in this ADR-only update.
+  Amended 2026-10-28: one browser progresses at most one Auth Ceremony per surface across all
+  parents; redeeming a new Admission replaces the previous one, whose later requests get the fixed
+  state-mismatch response.
 
 - `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19), amended
   2026-10-24 (D-116).** APP, COM, and ORG use owner-serialized registration, physical lifecycle
