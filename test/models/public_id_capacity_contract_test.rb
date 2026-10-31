@@ -5,7 +5,6 @@ require "test_helper"
 class PublicIdCapacityContractTest < ActiveSupport::TestCase
   TARGETS = [
     [Client, "clients", "chk_clients_pid"],
-    [Visitor, "visitors", "chk_visitors_pid"],
     [AppPreference, "app_preferences", "chk_app_preferences_pid"],
     [ComPreference, "com_preferences", "chk_com_preferences_pid"],
     [OrgPreference, "org_preferences", "chk_org_preferences_pid"],
@@ -32,18 +31,6 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
       persona_assignments
       personas
     ),
-    ComZenithRecord => %w(
-      com_enforcement_appeals
-      companies
-      company_ownership_transfer_requests
-      company_units
-      core_com_visitor_bridges
-      individual_assignments
-      individual_ownership_transfer_requests
-      individuals
-      visitor_accounts
-      visitor_identities
-    ),
     OrgZenithRecord => %w(
       agent_assignments
       agent_ownership_transfer_requests
@@ -59,7 +46,6 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
     ),
     OpBaseAppRecord => %w(logout_transactions),
     AppSignalRecord => %w(client_notification_records member_notifications),
-    ComSignalRecord => %w(visitor_notification_records),
     OrgSignalRecord => %w(operator_notification_records operator_notifications),
     AvatarRecord => %w(avatar_groups avatars group_avatar_memberships handles post_versions posts),
   }.freeze
@@ -79,8 +65,15 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
         assert_match(/char_length\(\(?public_id\)?(?:::text)?\) = 21/, constraint.expression)
 
         record =
-          [Client,
-           Visitor,].include?(model) ? model.create!(security_mode_id: SecurityModeTestDefault.id_for(model)) : model.create!
+          case model.name
+          when "Client" then model.create!(security_mode_id: SecurityModeTestDefault.id_for(model))
+          when "ComPreference"
+            model.create!(
+              jti: SecureRandom.uuid, last_issued_at: Time.current,
+              last_issued_expires_at: 400.days.from_now,
+            )
+          else model.create!
+          end
         long_value = "a" * 22
 
         assert_raises(ActiveRecord::StatementInvalid) do

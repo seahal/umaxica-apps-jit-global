@@ -10,7 +10,7 @@ module Preference
 
     test "resolves preference class from controller path" do
       assert_equal AppPreference, PreferenceClassRegistry.for_controller_path("core/app/api/v0/preferences")
-      assert_equal ComPreference, PreferenceClassRegistry.for_controller_path("core/com/api/v0/preferences")
+      assert_equal ComPreference, PreferenceClassRegistry.for_controller_path("base/com/api/v0/preferences")
       assert_equal OrgPreference, PreferenceClassRegistry.for_controller_path("core/org/api/v0/preferences")
     end
 
@@ -18,7 +18,6 @@ module Preference
       assert_equal AppPreferenceLanguageOption, PreferenceClassRegistry.option_class("App", :language)
       assert_equal ComPreferenceRegionOption, PreferenceClassRegistry.option_class("Com", "Region")
       assert_equal OrgPreferenceTimezoneOption, PreferenceClassRegistry.option_class("Org", :timezone)
-      assert_equal VisitorPreferenceThemeOption, PreferenceClassRegistry.option_class("Visitor", :theme)
     end
 
     test "resolves status and audit classes from preference class" do

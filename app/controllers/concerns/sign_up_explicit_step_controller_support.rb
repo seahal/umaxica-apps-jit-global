@@ -74,11 +74,7 @@ module SignUpExplicitStepControllerSupport
         ),
       )
     end
-    if gate.refusal == :no_active_flow && sign_up_session_state.age_restricted?
-      render_sign_up_age_restricted
-    else
-      render_sign_flow_phase_refusal
-    end
+    render_sign_flow_phase_refusal
     false
   end
 

@@ -34,21 +34,21 @@ class RiRoutingContractTest < ActiveSupport::TestCase
   # Targets that serve regional HTML and therefore owe the `ri` contract described in
   # docs/architecture/preference.md:197.
   RI_PARTICIPATING_TARGETS = %w(
-    auth/app auth/com auth/org
+    auth/app auth/org
     base/app base/com base/org
-    core/app core/com core/org
+    core/app core/org
     edit/org
     warp/app warp/com warp/org
     palm/app
     tech/org
-    visa/app visa/com visa/org
+    visa/app visa/org
   ).freeze
 
   # Visa's browser-facing authority pages intentionally reuse the root-session Authority base from
   # the matching Base realm. They must inherit PreferenceGlobal and set_region, but do not own a
   # second ApplicationController: creating one would blur the OP/RP boundary described by two.md
   # V3. The source-level contract below therefore resolves AuthorityController for these targets.
-  RI_SHARED_AUTHORITY_TARGETS = %w(visa/app visa/com visa/org).freeze
+  RI_SHARED_AUTHORITY_TARGETS = %w(visa/app visa/org).freeze
 
   # Targets deliberately outside the contract. An unexplained absence is indistinguishable from the
   # oversight this test exists to catch, so every exemption is grouped under a stated reason.
@@ -79,24 +79,15 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/auth/app/edge/v0/token/checks_controller.rb
     app/controllers/auth/app/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/app/omniauth/omniauth_callbacks_controller.rb
-    app/controllers/auth/com/edge/v0/token/checks_controller.rb
-    app/controllers/auth/com/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/org/edge/v0/token/checks_controller.rb
     app/controllers/auth/org/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
     app/controllers/base/app/oidc/callbacks_controller.rb
     app/controllers/base/app/sign/interruptions_controller.rb
-    app/controllers/base/com/oidc/callbacks_controller.rb
-    app/controllers/base/com/sign/interruptions_controller.rb
     app/controllers/base/org/oidc/callbacks_controller.rb
     app/controllers/base/org/sign/interruptions_controller.rb
-    app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/app/oidc/callbacks_controller.rb
     app/controllers/core/app/sign/interruptions_controller.rb
-    app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
-    app/controllers/core/com/oidc/callbacks_controller.rb
-    app/controllers/core/com/sign/interruptions_controller.rb
-    app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
     app/controllers/core/org/sign/interruptions_controller.rb
     app/controllers/edit/org/oidc/callbacks_controller.rb
@@ -106,12 +97,9 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/tech/org/oidc/callbacks_controller.rb
     app/controllers/tech/org/sign/interruptions_controller.rb
     app/controllers/visa/app/authorization_base_controller.rb
-    app/controllers/visa/com/authorization_base_controller.rb
     app/controllers/visa/org/authorization_base_controller.rb
     app/controllers/warp/app/oidc/callbacks_controller.rb
     app/controllers/warp/app/sign/interruptions_controller.rb
-    app/controllers/warp/com/oidc/callbacks_controller.rb
-    app/controllers/warp/com/sign/interruptions_controller.rb
     app/controllers/warp/org/oidc/callbacks_controller.rb
     app/controllers/warp/org/sign/interruptions_controller.rb
   ).freeze
@@ -131,7 +119,6 @@ class RiRoutingContractTest < ActiveSupport::TestCase
   # longer applies to them.
   RI_HTML_EXEMPT_CONTROLLERS = %w(
     base/app/preference/emails
-    base/com/preference/emails
     base/org/preference/emails
   ).freeze
 

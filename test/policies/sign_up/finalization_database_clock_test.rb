@@ -3,8 +3,8 @@
 require "test_helper"
 
 class SignUpFinalizationDatabaseClockTest < ActiveSupport::TestCase
-  test "finalization follows the Ticket database deadline immediately before at and after expiry in both realms" do
-    [[ClientSignUpFlow, Client, :app], [VisitorSignUpFlow, Visitor, :com]].each do |flow_class, owner_class, surface|
+  test "finalization follows the Ticket database deadline immediately before at and after expiry" do
+    [[ClientSignUpFlow, Client, :app]].each do |flow_class, owner_class, surface|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       deadline = flow_class.database_now + 10.minutes
       flow = flow_class.create!(

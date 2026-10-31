@@ -19,10 +19,20 @@ module Base
 
             AUTHENTICATION_MODE = :open
 
-            declare_authentication_mode! :open
+            rescue_from PreferenceBase::ResolutionError, with: :render_preference_dependency_failure
+            rescue_from PreferenceBrowserBinding::MismatchError, with: :render_binding_mismatch
 
-            skip_before_action :set_preferences_cookie, raise: false
-            skip_before_action :set_current_actor, raise: false
+            skip_before_action :set_preferences_cookie
+
+            private
+
+            def render_preference_dependency_failure
+              render_problem(:service_unavailable)
+            end
+
+            def render_binding_mismatch
+              render_problem(:authorization_denied)
+            end
           end
         end
       end

@@ -4,7 +4,7 @@
 # Cookie transport for credentials issued by Base's RP Session authority.
 # This boundary is deliberately separate from root Browser Session cookie
 # helpers: an RP Access/Refresh credential must never be made to look like a
-# root ClientToken, VisitorToken, or OperatorToken.
+# root ClientToken or OperatorToken.
 module OidcRpBrowserCredentialContract
   ACCESS_COOKIE = OidcRpCookieName.access
   REFRESH_COOKIE = OidcRpCookieName.refresh

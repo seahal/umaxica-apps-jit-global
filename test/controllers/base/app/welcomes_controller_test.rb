@@ -276,7 +276,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
     get :show, params: { ri: "jp",
                          pt: begin
                            fv5036 = "/identity?ri=jp"
-                           fv5038 = "com"
+                           fv5038 = "org"
                            fv5039 = "authentication"
                            fv5037 = SESSION_NONCE
                            fv5035 = 5.minutes
@@ -564,7 +564,7 @@ class Base::App::WelcomesControllerTest
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = token
   end
 
-  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org/.com)
+  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org)
   # must resolve to surface:BASE_* so the access token issuer matches the surface the
   # controller validates against.
   def jwt_issuer_id_for_test_host(host, resource_type)
@@ -583,13 +583,10 @@ class Base::App::WelcomesControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -610,10 +607,4 @@ class Base::App::WelcomesControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
 end

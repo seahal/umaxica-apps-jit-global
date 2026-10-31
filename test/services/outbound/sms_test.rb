@@ -6,6 +6,27 @@ require "test_helper"
 
 module Outbound
   class SmsTest < ActiveSupport::TestCase
+    test "a nonpositive or nonfinite transport budget is refused before resolving the provider" do
+      OutboundSms.stub(:provider, -> { flunk("must not resolve provider") }) do
+        [0, -1, Float::INFINITY].each do |timeout|
+          assert_raises(ArgumentError) do
+            OutboundSms.deliver_now(to: "+819012345678", title: "Verification", body: "code", timeout: timeout)
+          end
+        end
+      end
+    end
+
+    test "immediate delivery stops waiting when its transport budget expires" do
+      provider = Object.new
+      provider.define_singleton_method(:send_message) { |**| sleep 1 }
+
+      OutboundSms.stub(:provider, provider) do
+        assert_raises(Net::ReadTimeout) do
+          OutboundSms.deliver_now(to: "+819012345678", title: "Verification", body: "code", timeout: 0.05)
+        end
+      end
+    end
+
     include ActiveJob::TestHelper
 
     test "accepts a common outbound message payload" do

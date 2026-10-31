@@ -1,90 +1,16 @@
-# == Schema Information
-#
-# Table name: operator_preferences
-# Database name: org_principal
-#
-#  id              :bigint           not null, primary key
-#  consent_version :uuid
-#  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
-#  currency        :string           default("jpy"), not null
-#  date_format     :string           default("iso"), not null
-#  density         :string           default("standard"), not null
-#  functional      :boolean          default(FALSE), not null
-#  language        :string           default("ja"), not null
-#  motion          :string           default("standard"), not null
-#  page_size       :string           default("20"), not null
-#  performant      :boolean          default(FALSE), not null
-#  region          :string           default("jp"), not null
-#  targetable      :boolean          default(FALSE), not null
-#  theme           :string           default("sy"), not null
-#  time_format     :string           default("hour_24"), not null
-#  timezone        :string           default("Asia/Tokyo"), not null
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
-#  public_id       :string(21)
-#  staff_id        :bigint           not null
-#
-# Indexes
-#
-#  index_operator_preferences_on_public_id  (public_id) UNIQUE
-#  index_operator_preferences_on_staff_id   (staff_id) UNIQUE
-#
-# Foreign Keys
-#
-#  fk_rails_...  (staff_id => operators.id)
-#
 _fixture:
   model_class: OperatorPreference
 
-# Table name: staff_preferences
-# Database name: org_principal
-#
-#  id              :bigint           not null, primary key
-#  consent_version :uuid
-#  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
-#  currency        :string           default("jpy"), not null
-#  date_format     :string           default("iso"), not null
-#  density         :string           default("standard"), not null
-#  functional      :boolean          default(FALSE), not null
-#  page_size  :string           default("20"), not null
-#  language        :string           default("ja"), not null
-#  motion          :string           default("standard"), not null
-#  performant      :boolean          default(FALSE), not null
-#  region          :string           default("jp"), not null
-#  targetable      :boolean          default(FALSE), not null
-#  theme           :string           default("sy"), not null
-#  time_format     :string           default("hour_24"), not null
-#  timezone        :string           default("Asia/Tokyo"), not null
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
-#  public_id       :string(21)
-#  staff_id        :bigint           not null
-#
-# Indexes
-#
-#  index_staff_preferences_on_public_id  (public_id) UNIQUE
-#  index_staff_preferences_on_staff_id   (staff_id) UNIQUE
-#
-# Foreign Keys
-#
-#  fk_rails_...  (staff_id => operators.id)
-#
 one:
   id: 1
   public_id: "staff_pref_00000001xx"
-  staff_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
-  consented: false
-  functional: false
-  performant: false
-  targetable: false
+  operator_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  status_id: 0
+  explicit_fields: []
 
 two:
   id: 2
   public_id: "staff_pref_00000002xx"
-  staff_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
-  consented: false
-  functional: false
-  performant: false
-  targetable: false
+  operator_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
+  status_id: 0
+  explicit_fields: []

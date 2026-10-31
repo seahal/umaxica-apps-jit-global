@@ -93,18 +93,35 @@ module WithdrawalCeremonyReentry
       return render_withdrawal_reentry_invalid_code(start_time)
     end
 
-    verified = EmailReentryOtpVerificationCommitter.call(
-      email: email, code: params[:pass_code], operation: "withdrawal",
-      transaction_ref: state["otp_transaction_ref"], session_ref: state["session_ref"],
-    )
-    unless verified
-      return render_withdrawal_reentry_invalid_code(start_time)
-    end
+    ceremony = issue_withdrawal_after_otp!(email: email, subject: subject, state: state)
+    return render_withdrawal_reentry_invalid_code(start_time) unless ceremony
 
     session.delete(REENTRY_SESSION_KEY)
     ensure_min_elapsed(start_time, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
-    issue_withdrawal_ceremony!(subject: subject, purpose: "status")
     safe_redirect_to(withdrawal_edit_path, fallback: withdrawal_new_path, status: :see_other)
+  end
+
+  def issue_withdrawal_after_otp!(email:, subject:, state:)
+    subject.with_lock do
+      email.with_lock do
+        next unless withdrawal_subject_from_email(email)&.id == subject.id &&
+          withdrawal_reentry_subject_eligible?(subject) && withdrawal_reentry_email_current?(email)
+
+        verified = EmailReentryOtpVerificationCommitter.call(
+          email: email, code: params[:pass_code], operation: "withdrawal",
+          transaction_ref: state["otp_transaction_ref"], session_ref: state["session_ref"],
+        )
+        next unless verified && withdrawal_reentry_subject_eligible?(subject.reload) &&
+          withdrawal_reentry_email_current?(email.reload)
+
+        issue_withdrawal_ceremony!(subject: subject, purpose: "status")
+      end
+    end
+  end
+
+  def withdrawal_reentry_email_current?(email)
+    email.is_a?(ClientEmail) && email.binding_effective? && email.accessible?(email.class.database_now) &&
+      ClientEmail::EDITABLE_SUBSCRIPTION_PREFERENCE_STATUS_IDS.include?(email.user_email_status_id)
   end
 
   def render_withdrawal_reentry_invalid_code(start_time)

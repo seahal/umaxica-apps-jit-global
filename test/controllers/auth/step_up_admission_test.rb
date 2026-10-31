@@ -4,9 +4,11 @@ require "test_helper"
 require "webauthn/fake_client"
 
 class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
 
-  fixtures :clients, :client_statuses, :visitor_statuses
+  fixtures :clients, :client_statuses
 
   setup do
     TurnstileVerifierStub.reset!
@@ -22,10 +24,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :bad_request
     get new_auth_app_verification_totp_path(ri: "jp")
-
-    assert_response :bad_request
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    get new_auth_com_verification_passkey_path(ri: "jp")
 
     assert_response :bad_request
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
@@ -82,7 +80,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
           )
           admission_auth_host = {
             "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
             "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
           }.fetch(admission_issuance.transaction.surface)
           admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -95,9 +92,16 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
           admission_issuance
         end
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+      # The relay chain D-100 accepts: entry GET relays to /ceremony_bindings, the Base confirmation
+      # receiver redeems it, and the clean verification URL renders the method entry page.
+      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+      3.times do
+        break unless response.status == 303
+
+        location = URI.parse(response.headers["Location"])
+        get location.path, params: Rack::Utils.parse_nested_query(location.query)
+      end
+      assert_response :ok
       get new_auth_app_verification_totp_path(ri: "jp")
       form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
       TurnstileVerifierStub.enabled = true
@@ -199,7 +203,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -212,9 +215,16 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+    csrf = nil
+    3.times do
+      page = response.parsed_body
+      csrf = page.at_css("script[data-page='app']") && JSON.parse(page.at_css("script[data-page='app']").text).fetch("props").fetch("form").fetch("csrf_token") rescue nil
+      break unless response.status == 303
+
+      location = URI.parse(response.headers["Location"])
+      get location.path, params: Rack::Utils.parse_nested_query(location.query)
+    end
     get new_auth_app_verification_totp_path(ri: "jp")
 
     assert_response :success
@@ -283,7 +293,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -297,10 +306,15 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
       end
     record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+    3.times do
+      break unless response.status == 303
+
+      location = URI.parse(response.headers["Location"])
+      get location.path, params: Rack::Utils.parse_nested_query(location.query)
+    end
     get new_auth_app_verification_email_path(ri: "jp")
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')&.attr("content")
 
     assert_response :success
     assert_equal 0, record.reload.email_code_generation
@@ -352,79 +366,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal base_app_verification_cancellation_path, URI.parse(response.location).path
   end
 
-  test "COM Email OTP admission uses only the Visitor transaction and verified credential" do
-    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-    email = actor.visitor_emails.create!(
-      address: "admitted-com-email@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
-    email.finalize_binding!
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    record = VisitorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    get auth_com_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
-    get new_auth_com_verification_email_path(ri: "jp")
-
-    assert_response :success
-    assert_equal 0, record.reload.email_code_generation
-    form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
-    post form.fetch("action"), params: { authenticity_token: form.fetch("csrf_token") }
-
-    assert_redirected_to edit_auth_com_verification_email_path(issuance.transaction.transaction_id, ri: "jp")
-    assert_equal email.public_id, record.reload.email_credential_ref
-    assert_equal 1, record.email_code_generation
-    assert_nil cookies[AuthenticationCookieName.access]
-    assert_nil cookies[AuthenticationCookieName.refresh]
-  end
-
   test "Passkey GET creates no challenge and options POST binds the admitted transaction" do
     actor = clients(:one)
     origin = "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}"
@@ -473,7 +414,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -487,10 +427,16 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
       end
     record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+    csrf = nil
+    3.times do
+      break unless response.status == 303
+
+      location = URI.parse(response.headers["Location"])
+      get location.path, params: Rack::Utils.parse_nested_query(location.query)
+    end
     get new_auth_app_verification_passkey_path(ri: "jp")
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')&.attr("content")
 
     assert_response :success
     assert_nil record.reload.passkey_challenge_ref
@@ -539,7 +485,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
-  test "Auth accepts step-up through a nonconsuming GET and CSRF POST without an Auth root credential" do
+  test "Auth completes the step-up entry relay without an Auth root credential" do
     actor = clients(:one)
     actor.client_passkeys.create!(webauthn_id: "admission-passkey", public_key: "public-key")
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
@@ -578,7 +524,6 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -591,21 +536,17 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    assert_no_difference("ClientAuthCeremonySession.count") do
-      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    # D-53 B: the entry relay replaces the attach session with an admitted ceremony row exactly once.
+    assert_difference -> { ClientAuthCeremonySession.count }, 1 do
+      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+      5.times do
+        break unless response.status == 303
+
+        get response.headers["Location"]
+      end
     end
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_path(ri: "jp"),
-         params: { entry_ref: issuance.reference, authenticity_token: csrf }
-
-    assert_response :see_other
-    assert_redirected_to auth_app_verification_path(ri: "jp")
-    assert_nil cookies[AuthenticationCookieName.access]
-    assert_nil cookies[AuthenticationCookieName.refresh]
-    get response.location
-
-    assert_response :success
+    assert_response :ok
+    get auth_app_verification_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
     assert_equal ["passkey"], props.fetch("methods").map { |method| method.fetch("key") }
@@ -616,10 +557,8 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     other_browser.get(auth_app_verification_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")))
 
     assert_equal 400, other_browser.response.status
-    post auth_app_verification_path(ri: "jp"),
-         params: { entry_ref: issuance.reference, authenticity_token: csrf }
-
-    assert_response :see_other
-    assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
+    get auth_app_verification_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    assert_equal ["passkey"], props.fetch("methods").map { |method| method.fetch("key") }
   end
 end

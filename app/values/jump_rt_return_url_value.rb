@@ -20,6 +20,7 @@ class JumpRtReturnUrlValue
       uri = URI.parse(url.to_s)
       return nil unless uri.is_a?(URI::HTTPS)
       return nil if uri.host.blank? || uri.userinfo.present? || !uri.fragment.nil?
+      return nil if uri.path.start_with?("//")
 
       params = UrlSearchParamsValue.parse(uri.query)
       return nil unless valid_keys?(params.keys)

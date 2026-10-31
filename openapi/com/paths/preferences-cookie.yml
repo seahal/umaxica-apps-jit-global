@@ -1,18 +1,12 @@
 # GET and PATCH /api/v0/preferences/cookie on the com surface.
 servers:
-  - url: https://jp.umaxica.com
-    description: Core public host for the com (public and corporate) surface.
   - url: https://www.umaxica.com
     description: Base public host for the com (public and corporate) surface.
-  - url: https://auth.umaxica.com
-    description: Auth public host for the com (public and corporate) surface.
-  - url: https://www-jp.umaxica.com
-    description: Warp public host for the com (public and corporate) surface.
 get:
   summary: Cookie-consent banner state
   description: >-
     Reports whether the cookie-consent banner should be shown. Open: no session is required.
-    Served host-locally by each listed host: each host reads and writes its own host-only preference credentials, and a browser calls only its current origin.
+    A same-TLD preference token and a matching host-only browser binding identify a recorded decision.
   operationId: getPreferencesCookie
   tags: [Preferences]
   security: []
@@ -28,6 +22,8 @@ get:
         application/json:
           schema:
             $ref: "../../shared/components.yml#/schemas/CookieBanner"
+    "400":
+      description: Ambiguous duplicate preference cookies were rejected without a response body.
     "406":
       $ref: "../../shared/components.yml#/responses/NotAcceptable"
     "429":
@@ -35,11 +31,10 @@ get:
 patch:
   summary: Record cookie consent
   description: >-
-    Records a cookie-consent decision. Open: a caller without a preference token records the
-    decision in the consent buffer only. `cookie.consented` is required; each present flag must be
+    Records a cookie-consent decision. Open: a caller without a valid preference token receives a
+    new preference. Either `consented` or `cookie.consented` is required; each present flag must be
     a boolean or one of `1`, `0`, `"1"`, `"0"`, `"true"`, `"false"`, `"t"`, `"f"` (and the
-    upper-case forms), otherwise the request is a 422 naming each field. Successful writes have no
-    representation.
+    upper-case forms), otherwise the request is a 422 naming each field.
   operationId: patchPreferencesCookie
   tags: [Preferences]
   security: []
@@ -49,8 +44,11 @@ patch:
       application/json:
         schema:
           type: object
-          required: [cookie]
+          anyOf:
+            - required: [consented]
+            - required: [cookie]
           properties:
+            consented: {}
             cookie:
               type: object
               required: [consented]
@@ -60,19 +58,39 @@ patch:
                 performant: {}
                 targetable: {}
   responses:
-    "204":
-      description: Consent recorded. No body (RFC 9110 15.3.5).
+    "200":
+      description: Recorded consent choices.
       headers:
         Cache-Control:
           schema:
             type: string
             enum: [no-store]
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [cookie]
+            properties:
+              cookie:
+                type: object
+                required: [consented, functional, performant, targetable]
+                properties:
+                  consented: { type: boolean }
+                  functional: { type: boolean }
+                  performant: { type: boolean }
+                  targetable: { type: boolean }
     "400":
-      $ref: "../../shared/components.yml#/responses/BadRequest"
-    "401":
-      $ref: "../../shared/components.yml#/responses/ForeignPreferenceToken"
+      description: Malformed JSON or ambiguous duplicate preference cookies.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "../../shared/components.yml#/schemas/Problem"
     "403":
-      $ref: "../../shared/components.yml#/responses/CsrfVerificationFailed"
+      description: CSRF verification failed or the browser binding did not match.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "../../shared/components.yml#/schemas/Problem"
     "406":
       $ref: "../../shared/components.yml#/responses/NotAcceptable"
     "415":
@@ -81,3 +99,5 @@ patch:
       $ref: "../../shared/components.yml#/responses/ValidationFailed"
     "429":
       $ref: "../../shared/components.yml#/responses/RateLimited"
+    "503":
+      $ref: "../../shared/components.yml#/responses/Problem"

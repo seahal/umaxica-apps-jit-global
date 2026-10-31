@@ -1,0 +1,7 @@
+# ORG sign-in admission test alignment
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had extensive uncommitted changes affecting the checks.
+- Before the edit, `PARALLEL_WORKERS=1 bin/rails test test/controllers/auth/org/sign_ins_controller_test.rb` produced 8 runs, 22 assertions, 6 failures and no errors. All six failures were the baseline-listed sign-in-page tests expecting success after following the obsolete admission redirect.
+- Replaced the duplicated old continuation-driving code in those six tests with the existing `admit_auth_ceremony_entry!` helper. The original page assertions and the untrusted `pt` input remain. The helper uses HTTP for the Auth entry and attachment, and confirms the Base binding directly; it does not test the complete browser-through-Base confirmation path.
+- After the edit the same file passed: 8 runs, 63 assertions, no failures or errors. RuboCop and scoped `git diff --check` passed. The full-suite result in `2026-10-31-two-full-suite-after-corrections-N5R8.md` predates this test change; full WU-A1 and browser acceptance remain unverified.
+- Ran `RAILS_ENV=test bin/rails routes -c auth/org` with the configured test environment. The command succeeded and produced 69 lines naming `auth/org/` controllers; none of those lines contained `otp`, `redeliver`, `resend`, or `email`. This is a route/controller-name inventory, not proof about dynamically mounted routes or external services. Source inspection of the ORG scope in `config/routes/auth.rb` likewise found no Email OTP resend route.

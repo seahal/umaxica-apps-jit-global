@@ -58,7 +58,7 @@ class SignUpStuckRegistrationReportQueryTest < ActiveSupport::TestCase
     assert_not_includes report.to_json, address
   end
 
-  test "keeps APP and COM orphan records within their own surface" do
+  test "keeps orphan records within their own surface" do
     app_client = Client.create!(
       public_id: PublicId.generate,
       security_mode_id: SecurityModeConfigurable::NORMAL,
@@ -76,34 +76,12 @@ class SignUpStuckRegistrationReportQueryTest < ActiveSupport::TestCase
       confirm_using_mfa: true,
       user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
     )
-    com_visitor = Visitor.create!(
-      public_id: PublicId.generate,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    com_email = VisitorEmail.create!(
-      visitor_id: com_visitor.id,
-      address: "com-isolated-#{SecureRandom.hex(6)}@example.com",
-      visitor_email_status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    com_telephone = VisitorTelephone.create!(
-      visitor: com_visitor,
-      raw_number: "+12025550115",
-      confirm_policy: true,
-      visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
 
     app_report = SignUpStuckRegistrationReportQuery.call(surface: :app)
-    com_report = SignUpStuckRegistrationReportQuery.call(surface: :com)
 
     assert_includes app_report.map { |row| row.fetch(:contact_public_id) }, app_email.public_id
     assert_includes app_report.map { |row| row.fetch(:contact_public_id) }, app_telephone.public_id
-    assert_not_includes app_report.map { |row| row.fetch(:principal_public_id) }, com_visitor.public_id
-    assert_includes com_report.map { |row| row.fetch(:contact_public_id) }, com_email.public_id
-    assert_includes com_report.map { |row| row.fetch(:contact_public_id) }, com_telephone.public_id
-    assert_not_includes com_report.map { |row| row.fetch(:principal_public_id) }, app_client.public_id
     assert_not_includes app_report.to_json, "+12025550114"
-    assert_not_includes com_report.to_json, "+12025550115"
   end
 
   test "detects cleanup attempts at ten and above but not nine or completed cleanup" do

@@ -8,12 +8,9 @@ class IdentifierEncryptionReencryptTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
     @staff = operators(:one)
-    @visitor = create_verified_visitor_with_email(
-      email_address: "reencrypt-visitor-#{SecureRandom.hex(4)}@example.com",
-    )
   end
 
-  test "rewrites encrypted identifier columns across user staff and visitor records" do
+  test "rewrites encrypted identifier columns across user and staff records" do
     user_email = ClientEmail.create!(
       user: @user,
       address: "reencrypt-user-email-#{SecureRandom.hex(4)}@example.com",
@@ -38,20 +35,12 @@ class IdentifierEncryptionReencryptTest < ActiveSupport::TestCase
       confirm_policy: true,
       confirm_using_mfa: true,
     )
-    visitor_email = @visitor.visitor_emails.last
-    visitor_telephone = VisitorTelephone.create!(
-      visitor: @visitor,
-      raw_number: "+1 (555) #{rand(100..999)}-#{rand(1000..9999)}",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
 
     before_ciphertexts = {
       user_email: ciphertext_for(user_email, :address),
       user_telephone: ciphertext_for(user_telephone, :number),
       staff_email: ciphertext_for(staff_email, :address),
       staff_telephone: ciphertext_for(staff_telephone, :number),
-      visitor_email: ciphertext_for(visitor_email, :address),
-      visitor_telephone: ciphertext_for(visitor_telephone, :number),
     }
 
     result = IdentifierEncryptionReencrypt.new.call
@@ -60,16 +49,12 @@ class IdentifierEncryptionReencryptTest < ActiveSupport::TestCase
     assert_operator result.user_telephones_reencrypted, :>=, 1
     assert_operator result.staff_emails_reencrypted, :>=, 1
     assert_operator result.staff_telephones_reencrypted, :>=, 1
-    assert_operator result.visitor_emails_reencrypted, :>=, 1
-    assert_operator result.visitor_telephones_reencrypted, :>=, 1
 
     after_ciphertexts = {
       user_email: ciphertext_for(user_email.reload, :address),
       user_telephone: ciphertext_for(user_telephone.reload, :number),
       staff_email: ciphertext_for(staff_email.reload, :address),
       staff_telephone: ciphertext_for(staff_telephone.reload, :number),
-      visitor_email: ciphertext_for(visitor_email.reload, :address),
-      visitor_telephone: ciphertext_for(visitor_telephone.reload, :number),
     }
 
     before_ciphertexts.each_key do |key|
@@ -112,7 +97,6 @@ class IdentifierEncryptionReencryptTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -150,13 +134,6 @@ class IdentifierEncryptionReencryptTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -178,23 +155,6 @@ class IdentifierEncryptionReencryptTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -209,17 +169,9 @@ class IdentifierEncryptionReencryptTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -404,31 +356,6 @@ class IdentifierEncryptionReencryptTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

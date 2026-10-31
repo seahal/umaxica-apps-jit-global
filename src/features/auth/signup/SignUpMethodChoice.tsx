@@ -4,9 +4,8 @@ import Page from "@/components/ui/Page";
 // The sign-up entry screen: pick a registration method.
 //
 // Which methods exist is a server decision, so each entry arrives with a finished label and a
-// finished URL. `suspended_notice` means the `sign_up_suspended_<surface>` kill switch is on: the
-// screen shows the notice instead of entry points that would start a registration the guard is
-// about to reject anyway.
+// finished URL. Availability is handled server-side by the entry sentry; this screen renders only
+// methods the server decided to offer.
 import EntryExitForm, { type EntryExitFormProps } from "../EntryExitForm";
 import SocialProviderButton, { type AppleSignInLogos } from "./SocialProviderButton";
 
@@ -25,7 +24,6 @@ export type SignUpSocialProvider = {
 
 export type SignUpMethodChoiceProps = {
   title: string;
-  suspended_notice: string | null;
   methods: SignUpMethodLink[];
   social_providers: SignUpSocialProvider[];
   /** A local entry's links; empty on an OIDC-bound page, which moves only by Switch. */
@@ -36,30 +34,12 @@ export type SignUpMethodChoiceProps = {
 
 export default function SignUpMethodChoice({
   title,
-  suspended_notice: suspendedNotice,
   methods,
   social_providers: socialProviders,
   links,
   cancel_form: cancelForm,
   switch_form: switchForm,
 }: SignUpMethodChoiceProps) {
-  if (suspendedNotice) {
-    return (
-      <Page
-        title={title}
-        width="narrow"
-      >
-        <div
-          role="alert"
-          data-test-id="sign-up-suspended"
-          className="rounded-lg border border-danger bg-surface p-4 text-base text-error"
-        >
-          <p>{suspendedNotice}</p>
-        </div>
-      </Page>
-    );
-  }
-
   return (
     <Page
       title={title}

@@ -98,7 +98,7 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
       assert_not ClientStepUpCeremonyTransaction.exists?(consumed_old.id)
       assert ClientStepUpCeremonyTransaction.exists?(active.id)
       assert ClientStepUpCeremonyTransaction.exists?(expired_recent.id)
-      assert_equal({ app: 0, com: 0, org: 0 }, IdentityStepUpCeremonyTransactionPurger.new(now: @now).call)
+      assert_equal({ app: 0, org: 0 }, IdentityStepUpCeremonyTransactionPurger.new(now: @now).call)
     end
   end
 
@@ -109,13 +109,12 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
     )
 
     assert_empty ClientStepUpCeremonyTransaction.column_names & forbidden_columns
-    assert_empty VisitorStepUpCeremonyTransaction.column_names & forbidden_columns
     assert_empty OperatorStepUpCeremonyTransaction.column_names & forbidden_columns
   end
 
   test "surface validation rejects surface that does not match ceremony surface" do
     txn = ClientStepUpCeremonyTransaction.new(
-      surface: "com",
+      surface: "org",
       actor_ref: @client.public_id,
       session_ref: @token.public_id,
       required_scope: "settings_email",

@@ -100,13 +100,13 @@ module Security
       assert_empty wrongly_public, "Private routes must not match public categories:\n#{wrongly_public.join("\n")}"
     end
 
-    test "Auth admission attachment is GET-only on all three surfaces" do
+    test "Auth admission attachment is GET-only on the account surfaces" do
       entries =
         application_route_entries.select do |entry|
-          entry.controller_path.match?(%r{\Aauth/(app|com|org)/ceremony_bindings\z})
+          entry.controller_path.match?(%r{\Aauth/(app|org)/ceremony_bindings\z})
         end
 
-      assert_equal 3, entries.size
+      assert_equal 2, entries.size
       assert_equal ["GET"], entries.map(&:verb).uniq
       assert_equal ["show"], entries.map(&:action).uniq
       assert_equal ["/ceremony_bindings"], entries.map(&:path).uniq
@@ -124,7 +124,8 @@ module Security
           [route.verb, route.path.spec.to_s.sub(/\(\.:format\)\z/, ""), route.defaults[:action].to_s]
         end
 
-      assert_equal 20, entries.size, "expected two PWA endpoints on each of the ten base/auth/warp/palm hosts"
+      # The corporate Auth surface is retired, so nine hosts publish the two Rails PWA endpoints.
+      assert_equal 18, entries.size, "expected two PWA endpoints on each of the nine base/auth/warp/palm hosts"
       assert_equal ["GET"], entries.map(&:first).uniq
       assert_equal(
         [["/offline", "offline"], ["/service-worker", "service_worker"]],
@@ -381,7 +382,7 @@ module Security
       return false unless get?(entry)
 
       entry.controller_path.start_with?("auth/org/") &&
-        %w(/accounts /audit /billing /configuration /iam /support /system).include?(entry.path)
+        %w(/accounts /audit /billing /iam /support /system).include?(entry.path)
     end
 
     def public_warp_settings?(entry)

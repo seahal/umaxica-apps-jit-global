@@ -41,14 +41,8 @@ module ApplicationHelper
     end
   end
 
-  def theme_cookie_value
-    # Support both symbol and string access, and handle nil
-    # Fallback to request.cookies when helper cookies are empty.
-    raw = (
-      cookies[:ct] ||
-        cookies["ct"] ||
-        request.cookies["ct"]
-    ).to_s.downcase
+  def theme_cookie_value(value = nil)
+    raw = (value || Actor.preferences.theme).to_s.downcase
     {
       "dr" => "dark",
       "dark" => "dark",
@@ -59,8 +53,8 @@ module ApplicationHelper
     }[raw] || "system"
   end
 
-  def theme_html_class
-    theme = theme_cookie_value
+  def theme_html_class(value = nil)
+    theme = theme_cookie_value(value)
     classes = ["theme-#{theme}"]
     classes << "dark" if theme == "dark"
     classes.join(" ")

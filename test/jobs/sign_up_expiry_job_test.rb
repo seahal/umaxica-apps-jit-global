@@ -7,26 +7,20 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
   setup do
     ClientSignUpFlowStatus.ensure_defaults!
     ClientSignUpFlowCleanupStatus.ensure_defaults!
-    VisitorSignUpFlowStatus.ensure_defaults!
-    VisitorSignUpFlowCleanupStatus.ensure_defaults!
   end
 
-  test "expires overdue in-progress tickets on both ticket databases" do
+  test "expires overdue in-progress tickets on the app ticket database" do
     now = Time.current.change(usec: 0)
     expired_client = create_flow(ClientSignUpFlow, now: now, expires_at: now - 1.second)
     active_client = create_flow(ClientSignUpFlow, now: now, expires_at: now + 1.second)
-    expired_visitor = create_flow(VisitorSignUpFlow, now: now, expires_at: now - 1.second)
 
     travel_to now do
-      # Admission setup can exceed one second; freeze the owning database clocks as well.
-      ClientSignUpFlow.stub(:database_now, now) do
-        VisitorSignUpFlow.stub(:database_now, now) { SignUpExpiryJob.perform_now(batch_size: 1) }
-      end
+      # Admission setup can exceed one second; freeze the owning database clock as well.
+      ClientSignUpFlow.stub(:database_now, now) { SignUpExpiryJob.perform_now(batch_size: 1) }
     end
 
     assert_equal ClientSignUpFlowStatus::EXPIRED, expired_client.reload.status_id
     assert_predicate expired_client.reload, :cleanup_completed?
-    assert_equal VisitorSignUpFlowStatus::EXPIRED, expired_visitor.reload.status_id
     assert_predicate active_client.reload, :sign_up_in_progress?
   end
 
@@ -53,7 +47,7 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
   test "logs a failed expiry and still expires the other overdue tickets" do
     now = Time.current.change(usec: 0)
     failing = create_flow(ClientSignUpFlow, now: now, expires_at: now - 1.second)
-    other = create_flow(VisitorSignUpFlow, now: now, expires_at: now - 1.second)
+    other = create_flow(ClientSignUpFlow, now: now, expires_at: now - 1.second)
     real_call = SignUpTermination.method(:call)
     logged = []
 
@@ -74,7 +68,7 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
     end
 
     assert_predicate failing.reload, :sign_up_in_progress?
-    assert_equal VisitorSignUpFlowStatus::EXPIRED, other.reload.status_id
+    assert_equal ClientSignUpFlowStatus::EXPIRED, other.reload.status_id
     assert logged.any? { |line| line.include?("sign_up.expiry.failed") && line.include?(failing.public_id) }
   end
 

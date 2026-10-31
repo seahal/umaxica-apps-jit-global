@@ -185,6 +185,13 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "invalid_claim", verify(token).error
   end
 
+  test "rejects signed sources with path query or fragment instead of an origin" do
+    ["https://auth.umaxica.app/entry", "https://auth.umaxica.app?x=1",
+     "https://auth.umaxica.app#fragment",].each do |source|
+      assert_equal "invalid_claim", verify(sign_return_token(src: source)).error
+    end
+  end
+
   test "rejects the retired logical ceremony issuer as source" do
     token = sign_return_token(src: "https://log.umaxica.app")
 
@@ -195,6 +202,18 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     token = sign_return_token(url: "https://www.umaxica.app/other")
 
     assert_equal "invalid_url", verify(token).error
+  end
+
+  test "rejects a signed same-origin URL whose path is a protocol-relative redirect" do
+    url = "https://www.umaxica.app//evil.example/path"
+    token = sign_return_token(url: url)
+
+    result = JumpRtReturnVerifier.call(
+      token: token, request_url: "#{url}?rt=#{token}", request_base_url: "https://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } }, now: @now,
+    )
+
+    assert_equal "invalid_url", result.error
   end
 
   test "rejects a request whose query parameter order differs from the signed url" do

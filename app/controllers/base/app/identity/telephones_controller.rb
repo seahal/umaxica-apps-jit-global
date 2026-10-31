@@ -16,6 +16,7 @@ module Base
         TELEPHONE_VERIFICATION_RATE_WINDOW = 60
 
         before_action :authorize_telephone_registration!, only: %i(new create)
+        step_up only: %i(edit destroy), scope: "settings_telephone"
 
         public
 
@@ -59,14 +60,25 @@ module Base
             current_client, telephone,
           )
 
-          IdentityCredentialRemovalCommitter.call!(
+          removed = IdentityCredentialRemovalCommitter.call!(
             actor: current_client, credential: telephone, current_session: current_session, request: request,
             actor_context: current_actor,
           )
+          return render plain: t("errors.messages.invalid_request"), status: :unprocessable_content unless removed
+
           redirect_to(base_app_identity_telephones_path(ri: params[:ri]), status: :see_other)
         end
 
         private
+
+        def step_up_requirement(scope:, **options)
+          if scope == "settings_telephone" && %w(edit destroy).include?(action_name)
+            telephone = current_client.client_telephones.find_by!(public_id: params.expect(:id))
+            return super(scope: scope, **options.merge(resource_ref: telephone.public_id))
+          end
+
+          super
+        end
 
         def initiate_telephone_verification(user, number, auto_accept_confirmations: false)
           return false if user.blank?

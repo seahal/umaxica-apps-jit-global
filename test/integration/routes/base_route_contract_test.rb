@@ -199,130 +199,22 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
 
   # rubocop:disable Minitest/MultipleAssertions
   test "base com route contract" do
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/",
-      method: :get,
-    )
+    recognized = Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/", method: :get)
 
     assert_equal "base/com/roots", recognized[:controller]
     assert_equal "index", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/health",
-      method: :get,
-    )
+    {
+      "/health" => "base/com/healths",
+      "/health/liveness" => "base/com/health/livenesses",
+      "/health/readiness" => "base/com/health/readinesses",
+      "/health/startup" => "base/com/health/startups",
+      "/robots.txt" => "base/com/robots",
+      "/sitemap.xml" => "base/com/sitemaps",
+    }.each do |path, controller|
+      recognized = Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}#{path}", method: :get)
 
-    assert_equal "base/com/healths", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/health/liveness",
-      method: :get,
-    )
-
-    assert_equal "base/com/health/livenesses", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/health/readiness",
-      method: :get,
-    )
-
-    assert_equal "base/com/health/readinesses", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/health/startup",
-      method: :get,
-    )
-
-    assert_equal "base/com/health/startups", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/robots.txt",
-      method: :get,
-    )
-
-    assert_equal "base/com/robots", recognized[:controller]
-    assert_equal "index", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/sitemap.xml",
-      method: :get,
-    )
-
-    assert_equal "base/com/sitemaps", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/dashboard",
-      method: :get,
-    )
-
-    assert_equal "base/com/roots", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path(
-        "http://#{BASE_COM_HOST}/oidc/authorization",
-        method: :get,
-      )
-    end
-
-    # The Base self-RP receives its authorization response here (two.md D-50).
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/oidc/callback",
-      method: :get,
-    )
-
-    assert_equal "base/com/oidc/callbacks", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/oidc", method: :get)
-    end
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/sign/out/new",
-      method: :get,
-    )
-
-    assert_equal "base/com/sign_outs", recognized[:controller]
-    assert_equal "new", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/sign/out/edit",
-      method: :get,
-    )
-
-    assert_equal "base/com/sign_outs", recognized[:controller]
-    assert_equal "edit", recognized[:action]
-
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/sign/out",
-      method: :post,
-    )
-
-    assert_equal "base/com/sign_outs", recognized[:controller]
-    assert_equal "create", recognized[:action]
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path(
-        "http://#{BASE_COM_HOST}/lobby",
-        method: :get,
-      )
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out/complete", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path(
-        "http://#{BASE_COM_HOST}/sign/out",
-        method: :delete,
-      )
+      assert_equal controller, recognized[:controller], path
     end
 
     recognized = Rails.application.routes.recognize_path(
@@ -332,6 +224,17 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_equal "base/com/csp_violation_reports", recognized[:controller]
     assert_equal "create", recognized[:action]
+  end
+
+  test "base com no longer routes credential, session, or identity resources" do
+    %w(
+      /dashboard /oidc/callback /sign/out/new /sign/out/edit /identity/standing
+      /identity/sessions /preference/emails /.well-known/jwks.json
+    ).each do |path|
+      assert_raises(ActionController::RoutingError, "#{path} must stay unroutable on com") do
+        Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}#{path}", method: :get)
+      end
+    end
   end
   # rubocop:enable Minitest/MultipleAssertions
 

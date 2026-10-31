@@ -7,7 +7,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   fixtures :clients, :client_tokens
 
   test "expired binding restart preserves its live parent and browser ownership in every realm" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       browser_nonce = SecureRandom.urlsafe_base64(32)
       first = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: browser_nonce, base_token: nil,
@@ -38,7 +38,6 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   test "handoff retry refuses another browser nonce without adopting its existing parent in every realm" do
     [
       %w(app core-app-jp client),
-      %w(com core-com-jp visitor),
       %w(org core-org-jp operator),
     ].each do |surface, client_id, realm|
       transaction = OidcAuthorizationTransactionCoordinator.issue!(
@@ -222,7 +221,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_equal transaction.id, resolved.id
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
-        payload: payload, surface: "com", expected_intent: "step_up",
+        payload: payload, surface: "org", expected_intent: "step_up",
       )
     end
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
@@ -398,13 +397,13 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "entry consume returns the payload once for the issuing surface" do
     issuance = OidcTestEntry.issue!(
-      surface: "com",
+      surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: nil,
     )
 
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
     _auth_session, raw_sid =
       begin
         admission_binding = binding
@@ -424,15 +423,15 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         [admission_session, admission_raw_sid]
       end
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "com", expected_intent: "sign_in",
+      reference: issuance.reference, surface: "app", expected_intent: "sign_in",
       binding:, raw_auth_sid: raw_sid,
     )
 
     assert_equal issuance.transaction.transaction_id, payload.fetch("subject_ref")
-    assert_equal "visitor", payload.fetch("actor_type")
+    assert_equal "client", payload.fetch("actor_type")
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
-        reference: issuance.reference, surface: "com", expected_intent: "sign_in",
+        reference: issuance.reference, surface: "app", expected_intent: "sign_in",
         binding:, raw_auth_sid: raw_sid,
       )
     end
@@ -440,13 +439,48 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "local entry consume denies a code issued for another surface" do
     issuance = OidcTestEntry.issue!(
-      surface: "com",
+      surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: nil,
     )
 
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "org", expected_intent: "sign_in",
+        binding:, raw_auth_sid: raw_sid,
+      )
+    end
+  end
+
+  test "local entry consume denies a code issued for another intent" do
+    issuance = OidcTestEntry.issue!(
+      surface: "app",
+      intent: "sign_up",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
+    )
+
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
     _auth_session, raw_sid =
       begin
         admission_binding = binding
@@ -473,45 +507,10 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "local entry consume denies a code issued for another intent" do
-    issuance = OidcTestEntry.issue!(
-      surface: "com",
-      intent: "sign_up",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-      base_token: nil,
-    )
-
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    _auth_session, raw_sid =
-      begin
-        admission_binding = binding
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: nil,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_binding.class.auth_admission_surface_name,
-            entry_ref: admission_binding.entry_ref,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        [admission_session, admission_raw_sid]
-      end
-    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseAuthAdmissionCoordinator.consume_entry_reference!(
-        reference: issuance.reference, surface: "com", expected_intent: "sign_in",
-        binding:, raw_auth_sid: raw_sid,
-      )
-    end
-  end
-
   test "local entry consume denies an unknown code" do
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
-        reference: SecureRandom.uuid, surface: "com", expected_intent: "sign_in",
+        reference: SecureRandom.uuid, surface: "app", expected_intent: "sign_in",
         binding: ClientAuthAdmissionBinding.new, raw_auth_sid: "missing",
       )
     end
@@ -519,12 +518,12 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "local entry consume rejects an unsupported intent" do
     issuance = OidcTestEntry.issue!(
-      surface: "com",
+      surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: nil,
     )
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
     _auth_session, raw_sid =
       begin
         admission_binding = binding
@@ -545,7 +544,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       end
     assert_raises(ArgumentError) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
-        reference: issuance.reference, surface: "com", expected_intent: "withdrawal",
+        reference: issuance.reference, surface: "app", expected_intent: "withdrawal",
         binding:, raw_auth_sid: raw_sid,
       )
     end

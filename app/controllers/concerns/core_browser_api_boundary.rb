@@ -85,7 +85,7 @@ module CoreBrowserApiBoundary
   end
 
   # R5-WU17 cell process: the Access JWT plus this cell's local session; the actor is the local
-  # principal, never the canonical Client/Visitor/Operator.
+  # principal, never the canonical Client/Operator.
   def authenticate_core_cell_session!(token)
     result = authenticate_rp_cell_request(access_token: token)
     unless result.authenticated?
@@ -295,7 +295,6 @@ module CoreBrowserApiBoundary
   def core_rp_client_id
     case core_resource_type.to_s
     when "operator" then RpDeploymentBindingValue.client_id("core-org")
-    when "visitor" then RpDeploymentBindingValue.client_id("core-com")
     else RpDeploymentBindingValue.client_id("core-app")
     end
   end

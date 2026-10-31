@@ -9,13 +9,14 @@ module Auth
       include ::BrowserNavigationRequest
 
       AUTHENTICATION_MODE = :open
+      sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
       declare_authentication_mode! :open
 
       public
 
       def show
         apply_admission_transport_headers!
-        return render_invalid_admission_request! if request.head? || framed_destination_request?
+        return render_invalid_admission_request! unless document_navigation_request?
 
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
         if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)

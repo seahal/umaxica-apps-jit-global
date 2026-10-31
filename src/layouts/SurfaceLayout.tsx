@@ -31,6 +31,16 @@ export default function SurfaceLayout({ children }: { children: ReactNode }) {
   const { chrome, clear_history: clearHistory } = usePage<SharedProps>().props;
 
   useEffect(() => {
+    if (chrome.surface !== "com") {
+      return;
+    }
+    if (chrome.locale !== "ja" && chrome.locale !== "en") {
+      throw new Error("com page locale is missing or unsupported");
+    }
+    document.documentElement.lang = chrome.locale;
+  }, [chrome.surface, chrome.locale]);
+
+  useEffect(() => {
     if (clearHistory) {
       router.clearHistory();
     }

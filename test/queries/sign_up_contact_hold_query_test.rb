@@ -52,32 +52,6 @@ class SignUpContactHoldQueryTest < ActiveSupport::TestCase
     assert_not SignUpContactHoldQuery.call(contact: candidate(ClientTelephone.new(raw_number: "+12345670002")))
   end
 
-  test "COM email and telephone follow the same predicate" do
-    unfinished = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    VisitorEmail.create!(
-      visitor: unfinished, raw_address: "held-com@example.com", confirm_policy: true,
-      visitor_email_status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    VisitorTelephone.create!(
-      visitor: unfinished, raw_number: "+12345670003", confirm_policy: true,
-      visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    registered = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-    VisitorEmail.create!(
-      visitor: registered, raw_address: "registered-com@example.com", confirm_policy: true,
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
-
-    assert SignUpContactHoldQuery.call(contact: candidate(VisitorEmail.new(raw_address: "held-com@example.com")))
-    assert SignUpContactHoldQuery.call(contact: candidate(VisitorTelephone.new(raw_number: "+12345670003")))
-    registered_candidate = candidate(VisitorEmail.new(raw_address: "registered-com@example.com"))
-
-    assert_not SignUpContactHoldQuery.call(contact: registered_candidate)
-  end
-
   test "a contact without a destination digest is refused as an argument error" do
     assert_raises(ArgumentError) { SignUpContactHoldQuery.call(contact: ClientEmail.new) }
   end

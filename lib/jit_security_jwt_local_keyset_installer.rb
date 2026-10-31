@@ -27,6 +27,21 @@ module JitSecurityJwtLocalKeysetInstaller
       prefix: "PREFERENCE",
       kid: "#{Rails.env}-preference-es384-a",
     )
+    changed |= install_keyset_issuer!(
+      store,
+      prefix: "PREFERENCE_APP",
+      kid: "#{Rails.env}-preference-app-es384-a",
+    )
+    changed |= install_keyset_issuer!(
+      store,
+      prefix: "PREFERENCE_COM",
+      kid: "#{Rails.env}-preference-com-es384-a",
+    )
+    changed |= install_keyset_issuer!(
+      store,
+      prefix: "PREFERENCE_ORG",
+      kid: "#{Rails.env}-preference-org-es384-a",
+    )
 
     JitSecurityJwtRegistry::SURFACE_NAMESPACES.each do |namespace|
       changed |= install_surface_issuer!(

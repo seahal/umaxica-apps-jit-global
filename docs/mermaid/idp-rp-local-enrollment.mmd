@@ -11,6 +11,7 @@ stateDiagram-v2
         Derived timestamps and row existence, not a persisted status enum.
         Callback refuses expired incoming authority and disabled principals.
         Missing anchors are inserted then locked on the cell writer.
+        An existing anchor's identity must match before any new principal is created.
         Callback and logout serialize in either commit order.
     end note
     note right of Tombstoned

@@ -1,0 +1,7 @@
+# WU-A4 TOTP enrollment verification device binding
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting implementation and tests.
+- Baseline verification file passed (6 runs, 113 assertions). A new revoked-device case failed before the fix: a valid TOTP was accepted instead of raising the expected refusal (1 run, 1 assertion, 1 failure).
+- The verifier now locks the device before the token while retaining the owner lock, and validates usability, owner and current-token binding before reading the candidate for verification or changing the proof and attempt counter. A parameterized case covers revoked and superseded devices with valid and invalid submitted codes, preserving candidate proof, parent status and attempt count.
+- `PARALLEL_WORKERS=1 bin/rails test test/operations/identity_totp_enrollment_issuer_test.rb test/operations/identity_totp_enrollment_verification_committer_test.rb test/operations/identity_totp_enrollment_final_committer_test.rb` passed (19 runs, 243 assertions, 0 failures, 0 errors, 0 skips). RuboCop passed for the changed operation and test. The enrollment diagram and transition inventory describe the new guard.
+- The read-only enrollment display query has a separate device check gap under investigation. This test does not establish independent-connection revocation races or repair the finalizer's separate cross-database ordering and audit gaps.

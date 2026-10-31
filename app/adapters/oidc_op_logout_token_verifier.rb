@@ -75,7 +75,11 @@ class OidcOpLogoutTokenVerifier
     return false unless payload["sid"].is_a?(String) && payload["sid"].present?
     return false unless payload["jti"].is_a?(String) && payload["jti"].present?
 
-    payload["exp"].to_i - payload["iat"].to_i <= MAX_LIFETIME_SECONDS
+    issued_at = payload["iat"]
+    expires_at = payload["exp"]
+    return false unless issued_at.is_a?(Numeric) && expires_at.is_a?(Numeric)
+
+    expires_at > issued_at && expires_at - issued_at <= MAX_LIFETIME_SECONDS
   end
 
   def failure(error = "invalid_token")

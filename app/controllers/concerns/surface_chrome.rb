@@ -64,7 +64,7 @@ module SurfaceChrome
   def surface_chrome
     configuration = chrome_configuration
 
-    {
+    chrome = {
       family_label: configuration.fetch(:family_label),
       surface: configuration.fetch(:surface),
       brand: chrome_brand,
@@ -75,6 +75,8 @@ module SurfaceChrome
       theme_controls: chrome_theme_controls,
       copyright: chrome_copyright,
     }
+    chrome[:locale] = I18n.locale.to_s if configuration.fetch(:surface) == "com"
+    chrome
   end
 
   # Restricted Mode (Emergency Access) is a property of the session, not of a
@@ -189,9 +191,10 @@ module SurfaceChrome
 
   def chrome_cookie_controls
     endpoint_path = chrome_preference_controls.cookie_endpoint_path
-    return nil if endpoint_path.nil?
-
     surface = chrome_configuration.fetch(:surface)
+    family = chrome_configuration.fetch(:family)
+    return nil if endpoint_path.nil? && !(family == "warp" && surface == "com")
+
     scope = "layouts.shared.footer_cookie_controls"
     # The cookie screen owns consent while it is being edited; showing the banner there would
     # put two controls for the same decision on one page.

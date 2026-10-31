@@ -97,31 +97,6 @@ class ClientOidcIdentityBindingTest < ActiveSupport::TestCase
   end
 end
 
-class VisitorOidcIdentityBindingTest < ActiveSupport::TestCase
-  setup do
-    VisitorIdentityState.ensure_defaults!
-  end
-
-  test "visitor binding points to the canonical visitor identity" do
-    identity = VisitorIdentity.create!(
-      issuer: "https://www.umaxica.com",
-      subject: "canonical-#{SecureRandom.hex(6)}",
-      audience: "base-selector-bootstrap",
-      source_record_id: 9_101,
-      status_id: VisitorIdentityState::ACTIVE,
-    )
-    binding = VisitorOidcIdentityBinding.create!(
-      visitor_identity: identity,
-      issuer: "https://www.umaxica.com",
-      subject: "vis-#{SecureRandom.hex(6)}",
-      audience: "warp-com-jp",
-    )
-
-    assert_equal identity, binding.visitor_identity
-    assert_equal [binding], identity.reload.oidc_identity_bindings.to_a
-  end
-end
-
 class OperatorOidcIdentityBindingTest < ActiveSupport::TestCase
   setup do
     OperatorIdentityState.ensure_defaults!

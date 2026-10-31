@@ -12,6 +12,7 @@ module Auth
               include SignUpContactOtpControllerSupport
 
               AUTHENTICATION_MODE = :guest
+              sign_entry_classification! :sign_up
 
               def show
                 return unless load_gate_context!(gate_for_show)
@@ -29,7 +30,11 @@ module Auth
                 return redirect_telephone_session_expired unless @user_telephone
                 return render_otp_resend_too_soon if otp_resend_rate_limited?
 
-                result = issue_otp_ceremony!
+                begin
+                  result = issue_otp_ceremony!
+                rescue ActiveJob::EnqueueError, TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable
+                  return render_signup_telephone_delivery_unavailable
+                end
                 return render_otp_ceremony_result(result) unless result.success?
 
                 registration = (session[:user_telephone_registration] || {}).dup
@@ -119,13 +124,17 @@ module Auth
               end
 
               def render_otp_ceremony_result(result)
-                if result.status == :rate_limited
+                case result.status
+                when :rate_limited
                   @user_telephone.errors.add(:base, t("sign.app.registration.email.create.otp_resend_too_soon"))
-                  return render_sign_up_telephone_edit(status: :too_many_requests)
+                  render_sign_up_telephone_edit(status: :too_many_requests)
+                when :invalid_code, :result_expired, :session_mismatch, :missing_challenge, :inactive_flow,
+                     :inactive_candidate, :binding_mismatch, :closed_challenge, :locked, :delivery_refused
+                  @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
+                  render_sign_up_telephone_edit(status: :unprocessable_content)
+                else
+                  raise ArgumentError, "unsupported Telephone signup OTP result"
                 end
-
-                @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
-                render_sign_up_telephone_edit(status: :unprocessable_content)
               end
 
               def render_code_required

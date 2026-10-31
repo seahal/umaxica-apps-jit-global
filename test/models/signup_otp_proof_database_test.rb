@@ -5,21 +5,17 @@ require "test_helper"
 class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-    [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
-    [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
   ].each do |owner_model, contact_model, owner_key, flow_model, surface, channel|
     test "#{surface} #{channel} signup proof database shape and immutable committed result" do
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
+        status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       destination =
         (channel == :email) ? "retry-#{SecureRandom.hex(8)}@example.test" :
@@ -27,11 +23,9 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
       contact = contact_model.create!(
         owner_key => owner.id, :confirm_policy => "1",
         ((channel == :email) ? :address : :number) => destination,
-        **case [surface, channel]
-          when [:app, :email] then { user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP }
-          when [:app, :telephone] then { user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP }
-          when [:com, :email] then { visitor_email_status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP }
-          when [:com, :telephone] then { visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP }
+        **case channel
+          when :email then { user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP }
+          when :telephone then { user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP }
           end,
       )
       now = flow_model.database_now

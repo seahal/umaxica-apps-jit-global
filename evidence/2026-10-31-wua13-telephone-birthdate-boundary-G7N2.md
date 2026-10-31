@@ -1,0 +1,7 @@
+# Telephone signup birthdate boundary
+
+HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting the application and tests.
+
+The existing telephone signup test still expected the obsolete under-sixteen HALTED behavior. Before the edit, its focused run failed (1 run, 30 assertions, 1 failure): the eligible date proceeded to the sign-in continuation instead. The test now checks that today's and tomorrow's dates return the existing 422 message, leave the checkpoint pending, preserve the unfinished owner and do not save the date. The neighboring success test now checks the nearest eligible date, yesterday, completing the flow and persisting that date. No production code changed.
+
+An intermediate run failed because the stored birthdate is a string rather than a Date; the assertion was corrected. With the configured local test environment, the two boundary cases then passed (2 runs, 74 assertions), and `PARALLEL_WORKERS=1 bin/rails test test/controllers/auth/app/up/checkpoint_passkeys_controller_test.rb` passed (17 runs, 342 assertions). RuboCop and `git diff --check` passed for the modified file. The initial test's failure output exposed a synthetic test continuation token in a temporary log and tool output; the temporary logs from these checks were deleted. This does not establish the unavailable ORG invitation flow or the production age-restricted feature inventory.

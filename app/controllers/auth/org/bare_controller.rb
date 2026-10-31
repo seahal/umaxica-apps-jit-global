@@ -9,6 +9,13 @@ module Auth
       include ::FqdnAvailabilityGate
       include ::RateLimit
       include ::DefaultNoStore
+      include ::SignEntryClassification
+
+      # D-59: none of the bare endpoints is a Sign Entry. The family declares the exclusion once,
+      # with its reason, so a new bare endpoint inherits a stated classification instead of an
+      # implicit one.
+      sign_entry_classification! :excluded,
+                                 reason: "bare health, revision, robots, sitemap and JWKS probe endpoints"
 
       AUTHENTICATION_MODE = :bare
 

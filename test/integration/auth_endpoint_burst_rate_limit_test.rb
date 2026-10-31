@@ -9,6 +9,8 @@ require "test_helper"
 # stack so a limiter that is declared but never wired is a failing test rather
 # than silent absence of protection.
 class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -41,57 +43,28 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    issuance = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :success
 
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
+    BURST_ALLOWANCE.times do
+      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
            params: { identifier: "burst_app@example.com" }, as: :json
+
+      assert_not_includes [400, 429], response.status
     end
+
+    post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+         params: { identifier: "burst_app@example.com" }, as: :json
 
     assert_response :too_many_requests
     assert_equal "60", response.headers["Retry-After"]
@@ -100,173 +73,52 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    headers = {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    get auth_app_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :see_other
+    get response.location, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-    (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
+    assert_response :see_other
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
+
+    BURST_ALLOWANCE.times do
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
+
+      assert_response :bad_request
     end
 
-    assert_response :too_many_requests
-  end
-
-  test "com passkey options answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "com"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
-           params: { identifier: "burst_com@example.com" }, as: :json
-    end
-
-    assert_response :too_many_requests
-  end
-
-  test "com passkey verification answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "com"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
-           params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
-    end
+    post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+         params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
 
     assert_response :too_many_requests
   end
@@ -274,56 +126,52 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "org"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-org-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    headers = {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :see_other
+    get response.location, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-    end
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-    (BURST_ALLOWANCE + 1).times do
+    assert_response :see_other
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
+
+    BURST_ALLOWANCE.times do
       post auth_org_sign_in_passkey_options_url(ri: "jp", host: host),
            params: { identifier: "0123456789ABCDEF" }, as: :json
+
+      assert_response :unprocessable_content
     end
+
+    post auth_org_sign_in_passkey_options_url(ri: "jp", host: host),
+         params: { identifier: "0123456789ABCDEF" }, as: :json
 
     assert_response :too_many_requests
   end
@@ -331,56 +179,52 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "org"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-org-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    headers = {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :see_other
+    get response.location, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-    end
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-    (BURST_ALLOWANCE + 1).times do
+    assert_response :see_other
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
+
+    BURST_ALLOWANCE.times do
       post auth_org_sign_in_passkey_verification_url(ri: "jp", host: host),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
+
+      assert_response :unprocessable_content
     end
+
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", host: host),
+         params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
 
     assert_response :too_many_requests
   end
@@ -388,231 +232,228 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :success
 
-      assert_equal 303, admission_browser.response.status
-    end
-
-    (BURST_ALLOWANCE + 1).times do
+    BURST_ALLOWANCE.times do
       post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host),
            params: { challenge_id: "missing" }, as: :json
+
+      assert_response :see_other
     end
+
+    post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host),
+         params: { challenge_id: "missing" }, as: :json
 
     assert_response :too_many_requests
+    assert_equal "60", response.headers["Retry-After"]
   end
 
-  test "com MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+  test "app MFA passkey burst limit applies to a pending MFA ceremony" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "com"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    email = actor.client_emails.create!(
+      address: "mfa-limit-#{SecureRandom.hex(8)}@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    ClientTotpCredential.create!(
+      user: actor, private_key: ROTP::Base32.random_base32,
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE, title: "MFA TOTP",
+    )
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "mfa-limit-key")
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :success
+    post auth_app_sign_in_email_path(ri: "jp"),
+         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only" }
+    delivery = ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    patch auth_app_sign_in_email_path(ri: "jp"),
+          params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "test-only" }
 
-      assert_equal 303, admission_browser.response.status
+    flow = ClientSignInFlow.where(principal_id: actor.id).recent_first.first
+
+    assert_predicate flow, :sign_in_mfa_pending?
+    phase_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "MFA_PENDING")
+    get new_auth_app_sign_in_challenge_passkey_path(ri: "jp", fb: phase_binding)
+
+    assert_response :success
+    BURST_ALLOWANCE.times do
+      post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host, fb: phase_binding),
+           params: { challenge_id: "missing" }, as: :json
+
+      assert_response :see_other
+      assert_equal auth_app_sign_in_challenge_path(ri: "jp").split("?").first, URI.parse(response.location).path
     end
+    post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host, fb: phase_binding),
+         params: { challenge_id: "missing" }, as: :json
 
-    (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_challenge_passkey_url(ri: "jp", host: host),
+    assert_response :too_many_requests
+    assert_equal "60", response.headers["Retry-After"]
+  end
+
+  test "app MFA passkey sustained limit applies to a pending MFA ceremony" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! host
+    https!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    email = actor.client_emails.create!(
+      address: "mfa-limit-#{SecureRandom.hex(8)}@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    ClientTotpCredential.create!(
+      user: actor, private_key: ROTP::Base32.random_base32,
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE, title: "MFA TOTP",
+    )
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "mfa-limit-key")
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
+    post auth_app_sign_in_email_path(ri: "jp"),
+         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only" }
+    delivery = ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    patch auth_app_sign_in_email_path(ri: "jp"),
+          params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "test-only" }
+
+    flow = ClientSignInFlow.where(principal_id: actor.id).recent_first.first
+
+    assert_predicate flow, :sign_in_mfa_pending?
+    phase_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "MFA_PENDING")
+    get new_auth_app_sign_in_challenge_passkey_path(ri: "jp", fb: phase_binding)
+
+    assert_response :success
+    (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
+      travel((burst * 61).seconds) do
+        BURST_ALLOWANCE.times do
+          post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host, fb: phase_binding),
+               params: { challenge_id: "missing" }, as: :json
+
+          assert_response :see_other
+          assert_equal auth_app_sign_in_challenge_path(ri: "jp").split("?").first, URI.parse(response.location).path
+        end
+      end
+    end
+    travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
+      post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing" }, as: :json
     end
 
     assert_response :too_many_requests
+    assert_equal "900", response.headers["Retry-After"]
+    assert_predicate flow.reload, :sign_in_mfa_pending?
   end
 
   test "app email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :success
 
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
+    BURST_ALLOWANCE.times do |index|
+      post auth_app_sign_in_email_url(ri: "jp", host: host),
+           params: { user_email: { address: "burst_signin_#{index}@example.com" } }
+
+      assert_response :redirect
     end
 
-    (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
-           params: { user_email: { address: "burst_signin@example.com" } }
-    end
+    post auth_app_sign_in_email_url(ri: "jp", host: host),
+         params: { user_email: { address: "burst_signin@example.com" } }
 
     assert_response :too_many_requests
-  end
-
-  test "com email sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "com"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
-           params: { visitor_email: { address: "burst_signin_com@example.com" } }
-    end
-
-    assert_response :too_many_requests
+    assert_equal "60", response.headers["Retry-After"]
   end
 
   # Email sign-in declares a sustained limiter alongside the burst one, with a
@@ -620,73 +461,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   {
     "app email sign-in" => [
       :auth_app_sign_in_email_url, "PUBLIC_AUTH_SERVICE_URL",
-      { client_email: { address: "sustained@example.com" } },
-    ],
-    "com email sign-in" => [
-      :auth_com_sign_in_email_url, "PUBLIC_AUTH_CORPORATE_URL",
-      { visitor_email: { address: "sustained@example.com" } },
+      { user_email: { address: "sustained@example.com" } },
     ],
   }.each do |label, (helper, host_env, request_params)|
     test "#{label} answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
       host = ENV.fetch(host_env)
       host! host
-      begin
-        admission_browser = self
-        admission_surface = label.split.first
-        admission_intent = "sign_in"
-        admission_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_surface)
-        admission_browser.host!(admission_host)
-        admission_issuance = OidcTestEntry.issue!(
-          surface: admission_surface, intent: admission_intent,
-          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-        )
-        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
+      https!
+      client = OidcClientRegistry.find!("core-app-jp")
+      transaction = OidcAuthorizationTransactionCoordinator.issue!(
+        surface: "app", intent: "sign_in", params: {
+          response_type: "code",
+          client_id: client.client_id,
+          redirect_uri: client.redirect_uris.first,
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+          code_challenge_method: "S256",
+          state: SecureRandom.urlsafe_base64(16),
+          nonce: SecureRandom.urlsafe_base64(16),
+          scope: "openid profile",
+        },
+      ).transaction
+      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+      get response.location, headers: NAVIGATION_HEADERS
+      binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+      binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+      get response.location, headers: NAVIGATION_HEADERS
 
-        assert_equal 303, admission_browser.response.status
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_surface, reference: admission_issuance.reference,
-        )
-        admission_binding.reload.confirm_base!(
-          base_token: nil,
-          browser_digest: admission_binding.base_browser_digest,
-        )
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
-
-        assert_equal 303, admission_browser.response.status
-        phase_binding = nil
-      end
+      assert_response :success
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
         travel((burst * 61).seconds) do
-          BURST_ALLOWANCE.times {
-            post public_send(helper, ri: "jp", host: host, fb: phase_binding), params: request_params
-          }
+          BURST_ALLOWANCE.times do |index|
+            address = "sustained_#{burst}_#{index}@example.com"
+            post public_send(helper, ri: "jp", host: host), params: { user_email: { address: address } }
+
+            assert_response :redirect
+          end
         end
       end
 
       travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-        post public_send(helper, ri: "jp", host: host, fb: phase_binding), params: request_params
+        post public_send(helper, ri: "jp", host: host), params: request_params
       end
 
       assert_response :too_many_requests
@@ -697,59 +516,38 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
+    assert_response :success
 
     # Four bursts of five, each after the one-minute burst window has rolled
     # over, spend the sustained allowance without ever tripping the burst rule.
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
+          post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
                params: { identifier: "sustained_app@example.com" }, as: :json
 
           assert_response :success
@@ -758,76 +556,8 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
+      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
            params: { identifier: "sustained_app@example.com" }, as: :json
-    end
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
-
-  test "com passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "com"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times do
-          post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
-               params: { identifier: "sustained_com@example.com" }, as: :json
-        end
-      end
-    end
-
-    travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
-           params: { identifier: "sustained_com@example.com" }, as: :json
     end
 
     assert_response :too_many_requests
@@ -837,57 +567,50 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "org"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-org-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    headers = {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :see_other
+    get response.location, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-    end
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
+
+    assert_response :see_other
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
           post auth_org_sign_in_passkey_options_url(ri: "jp", host: host),
                params: { identifier: "0123456789ABCDEF" }, as: :json
+
+          assert_response :unprocessable_content
         end
       end
     end
@@ -904,132 +627,56 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    headers = {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    get auth_app_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :see_other
+    get response.location, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
+
+    assert_response :see_other
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
+          post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
                params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
+
+          assert_response :bad_request
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
-           params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
-    end
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
-
-  test "com passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-    begin
-      admission_browser = self
-      admission_surface = "com"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times do
-          post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
-               params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
-        end
-      end
-    end
-
-    travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -1040,57 +687,50 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "org"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-org-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    headers = {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :see_other
+    get response.location, headers: headers
 
-      assert_equal 303, admission_browser.response.status
-    end
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_org_sign_in_path, params: { entry_ref: handoff.reference, ri: "jp" }, headers: headers
+
+    assert_response :see_other
+    get response.location, headers: NAVIGATION_HEADERS
+
+    assert_response :success
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
           post auth_org_sign_in_passkey_verification_url(ri: "jp", host: host),
                params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
+
+          assert_response :unprocessable_content
         end
       end
     end
@@ -1107,74 +747,53 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   # The MFA challenge endpoints carry the same burst-and-sustained pair as the
   # primary factors. Four bursts of five, each after the one-minute burst window
   # has rolled over, spend the sustained allowance without tripping the burst rule.
-  {
-    "app" => [:auth_app_sign_in_challenge_passkey_url, "PUBLIC_AUTH_SERVICE_URL"],
-    "com" => [:auth_com_sign_in_challenge_passkey_url, "PUBLIC_AUTH_CORPORATE_URL"],
-  }.each do |surface, (helper, host_env)|
-    test "#{surface} MFA passkey challenge answers 429 with the sustained hint once the 15-minute allowance is spent" do
-      host = ENV.fetch(host_env)
-      host! host
-      begin
-        admission_browser = self
-        admission_surface = surface
-        admission_intent = "sign_in"
-        admission_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_surface)
-        admission_browser.host!(admission_host)
-        admission_issuance = OidcTestEntry.issue!(
-          surface: admission_surface, intent: admission_intent,
-          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-        )
-        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
+  test "app MFA passkey challenge answers 429 with the sustained hint once the 15-minute allowance is spent" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! host
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-        assert_equal 303, admission_browser.response.status
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_surface, reference: admission_issuance.reference,
-        )
-        admission_binding.reload.confirm_base!(
-          base_token: nil,
-          browser_digest: admission_binding.base_browser_digest,
-        )
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
+    assert_response :success
 
-        assert_equal 303, admission_browser.response.status
-      end
+    (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
+      travel((burst * 61).seconds) do
+        BURST_ALLOWANCE.times do
+          post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host),
+               params: { challenge_id: "missing" }, as: :json
 
-      (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-        travel((burst * 61).seconds) do
-          BURST_ALLOWANCE.times do
-            post public_send(helper, ri: "jp", host: host), params: { challenge_id: "missing" }, as: :json
-          end
+          assert_response :see_other
         end
       end
-
-      travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-        post public_send(helper, ri: "jp", host: host), params: { challenge_id: "missing" }, as: :json
-      end
-
-      assert_response :too_many_requests
-      assert_equal "900", response.headers["Retry-After"]
     end
+
+    travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
+      post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host),
+           params: { challenge_id: "missing" }, as: :json
+    end
+
+    assert_response :too_many_requests
+    assert_equal "900", response.headers["Retry-After"]
   end
 
   # The per-account rule is the only one that bounds a distributed attacker, who
@@ -1187,57 +806,41 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app email sign-in code submission answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    assert_response :success
 
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
-
-    (BURST_ALLOWANCE + 1).times do
-      patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
+    BURST_ALLOWANCE.times do
+      patch auth_app_sign_in_email_url(ri: "jp", host: host),
             params: { client_email: { pass_code: "000000" } }
+
+      assert_response :redirect
     end
+
+    patch auth_app_sign_in_email_url(ri: "jp", host: host),
+          params: { client_email: { pass_code: "000000" } }
 
     assert_response :too_many_requests
     assert_equal "60", response.headers["Retry-After"]
@@ -1246,64 +849,45 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app email sign-in code submission answers 429 with the sustained hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
-    begin
-      admission_browser = self
-      admission_surface = "app"
-      admission_intent = "sign_in"
-      admission_host = {
-        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-      }.fetch(admission_surface)
-      admission_browser.host!(admission_host)
-      admission_issuance = OidcTestEntry.issue!(
-        surface: admission_surface, intent: admission_intent,
-        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-      )
-      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
+    get response.location, headers: NAVIGATION_HEADERS
 
-      assert_equal 303, admission_browser.response.status
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: admission_surface, reference: admission_issuance.reference,
-      )
-      admission_binding.reload.confirm_base!(
-        base_token: nil,
-        browser_digest: admission_binding.base_browser_digest,
-      )
-      admission_browser.get(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
-
-      assert_equal 303, admission_browser.response.status
-      phase_binding = nil
-    end
+    assert_response :success
     params = { client_email: { pass_code: "000000" } }
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times {
-          patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding), params: params
-        }
+        BURST_ALLOWANCE.times do
+          patch auth_app_sign_in_email_url(ri: "jp", host: host), params: params
+
+          assert_response :redirect
+        end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding), params: params
+      patch auth_app_sign_in_email_url(ri: "jp", host: host), params: params
     end
 
     assert_response :too_many_requests
@@ -1314,7 +898,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   # address so that OTP fanout to one mailbox is bounded even from many sources.
   {
     "app" => [:auth_app_sign_up_email_url, "PUBLIC_AUTH_SERVICE_URL", :client_email],
-    "com" => [:auth_com_sign_up_email_url, "PUBLIC_AUTH_CORPORATE_URL", :visitor_email],
   }.each do |surface, (helper, host_env, param_key)|
     test "#{surface} sign-up email answers 429 once the per-source allowance is spent" do
       # The per-source quota is larger than the sign-up flow's own OTP cooldown, so

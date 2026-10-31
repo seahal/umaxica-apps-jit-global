@@ -11,6 +11,7 @@ module Auth
         include ::SignOutInertiaPages
 
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
         declare_authentication_mode! :open
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path

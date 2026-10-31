@@ -3,14 +3,13 @@
 
 require "sha3"
 require "concurrent"
-require_relative "../../models/concerns/refresh_token_shared"
 
 # ==========================================================================
 # TOC
 # 1) Preference request entrypoints (I/O boundary)
 # 2) Preference option/domain mapping
 # 3) Audit + preference domain updates
-# 4) Refresh/access token lifecycle (I/O + domain)
+# 4) Anonymous Preference JWT lifecycle (I/O + domain)
 # 5) Cookie/header/session helpers (I/O boundary)
 # 6) Child-record lazy helpers
 #
@@ -21,31 +20,13 @@ require_relative "../../models/concerns/refresh_token_shared"
 
 module PreferenceBase
   extend ActiveSupport::Concern
-  include DbscCanonicalUrl
-  include ::RefreshTokenShared
-  include PreferenceCookieWriter
+  include PreferenceBrowserBinding
+  include PreferenceWriteBoundary
   include PreferenceAccessTokenTransport
   include PreferenceAccessTokenIssuer
-  include PreferenceRefreshTokenTransport
   include PreferenceTransport
 
   class ResolutionError < StandardError; end
-
-  ACCESS_TOKEN_TTL = ::SecurityTokenLifetimes::PREFERENCE_JWT_TTL
-  REFRESH_TOKEN_TTL = 400.days
-  THEME_COOKIE_KEY = PreferenceIoKeys::Cookies::THEME
-  LANGUAGE_COOKIE_KEY = PreferenceIoKeys::Cookies::LANGUAGE
-  TIMEZONE_COOKIE_KEY = PreferenceIoKeys::Cookies::TIMEZONE
-  PUBLIC_OPTION_COOKIE_METHODS = {
-    PreferenceIoKeys::Cookies::THEME => :theme,
-    PreferenceIoKeys::Cookies::TIMEZONE => :timezone,
-    PreferenceIoKeys::Cookies::CURRENCY => :currency,
-    PreferenceIoKeys::Cookies::DATE_FORMAT => :date_format,
-    PreferenceIoKeys::Cookies::TIME_FORMAT => :time_format,
-    PreferenceIoKeys::Cookies::MOTION => :motion,
-    PreferenceIoKeys::Cookies::DENSITY => :density,
-    PreferenceIoKeys::Cookies::PAGE_SIZE => :page_size,
-  }.freeze
 
   THEME_SHORT_MAP = {
     "light" => "li",
@@ -86,20 +67,9 @@ module PreferenceBase
 
   def set_color_theme
     source = color_theme_preference_source
-    theme = normalize_theme(public_option_cookie_value(source, THEME_COOKIE_KEY, :theme))
-
-    # Display defaults used after detaching a credential are not the visitor's settings, so they
-    # must not overwrite the public option cookies.
-    if preference_state_write_request? && !preference_credential_detached?
-      write_preference_cookie(THEME_COOKIE_KEY, theme)
-      write_public_option_cookies(source)
-    end
+    theme = normalize_theme(theme_preference_value(source))
     @color_theme = theme
     nil
-  end
-
-  def preference_state_write_request?
-    !request.get? && !request.head?
   end
 
   def color_theme_preference_source
@@ -110,26 +80,14 @@ module PreferenceBase
     Actor.preferences
   end
 
-  def write_public_option_cookies(source)
-    public_option_cookie_payload(source).each do |key, value|
-      write_preference_cookie(key, value.to_s)
-    end
-  end
-
-  def public_option_cookie_payload(source)
-    return {} if source.blank?
-
-    PUBLIC_OPTION_COOKIE_METHODS.each_with_object({}) do |(key, method_name), payload|
-      value = public_option_cookie_value(source, key, method_name)
-      payload[key] = value if value.present?
-    end
-  end
-
-  def public_option_cookie_value(source, key, method_name)
-    if source.respond_to?(:[])
-      source[key] || source[key.to_sym]
-    elsif source.respond_to?(method_name)
-      source.public_send(method_name)
+  def theme_preference_value(source)
+    case source
+    when Hash
+      source["theme"] || source[:theme]
+    when Actor::Preference
+      source.theme
+    else
+      raise ArgumentError, "unsupported Preference display source: #{source.class.name}"
     end
   end
 
@@ -145,6 +103,12 @@ module PreferenceBase
       create_preference_cookie(prefix, preference)
       ensure_preference_option_defaults(prefix)
       create_preference_option_records(prefix, preference, option_ids)
+      if prefix == "Com"
+        ComPreferenceWebPushOption.ensure_defaults!
+        create_preference_association!(
+          preference, ComPreferenceWebPush, option_id: ComPreferenceWebPushOption::DISABLED,
+        )
+      end
     end
   end
 
@@ -285,32 +249,12 @@ module PreferenceBase
   end
 
   def ensure_preferences_record
-    if request.get? || request.head?
-      load_access_token_preference_record!(clear_invalid_cookie: false)
-      return @preferences if @preferences.present?
-
-      # A screen render may read a current preference token, but an ordinary
-      # navigation must not create its server-side record. Explicit preference
-      # writes bootstrap a persisted record through set_preferences_cookie.
-      return @preferences = preference_class.new
-    end
-
-    # A credential refused earlier in this request keeps its refusal: creating a fresh record here
-    # would turn an invalid credential into a successful write. Callers treat nil as a failed
-    # preference operation.
-    return if preference_refresh_failed? || preference_credential_detached?
-
-    load_access_token_preference_record!
-    return @preferences if @preferences.present?
-
-    preference, = load_preference_record_from_refresh_token!(create_if_missing: true)
-    return if preference_refresh_failed?
-
-    @preferences = preference
+    load_access_token_preference_record! if @preferences.blank?
+    @preferences ||= preference_class.new
   end
 
   def create_audit_log(event_id:, context:, expires_at: nil)
-    expires_at_value = expires_at || REFRESH_TOKEN_TTL.from_now
+    expires_at_value = expires_at || SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_ACCESS_TOKEN_TTL.from_now
     normalized_event_id = normalize_preference_audit_event_id(event_id)
 
     ChronicleRecord.connected_to(role: :writing) do
@@ -443,8 +387,6 @@ module PreferenceBase
     ensure_model_defaults!(PreferenceClassRegistry.status_class_for(preference_class))
     ensure_model_defaults!(preference_audit_level_class)
     ensure_model_defaults!(preference_audit_event_class)
-    ensure_model_defaults!(preference_binding_method_class)
-    ensure_model_defaults!(preference_dbsc_status_class)
   end
 
   def ensure_model_defaults!(klass)
@@ -482,139 +424,66 @@ module PreferenceBase
     return yield if connection_owner.blank?
 
     connection_owner.connected_to(role: role) { yield }
-  rescue ActiveRecord::ConnectionNotDefined
-    raise unless role == :reading
-
-    connection_owner.connected_to(role: :writing) { yield }
   end
 
   # ==========================================================================
   # 5) Refresh/access token lifecycle (Cookie/Header/Request I/O boundary)
   # ==========================================================================
-  def preference_binding_method_class
-    case preference_class.name
-    when "AppPreference" then AppPreferenceBindingMethod
-    when "ComPreference" then ComPreferenceBindingMethod
-    when "OrgPreference" then OrgPreferenceBindingMethod
-    when "ClientToken" then ClientTokenBindingMethod
-    when "OperatorToken" then OperatorTokenBindingMethod
-    when "VisitorToken" then VisitorTokenBindingMethod
-    else
-      raise ArgumentError, "Unknown preference class: #{preference_class.name}"
-    end
+  def build_preferences_payload(preference)
+    raise ArgumentError, "unsupported Preference token model" unless anonymous_preference_claim_shape?(preference)
+
+    build_anonymous_realm_preferences_payload(preference)
   end
 
-  def preference_dbsc_status_class
-    case preference_class.name
-    when "AppPreference" then AppPreferenceDbscStatus
-    when "ComPreference" then ComPreferenceDbscStatus
-    when "OrgPreference" then OrgPreferenceDbscStatus
-    when "ClientToken" then ClientTokenDbscStatus
-    when "OperatorToken" then OperatorTokenDbscStatus
-    when "VisitorToken" then VisitorTokenDbscStatus
-    else
-      raise ArgumentError, "Unknown preference class: #{preference_class.name}"
+  # Anonymous realm tokens contain only the nine closed display fields. Region, consent, Web Push,
+  # and identity stay in their owning records and never enter the shared display credential.
+  def build_anonymous_realm_preferences_payload(preference)
+    prefix = preference_prefix(preference)
+    option_ids = preference_payload_option_ids(preference)
+    %i(theme language timezone currency date_format time_format motion density page_size).each do |type|
+      option_ids[type] ||= PreferenceClassRegistry.default_option_id(prefix, type)
     end
-  end
-
-  def preference_dbsc_payload_for(preference)
-    return unless preference
-
     {
-      binding_method: dbsc_binding_method_name(preference),
-      status: dbsc_status_name(preference),
-      session_id: preference.dbsc_session_id,
-      registration_url: preference_dbsc_path,
-      verification_url: preference_dbsc_path,
+      "theme" => normalized_theme_key(option_id_to_theme(option_ids[:theme], prefix)),
+      "language" => option_id_to_language(option_ids[:language], prefix),
+      "timezone" => option_id_to_timezone(option_ids[:timezone], prefix),
+      "currency" => option_id_to_preference_value(option_ids[:currency], prefix, :currency),
+      "date_format" => option_id_to_preference_value(option_ids[:date_format], prefix, :date_format),
+      "time_format" => option_id_to_preference_value(option_ids[:time_format], prefix, :time_format),
+      "motion" => option_id_to_preference_value(option_ids[:motion], prefix, :motion),
+      "density" => option_id_to_preference_value(option_ids[:density], prefix, :density),
+      "page_size" => option_id_to_preference_value(option_ids[:page_size], prefix, :page_size),
     }
   end
 
-  def preference_dbsc_cookie_expires_at(preference, now: Time.current)
-    return unless preference&.binding_method_dbsc?
-
-    times = [now + 10.minutes, preference.expires_at]
-    times << preference.revoked_at if preference.respond_to?(:revoked_at)
-    times.compact.min
+  def normalized_theme_key(value)
+    { "li" => "light", "dr" => "dark", "sy" => "system" }.fetch(value, value)
   end
 
-  def issue_preference_dbsc_registration_header_for(preference)
-    return unless preference
-    return if preference.binding_method_dbsc?
+  # Accepts either the preference instance or its class; the claim shape is a per-class contract.
+  def anonymous_com_claim_shape?(preference)
+    klass = preference.is_a?(Class) ? preference : preference.class
 
-    # A host without a Preference DBSC endpoint must not advertise a registration
-    # path. Host-only Preference credentials cannot register against another host.
-    path = preference_dbsc_path
-    return if path.nil?
-
-    challenge = issue_preference_dbsc_challenge_for!(preference)
-    return if challenge.blank?
-
-    value = DbscHeaderSerializer.registration(path: path, challenge: challenge)
-    response.set_header(
-      PreferenceIoKeys::Headers::DBSC_REGISTRATION,
-      value,
-    )
-    response.set_header(PreferenceIoKeys::Headers::DBSC_SECURE_REGISTRATION, value)
-    Rails.logger.info(
-      JitLogEvent.format("dbsc.registration.advertised", request_path: path),
-    )
+    klass.name == "ComPreference"
   end
 
-  def issue_preference_dbsc_challenge_for!(preference)
-    challenge = SecureRandom.urlsafe_base64(32)
-    preference.update!(dbsc_challenge: challenge, dbsc_challenge_issued_at: Time.current)
-    challenge
-  rescue StandardError
-    nil
+  def anonymous_preference_claim_shape?(preference)
+    klass = preference.is_a?(Class) ? preference : preference.class
+
+    [AppPreference, ComPreference, OrgPreference].include?(klass)
   end
 
-  def preference_dbsc_path
-    # Unsupported by default. Each host that serves the endpoint names its own
-    # canonical route explicitly in its surface-local controller base.
-    nil
+  def anonymous_preference_payload?(payload)
+    payload.is_a?(Hash) && SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALMS.include?(payload["aud"])
   end
 
-  def dbsc_binding_method_name(record)
-    return "dbsc" if record.binding_method_dbsc?
-    return "legacy" if record.binding_method_legacy?
-
-    "nothing"
-  end
-
-  def dbsc_status_name(record)
-    return "pending" if record.dbsc_status_pending?
-    return "active" if record.dbsc_status_active?
-    return "failed" if record.dbsc_status_failed?
-    return "revoke" if record.dbsc_status_revoke?
-
-    "nothing"
-  end
-
-  def build_preferences_payload(preference)
-    option_prefix = preference.class.name.sub("Preference", "")
-    option_ids = preference_payload_option_ids(preference)
-    consent_state = preference_cookie_consent_state(preference)
-
-    {
-      "ver" => Actor::Preference::SCHEMA_VERSION,
-      "lx" => option_id_to_language(option_ids[:language], option_prefix) || "ja",
-      "ri" => option_id_to_region(option_ids[:region], option_prefix) || "jp",
-      "tz" => option_id_to_timezone(option_ids[:timezone], option_prefix) || "Asia/Tokyo",
-      "ct" => normalize_theme(option_id_to_theme(option_ids[:theme], option_prefix)) || "sy",
-    }.merge(
-      preference_payload_extended_options(option_ids, option_prefix),
-      preference_payload_consent(consent_state),
-      preference_payload_explicit(preference),
-    )
-  end
-
-  # Field names the user set on purpose, carried in the signed payload so the
-  # Actor can let an explicit value win over dynamic region seeding (?ri).
-  # Absent (older record without the marker) yields an empty list.
-  def preference_payload_explicit(preference)
-    return {} unless preference.respond_to?(:explicit_field_names)
-
-    { "explicit" => preference.explicit_field_names }
+  def preference_realm_name
+    case preference_class.name
+    when "AppPreference" then "app"
+    when "ComPreference" then "com"
+    when "OrgPreference" then "org"
+    else raise ArgumentError, "unsupported Preference model: #{preference_class.name}"
+    end
   end
 
   def preference_payload_option_ids(preference)
@@ -625,40 +494,6 @@ module PreferenceBase
         type,
       ).where(preference_id: preference.id).pick(:option_id)
     end
-  end
-
-  def preference_payload_extended_options(option_ids, option_prefix)
-    {
-      "cu" => option_id_to_preference_value(option_ids[:currency], option_prefix, :currency) || "jpy",
-      "df" => option_id_to_preference_value(option_ids[:date_format], option_prefix, :date_format) || "iso",
-      "tf" => option_id_to_preference_value(option_ids[:time_format], option_prefix, :time_format) || "24",
-      "mo" => option_id_to_preference_value(option_ids[:motion], option_prefix, :motion) || "standard",
-      "dn" => option_id_to_preference_value(option_ids[:density], option_prefix, :density) || "standard",
-      "ps" => option_id_to_preference_value(option_ids[:page_size], option_prefix, :page_size) || "infinity",
-    }
-  end
-
-  def preference_payload_consent(consent_state)
-    {
-      "consented" => consent_state[:consented],
-      "functional" => consent_state[:functional],
-      "performant" => consent_state[:performant],
-      "targetable" => consent_state[:targetable],
-    }
-  end
-
-  def preference_cookie_consent_state(preference)
-    cookie = PreferenceClassRegistry.cookie_class(
-      preference_prefix(preference),
-    ).find_by(preference_id: preference.id)
-    return { consented: false, functional: false, performant: false, targetable: false } if cookie.blank?
-
-    {
-      consented: !!cookie.consented,
-      functional: !!cookie.functional,
-      performant: !!cookie.performant,
-      targetable: !!cookie.targetable,
-    }
   end
 
   def option_id_to_language(option_id, prefix)
@@ -712,198 +547,12 @@ module PreferenceBase
     PreferenceToken.extract_preferences(@preference_payload)
   end
 
-  def clear_preference_refresh_failure!
-    @preference_refresh_failed = false
-  end
-
-  def preference_refresh_failed?
-    @preference_refresh_failed
-  end
-
-  def preference_refresh_binding_allowed?(preference)
-    return preference_refresh_dbsc_allowed?(preference) if preference.binding_method_dbsc?
-
-    true
-  end
-
-  def preference_refresh_dbsc_allowed?(preference)
-    unless preference.dbsc_status_active?
-      @preference_refresh_binding_reason = "dbsc_not_active"
-      return false
-    end
-
-    dbsc_cookie = preference_dbsc_cookie_names.lazy.filter_map { |cookie_name|
-      BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
-    }.first
-    if dbsc_cookie.blank?
-      @preference_refresh_binding_reason = "missing_bound_cookie"
-      return false
-    end
-
-    if preference.dbsc_session_id.to_s.blank? || preference.dbsc_session_id != dbsc_cookie
-      @preference_refresh_binding_reason = "session_id_mismatch"
-      return false
-    end
-
-    true
-  end
-
-  def handle_preference_refresh_binding_denied(preference, refresh_public_id)
-    clear_preference_auth_cookies!
-    @preference_refresh_failed = true
-    @preference_refresh_binding_denied = true
-    @preference_credential_failure = :binding_denied
-
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "preference.token.refresh.binding_denied",
-        reason: @preference_refresh_binding_reason || "missing",
-        **preference_refresh_log_context(preference, refresh_public_id),
-      ),
-    )
-  end
-
-  def handle_preference_refresh_failed(preference, refresh_public_id)
-    clear_preference_auth_cookies!
-    @preference_refresh_failed = true
-    @preference_credential_failure ||=
-      classify_refresh_credential_failure(preference, refresh_public_id, @refresh_presented_digest)
-
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "preference.token.refresh.failed",
-        **preference_refresh_log_context(preference, refresh_public_id),
-      ),
-    )
-  end
-
-  def render_preference_refresh_error!
-    if request.format.json?
-      render json: {
-        error: I18n.t("sign.token_refresh.errors.invalid_refresh_token"),
-        error_code: "invalid_refresh_token",
-      }, status: :unauthorized
-    else
-      head :unauthorized
-    end
-  end
-
-  def valid_refresh_preference?(preference)
-    preference.present? &&
-      preference.status_id != preference_status_class::DELETED &&
-      (preference.expires_at.nil? || preference.expires_at > Time.current) &&
-      !preference.replay? &&
-      !preference.revoked?
-  end
-
-  def find_preference_by_presented_token
-    return nil if @refresh_presented_digest.blank?
-
-    relation = preference_class.where(token_digest: @refresh_presented_digest)
-    relation = relation.where(public_id: @refresh_public_id) if @refresh_public_id.present?
-    relation.order(:id).last
-  end
-
-  def handle_preference_refresh_replay!(preference)
-    now = Time.current
-
-    with_preference_connection(:writing) do
-      updates = { discard_at: now }
-      updates[:compromised_at] = now if preference.respond_to?(:compromised_at=)
-      updates[:revoked_at] = now if preference.respond_to?(:revoked_at=)
-
-      lapses_at_value = preference.discard_at
-      is_infinite = lapses_at_value.respond_to?(:infinite?) && lapses_at_value.infinite?
-      already_handled =
-        if preference.respond_to?(:compromised_at)
-          preference.compromised_at.present?
-        else
-          !is_infinite && lapses_at_value <= now
-        end
-      preference.update!(updates) unless already_handled
-    end
-
-    clear_preference_auth_cookies!
-    @preference_refresh_failed = true
-    @preference_credential_failure = :replay_detected
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "preference.token.refresh.replay_detected",
-        replaced_by_id: preference.replaced_by_id,
-        **preference_refresh_log_context(preference, preference.public_id),
-      ),
-    )
-    :compromised
-  end
-
-  def log_preference_refresh_rotation_failed(preference, refresh_public_id)
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "preference.token.refresh.rotation_failed",
-        **preference_refresh_log_context(preference, refresh_public_id),
-      ),
-    )
-  end
-
-  def preference_refresh_log_context(preference, refresh_public_id)
-    {
-      preference_type: preference_class.name,
-      preference_public_id: preference&.public_id || refresh_public_id,
-      refresh_public_id: refresh_public_id || @refresh_public_id,
-      controller: controller_path,
-      action: action_name.presence || params[:action],
-      request_method: request.request_method,
-      path: request.path,
-      format: request.format&.ref,
-      request_id: request.request_id,
-    }.compact
-  end
-
-  # ==========================================================================
-  # 6) Cookie/header/session helpers (I/O boundary)
-  # ==========================================================================
-  def preference_cookie_options(expires_at:, httponly:)
-    ::CoreCookieOptions.for(
-      request: request,
-      expires: expires_at,
-      httponly: httponly,
-      secure: ::JitSessionCookieConfig.force_secure?,
-      same_site: :strict,
-      path: "/",
-    )
-  end
-
-  def preference_auth_cookie_options(expires_at:)
-    # Inherit SameSite=Strict from preference_cookie_options. The preference JWT (access/refresh)
-    # is not required on a cross-site top-level inbound navigation: a missing cookie on the first
-    # external hit only means default preferences for that first paint, restored on the next
-    # same-site request. This matches the accepted trade-off for the auth cookies.
-    preference_cookie_options(expires_at: expires_at, httponly: true)
-  end
-
   def access_token_cookie_name
-    PreferenceCookieName.access
+    PreferenceCookieName.anonymous_jwt
   end
 
   def access_token_cookie_names
-    [access_token_cookie_name, *PreferenceCookieName.legacy_access_names(surface: preference_cookie_surface)].uniq
-  end
-
-  def refresh_token_cookie_name
-    PreferenceCookieName.refresh
-  end
-
-  def preference_dbsc_cookie_name
-    PreferenceCookieName.dbsc
-  end
-
-  def refresh_token_cookie_names
-    [refresh_token_cookie_name, *PreferenceCookieName.legacy_refresh_names(surface: preference_cookie_surface)].uniq
-  end
-
-  def preference_dbsc_cookie_names
-    [preference_dbsc_cookie_name, *PreferenceCookieName.legacy_dbsc_names(surface: preference_cookie_surface)].uniq
+    [PreferenceCookieName.anonymous_jwt]
   end
 
   def preference_cookie_surface
@@ -912,47 +561,6 @@ module PreferenceBase
     when "ComPreference" then :com
     when "OrgPreference" then :org
     end
-  end
-
-  def set_refresh_token_cookie(token, expires_at)
-    cookies[refresh_token_cookie_name] = preference_auth_cookie_options(expires_at: expires_at).merge(
-      value: token,
-    )
-    clear_legacy_preference_auth_cookies!
-  end
-
-  def set_preference_dbsc_cookie!(token, expires_at:)
-    cookies[preference_dbsc_cookie_name] = preference_cookie_options(expires_at: expires_at, httponly: true).merge(
-      value: token,
-    )
-    clear_legacy_preference_auth_cookies!
-  end
-
-  def clear_preference_auth_cookies!
-    [access_token_cookie_name, refresh_token_cookie_name, preference_dbsc_cookie_name,
-     *PreferenceCookieName.legacy_access_names(surface: preference_cookie_surface),
-     *PreferenceCookieName.legacy_refresh_names(surface: preference_cookie_surface),
-     *PreferenceCookieName.legacy_dbsc_names(surface: preference_cookie_surface),].uniq.each do |cookie_name|
-      cookies.delete(cookie_name, **preference_cookie_deletion_options)
-    end
-  end
-
-  def clear_legacy_preference_auth_cookies!
-    [*PreferenceCookieName.legacy_access_names(surface: preference_cookie_surface),
-     *PreferenceCookieName.legacy_refresh_names(surface: preference_cookie_surface),
-     *PreferenceCookieName.legacy_dbsc_names(surface: preference_cookie_surface),].uniq.each do |cookie_name|
-      next if cookie_name == access_token_cookie_name
-      next if cookie_name == refresh_token_cookie_name
-      next if cookie_name == preference_dbsc_cookie_name
-
-      cookies.delete(cookie_name, **preference_cookie_deletion_options)
-    end
-  end
-
-  def preference_cookie_deletion_options
-    opts = preference_auth_cookie_options(expires_at: nil)
-    opts.delete(:expires)
-    opts
   end
 
   def preference_child_class_suffix(type)
@@ -1007,7 +615,7 @@ module PreferenceBase
   # backfilled at the next legitimate write point (PATCH/update), not on GET.
   def load_or_build_preference_child(child_type, default_attributes = {})
     record_class = preference_child_record_class(child_type)
-    child = record_class.find_by(preference_id: @preferences.id)
+    child = record_class.find_by(preference_id: @preferences.id) if @preferences.persisted?
     return child if child.present?
 
     attributes = { preference_id: @preferences.id }.merge(default_attributes)

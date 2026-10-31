@@ -107,10 +107,7 @@ class BranchCoverageBatch30LibEasyArmsTest < ActiveSupport::TestCase
     assert_equal "client", SecurityJwtOidcIdTokenCodec.resource_type_for_client(client)
     assert_equal "operator",
                  SecurityJwtOidcIdTokenCodec.resource_type_for_client(Struct.new(:resource_type).new("staff"))
-    assert_equal "visitor",
-                 SecurityJwtOidcIdTokenCodec.resource_type_for_client(Struct.new(:resource_type).new("customer"))
     assert_equal "operator", SecurityJwtOidcIdTokenCodec.resource_type_for_resource(Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED))
-    assert_equal "visitor", SecurityJwtOidcIdTokenCodec.resource_type_for_resource(Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
   end
 
   test "SignInSequence expired blank expires_at is expired" do

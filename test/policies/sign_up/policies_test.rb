@@ -227,22 +227,27 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
   end
 
   test "social callback policy is app social only" do
-    op_base_app = build_ticket(
+    app_social = build_ticket(
       ClientSignUpFlow,
       entry_method: "google",
       status_id: ClientSignUpFlowStatus::STARTED,
       step: "start",
     )
-    op_base_com = build_ticket(
-      VisitorSignUpFlow,
+    app_email = build_ticket(
+      ClientSignUpFlow,
       entry_method: "email",
-      status_id: VisitorSignUpFlowStatus::STARTED,
+      status_id: ClientSignUpFlowStatus::STARTED,
       step: "start",
     )
+    com_context = SignUpPolicyContext.build(
+      surface: :com,
+      actor_authentication: auth(active_sign_sequence_id: app_social.public_id),
+      ticket: app_social,
+    )
 
-    assert_predicate SignUp::SocialCallbackPolicy.new(policy_context(op_base_app), user: nil), :start_social_callback?
-    assert_not_predicate SignUp::SocialCallbackPolicy.new(policy_context(op_base_com), user: nil),
-                         :start_social_callback?
+    assert_predicate SignUp::SocialCallbackPolicy.new(policy_context(app_social), user: nil), :start_social_callback?
+    assert_not_predicate SignUp::SocialCallbackPolicy.new(policy_context(app_email), user: nil), :start_social_callback?
+    assert_not_predicate SignUp::SocialCallbackPolicy.new(com_context, user: nil), :start_social_callback?
   end
 
   test "surface falls back to registry when context lacks surface method" do
@@ -270,19 +275,6 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     context = policy_context(ticket)
 
     assert_not_predicate SignUp::TicketPolicy.new(context, user: clients(:one)), :finalize?
-  end
-
-  test "actor_class_matches? verifies user class matches visitor sign-up flow" do
-    visitor = visitors(:reserved_visitor)
-    ticket = build_ticket(
-      VisitorSignUpFlow,
-      entry_method: "email",
-      step: "checkpoint",
-      principal_id: visitor.id,
-    )
-    context = policy_context(ticket)
-
-    assert_not_predicate SignUp::TicketPolicy.new(context, user: visitor), :finalize?
   end
 
   test "actor_class_matches? returns false for unknown ticket class" do

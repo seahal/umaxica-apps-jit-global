@@ -85,7 +85,8 @@ Common examples:
 
 - dashboards;
 - signed-in user settings under `/setting`;
-- operator-controlled configuration under `/configurator`;
+- operator-controlled configuration under Base ORG `/settings` (the owner-approved WU-X1
+  migration; separate from Auth APP/ORG identity `/settings`);
 - credential management;
 - authenticated APIs tied to the current actor.
 

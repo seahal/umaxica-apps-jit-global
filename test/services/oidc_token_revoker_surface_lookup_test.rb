@@ -13,9 +13,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses,
            :operators, :operator_statuses, :operator_token_kinds, :operator_token_statuses,
-           :operator_token_binding_methods, :operator_token_dbsc_statuses,
-           :visitors, :visitor_statuses, :visitor_token_kinds, :visitor_token_statuses,
-           :visitor_token_binding_methods, :visitor_token_dbsc_statuses
+           :operator_token_binding_methods, :operator_token_dbsc_statuses
 
   test "a staff client revokes its own refresh token usage" do
     token = OperatorToken.create!(
@@ -43,56 +41,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
     assert_predicate usage.reload, :revoked?
   end
 
-  test "a visitor client revokes its own refresh token usage" do
-    token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitors(:reserved_visitor),
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discard_at: 1.day.from_now,
-    )
-    usage = OpComGrant.create!(
-      authentication_epoch: 0,
-      visitor_token: token, oidc_client_id: "core-com-jp", refresh_token_expires_at: 1.hour.from_now,
-    )
-    refresh_token = usage.issue_refresh_token!
 
-    result =
-      OidcClientRegistry.stub(:authenticate, true) do
-        OidcTokenRevoker.call(
-          token: refresh_token, client_id: "core-com-jp", client_secret: "secret",
-          token_type_hint: "refresh_token",
-        )
-      end
-
-    assert_predicate result, :success?
-    assert_predicate usage.reload, :revoked?
-  end
-
-  test "a staff refresh token is not revoked by a visitor client" do
-    token = OperatorToken.create!(
-      authentication_epoch: 0,
-      staff: operators(:one),
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discard_at: 1.day.from_now,
-    )
-    usage = OpOrgGrant.create!(
-      authentication_epoch: 0,
-      operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
-    )
-    refresh_token = usage.issue_refresh_token!
-
-    OidcClientRegistry.stub(:authenticate, true) do
-      OidcTokenRevoker.call(
-        token: refresh_token, client_id: "core-com-jp", client_secret: "secret",
-        token_type_hint: "refresh_token",
-      )
-    end
-
-    assert_not usage.reload.revoked?,
-               "#{usage.public_id}: a visitor-authenticated revocation must not reach a staff usage row"
-  end
 
   test "an access token sid that names only the parent does not revoke the parent" do
     token = ClientToken.create!(

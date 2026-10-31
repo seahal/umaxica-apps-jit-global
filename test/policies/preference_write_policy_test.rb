@@ -70,7 +70,7 @@ class PreferenceWritePolicyTest < ActiveSupport::TestCase
   test "client preference policy only allows the owning client" do
     owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 10)
     other = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 20)
-    preference = ClientPreference.new(user_id: owner.id)
+    preference = ClientPreference.new(client_id: owner.id)
 
     assert_predicate ClientPreferencePolicy.new(preference, user: owner), :update?
     assert_not ClientPreferencePolicy.new(preference, user: other).update?
@@ -78,10 +78,10 @@ class PreferenceWritePolicyTest < ActiveSupport::TestCase
   end
 
   test "client preference policy denies non-Client user" do
-    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 10)
-    preference = ClientPreference.new(user_id: visitor.id)
+    operator = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 10)
+    preference = ClientPreference.new(client_id: operator.id)
 
-    assert_not ClientPreferencePolicy.new(preference, user: visitor).update?
+    assert_not ClientPreferencePolicy.new(preference, user: operator).update?
   end
 
   test "client preference policy denies non-ClientPreference record" do
@@ -93,7 +93,7 @@ class PreferenceWritePolicyTest < ActiveSupport::TestCase
   test "operator preference policy only allows the owning operator" do
     owner = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 10)
     other = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 20)
-    preference = OperatorPreference.new(staff_id: owner.id)
+    preference = OperatorPreference.new(operator_id: owner.id)
 
     assert_predicate OperatorPreferencePolicy.new(preference, user: owner), :update?
     assert_not OperatorPreferencePolicy.new(preference, user: other).update?
@@ -102,7 +102,7 @@ class PreferenceWritePolicyTest < ActiveSupport::TestCase
 
   test "operator preference policy denies non-Operator user" do
     client = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 10)
-    preference = OperatorPreference.new(staff_id: client.id)
+    preference = OperatorPreference.new(operator_id: client.id)
 
     assert_not OperatorPreferencePolicy.new(preference, user: client).update?
   end
@@ -111,28 +111,5 @@ class PreferenceWritePolicyTest < ActiveSupport::TestCase
     operator = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 10)
 
     assert_not OperatorPreferencePolicy.new(String.new, user: operator).update?
-  end
-
-  test "visitor preference policy only allows the owning visitor" do
-    owner = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 10)
-    other = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 20)
-    preference = VisitorPreference.new(visitor_id: owner.id)
-
-    assert_predicate VisitorPreferencePolicy.new(preference, user: owner), :update?
-    assert_not VisitorPreferencePolicy.new(preference, user: other).update?
-    assert_not VisitorPreferencePolicy.new(preference, user: nil).update?
-  end
-
-  test "visitor preference policy denies non-Visitor user" do
-    client = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 10)
-    preference = VisitorPreference.new(visitor_id: client.id)
-
-    assert_not VisitorPreferencePolicy.new(preference, user: client).update?
-  end
-
-  test "visitor preference policy denies non-VisitorPreference record" do
-    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 10)
-
-    assert_not VisitorPreferencePolicy.new(String.new, user: visitor).update?
   end
 end

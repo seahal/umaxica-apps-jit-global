@@ -1,0 +1,6 @@
+# WU-7 realm and com reader recheck
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- `PARALLEL_WORKERS=1 bin/rails test test/values/anonymous_com_preference_token_shape_test.rb test/unit/jit/security/jwt/registry_test.rb test/integration/anonymous_com_web_push_initialization_test.rb test/controllers/warp/com/roots_controller_test.rb` passed: 86 runs, 743 assertions, zero failures, errors or skips.
+- The codec tests exercise com tokens on app and org hosts, app and org tokens on com, same-realm sibling acceptance, and rejection of tokens signed by the other namespace's key. The registry test verifies a com token using a configured public-only key and refuses issuance with that configuration. The integration test sends a Base-issued token to Warp com, observes no com preference SQL, makes a private-key lookup raise if called, checks rendered theme and checks no shared preference or binding cookie is issued. The Warp controller test also checks signed display values and no com preference SQL.
+- These tests do not prove deployment key distribution or process-level secret isolation, app-to-org or org-to-app isolation, every same-TLD reader, or full-suite status. App/org remain on their existing shared preference namespace for WU-9. No migration or external key distribution was performed.

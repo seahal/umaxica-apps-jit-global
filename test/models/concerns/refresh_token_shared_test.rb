@@ -74,20 +74,20 @@ class RefreshTokenSharedTest < ActiveSupport::TestCase
     used_digest = AppPreference.digest_refresh_token("used-refresh")
     expired_digest = AppPreference.digest_refresh_token("expired-refresh")
     eligible = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
+      status_id: AppPreferenceStatus::ACTIVE,
       discard_at: 1.hour.from_now,
       token_digest: eligible_digest,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
+      status_id: AppPreferenceStatus::ACTIVE,
       discard_at: 1.hour.from_now,
       token_digest: used_digest,
       used_at: Time.current,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
+      status_id: AppPreferenceStatus::ACTIVE,
       discard_at: 1.minute.ago,
       token_digest: expired_digest,
       jti: SecureRandom.uuid,

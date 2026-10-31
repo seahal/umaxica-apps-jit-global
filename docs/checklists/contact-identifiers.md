@@ -21,6 +21,8 @@ deletion, secret rotation or production authority.
 - Telephone uses its explicit otp_last_sent_at in every realm, never created_at. Email/Telephone own
   separate stateful lifecycle/attempt/cooldown/resend/retention policies; pure crypto primitives may
   be shared. No shared OtpLockable, shared stateful parent or new global identifier authority.
+- APP and ORG Telephone credential-registration issuance accepts the existing negative-infinity
+  timestamp and applies the 30-second Source cooldown at the before, equal and after boundaries.
 - Check concrete model/policy/issuer callers, schema timestamp and public OTP tests. Start at
   existing `test/models/concerns/otp_lockable_test.rb` only after inspecting its current subject;
   its historical filename does not authorize reintroducing shared policy. Complete six-model

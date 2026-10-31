@@ -55,12 +55,12 @@ class DatabaseConsistencyTest < ActiveSupport::TestCase
   test "AppPreference requires unique jti" do
     AppPreference.create!(
       jti: "unique_jti_123",
-      status_id: AppPreferenceStatus::NOTHING,
+      status_id: AppPreferenceStatus::ACTIVE,
     )
 
     pref2 = AppPreference.new(
       jti: "unique_jti_123",
-      status_id: AppPreferenceStatus::NOTHING,
+      status_id: AppPreferenceStatus::ACTIVE,
     )
 
     assert_not pref2.valid?

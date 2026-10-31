@@ -3,6 +3,9 @@
 require "test_helper"
 
 class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+  uses_transaction "test_app_real_and_dummy_receipt_and_wrong_OTP_expose_the_same_controls_and_feedback"
+
   setup do
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -13,10 +16,10 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} email OTP cancellation refuses a browser without sign-in admission" do
       browser = open_session
-      host = (surface == "app") ? ENV.fetch("PUBLIC_AUTH_SERVICE_URL") : ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+      host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       browser.host!(host)
 
       browser.delete("/sign/in/email")
@@ -25,81 +28,35 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
     end
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} real and dummy code entry share microsecond expiry boundaries" do
       address = "expiry-real-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).finalize_binding!
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-          status_id: VisitorStatus::ACTIVE,
-        )
-        owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).finalize_binding!
-      end
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).finalize_binding!
+      model = ClientAuthCeremonySession
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       paths = {}
       [["real", address], ["fake", "expiry-fake-#{SecureRandom.hex(8)}@example.test"]].each do |mode, destination|
         browser = open_session
-        begin
-          admission_browser = browser
-          admission_surface = surface
-          admission_intent = "sign_in"
-          admission_host = {
-            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-          }.fetch(admission_surface)
-          admission_browser.host!(admission_host)
-          admission_issuance = OidcTestEntry.issue!(
-            surface: admission_surface, intent: admission_intent,
-            base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-          )
-          admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-          admission_browser.get(
-            admission_path,
-            params: { entry_ref: admission_issuance.reference, ri: "jp" },
-          )
-          admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-          admission_browser.post(
-            "/ceremony_bindings",
-            params: { entry_ref: admission_issuance.reference,
-                      authenticity_token: admission_csrf,
-                      ri: "jp", },
-          )
-
-          assert_equal 303, admission_browser.response.status
-          admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-            surface: admission_surface, reference: admission_issuance.reference,
-          )
-          admission_binding.reload.confirm_base!(
-            base_token: nil,
-            browser_digest: admission_binding.base_browser_digest,
-          )
-          admission_browser.get(
-            admission_path,
-            params: { entry_ref: admission_issuance.reference, ri: "jp" },
-          )
-          admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-          admission_browser.post(
-            admission_path,
-            params: { entry_ref: admission_issuance.reference,
-                      authenticity_token: admission_csrf,
-                      ri: "jp", },
-          )
-
-          assert_equal 303, admission_browser.response.status
-        end
+        browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+        issuance = OidcTestEntry.issue!(
+          surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+        assert_equal 303, browser.response.status
+        browser.get(browser.response.location)
+        assert_equal 303, browser.response.status
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+        binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+        assert_equal 303, browser.response.status
+        browser.get(browser.response.location)
+        assert_equal 200, browser.response.status
         phase_binding = nil
         browser.post(
           "/sign/in/email", params: {
@@ -132,125 +89,62 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
     test "#{surface} real and dummy receipt and wrong OTP expose the same controls and feedback" do
       address = "parity-real-#{SecureRandom.hex(8)}@example.test"
-      case surface
-      when "app"
-        actor = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = actor.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      when "com"
-        actor = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = actor.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      fake_address = "parity-fake-#{SecureRandom.hex(8)}@example.test"
+      candidate_bodies = [address, fake_address].map { |value| OccurrenceHmac.digest(kind: :email, body: value) }
+      issuances = []
+
+      assert_not EmailOccurrence.exists?(body: candidate_bodies)
+      occurrence_bodies = candidate_bodies
+      actor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = actor.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       real = open_session
       dummy = open_session
       source_generation = contact.attributes.slice(
         "public_id", "address_digest", "number_digest", "user_id",
         "visitor_id", "staff_id",
       )
-      begin
-        admission_browser = real
-        admission_surface = surface
-        admission_intent = "sign_in"
-        admission_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_surface)
-        admission_browser.host!(admission_host)
-        admission_issuance = OidcTestEntry.issue!(
-          surface: admission_surface, intent: admission_intent,
-          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-        )
-        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
-
-        assert_equal 303, admission_browser.response.status
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_surface, reference: admission_issuance.reference,
-        )
-        admission_binding.reload.confirm_base!(
-          base_token: nil,
-          browser_digest: admission_binding.base_browser_digest,
-        )
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
-
-        assert_equal 303, admission_browser.response.status
-      end
+      real.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+      real.https!
+      issuance = OidcTestEntry.issue!(
+        surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      issuances << issuance
+      real.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      assert_equal 303, real.response.status
+      real.get(real.response.location)
+      assert_equal 303, real.response.status
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+      binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      real.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      assert_equal 303, real.response.status
+      real.get(real.response.location)
+      assert_equal 200, real.response.status
       real_phase_binding = nil
-      begin
-        admission_browser = dummy
-        admission_surface = surface
-        admission_intent = "sign_in"
-        admission_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_surface)
-        admission_browser.host!(admission_host)
-        admission_issuance = OidcTestEntry.issue!(
-          surface: admission_surface, intent: admission_intent,
-          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-        )
-        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
-
-        assert_equal 303, admission_browser.response.status
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_surface, reference: admission_issuance.reference,
-        )
-        admission_binding.reload.confirm_base!(
-          base_token: nil,
-          browser_digest: admission_binding.base_browser_digest,
-        )
-        admission_browser.get(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
-
-        assert_equal 303, admission_browser.response.status
-      end
+      dummy.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+      dummy.https!
+      issuance = OidcTestEntry.issue!(
+        surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      issuances << issuance
+      dummy.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      assert_equal 303, dummy.response.status
+      dummy.get(dummy.response.location)
+      assert_equal 303, dummy.response.status
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+      binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      dummy.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      assert_equal 303, dummy.response.status
+      dummy.get(dummy.response.location)
+      assert_equal 200, dummy.response.status
       dummy_phase_binding = nil
       paths = []
       # Equal-length input isolates binding-existence leakage from the caller-known address length.
-      [[real, address], [dummy, "parity-fake-#{SecureRandom.hex(8)}@example.test"]].each do |browser, destination|
+      [[real, address], [dummy, fake_address]].each do |browser, destination|
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         browser.post(
           "/sign/in/email", params: {
@@ -284,7 +178,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           assert fv5006, "expected a rendered Inertia page"
           JSON.parse(fv5006.text).fetch("props")
         end
-      resend_key = (surface == "app") ? "otp_resend" : "resend"
+      resend_key = "otp_resend"
 
       # Each admitted flow receives its own purpose-bound capability.  It is intentionally
       # different between the real and dummy browser, so compare the rendered contract after
@@ -319,7 +213,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         assert_equal 200, browser.response.status
         assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.1
       end
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       ceremony = model.find_active_by_raw_sid(real.cookies[cookie_name])
       context = ceremony.email_otp_context
@@ -399,6 +293,17 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         assert_equal 302, browser.response.status
       end
       assert_equal cancellation_paths.first, cancellation_paths.last
+    ensure
+      EmailOccurrence.where(body: occurrence_bodies).delete_all if occurrence_bodies
+      issuances&.each do |entry|
+        bindings = ClientAuthAdmissionBinding.where(authorization_transaction_id: entry.transaction.id)
+        session_ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
+        bindings.delete_all
+        ClientAuthCeremonySession.where(id: session_ids).delete_all
+        entry.transaction.delete
+      end
+      contact&.delete
+      actor&.delete
     end
   end
 

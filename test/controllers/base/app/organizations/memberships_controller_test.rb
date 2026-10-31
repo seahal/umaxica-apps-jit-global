@@ -719,7 +719,7 @@ class Base::App::Organizations::MembershipsControllerTest
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = token
   end
 
-  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org/.com)
+  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org)
   # must resolve to surface:BASE_* so the access token issuer matches the surface the
   # controller validates against.
   def jwt_issuer_id_for_test_host(host, resource_type)
@@ -738,13 +738,10 @@ class Base::App::Organizations::MembershipsControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -765,10 +762,4 @@ class Base::App::Organizations::MembershipsControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
 end

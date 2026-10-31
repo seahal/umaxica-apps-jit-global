@@ -32,21 +32,13 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
       count: 1,
       classification: "best-effort authorization failure audit side effect",
     },
-    "app/controllers/concerns/preference_adoption.rb" => {
-      count: 2,
-      classification: "best-effort preference adoption side effect",
+    "app/controllers/concerns/sign_oidc_logout.rb" => {
+      count: 1,
+      classification: "committed authentication logout isolates the best-effort Preference writer",
     },
     "app/controllers/concerns/preference_base.rb" => {
-      count: 2,
-      classification: "preference token/cookie degradation; auth state must not depend on this",
-    },
-    "app/controllers/concerns/preference_core.rb" => {
       count: 1,
-      classification: "preference persistence side effect; resolution errors are re-raised separately",
-    },
-    "app/controllers/concerns/preference_transport.rb" => {
-      count: 1,
-      classification: "preference refresh transport side effect; resolution errors are re-raised separately",
+      classification: "Preference current-resource resolution; failures are re-raised as resolution errors",
     },
     "app/controllers/concerns/authentication_base.rb" => {
       count: 3,

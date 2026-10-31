@@ -633,27 +633,24 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_response :unauthorized
   end
 
-  test "a visitor-realm credential does not authenticate a client-realm controller" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
-    visitor_token.rotate_refresh_token!
-    visitor_client = OidcClientRegistry.find!("core-com-jp")
-    op_com_grant = OpComGrant.create!(
+  test "an operator-realm credential does not authenticate a client-realm controller" do
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    operator_token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
+    operator_token.rotate_refresh_token!
+    operator_client = OidcClientRegistry.find!("core-org-jp")
+    op_org_grant = OpOrgGrant.create!(
       authentication_epoch: 0,
-      visitor_token: visitor_token, oidc_client_id: visitor_client.client_id, oidc_scope: "openid profile",
+      operator_token: operator_token, oidc_client_id: operator_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: 1.minute.ago, refresh_token_expires_at: 10.minutes.from_now,
     )
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      visitor,
-      host: request.host, resource_type: "visitor", session_public_id: visitor_token.public_id,
-      base_session_public_id: visitor_token.public_id, oidc_sid: op_com_grant.public_id,
-      oidc_jti: op_com_grant.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
-      issuer: OidcIssuer.for_resource_type("visitor"), audiences: [visitor_client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(visitor_client),
-      subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: visitor_client.client_id,
+      operator,
+      host: request.host, resource_type: "operator", session_public_id: operator_token.public_id,
+      base_session_public_id: operator_token.public_id, oidc_sid: op_org_grant.public_id,
+      oidc_jti: op_org_grant.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("operator"), audiences: [operator_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(operator_client),
+      subject: OidcSubject.for(operator, resource_type: "operator"), client_id: operator_client.client_id,
     )
 
     get :show, params: { required: "1" }
@@ -1011,10 +1008,9 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 end
 
 class BrowserRpUnauthenticatedBasePasskeyTest < ActionDispatch::IntegrationTest
-  test "Base passkey management without a session reaches the authentication gate in every realm" do
+  test "Base passkey management without a session reaches the authentication gate in every account realm" do
     [
       ["app", new_base_app_identity_passkey_path(ri: "jp", format: :json)],
-      ["com", new_base_com_identity_passkey_path(ri: "jp", format: :json)],
       ["org", new_base_org_identity_passkey_path(ri: "jp", format: :json)],
     ].each do |realm, path|
       client = OidcClientRegistry.find!("base-#{realm}-ww")

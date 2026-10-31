@@ -18,8 +18,6 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
 
   OTHER_SURFACE_SCOPED = {
     OperatorSecretCredentialPolicy => [OperatorSecretCredential, :staff_id],
-    VisitorPasskeyPolicy => [VisitorPasskey, :visitor_id],
-    VisitorSecretCredentialPolicy => [VisitorSecretCredential, :visitor_id],
   }.freeze
 
   def scoped(policy_class, relation, user:)
@@ -36,7 +34,6 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
         case model.name
         when /\AClient/ then clients(:one)
         when /\AOperator/ then operators(:one)
-        when /\AVisitor/ then Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
         end
 
       assert_includes scoped(policy_class, model.all, user: actor).to_sql, foreign_key.to_s

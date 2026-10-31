@@ -9,29 +9,6 @@ class Acme::OwnerQuotaSurfaceMappingTest < ActiveSupport::TestCase
   setup do
     ClientIdentityState.ensure_defaults!
     OperatorIdentityState.ensure_defaults!
-    VisitorIdentityState.ensure_defaults!
-  end
-
-  test "maps com account quota to Visitor and Individual ownership" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    identity = VisitorIdentity.create!(
-      issuer: "https://id.example.test",
-      subject: "quota-com-individual-#{SecureRandom.hex(6)}",
-      audience: "acme_com",
-      source_record_id: visitor.id,
-      status_id: VisitorIdentityState::ACTIVE,
-    )
-    individual = I18n.with_locale(:en) { Individual.create!(visitor_identity: identity, title: "Individual") }
-    IndividualLifecycle.create!(individual:, state: AuthorityResourceLifecycleStateValue::ACTIVE)
-    IndividualOwnership.create!(individual:, visitor:)
-
-    policy = Acme::AccountQuotaPolicy.new(surface: :com, principal: visitor)
-
-    assert_equal 1, policy.current_count
-    assert_equal 9, policy.remaining
   end
 
   test "maps org account quota to Operator and Agent ownership" do
@@ -54,21 +31,6 @@ class Acme::OwnerQuotaSurfaceMappingTest < ActiveSupport::TestCase
 
     assert_equal 1, policy.current_count
     assert_equal 9, policy.remaining
-  end
-
-  test "maps com organization quota to Visitor and Company ownership" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    company = I18n.with_locale(:en) { Company.create!(name: "Company", title: "Company") }
-    CompanyLifecycle.create!(company:, state: AuthorityResourceLifecycleStateValue::ACTIVE)
-    CompanyOwnership.create!(company:, visitor:)
-
-    policy = Acme::OrganizationQuotaPolicy.new(surface: :com, principal: visitor)
-
-    assert_equal 1, policy.current_count
-    assert_equal 1, policy.remaining
   end
 
   test "maps org organization quota to Operator and Bureau ownership" do

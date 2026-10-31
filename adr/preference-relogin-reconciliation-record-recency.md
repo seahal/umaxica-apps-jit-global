@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted on 2026-05-10.
+Superseded on 2026-10-31 by
+[`preference-sign-in-application-is-one-directional.md`](preference-sign-in-application-is-one-directional.md).
+Retained as a historical decision; it is not normative for current Preference behavior.
 
 ## Context
 

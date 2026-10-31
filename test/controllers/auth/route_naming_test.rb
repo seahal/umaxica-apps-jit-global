@@ -8,7 +8,6 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
   BOOT_HOSTS = Rails.configuration.x.boot_config.fetch(:hosts)
   SURFACES = {
     app: BOOT_HOSTS.sign_service.host,
-    com: BOOT_HOSTS.sign_corporate.host,
     org: BOOT_HOSTS.sign_staff.host,
   }.freeze
 
@@ -33,7 +32,7 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     assert_not_respond_to helpers, :auth_app_sign_out_completion_path
   end
 
-  test "top-level sign entry routes resolve conventionally on every sign surface" do
+  test "top-level sign entry routes resolve conventionally on the account sign surfaces" do
     SURFACES.each_key do |surface|
       assert_recognizes_sign_route(surface, "/sign/up", :get, "auth/#{surface}/sign/ups", "show")
       assert_recognizes_sign_route(surface, "/sign/in", :get, "auth/#{surface}/sign/ins", "show")
@@ -62,7 +61,6 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
 
   test "sign check routes use checks controller namespace and old checkpoint route is absent" do
     assert_recognizes_sign_route(:app, "/sign/in/check", :get, "auth/app/sign/in/checks", "show")
-    assert_recognizes_sign_route(:com, "/sign/in/check", :get, "auth/com/sign/in/checks", "show")
     assert_recognizes_sign_route(:org, "/sign/in/check", :get, "auth/org/sign/in/checks", "show")
 
     SURFACES.each_key do |surface|
@@ -74,8 +72,8 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "com org social routes remain absent from sign authority surfaces" do
-    assert_unrecognized(:com, "/social/apple/connection", :get)
+  test "cross-provider social routes remain absent from sign authority surfaces" do
+    assert_unrecognized(:app, "/social/entra/connection", :get)
     assert_unrecognized(:org, "/social/google/connection", :get)
   end
 
@@ -136,34 +134,6 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "auth com settings has no credential management routes" do
-    helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
-
-    %w(auth_com_settings).each do |prefix|
-      assert helper_names.any? { |name| name.start_with?(prefix) }, "#{prefix} must remain"
-    end
-
-    %w(
-      auth_com_settings_passkey
-      auth_com_settings_passkeys
-      auth_com_settings_totp
-      auth_com_settings_google
-      auth_com_settings_apple
-      auth_com_settings_entra
-      auth_com_settings_email
-      auth_com_settings_telephone
-      auth_com_settings_birthdate
-      auth_com_settings_secret
-      auth_com_settings_session
-      auth_com_settings_revocation
-      auth_com_settings_activity
-      auth_com_settings_withdrawal
-      auth_com_settings_mfa
-    ).each do |prefix|
-      assert helper_names.none? { |name| name.start_with?(prefix) }, "#{prefix} must not exist"
-    end
-  end
-
   test "auth org settings keeps only the Entra ceremony" do
     helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
 
@@ -200,9 +170,6 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
       app: %w(/settings/emails /settings/telephones /settings/birthdate /settings/secret_credentials
               /settings/sessions /settings/revocations/all /settings/activities /settings/withdrawal
               /settings/mfa/challenge /settings/mfa/reset /settings/passkeys /settings/totps),
-      com: %w(/settings/emails /settings/telephones /settings/birthdate /settings/secret_credentials
-              /settings/sessions /settings/revocations/all /settings/activities /settings/withdrawal
-              /settings/mfa/challenge /settings/passkeys),
       org: %w(/settings/emails /settings/telephones /settings/birthdate /settings/secret_credentials
               /settings/sessions /settings/revocations/all /settings/activities /settings/withdrawal
               /settings/mfa/challenge /settings/operator_lifecycle_requests /settings/passkeys),

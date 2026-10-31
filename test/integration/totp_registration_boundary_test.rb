@@ -3,9 +3,11 @@
 require "test_helper"
 
 class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
 
-  fixtures :clients, :client_statuses, :client_email_statuses, :visitor_statuses, :operator_statuses
+  fixtures :clients, :client_statuses, :client_email_statuses, :operator_statuses
 
   setup do
     TurnstileVerifierStub.enabled = false
@@ -45,7 +47,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: token,
     )
-    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
     assert_no_difference("IdentityTotpCeremonyCandidate.count") do
@@ -117,7 +119,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         URI.parse("https://#{fv5043}/"),
       )
     end
-    get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference))
+    get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     assert_no_difference("ClientAuthCeremonySession.count") do
       post(
@@ -196,7 +198,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         URI.parse("https://#{fv5091}/"),
       )
     end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :success
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -258,21 +260,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
   # Each surface redeems its own permission and limits registration to its method matrix.
-  test "COM and ORG setup admit only their actor-specific Passkey registration permission" do
-    %w(com org).each do |surface|
+  test "ORG setup admits only its actor-specific Passkey registration permission" do
+    %w(org).each do |surface|
       case surface
-      when "com"
-        actor = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
-          status_id: VisitorStatus::ACTIVE,
-        )
-        token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, root_login_established_at: Time.current)
-        auth_host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-        display_path = new_auth_com_verification_setup_path(ri: "jp")
-        create_path = auth_com_verification_setup_path(ri: "jp")
-        cancel_path = auth_com_verification_cancellation_path(ri: "jp")
-        base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
       when "org"
         actor = Operator.create!(
           security_mode_id: SecurityModeConfigurable::ADVANCED,
@@ -282,7 +272,6 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
         auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         display_path = new_auth_org_verification_setup_path(ri: "jp")
-        create_path = auth_org_verification_setup_path(ri: "jp")
         cancel_path = auth_org_verification_cancellation_path(ri: "jp")
         base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
       end
@@ -340,12 +329,12 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
           URI.parse("https://#{fv5081}/"),
         )
       end
-      browser.get(display_path, params: { entry_ref: issuance.reference })
-      csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-      browser.post(create_path, params: { entry_ref: issuance.reference, authenticity_token: csrf })
-
+      browser.get(display_path, params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS)
       assert_equal 303, browser.response.status
       browser.follow_redirect!
+
+      assert_equal 200, browser.response.status
+      browser.get(new_auth_org_verification_registration_passkey_path(ri: "jp"))
 
       assert_equal 200, browser.response.status
       page = JSON.parse(Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']").text)
@@ -374,7 +363,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         RedirectsJumpGatewayUrl.stub(
           :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
         ) do
-          browser.post(cancel_path, params: { authenticity_token: csrf })
+          browser.post(cancel_path)
         end
       end
 
@@ -440,7 +429,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         URI.parse("https://#{fv5070}/"),
       )
     end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
     assert_no_difference("IdentityTotpCeremonyCandidate.count") do
@@ -616,6 +605,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
       "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
       "Sec-Fetch-Site" => "same-origin",
+      **NAVIGATION_HEADERS,
     }
 
     assert_equal 0, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count

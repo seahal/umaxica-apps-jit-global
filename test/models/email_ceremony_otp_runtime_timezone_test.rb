@@ -3,7 +3,7 @@
 require "test_helper"
 
 class EmailCeremonyOtpRuntimeTimezoneTest < ActiveSupport::TestCase
-  [ClientEmailCeremonyTransaction, VisitorEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
+  [ClientEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} proof delivery consumption and receipt use canonical timestamps across runtime zones" do
       transaction = nil
       code = nil

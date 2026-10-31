@@ -30,8 +30,6 @@ class EmailCredentialRegistrationOtpFormQuery
       case [actor, token, email, transaction]
       in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction]
         ["app", token.user_id == actor.id && email.user_id == actor.id, ClientStepUpCeremonyTransaction]
-      in [Visitor, VisitorToken, VisitorEmail, VisitorEmailCeremonyTransaction]
-        ["com", token.visitor_id == actor.id && email.visitor_id == actor.id, VisitorStepUpCeremonyTransaction]
       in [Operator, OperatorToken, OperatorEmail, OperatorEmailCeremonyTransaction]
         ["org", token.staff_id == actor.id && email.staff_id == actor.id, OperatorStepUpCeremonyTransaction]
       else raise ArgumentError, "unsupported Email registration form realm"
@@ -51,7 +49,7 @@ class EmailCredentialRegistrationOtpFormQuery
 
     def source_available?(email)
       case email
-      when ClientEmail, VisitorEmail then email.accessible?(email.class.database_now) && !email.binding_released?
+      when ClientEmail then email.accessible?(email.class.database_now) && !email.binding_released?
       when OperatorEmail
         [OperatorEmailStatus::UNVERIFIED, OperatorEmailStatus::VERIFIED].include?(email.staff_email_status_id)
       else raise ArgumentError, "unsupported Email registration candidate"

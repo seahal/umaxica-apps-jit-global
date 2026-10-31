@@ -11,7 +11,6 @@ module Sign
 
       setup do
         ClientOccurrenceStatus.find_or_create_by!(id: ClientOccurrenceStatus::ACTIVE)
-        VisitorOccurrenceStatus.ensure_defaults!
         @user = clients(:one)
       end
 
@@ -64,7 +63,7 @@ module Sign
         ENV["RISK_ENFORCEMENT_ENABLED"] = original_enabled
       end
 
-      test "emit creates visitor occurrence with hmac context when enabled" do
+      test "emit creates client occurrence with hmac context when enabled" do
         original_disabled = ENV["RISK_ENFORCEMENT_DISABLED"]
         original_enabled = ENV["RISK_ENFORCEMENT_ENABLED"]
         ENV["RISK_ENFORCEMENT_DISABLED"] = nil
@@ -73,21 +72,21 @@ module Sign
         option = ->(key, **) { (key == :OCCURRENCE_HMAC_SECRET) ? "secret_credential" : nil }
 
         Rails.app.creds.stub(:option, option) do
-          assert_difference "VisitorOccurrence.count", 1 do
+          assert_difference "ClientOccurrence.count", 1 do
             SignRiskEmitter.emit(
               "auth_failed",
-              visitor_id: 123,
-              email: "Visitor@Example.com",
+              user_id: @user.id,
+              email: "Retained@Example.com",
               ip: "203.0.113.10",
               reason: "bad_secret_credential",
             )
           end
         end
 
-        occurrence = VisitorOccurrence.order(:id).last
+        occurrence = ClientOccurrence.order(:id).last
 
         assert_equal "risk.auth_failed", occurrence.event_type
-        assert_equal 123, occurrence.context.fetch("visitor_id")
+        assert_equal @user.id, occurrence.context.fetch("user_id")
         assert_match(/\A\h{64}\z/, occurrence.context.fetch("ip_hmac"))
         assert_match(/\A\h{64}\z/, occurrence.context.fetch("email_hmac"))
         assert_not_includes occurrence.context, "ip"
@@ -95,6 +94,12 @@ module Sign
       ensure
         ENV["RISK_ENFORCEMENT_DISABLED"] = original_disabled
         ENV["RISK_ENFORCEMENT_ENABLED"] = original_enabled
+      end
+
+      test "retired visitor actor input is rejected without writing an occurrence" do
+        assert_no_difference ["ClientOccurrence.count", "OperatorOccurrence.count", "VisitorOccurrence.count"] do
+          assert_raises(ArgumentError) { SignRiskEmitter.emit("auth_failed", visitor_id: 123) }
+        end
       end
 
       test "emit does nothing without actor id" do

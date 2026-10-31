@@ -142,6 +142,23 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_equal @user.id, @token.user_id
   end
 
+  test "token cannot bind a device session belonging to another Client" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: other)
+    original_device_id = @token.device_session_id
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+
+    assert_equal "fk_client_tokens_on_user_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+    assert_equal original_device_id, @token.reload.device_session_id
+  end
+
   test "device session rejects a current token owned by another session" do
     other_token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     session = @token.device_session

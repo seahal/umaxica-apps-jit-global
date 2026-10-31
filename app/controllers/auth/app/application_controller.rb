@@ -14,7 +14,6 @@ module Auth
       include ::Session
       include ::PreferenceGlobal
       # Adopt anonymous preference cookies into the signed-in user account after authentication.
-      include ::PreferenceAdoption
       include ::SignSignupObservability
       include ::AuthenticationClient
       include ::SignErrorResponses
@@ -27,6 +26,7 @@ module Auth
       include ::AuthCeremonyContext
       include ::AuthAdmissionCurfewGate
       include ::SignInPathRefusal
+      include ::SignEntryClassification
       include ::SignEntrySentryEnforcement
       include SurfaceRouteAliasHelper
       include ::ActorSupport

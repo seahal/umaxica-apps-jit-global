@@ -134,8 +134,6 @@ module AvatarProvisioning
         AvatarPersonaBinding.create!(avatar: avatar, persona: subject)
       when "agent"
         AvatarAgentBinding.create!(avatar: avatar, agent: subject)
-      when "individual"
-        AvatarIndividualBinding.create!(avatar: avatar, individual: subject)
       else
         raise ArgumentError, "unsupported subject_type: #{subject_type.inspect}"
       end

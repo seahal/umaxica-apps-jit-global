@@ -19,21 +19,6 @@ class CoreRpBridgeTest < ActiveSupport::TestCase
     assert_equal bridge, client.reload.core_app_client_bridge
   end
 
-  test "com bridge exposes core visitor identity for the visitor actor" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    bridge = CoreComVisitorBridge.create!(visitor:)
-
-    assert_predicate bridge.public_id, :present?
-    assert_equal "core-com-jp", bridge.rp_client_id
-    assert_equal "umaxica-core-com", bridge.audience
-    assert_equal "jpx.umaxica.com", bridge.host
-    assert_equal visitor, bridge.actor
-    assert_equal visitor.public_id, bridge.subject
-    assert_predicate bridge, :core?
-    assert_equal ComRpRecord.connection_db_config.name, bridge.class.connection_db_config.name
-    assert_equal bridge, visitor.reload.core_com_visitor_bridge
-  end
-
   test "org bridge exposes core operator identity for the operator actor" do
     operator = operators(:one)
     bridge = CoreOrgOperatorBridge.create!(operator:)

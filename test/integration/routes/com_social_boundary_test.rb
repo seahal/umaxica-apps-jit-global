@@ -15,4 +15,17 @@ class ComSocialBoundaryTest < ActionDispatch::IntegrationTest
       end
     end
   end
+
+  # The corporate hosts have no credential route at all, so even the bare provider entry points a
+  # legacy flag could have enabled are unrecognised rather than merely refused.
+  test "A05-13: COM does not route a bare social or Auth provider entry" do
+    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    %w(/social/google /social/google_org /social/apple /auth/google_com).each do |path|
+      %i(get post).each do |method|
+        assert_raises(ActionController::RoutingError, "#{path} #{method}") do
+          Rails.application.routes.recognize_path("https://#{host}#{path}", method: method)
+        end
+      end
+    end
+  end
 end

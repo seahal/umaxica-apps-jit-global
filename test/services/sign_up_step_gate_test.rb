@@ -11,6 +11,17 @@ class SignUpStepGateTest < ActiveSupport::TestCase
 
   ControllerBoundary = Struct.new(:session, :params, :current_sign_up_flow_ticket, :sign_up_ticket_public_id)
 
+  test "retired corporate signup routes are rejected before flow lookup" do
+    controller = ControllerBoundary.new({}, {}, nil, nil)
+
+    [:otp, :birthdate].each do |step|
+      gate = SignUpStepGate.for_show(controller: controller, surface: :com, family: "email", step: step)
+
+      assert_not gate.success?
+      assert_includes gate.errors, "unsupported sign-up route"
+    end
+  end
+
   test "for_show refuses a flow named only by the session sequence id" do
     # E1: the Flow comes from the admitted Binding; a session hint alone never selects one.
     cycle = ClientSignUpFlow.create!(

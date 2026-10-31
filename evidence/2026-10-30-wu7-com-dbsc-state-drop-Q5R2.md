@@ -1,0 +1,7 @@
+# WU-7 com DBSC state columns
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- The owner authorized destructive migration. The test-only scope, counts, backup and recovery limitations are recorded in `plans/2026-10-30-wu7-dbsc-state-columns-ticket.md`. Before execution the local test database had two preference rows and zero non-null values in each of the four targeted DBSC state columns.
+- Under the test process lock, `RAILS_ENV=test bin/rails db:migrate:up:com_setting VERSION=20261030213406` succeeded. The migration holds an exclusive table lock and refuses populated state before dropping the four columns and dependent session index. Rails reported 0.0038 seconds. A subsequent query found none of the four columns and two retained preference rows. Production and Neon were not targeted.
+- Removed the obsolete com reset assignment to the session column and corrected model/fixture schema annotations. The shared app/org DBSC paths remain. Before the change, com write, Web Push initialization and shared-base tests passed: 86 runs, 729 assertions. Afterward, the expanded com request, model and shared-base selection passed: 126 runs, 941 assertions, zero failures, errors or skips. RuboCop passed for the checked model, boundary and migration.
+- The populated-state refusal, restore, schema-dump parity, reference-table removal, full suite and WU-7 completion remain unverified. The pre-existing staged and unstaged schema dump was not overwritten.

@@ -167,11 +167,18 @@ class ClientSecretPasskeyReservationIssuer
         raise ArgumentError, "Secret delivery requires an explicit finite reservation duration"
       end
 
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            actor_context.subject.with_lock do
-              reserve!(actor_context, token, passkey, expires_after)
+      AppZenithRecord.connected_to(role: :writing) do
+        actor_context.subject.with_lock do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientToken.transaction do
+              device = token.device_session_record!
+              device.with_lock do
+                unless device.usable? && device.user_id == actor_context.subject.id
+                  raise Denied, "Secret distribution device is unavailable"
+                end
+
+                reserve!(actor_context, token, passkey, expires_after, device)
+              end
             end
           end
         end
@@ -316,8 +323,12 @@ class ClientSecretPasskeyReservationIssuer
 
     end
 
-    def authorized_registration!(actor, token, passkey)
+    def authorized_registration!(actor, token, passkey, device)
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
+      unless current && current.device_session_id == device.id && device.current_refresh_token_id == current.id
+        raise Denied, "Secret distribution session is unavailable"
+      end
+
       registered = ClientPasskey.lock.find_by(id: passkey.id, public_id: passkey.public_id, user_id: actor.id)
       requirement = StepUpRequirement.new(
         scope: "settings_passkey", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
@@ -358,9 +369,9 @@ class ClientSecretPasskeyReservationIssuer
       transaction
     end
 
-    def reserve!(context, token, passkey, duration)
+    def reserve!(context, token, passkey, duration, device)
       actor = context.subject
-      current, registered, authorization_at = authorized_registration!(actor, token, passkey)
+      current, registered, authorization_at = authorized_registration!(actor, token, passkey, device)
 
       # A server-derived UUID names exactly this persisted registration, including omission retries.
       operation = registration_operation(registered)

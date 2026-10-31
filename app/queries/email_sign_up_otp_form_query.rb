@@ -30,10 +30,6 @@ class EmailSignUpOtpFormQuery
         raise ArgumentError, "APP signup requires its own Email" unless email.is_a?(ClientEmail)
 
         [Client.find(email.user_id), ClientEmailCeremonyTransaction, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-      when VisitorSignUpFlow
-        raise ArgumentError, "COM signup requires its own Email" unless email.is_a?(VisitorEmail)
-
-        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Email signup realm"
       end
     end
@@ -43,7 +39,6 @@ class EmailSignUpOtpFormQuery
       owner_id =
         case email
         when ClientEmail then email.user_id
-        when VisitorEmail then email.visitor_id
         else raise ArgumentError, "unsupported Email signup candidate"
         end
       !flow.sign_up_terminal? && flow.expires_at > now && !flow.lapsed?(now) &&

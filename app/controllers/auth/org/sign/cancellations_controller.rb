@@ -10,6 +10,7 @@ module Auth
         include ::SignEntryExit
 
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
         declare_authentication_mode! :open
 
         public

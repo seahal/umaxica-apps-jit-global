@@ -6,13 +6,11 @@ require "test_helper"
 class CycleCloseAuthenticatedRootsTest < ActionDispatch::IntegrationTest
   ROOTS = [
     ["PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"],
-    ["PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"],
     ["PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"],
     ["PUBLIC_BASE_SERVICE_URL", "base.app.localhost"],
     ["PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"],
     ["PUBLIC_BASE_STAFF_URL", "base.org.localhost"],
     ["PUBLIC_CORE_SERVICE_URL", "core.app.localhost"],
-    ["PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"],
     ["PUBLIC_CORE_STAFF_URL", "core.org.localhost"],
     ["PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"],
     ["PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"],
@@ -21,7 +19,7 @@ class CycleCloseAuthenticatedRootsTest < ActionDispatch::IntegrationTest
     ["PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"],
   ].freeze
 
-  test "fourteen in-scope roots answer on their host and do not open-redirect" do
+  test "twelve in-scope roots answer on their host and do not open-redirect" do
     ROOTS.each do |env_key, fallback|
       host = ENV.fetch(env_key, fallback)
       get "/", params: { ri: "jp" }, headers: { "Host" => host }

@@ -46,6 +46,105 @@ class OrgStepUpPasskeyCommittersTest < ActiveSupport::TestCase
     @assertion = @fake.get(challenge: options.challenge, user_verified: true, sign_count: 5)
   end
 
+  test "a revoked device cannot consume a Passkey challenge or record evidence" do
+    @token.device_session_record!.revoke!
+
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpPasskeyVerificationCommitter.call!(
+        actor: @actor, transaction: @transaction, session_record: @record, config: @config,
+        reference: @reference, credential_params: @assertion,
+      )
+    end
+    assert_nil @record.reload.passkey_challenge_consumed_at
+    assert_equal "pending", @transaction.reload.status
+    assert_equal 0, @credential.reload.sign_count
+  end
+
+  test "a superseded token cannot consume a Passkey challenge" do
+    device = @token.device_session_record!
+    replacement = OperatorToken.create!(authentication_epoch: 0, staff: @actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpPasskeyVerificationCommitter.call!(
+        actor: @actor, transaction: @transaction, session_record: @record, config: @config,
+        reference: @reference, credential_params: @assertion,
+      )
+    end
+    assert_nil @record.reload.passkey_challenge_consumed_at
+    assert_equal "pending", @transaction.reload.status
+    assert_equal 0, @credential.reload.sign_count
+  end
+
+  test "a Passkey revoked during verification cannot create evidence" do
+    verifier = Webauthn::AssertionVerifier.method(:verify!)
+    verify_then_revoke =
+      lambda do |**arguments|
+        result = verifier.call(**arguments)
+        @credential.update!(status_id: OperatorPasskeyStatus::REVOKED)
+        result
+      end
+
+    Webauthn::AssertionVerifier.stub(:verify!, verify_then_revoke) do
+      assert_raises(IdentityStepUpCeremonyContract::Error) do
+        IdentityStepUpPasskeyVerificationCommitter.call!(
+          actor: @actor, transaction: @transaction, session_record: @record, config: @config,
+          reference: @reference, credential_params: @assertion,
+        )
+      end
+    end
+    assert_not_nil @record.reload.passkey_challenge_consumed_at
+    assert_equal "pending", @transaction.reload.status
+    assert_equal OperatorPasskeyStatus::REVOKED, @credential.reload.status_id
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "an owner stopped during Passkey verification cannot receive evidence" do
+    verifier = Webauthn::AssertionVerifier.method(:verify!)
+    verify_then_stop =
+      lambda do |**arguments|
+        result = verifier.call(**arguments)
+        @actor.update!(status_id: OperatorStatus::RESERVED)
+        result
+      end
+
+    Webauthn::AssertionVerifier.stub(:verify!, verify_then_stop) do
+      assert_raises(IdentityStepUpCeremonyContract::Error) do
+        IdentityStepUpPasskeyVerificationCommitter.call!(
+          actor: @actor, transaction: @transaction, session_record: @record, config: @config,
+          reference: @reference, credential_params: @assertion,
+        )
+      end
+    end
+    assert_not_nil @record.reload.passkey_challenge_consumed_at
+    assert_equal "pending", @transaction.reload.status
+    assert_equal 5, @credential.reload.sign_count
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "device revocation during Passkey verification prevents evidence" do
+    verifier = Webauthn::AssertionVerifier.method(:verify!)
+    verify_then_revoke =
+      lambda do |**arguments|
+        result = verifier.call(**arguments)
+        @token.device_session_record!.revoke!
+        result
+      end
+
+    Webauthn::AssertionVerifier.stub(:verify!, verify_then_revoke) do
+      assert_raises(IdentityStepUpCeremonyContract::Error) do
+        IdentityStepUpPasskeyVerificationCommitter.call!(
+          actor: @actor, transaction: @transaction, session_record: @record, config: @config,
+          reference: @reference, credential_params: @assertion,
+        )
+      end
+    end
+    assert_not_nil @record.reload.passkey_challenge_consumed_at
+    assert_equal "pending", @transaction.reload.status
+    assert_equal 5, @credential.reload.sign_count
+    assert_nil @token.reload.last_step_up_at
+  end
+
   test "ORG real signature evidence uses the existing credential reference and Base finalizes once" do
     IdentityStepUpPasskeyVerificationCommitter.call!(
       actor: @actor, transaction: @transaction, session_record: @record, config: @config,

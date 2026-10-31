@@ -35,20 +35,24 @@ class OrgEmergencyAccessInvariantsTest < ActiveSupport::TestCase
     assert recognizes?(org_host, "POST", "/sign/in/emergency/passkey/verification")
   end
 
-  test "app and com publish no emergency sign-in ceremony" do
-    [app_host, com_host].each do |host|
-      # Guard against a host name that resolves to nothing, which would make
-      # every assertion below pass for the wrong reason.
-      assert recognizes?(host, "GET", "/sign/in/passkey/new"),
-             "#{host} does not look like a live auth surface; the negative assertions would be vacuous"
+  test "app publishes no emergency sign-in ceremony" do
+    assert recognizes?(app_host, "GET", "/sign/in/passkey/new"),
+           "#{app_host} does not look like a live auth surface; the negative assertions would be vacuous"
 
-      EMERGENCY_ROUTES.each do |method, paths|
-        Array(paths).each do |path|
-          assert_not recognizes?(host, method, path),
-                     "#{host} must not publish #{method} #{path}; Emergency Access is org only"
-        end
+    EMERGENCY_ROUTES.each do |method, paths|
+      Array(paths).each do |path|
+        assert_not recognizes?(app_host, method, path),
+                   "#{app_host} must not publish #{method} #{path}; Emergency Access is org only"
       end
     end
+  end
+
+  test "the retired corporate auth host publishes no sign-in ceremony" do
+    assert_not recognizes?(com_host, "GET", "/sign/in/passkey/new")
+
+    landing = Rails.application.routes.recognize_path("https://#{com_host}/", method: "GET")
+    assert_equal %w(unknown_hosts show), [landing[:controller], landing[:action]],
+                 "the corporate Auth host must fall through to the unknown-host handler"
   end
 
   test "the emergency ceremony recognizes only its intended verbs" do

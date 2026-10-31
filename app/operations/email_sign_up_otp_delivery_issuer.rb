@@ -11,7 +11,6 @@ class EmailSignUpOtpDeliveryIssuer
       notifier =
         case flow
         when ClientSignUpFlow then Notify::App::OtpNotifier
-        when VisitorSignUpFlow then Notify::Com::OtpNotifier
         else raise ArgumentError, "unsupported Email signup delivery realm"
         end
       notifier.issue(

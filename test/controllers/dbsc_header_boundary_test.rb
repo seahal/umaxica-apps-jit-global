@@ -18,7 +18,6 @@ require_relative "../../app/controllers/concerns/preference_io_keys"
 require_relative "../../app/controllers/concerns/dbsc_request_logging"
 require_relative "../../app/controllers/concerns/dbsc_canonical_url"
 require_relative "../../app/controllers/concerns/sign_dbsc_registration_endpoint"
-require_relative "../../app/controllers/concerns/preference_dbsc_registration_endpoint"
 
 class DbscHeaderBoundaryTest < Minitest::Test
   include ActiveSupport::Testing::Assertions
@@ -46,25 +45,6 @@ class DbscHeaderBoundaryTest < Minitest::Test
     end
   end
 
-  class PreferenceController < ActionController::API
-    include PreferenceDbscRegistrationEndpoint
-
-    def initialize(record)
-      super()
-      @record = record
-    end
-
-    private
-
-    def dbsc_url = "https://example.com/dbsc"
-
-    def current_preference_record = @record
-
-    def issue_preference_dbsc_challenge_for!(record)
-      record.dbsc_challenge = "private-challenge"
-    end
-  end
-
   def setup
     @previous_logger = Rails.logger
     @logs = StringIO.new
@@ -76,7 +56,7 @@ class DbscHeaderBoundaryTest < Minitest::Test
   end
 
   def test_issues_challenge_only_for_the_registered_identifier_without_logging_secrets
-    [SignController, PreferenceController].each do |controller_class|
+    [SignController].each do |controller_class|
       record = Record.new("private-session", "old-challenge")
       request = ActionDispatch::Request.new(Rack::MockRequest.env_for("/dbsc", method: "POST"))
       request.set_header("HTTP_SEC_SECURE_SESSION_ID", '"private-session";ignored="value"')
@@ -94,7 +74,7 @@ class DbscHeaderBoundaryTest < Minitest::Test
   end
 
   def test_rejects_malformed_fields_before_changing_a_challenge
-    [SignController, PreferenceController].each do |controller_class|
+    [SignController].each do |controller_class|
       ["session", 's";extra="v', '"session"junk', '"session", "other"', '"bad\\n"',
        '""', "\"session\r\nInjected: value\"",].each do |input|
         record = Record.new("session", "old-challenge")
@@ -115,7 +95,7 @@ class DbscHeaderBoundaryTest < Minitest::Test
   end
 
   def test_rejects_unknown_or_unregistered_identifiers_before_changing_a_challenge
-    [SignController, PreferenceController].each do |controller_class|
+    [SignController].each do |controller_class|
       [nil, "", "different-session"].each do |registered|
         record = Record.new(registered, "old-challenge")
         request = ActionDispatch::Request.new(Rack::MockRequest.env_for("/dbsc", method: "POST"))
@@ -132,7 +112,7 @@ class DbscHeaderBoundaryTest < Minitest::Test
   end
 
   def test_refuses_a_request_without_the_corresponding_record
-    [SignController, PreferenceController].each do |controller_class|
+    [SignController].each do |controller_class|
       request = ActionDispatch::Request.new(Rack::MockRequest.env_for("/dbsc", method: "POST"))
       request.set_header("HTTP_SEC_SECURE_SESSION_ID", '"session"')
       response = ActionDispatch::Response.new
@@ -149,7 +129,7 @@ class DbscHeaderBoundaryTest < Minitest::Test
       key = OpenSSL::PKey::EC.generate("prime256v1")
       other_key = OpenSSL::PKey::EC.generate("prime256v1")
       now = Time.current
-      [SignController, PreferenceController].each do |controller_class|
+      [SignController].each do |controller_class|
         { "https://other.example/dbsc" => "audience_mismatch",
           "https://example.com/dbsc" => "invalid_proof", }.each do |audience, error|
           record = Record.new("private-session", "old-challenge", JWT::JWK.new(key).export, now)

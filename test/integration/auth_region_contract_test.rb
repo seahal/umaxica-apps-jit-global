@@ -13,13 +13,12 @@ require "test_helper"
 class AuthRegionContractTest < ActionDispatch::IntegrationTest
   SURFACES = [
     ["app", ENV.fetch("PUBLIC_AUTH_SERVICE_URL")],
-    ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")],
     ["org", ENV.fetch("PUBLIC_AUTH_STAFF_URL")],
   ].freeze
 
   ENTRY_PATHS = %w(/sign/in /sign/up).freeze
   INTENT_BY_PATH = { "/sign/in" => "sign_in", "/sign/up" => "sign_up" }.freeze
-  REALM_BY_SURFACE = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
+  REALM_BY_SURFACE = { "app" => "client", "org" => "operator" }.freeze
 
   test "a missing region is normalized on every credential gateway entry page" do
     SURFACES.each do |surface, host|
@@ -130,10 +129,8 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
                       fv5043 = fv5039
                       {
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
-                        ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
                         ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
-                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5043)
                     end
@@ -302,7 +299,7 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
   # signature rather than a stub -- `AuthCeremonyAdmission#admit_or_render_sign_ceremony!` verifies
   # it for real.
   def admission_reference_for(surface, path)
-    client_id = { "app" => "core-app-jp", "com" => "core-com-jp", "org" => "core-org-jp" }.fetch(surface)
+    client_id = { "app" => "core-app-jp", "org" => "core-org-jp" }.fetch(surface)
     client = OidcClientRegistry.find!(client_id)
     transaction =
       OidcAuthorizationTransactionCoordinator.issue!(

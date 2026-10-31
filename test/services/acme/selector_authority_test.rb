@@ -55,17 +55,6 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
     assert_equal 2, result[:accounts].size
   end
 
-  test "com automatic selection returns its authenticated Dashboard" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
-    BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
-    result = BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
-
-    assert_equal "selected", result[:status]
-    assert_equal "/dashboard", result[:next]
-    assert_predicate token.reload, :selected_actor_context?
-  end
-
   test "rejects another identity selection" do
     other = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,

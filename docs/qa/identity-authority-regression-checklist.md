@@ -37,7 +37,8 @@ Remaining bounded legacy:
   session-management UI.
 - Auth settings does not own identity, profile, session-management, activity, or lifecycle routes
   except for the approved credential ceremony-backed settings matrix: app
-  passkeys/TOTP/Google/Apple, com passkeys, and org passkeys/Entra.
+  passkeys/TOTP/Google/Apple, and org passkeys/Entra. The `com` surface owns no credential
+  ceremony, so it has no Auth settings matrix.
 - Retired Auth settings routes for emails, telephones, birthdate, secrets, secret credentials,
   sessions, revocations, activities, and withdrawal are unroutable. They must not redirect to Base,
   return compatibility `410 Gone`, or remain available through alias helpers.
@@ -141,6 +142,6 @@ bin/rails test test/services/identity/telephone_ceremony_contract_test.rb test/s
 bin/rails test test/services/identity/email_ceremony_contract_test.rb test/services/identity/email_ceremony_acme_transaction_test.rb
 bin/rails test test/services/identity/social_ceremony_contract_test.rb test/services/identity/social_ceremony_acme_transaction_test.rb
 bin/rails test test/integration/social_auth_login_test.rb test/integration/social_auth_app_flow_contract_test.rb test/integration/social_auth_unlink_test.rb test/integration/social_link_unlink_test.rb
-bin/rails test test/integration/sign/app/credential_removal_constraints_test.rb test/integration/sign/com/credential_removal_constraints_test.rb test/integration/sign/org/credential_removal_constraints_test.rb
+bin/rails test test/integration/sign/app/credential_removal_constraints_test.rb test/integration/sign/org/credential_removal_constraints_test.rb
 bundle exec rails test test/controllers/sign test/controllers/acme
 ```

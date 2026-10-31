@@ -8,7 +8,7 @@
 # boundary is a separate Postgres database) and previously leaned on an
 # implicit `dependent: :destroy/:nullify` AR cascade. That cascade is a
 # non-atomic, pseudo cross-DB referential-integrity mechanism -- and for the
-# purge path it never even ran (Client/Visitor are anonymized, Operator is
+# purge path it never even ran (Client is anonymized, Operator is
 # removed via set-based `delete_all`, both of which skip `dependent:`),
 # leaving cross-DB orphans.
 #
@@ -36,7 +36,6 @@ class RetentionCrossDatabaseChildPurge
   def call
     case actor
     when Client   then purge_client
-    when Visitor  then purge_visitor
     when Operator then purge_operator
     end
     actor
@@ -52,11 +51,6 @@ class RetentionCrossDatabaseChildPurge
   def purge_client
     ClientNotificationRecord.where(user_id: actor.id).delete_all # app_signal DB
     AvatarAssignment.where(user_id: actor.id).delete_all         # avatar DB (join rows only)
-  end
-
-  def purge_visitor
-    VisitorNotificationRecord.where(visitor_id: actor.id).delete_all # com_signal DB
-    VisitorAccount.where(visitor_id: actor.id).delete_all # com_zenith DB
   end
 
   def purge_operator

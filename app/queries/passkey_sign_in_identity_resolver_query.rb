@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Identifier-first Passkey sign-in (adr/passkey-identifier-first-sign-in.md) on APP and COM:
+# Identifier-first Passkey sign-in (adr/passkey-identifier-first-sign-in.md) on APP:
 # resolves the entered Email or Telephone to exactly one Identity through effective contact
 # bindings of that surface only. Unknown, ambiguous and malformed identifiers all return nil, so
 # the caller answers them like a real Identity without a usable Passkey.
@@ -14,15 +14,6 @@ class PasskeySignInIdentityResolverQuery
       email_status_ids: [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP].freeze,
       telephone_status_column: :user_telephone_status_id,
       telephone_status_ids: [ClientTelephoneStatus::VERIFIED, ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP].freeze,
-    }.freeze,
-    com: {
-      email: VisitorEmail,
-      telephone: VisitorTelephone,
-      owner: :visitor,
-      email_status_column: :visitor_email_status_id,
-      email_status_ids: [VisitorEmailStatus::VERIFIED, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP].freeze,
-      telephone_status_column: :visitor_telephone_status_id,
-      telephone_status_ids: [VisitorTelephoneStatus::VERIFIED, VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP].freeze,
     }.freeze,
   }.freeze
 

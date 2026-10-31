@@ -4,6 +4,7 @@ class Auth::Org::Verification::Registration::PasskeysController < ::Auth::Org::A
   include ::AuthPasskeyRegistrationCeremony
 
   AUTHENTICATION_MODE = :open
+  sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
   declare_authentication_mode! :open
 
   private

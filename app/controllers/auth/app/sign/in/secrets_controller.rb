@@ -9,6 +9,7 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   include SignInPhaseBindingControllerSupport
 
   AUTHENTICATION_MODE = :guest
+  sign_entry_classification! :sign_in
   declare_authentication_mode! :guest
   prepend_before_action :require_sign_in_ceremony_admission!
   ensure_fqdn_gate_first!

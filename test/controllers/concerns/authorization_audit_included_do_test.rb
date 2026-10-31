@@ -5,7 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AuthorizationAuditIncludedDoTest < ActiveSupport::TestCase
-  fixtures :visitors
 
   class Harness < ApplicationController
     include AuthorizationAudit

@@ -81,6 +81,58 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_predicate ceremony.authentication_event_at, :present?
   end
 
+  test "Visa APP sign-in reflects explicit display choices only and excludes region" do
+    ClientPreferenceStatus.ensure_defaults!
+    ClientPreference.where(client_id: @user.id).find_each(&:retire!)
+    ClientPreferenceThemeOption.ensure_defaults!
+    ClientPreferenceLanguageOption.ensure_defaults!
+    ClientPreferenceRegionOption.ensure_defaults!
+    actor_preference = ClientPreference.create!(
+      client_id: @user.id,
+      status_id: ClientPreferenceStatus::ACTIVE,
+      explicit_fields: ["theme"],
+    )
+    actor_preference.create_client_preference_theme!(option_id: ClientPreferenceThemeOption::DARK)
+    actor_preference.create_client_preference_language!(option_id: ClientPreferenceLanguageOption::EN)
+    actor_preference.create_client_preference_region!(option_id: ClientPreferenceRegionOption::US)
+
+    start_oidc_authorization!(oidc_authorize_params(realm: "client").merge(ri: "jp"))
+    submit_email_otp!
+    follow_redirect_to_oidc_handoff!
+    post_oidc_handoff!
+    get_oidc_result!
+
+    assert_response :redirect
+    claims = PreferenceToken.decode(
+      cookies[PreferenceCookieName.anonymous_jwt],
+      host: request.host,
+      jwt_issuer_id: "preference_app",
+    )
+    anonymous = AppPreference.find_by!(public_id: claims.fetch("sub"))
+
+    assert_equal "dark", claims.fetch("preferences").fetch("theme")
+    assert_equal "ja", claims.fetch("preferences").fetch("language")
+    assert_not_equal ClientPreferenceRegionOption::US,
+                     anonymous.app_preference_region.option_id,
+                     "account region is deliberately not reflected into the anonymous row"
+    assert_equal ["theme"], actor_preference.reload.explicit_field_names
+  end
+
+  test "successful APP sign-in remains issued when the Preference writer fails" do
+    start_oidc_authorization!(oidc_authorize_params(realm: "client").merge(ri: "jp"))
+    submit_email_otp!
+    follow_redirect_to_oidc_handoff!
+    post_oidc_handoff!
+    assert_difference -> { ClientToken.where(user_id: @user.id).count }, 1 do
+      assert_no_difference -> { AppPreference.count } do
+        PreferenceToken.stub(:encode, nil) { get_oidc_result! }
+      end
+    end
+
+    assert_response :redirect
+    assert_nil cookies[PreferenceCookieName.anonymous_jwt]
+  end
+
   test "A12-6: a repeated final result after Root issuance is an error without a second Root" do
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
     credential = client_secret_credentials(:one)

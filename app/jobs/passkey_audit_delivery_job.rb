@@ -6,7 +6,6 @@ class PasskeyAuditDeliveryJob < ApplicationJob
 
   SOURCES = {
     ClientPasskeyAuditOutbox => "app",
-    VisitorPasskeyAuditOutbox => "com",
     OperatorPasskeyAuditOutbox => "org",
   }.freeze
 
@@ -35,38 +34,55 @@ class PasskeyAuditDeliveryJob < ApplicationJob
   private
 
   def deliver_source!(model, surface, batch_size)
-    failures = []
+    first_failure = nil
     model.connection_class_for_self.connected_to(role: :writing) do
-      model.where(acknowledged_at: nil).order(:id).limit(batch_size).each do |event|
-        begin
-          event.with_lock do
-            next if event.acknowledged_at
+      upper_id = model.where(acknowledged_at: nil).maximum(:id)
+      return [] unless upper_id
 
-            audit = persist_chronicle!(event, surface)
-            unless identity_matches?(audit, event, surface)
-              raise ArgumentError, "Passkey Chronicle event identity conflicts with its source"
+      cursor = nil
+      loop do
+        scope = model.where(acknowledged_at: nil, id: ..upper_id).order(:id)
+        scope = scope.where("id > ?", cursor) if cursor
+        events = scope.limit(batch_size).to_a
+        break if events.empty?
+
+        events.each do |event|
+          begin
+            event.with_lock do
+              next if event.acknowledged_at
+
+              unless event.metadata.is_a?(Hash) &&
+                  !event.metadata.stringify_keys.keys.intersect?(%w(surface external_id actor_ref))
+                raise ArgumentError, "Passkey audit metadata conflicts with authoritative references"
+              end
+
+              audit = persist_chronicle!(event, surface)
+              unless identity_matches?(audit, event, surface)
+                raise ArgumentError, "Passkey Chronicle event identity conflicts with its source"
+              end
+
+              event.update!(acknowledged_at: model.database_now)
             end
-
-            event.update!(acknowledged_at: model.database_now)
+          rescue StandardError => e
+            first_failure ||= e
+            Rails.error.report(
+              e,
+              handled: false,
+              context: {
+                job: self.class.name,
+                source_model: model.name,
+                surface:,
+                event_uuid: event.event_uuid,
+                batch_size:,
+              },
+            )
           end
-        rescue StandardError => e
-          failures << [event, e]
-          Rails.error.report(
-            e,
-            handled: false,
-            context: {
-              job: self.class.name,
-              source_model: model.name,
-              surface:,
-              event_uuid: event.event_uuid,
-              batch_size:,
-            },
-          )
         end
+        cursor = events.last.id
       end
     end
 
-    failures.map!(&:last)
+    first_failure ? [first_failure] : []
   end
 
   def identity_matches?(audit, event, surface)
@@ -74,7 +90,8 @@ class PasskeyAuditDeliveryJob < ApplicationJob
       audit.request_id == event.operation_ref &&
       audit.occurred_at == event.occurred_at &&
       audit.metadata == metadata_for(event, surface) &&
-      audit.result == "succeeded" && audit.reason.nil? && audit.changeset == {}
+      audit.result == "succeeded" && audit.reason.nil? && audit.changeset == {} &&
+      audit.actor_type.nil? && audit.actor_id.nil? && audit.subject_type.nil? && audit.subject_id.nil?
   end
 
   def metadata_for(event, surface)

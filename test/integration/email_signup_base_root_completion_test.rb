@@ -10,14 +10,10 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
 
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
-    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} email signup binds its original OIDC browser and Base commits exactly one root" do
       previous_protection = ActionController::Base.allow_forgery_protection
       previous_turnstile = [TurnstileVerifierStub.enabled, TurnstileVerifierStub.response]
@@ -33,10 +29,6 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         when "app"
           [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
            "BASE_APP", ClientSignUpFlow, ClientEmail, Client, ClientToken, :user_id, :client_email,]
-        when "com"
-          [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-           "BASE_COM", VisitorSignUpFlow, VisitorEmail, Visitor, VisitorToken, :visitor_id,
-           :visitor_email,]
         end
       owner = open_session
       owner.host!(base_host)
@@ -153,7 +145,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       actor = actor_model.find(contact[owner_key])
 
       assert_equal 0, token_model.where(owner_key => actor.id).count
-      transaction_model = (surface == "app") ? ClientEmailCeremonyTransaction : VisitorEmailCeremonyTransaction
+      transaction_model = ClientEmailCeremonyTransaction
       transaction = transaction_model.find_by!(email_candidate_ref: contact.public_id)
       delivery =
         (enqueued_jobs + performed_jobs).reverse.find do |entry|
@@ -206,27 +198,6 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
 
       assert_equal 200, auth.response.status
       csrf = auth.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-      if surface == "com"
-        session_flow_ref = auth.request.session[:auth_com_up_sequence_id]
-
-        assert_withheld("The browser session must retain the signed signup Parent") {
-          session_flow_ref == decoded.flow_public_id
-        }
-        stored_signup = signup_model.find_by(public_id: session_flow_ref)
-
-        assert_withheld("The original signed signup Parent must still exist") { stored_signup.present? }
-        assert Visitor.exists?(id: stored_signup.principal_id), "The signup principal Visitor must exist"
-        assert Visitor.exists?(id: contact.reload.visitor_id), "The Contact owner Visitor must exist"
-        assert_withheld("The original signup principal must match the Contact owner") {
-          stored_signup.principal_id == contact.visitor_id
-        }
-        assert_withheld("The birthdate checkpoint must retain the original Visitor") {
-          stored_signup.principal_id == actor.id
-        }
-        assert_withheld("Admission must retain the original OIDC Parent") {
-          authorization_transaction_for_test(binding.reload).id == original_parent_id
-        }
-      end
       auth.patch(
         birthdate_uri.request_uri, params: {
           requirement: "birthdate",

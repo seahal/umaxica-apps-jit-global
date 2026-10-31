@@ -13,7 +13,6 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
-    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
     ClientSessionLimitResolutionState::DEFAULTS.each do |id|
       ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
         state.created_at = Time.current
@@ -21,9 +20,6 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       end
     end
     ClientIdentityState::DEFAULTS.each { |id| ClientIdentityState.find_or_create_by!(id: id) }
-    VisitorIdentityState::DEFAULTS.each { |id| VisitorIdentityState.find_or_create_by!(id: id) }
-    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
-    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }

@@ -248,77 +248,6 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     end
   end
 
-  test "rotation supports visitor refresh tokens" do
-    visitor = create_refresh_visitor
-    token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor,
-      discard_at: 1.day.from_now,
-      purge_eligible_at: 2.days.from_now,
-    )
-    refresh = token.rotate_refresh_token!
-
-    result = SignRefreshTokenIssuer.call(refresh_token: refresh)
-
-    assert_instance_of VisitorToken, result[:token]
-    assert_not_equal token.id, result[:token].id
-    assert_equal token.refresh_token_generation + 1, result[:token].refresh_token_generation
-    assert_equal token.refresh_token_family_id, result[:token].refresh_token_family_id
-    assert_predicate token.reload.rotated_at, :present?
-  end
-
-  test "visitor refresh reuse revokes all visitor tokens" do
-    visitor = create_refresh_visitor
-    token = VisitorToken.create!(
-      authentication_epoch: 0, visitor: visitor, discard_at: 1.day.from_now,
-      purge_eligible_at: 2.days.from_now,
-    )
-    first_refresh = token.rotate_refresh_token!
-    rotated = SignRefreshTokenIssuer.call(refresh_token: first_refresh)
-
-    reuse_result = SignRefreshTokenIssuer.call(refresh_token: first_refresh)
-
-    assert_not reuse_result.success?
-    assert_equal :refresh_token_reuse_detected, reuse_result.reason
-
-    assert_operator VisitorToken.where(visitor_id: visitor.id).maximum(:discard_at), :<=, Time.current
-    rotated_result = SignRefreshTokenIssuer.call(refresh_token: rotated[:refresh_token])
-
-    assert_not rotated_result.success?
-    assert_equal :inactive_token, rotated_result.reason
-  end
-
-  private
-
-  def create_refresh_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::ACTIVE)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::NOTHING)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-    VisitorTokenStatus.ensure_defaults!
-
-    Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-  end
-end
-
-# DAMP local helper copy for former shared test support.
-class SignRefreshTokenIssuerTest
-  TEST_BROWSER_USER_AGENT =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  TEST_VERIFICATION_COOKIE_PREFIX = "test_verified:"
-
-  private
-
-  def configured_host(surface_name)
-    Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -330,7 +259,6 @@ class SignRefreshTokenIssuerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -368,13 +296,6 @@ class SignRefreshTokenIssuerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -396,23 +317,6 @@ class SignRefreshTokenIssuerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -427,17 +331,9 @@ class SignRefreshTokenIssuerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -622,31 +518,6 @@ class SignRefreshTokenIssuerTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

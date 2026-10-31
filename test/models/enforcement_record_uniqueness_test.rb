@@ -5,7 +5,6 @@ require "test_helper"
 class EnforcementRecordUniquenessTest < ActiveSupport::TestCase
   REALMS = [
     [AppEnforcementCase, AppEnforcementAppeal, AppEnforcementPrincipalEffect, :app_enforcement_case_id],
-    [ComEnforcementCase, ComEnforcementAppeal, ComEnforcementPrincipalEffect, :com_enforcement_case_id],
     [OrgEnforcementCase, OrgEnforcementAppeal, OrgEnforcementPrincipalEffect, :org_enforcement_case_id],
   ].freeze
 

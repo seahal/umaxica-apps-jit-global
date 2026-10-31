@@ -7,8 +7,6 @@ class IdentifierEncryptionReencrypt
     :user_telephones_reencrypted,
     :staff_emails_reencrypted,
     :staff_telephones_reencrypted,
-    :visitor_emails_reencrypted,
-    :visitor_telephones_reencrypted,
   )
 
   MODELS = [
@@ -16,8 +14,6 @@ class IdentifierEncryptionReencrypt
     ClientTelephone,
     OperatorEmail,
     OperatorTelephone,
-    VisitorEmail,
-    VisitorTelephone,
   ].freeze
 
   public
@@ -51,8 +47,6 @@ class IdentifierEncryptionReencrypt
       user_telephones_reencrypted: counts["ClientTelephone"],
       staff_emails_reencrypted: counts["OperatorEmail"],
       staff_telephones_reencrypted: counts["OperatorTelephone"],
-      visitor_emails_reencrypted: counts["VisitorEmail"],
-      visitor_telephones_reencrypted: counts["VisitorTelephone"],
     )
   end
 

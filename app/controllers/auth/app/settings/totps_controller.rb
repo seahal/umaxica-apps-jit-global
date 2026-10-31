@@ -7,6 +7,9 @@ module Auth
   module App
     module Settings
       class TotpsController < ::Auth::App::ApplicationController
+        # D-59: the settings surface manages TOTP; it is not a Sign Entry.
+        sign_entry_classification! :excluded, reason: "signed-in settings surface, not a sign entry"
+
         include ::SurfaceInertiaPage
         include ::TurnstilePageProps
         include ::CloudflareTurnstile

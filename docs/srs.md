@@ -173,10 +173,10 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   honoring read replicas for reporting workloads.
 - **FR-22**: Sensitive columns (emails, telephone numbers, OTP secrets) must use Active Record
   encryption with deterministic mode for lookups where required.
-- **FR-23**: Preference credential cookies (`preference_access`, `preference_refresh`, and
-  `preference_dbsc`, with `__Host-` prefixes in production) must keep their documented security
-  attributes. Any downstream readable mirror must be documented separately from the credential
-  cookie contract.
+- **FR-23**: The realm-scoped Preference JWT (`__Secure-preference`) and its `language` and
+  `__Secure-experience` display cookies must keep their documented realm-domain scope and security
+  attributes. The host-only `__Host-preference_binding` cookie must remain separate and must never
+  be treated as database input. Preference refresh and Preference DBSC cookies are retired.
 - **FR-24**: All database operations (create, update, delete) involving `User` and `Staff` entities
   must be recorded in the Audit log (`UserIdentityAudit`, `StaffIdentityAudit`) to ensure
   traceability and accountability.

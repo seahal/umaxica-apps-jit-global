@@ -59,8 +59,8 @@ class BranchCoverageBatch37ThresholdCloseTest < ActiveSupport::TestCase
 
     subject = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     subject.define_singleton_method(:public_id) { "client-pub" }
-    actor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)
-    actor.define_singleton_method(:public_id) { "visitor-pub" }
+    actor = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    actor.define_singleton_method(:public_id) { "operator-pub" }
     request = ActionDispatch::TestRequest.create
     request.request_id = "req-1"
     request.user_agent = "CoverageAgent/1.0"
@@ -73,8 +73,8 @@ class BranchCoverageBatch37ThresholdCloseTest < ActiveSupport::TestCase
       context: { reason_code: "user_request" },
     )
 
-    assert_equal "Visitor", ctx["actor_type"]
-    assert_equal "visitor-pub", ctx["actor_public_id"]
+    assert_equal "Operator", ctx["actor_type"]
+    assert_equal "operator-pub", ctx["actor_public_id"]
     assert_equal "app", ctx["surface"]
     assert_equal "req-1", ctx["request_id"]
     assert_predicate ctx["user_agent_digest"], :present?

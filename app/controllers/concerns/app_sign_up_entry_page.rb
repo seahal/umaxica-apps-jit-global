@@ -21,7 +21,6 @@ module AppSignUpEntryPage
   def sign_up_entry_page_props
     {
       title: t("sign.app.registration.new.page_title"),
-      suspended_notice: nil,
       methods: sign_up_entry_methods,
       social_providers: sign_up_entry_social_providers,
       links: sign_entry_parent_bound? ? [] : sign_up_entry_links,

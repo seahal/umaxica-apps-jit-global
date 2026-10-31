@@ -1,27 +1,36 @@
 # typed: false
 # frozen_string_literal: true
 
+# ADR `sign-up-one-day-minimum-age-and-feature-level-age-restrictions` (R-AU-50): sign-up on
+# `.app` and `.org` establishes identity and does not gate on age. A birthdate is eligible only
+# when it is at least one calendar day before the service date of the check: yesterday is the
+# closest eligible date, today is refused on purpose (an unattended submission produces it), and
+# tomorrow or later was already invalid and now meets the same boundary. Feature-level age rules
+# (for example an adult-content gate) are each feature's own concern and must not reuse this.
 class SignUpEligibilityPolicy
-  APP_CLIENT_DIRECT_SIGN_UP_MINIMUM_AGE = 16
-  COM_VISITOR_ACCOUNT_SIGN_UP_MINIMUM_AGE = 13
+  SURFACES = %i(app org).freeze
+  private_constant :SURFACES
 
-  MINIMUM_AGES = {
-    app: APP_CLIENT_DIRECT_SIGN_UP_MINIMUM_AGE,
-    com: COM_VISITOR_ACCOUNT_SIGN_UP_MINIMUM_AGE,
-  }.freeze
-  private_constant :MINIMUM_AGES
+  def self.eligible?(birthdate, surface:, today: Time.zone.today)
+    validate_surface!(surface)
 
-  def self.minimum_age(surface:)
-    MINIMUM_AGES.fetch(surface.to_sym)
-  rescue KeyError
-    raise ArgumentError, "unsupported sign-up eligibility surface: #{surface.inspect}"
+    birthdate = AgeEligibility.birthdate_for_age(birthdate)
+    birthdate.present? && birthdate < today
   end
 
-  def self.minimum_age_reached?(birthdate, surface:, today: Time.zone.today)
-    AgeEligibility.minimum_age_reached?(
-      birthdate,
-      minimum_age: minimum_age(surface: surface),
-      today: today,
-    )
+  def self.supported_surface?(surface)
+    return false unless surface.is_a?(String) || surface.is_a?(Symbol)
+
+    SURFACES.include?(surface.to_sym)
+  end
+
+  class << self
+    private
+
+    def validate_surface!(surface)
+      return if supported_surface?(surface)
+
+      raise ArgumentError, "unsupported sign-up eligibility surface: #{surface.inspect}"
+    end
   end
 end

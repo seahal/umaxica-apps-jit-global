@@ -5,32 +5,20 @@ require "test_helper"
 class AuthEmailOtpLockDeadlineTest < ActiveSupport::TestCase
   setup do
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
-    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(otp parent parent_issuance parent_delivery).each do |deadline_kind|
       test "#{surface} email challenge rechecks #{deadline_kind} deadline after acquiring Contact ownership locks" do
         address = "lock-deadline-#{SecureRandom.hex(8)}@example.test"
-        if surface == "app"
-          owner = Client.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-          )
-          contact = owner.client_emails.create!(
-            address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-          model = ClientAuthCeremonySession
-        else
-          owner = Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-          )
-          contact = owner.visitor_emails.create!(
-            address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-          model = VisitorAuthCeremonySession
-        end
+        owner = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+        )
+        contact = owner.client_emails.create!(
+          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+        ).tap(&:finalize_binding!)
+        model = ClientAuthCeremonySession
         issuance = OidcTestEntry.issue!(
           surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )

@@ -1,6 +1,3 @@
-import { router } from "@inertiajs/react";
-import { useState } from "react";
-
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
 
@@ -11,21 +8,6 @@ type Props = {
 };
 
 export default function PrivacyErasureNew({ title, notices, form }: Props) {
-  const [processing, setProcessing] = useState(false);
-
-  const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    router.post(
-      form.action,
-      { jurisdiction: form.jurisdiction },
-      {
-        onStart: () => setProcessing(true),
-
-        onFinish: () => setProcessing(false),
-      },
-    );
-  };
-
   return (
     <Page
       title={title}
@@ -37,15 +19,13 @@ export default function PrivacyErasureNew({ title, notices, form }: Props) {
         ))}
       </div>
 
-      <form onSubmit={submit}>
-        <Button
-          type="submit"
-          variant="danger"
-          isDisabled={processing}
-        >
-          {form.submit_label}
-        </Button>
-      </form>
+      <Button
+        type="button"
+        variant="danger"
+        isDisabled
+      >
+        {form.submit_label}
+      </Button>
     </Page>
   );
 }

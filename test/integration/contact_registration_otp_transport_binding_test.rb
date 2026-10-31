@@ -7,7 +7,7 @@ require "minitest/mock"
 class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(email telephone).each do |channel|
       states = %i(current verified reissued revoked expired missing_ticket wrong_destination wrong_code wrong_binding)
       states += [:current_localized] if channel == :telephone
@@ -19,18 +19,12 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
               [Client, ClientEmail, :user_id, ClientEmailCeremonyTransaction, Email::App::OtpMailer]
             when [:app, :telephone]
               [Client, ClientTelephone, :user_id, ClientTelephoneCeremonyTransaction, nil]
-            when [:com, :email]
-              [Visitor, VisitorEmail, :visitor_id, VisitorEmailCeremonyTransaction, Email::Com::OtpMailer]
-            when [:com, :telephone]
-              [Visitor, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction, nil]
             end
           actor = owner_model.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
-            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+            status_id: ClientStatus::ACTIVE,
           )
-          token =
-            (surface == :app) ? ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now) :
-                        VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
+          token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
           token.rotate_refresh_token!
           destination =
             (channel == :email) ? "transport-#{SecureRandom.hex(8)}@example.test" :
@@ -60,7 +54,7 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
                               "Your verification code: #{code}"
           clear_enqueued_jobs
           if channel == :email
-            notifier = (surface == :app) ? Notify::App::OtpNotifier : Notify::Com::OtpNotifier
+            notifier = Notify::App::OtpNotifier
             notifier.issue(
               record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
               contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_generation: generation,

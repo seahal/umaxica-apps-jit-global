@@ -4,7 +4,7 @@
     <%= display_meta_tags title: I18n.t("actions.continue") %>
     <meta charset="utf-8">
     <meta name="robots" content="noindex,nofollow">
-    <meta name="referrer" content="no-referrer">
+    <meta name="referrer" content="strict-origin">
   </head>
   <body>
     <%= form_with url: action_url, method: :post, local: true, data: { turbo: false } do %>

@@ -8,11 +8,24 @@ class SignEntrySentryTest < ActionDispatch::IntegrationTest
 
   SURFACES = {
     app: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-    com: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
     org: ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
   }.freeze
 
   FLOWS = %i(sign_in sign_up).freeze
+
+  test "blocked email OTP resend stops before unadmitted entry can allocate state" do
+    host!(SURFACES.fetch(:app))
+    Flipper.disable(FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name)
+    before_occurrences = EmailOccurrence.count
+    before_sessions = ClientAuthCeremonySession.count
+
+    post "/web/v0/in/email/otp", params: { state: "invalid" }, as: :json
+
+    assert_response :service_unavailable
+    assert_equal before_occurrences, EmailOccurrence.count
+    assert_equal before_sessions, ClientAuthCeremonySession.count
+    assert_not_includes response.headers["Set-Cookie"].to_s, "auth_sid="
+  end
 
   test "A07-2: a retryable sentry refusal keeps flow locators and Auth continuity" do
     host = SURFACES.fetch(:app)
@@ -63,7 +76,6 @@ class SignEntrySentryTest < ActionDispatch::IntegrationTest
   teardown do
     %i(
       sign_in_available_app sign_up_available_app
-      sign_in_available_com sign_up_available_com
       sign_in_available_org sign_up_available_org
     ).each { |feature| Flipper.enable(feature) }
   end

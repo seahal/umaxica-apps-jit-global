@@ -16,7 +16,7 @@ module Base
           activities = activity_log.app_activities(activity_scope, client: current_client, limit: 100)
           render inertia: true, props: activities_page_props(activities)
         rescue ActiveRecord::ActiveRecordError
-          render inertia: true, props: activities_page_props(ClientChronicle.none)
+          render plain: t("base.shared.identity.activities.unavailable"), status: :service_unavailable
         end
 
         private

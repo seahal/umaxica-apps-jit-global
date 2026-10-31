@@ -12,7 +12,6 @@ class WithdrawalPersonalDataAnonymizer
 
   def call
     anonymize_client if actor.is_a?(Client)
-    anonymize_visitor if actor.is_a?(Visitor)
     # Explicit, ordered cleanup of non-audit children that live in other
     # databases (no implicit cross-DB AR cascade). Chronicle/audit is
     # intentionally retained.
@@ -53,27 +52,12 @@ class WithdrawalPersonalDataAnonymizer
     remove_common_social_identities
   end
 
-  def anonymize_visitor
-    VisitorEmail.where(visitor_id: actor.id).find_each(&:retire_for_withdrawal!)
-    VisitorTelephone.where(visitor_id: actor.id).find_each(&:retire_for_withdrawal!)
-    revoke_records(
-      VisitorPasskey.where(visitor_id: actor.id),
-      status_column: :status_id,
-      revoked_status: VisitorPasskeyStatus::REVOKED,
-      purge_at: actor.purge_eligible_at,
-    )
-    revoke_records(
-      VisitorSecretCredential.where(visitor_id: actor.id),
-      status_column: :visitor_secret_credential_status_id, revoked_status: VisitorSecretCredentialStatus::REVOKED,
-    )
-  end
-
   def revoke_records(scope, status_column:, revoked_status:, purge_at: nil)
     scope.find_each do |record|
       record.class.transaction do
         record.lock!
         was_revoked = record.public_send(status_column) == revoked_status
-        if !was_revoked && (record.is_a?(ClientPasskey) || record.is_a?(VisitorPasskey))
+        if !was_revoked && record.is_a?(ClientPasskey)
           PasskeyAuditOutbox.record_for!(
             passkey: record,
             event_type: "passkey.revoked",
@@ -104,7 +88,6 @@ class WithdrawalPersonalDataAnonymizer
   def surface_for(actor)
     case actor
     when Client then "app"
-    when Visitor then "com"
     else raise ArgumentError, "unsupported passkey withdrawal actor"
     end
   end

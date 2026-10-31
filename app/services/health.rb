@@ -231,9 +231,7 @@ module Health
       cache_key: "acme-com",
       surface_label: "com",
       record_classes: [
-        ComRpRecord,
         ComSettingRecord,
-        ComSignalRecord,
       ],
     )
 
@@ -254,16 +252,6 @@ module Health
         AppPrincipalRecord,
         OpBaseAppRecord,
         AppSettingRecord,
-      ],
-    )
-
-    SignCom = Base.new(
-      cache_key: "sign-com",
-      surface_label: "sign com",
-      record_classes: [
-        ComPrincipalRecord,
-        OpBaseComRecord,
-        ComSettingRecord,
       ],
     )
 

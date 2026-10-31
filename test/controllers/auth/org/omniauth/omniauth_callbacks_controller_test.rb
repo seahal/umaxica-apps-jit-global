@@ -75,6 +75,11 @@ class Auth::Org::Omniauth::OmniauthCallbacksControllerTest < ActionDispatch::Int
 
     query = Rack::Utils.parse_nested_query(uri.query)
 
+    assert_equal ExternalAuthenticationEntraRedirectUri.call, query.fetch("redirect_uri")
+    callback = URI.parse(query.fetch("redirect_uri"))
+    assert_equal ENV.fetch("PUBLIC_AUTH_STAFF_URL"), callback.host
+    assert_equal "/social/entra/callback", callback.path
+    assert_equal "https", callback.scheme
     assert_equal "openid profile", query.fetch("scope")
     assert_equal "S256", query.fetch("code_challenge_method")
     assert_not_includes uri.query, "common"

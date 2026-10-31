@@ -8,6 +8,7 @@ class Auth::App::VerificationsController < ::Auth::App::ApplicationController
   include AuthStepUpCeremonyEntry
 
   AUTHENTICATION_MODE = :open
+  sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
   declare_authentication_mode! :open
 
   private

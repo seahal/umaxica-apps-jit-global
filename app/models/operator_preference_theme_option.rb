@@ -19,11 +19,6 @@ class OperatorPreferenceThemeOption < OrgPrincipalRecord
 
   DEFAULTS = [NOTHING, LIGHT, DARK, SYSTEM].freeze
 
-  has_many :staff_preference_themes,
-           class_name: "OperatorPreferenceTheme",
-           foreign_key: :option_id,
-           inverse_of: :option,
-           dependent: :restrict_with_error
   has_many :operator_preference_themes,
            class_name: "OperatorPreferenceTheme",
            foreign_key: :option_id,

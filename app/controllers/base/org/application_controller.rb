@@ -4,6 +4,13 @@
 module Base
   module Org
     class ApplicationController < ActionController::Base
+      PREFERENCE_WRITE_CONTEXT = {
+        surface_key: "base/org",
+        realm: "org",
+        preference_model: OrgPreference,
+        issuer_id: "preference_org",
+      }.freeze
+
       include ::OrgSecondPasskeyGate
       include ::FqdnAvailabilityGate
       include ::RateLimit
@@ -14,7 +21,6 @@ module Base
 
       include ::PreferenceGlobal
 
-      include ::PreferenceAdoption
 
       include ::BrowserRpAuthentication
       include ::AuthenticationWithdrawalGate
@@ -54,6 +60,7 @@ module Base
       authorize :actor, through: :current_actor
       rescue_from AuthenticationBase::LoginCooldownError, with: :render_login_cooldown
       rescue_from ApplicationError, with: :handle_application_error
+      rescue_from BaseZenithIdentityResolver::DependencyUnavailable, with: :render_base_zenith_identity_unavailable
       rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
       rescue_from ActionPolicy::Unauthorized, with: :handle_authorization_error
       helper_method :current_actor, :current_account, :current_session_public_id,
@@ -112,6 +119,29 @@ module Base
 
         instrument_unverified_request
         handle_unverified_request
+      end
+
+      def preference_write_actor
+        resource = preference_current_resource
+        return unless resource
+
+        unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+          raise ActiveRecord::RecordNotFound,
+                "Base preference actor has the wrong type" unless resource.instance_of?(Operator)
+
+          return resource
+        end
+
+        return unless browser_rp_authenticated?
+
+        BaseZenithIdentityResolver.call(access_state: browser_rp_access_state, surface: :org)
+      end
+
+      def preference_write_context = PREFERENCE_WRITE_CONTEXT
+
+      def render_base_zenith_identity_unavailable
+        response.set_header("Cache-Control", "no-store")
+        head :service_unavailable
       end
 
       def browser_rp_client_id

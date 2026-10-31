@@ -1,0 +1,6 @@
+# Preference replay at the current Base sign boundary
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Extensive uncommitted worktree changes affected the results.
+- Replaced the obsolete Auth sign-in POST replay scenario with the current Base sign POST. The test still checks replay detection, retirement of the old credential, no new Preference row, and cookie clearing. The detached-credential CSRF case now targets the same existing POST and asserts HTTP 422 and no admission session mutation.
+- With `POSTGRESQL_TEST_PREPARE_DATABASES` set to the existing `.env` value and `PARALLEL_WORKERS=1`, `bin/rails test test/integration/preference_entry_recovery_test.rb test/integration/preference_refresh_replay_test.rb` passed 19 runs and 113 assertions, with no failures, errors or skips. After strengthening the CSRF status assertion, rerunning `test/integration/preference_entry_recovery_test.rb` passed 17 runs and 102 assertions, with no failures, errors or skips.
+- This completes the remaining failure recorded in `2026-10-29-preference-entry-recovery-A3M6.md` for this test file. The full suite was not rerun after this change. Test database preparation was used; no production persistence operation or external write was performed.

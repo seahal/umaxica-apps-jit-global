@@ -6,11 +6,11 @@ require "webauthn/fake_client"
 
 # Boolean comparisons prevent disclosure of proof, OTP and root facts on assertion failures.
 class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(email telephone).each do |channel|
       %i(success foreign_browser foreign_root foreign_owner foreign_flow proof_before proof_at proof_after revoked
          lost_freshness credential_lost current_policy source_fault receipt_fault
-         root_before root_at root_after).each do |scenario|
+         root_before root_at root_after rebound_device).each do |scenario|
         test "#{surface} #{channel} finalization #{scenario} preserves original proof and commit authority" do
           owner_model, contact_model, owner_key, flow_model, _, session_model, auth_model, audit_model,
             status_key, verified_status, auth_host =
@@ -22,22 +22,13 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
                ClientContactAuditOutbox, (channel == :email) ? :user_email_status_id : :user_telephone_status_id,
                (channel == :email) ? ClientEmailStatus::VERIFIED : ClientTelephoneStatus::VERIFIED,
                ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),]
-            when [:com, :email], [:com, :telephone]
-              [Visitor, (channel == :email) ? VisitorEmail : VisitorTelephone, :visitor_id,
-               (channel == :email) ? VisitorEmailCeremonyTransaction : VisitorTelephoneCeremonyTransaction,
-               VisitorStepUpCeremonyTransaction, VisitorStepUpSession, VisitorAuthCeremonySession,
-               VisitorContactAuditOutbox, (channel == :email) ? :visitor_email_status_id : :visitor_telephone_status_id,
-               (channel == :email) ? VisitorEmailStatus::VERIFIED : VisitorTelephoneStatus::VERIFIED,
-               ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
             end
           actor = owner_model.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
             id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+            status_id: ClientStatus::ACTIVE,
           )
-          token =
-            (surface == :app) ? ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now) :
-                        VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
+          token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
           token.rotate_refresh_token!
           origin = "https://#{auth_host}"
           fake = WebAuthn::FakeClient.new(origin, encoding: :base64url)
@@ -47,11 +38,6 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
           passkey =
             if surface == :app
               actor.client_passkeys.create!(
-                webauthn_id: registered.id, public_key: registered.public_key,
-                sign_count: 0,
-              )
-            else
-              actor.visitor_passkeys.create!(
                 webauthn_id: registered.id, public_key: registered.public_key,
                 sign_count: 0,
               )
@@ -73,8 +59,6 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             case [surface, channel]
             when [:app, :email] then ClientEmailPolicy
             when [:app, :telephone] then ClientTelephonePolicy
-            when [:com, :email] then VisitorEmailPolicy
-            when [:com, :telephone] then VisitorTelephonePolicy
             end
           requirement = policy_model.new(contact, user: actor).credential_registration_requirement(token:)
           admission = BaseStepUpAdmissionIssuer.call!(
@@ -145,7 +129,7 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             finalizer = TelephoneCredentialRegistrationOtpFinalizer
           end
           actor_context = ActorValuesContext.empty.with(
-            subject: actor, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+            subject: actor, actor_type: :client, tld: surface, surface: :base,
           )
           arguments = { actor:,
                         actor_context:,
@@ -161,18 +145,16 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
           when :foreign_browser
             arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
           when :foreign_root
-            replacement =
-              (surface == :app) ? ClientToken.create!(
-                authentication_epoch: 0, user: actor,
-                discard_at: 1.day.from_now,
-              ) :
-                          VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
+            replacement = ClientToken.create!(
+              authentication_epoch: 0, user: actor,
+              discard_at: 1.day.from_now,
+            )
             replacement.rotate_refresh_token!
             arguments[:token] = replacement
           when :foreign_owner
             arguments[:actor] = owner_model.create!(
               security_mode_id: SecurityModeConfigurable::NORMAL,
-              status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+              status_id: ClientStatus::ACTIVE,
             )
           when :foreign_flow
             candidate_fields =
@@ -212,6 +194,13 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
           supplied_ticket_facts = arguments.fetch(:transaction).reload.attributes
           audits = audit_model.where(operation_ref: transaction.transaction_id)
           original_audits = audits.count
+          if scenario == :rebound_device
+            replacement = ClientToken.create!(authentication_epoch: 0, user: actor)
+            new_device = replacement.device_session_record!
+            ClientToken.find(token.id).update!(device_session_id: new_device.id)
+            new_device.update!(current_refresh_token_id: token.id)
+            root_facts = ClientToken.find(token.id).attributes
+          end
           if %i(source_fault receipt_fault).include?(scenario)
             fired = false
             fault =
@@ -251,6 +240,10 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               assert_predicate previous.reload, :binding_released?, "Source replacement must retain its release fact"
               assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
               assert_equal 1, audits.where(event_name: "released", contact_ref: previous.public_id).count
+              assert_equal root_facts.fetch("last_step_up_at"), token.reload.last_step_up_at
+              assert_predicate StepUpResolver.call(
+                token: token, requirement: requirement, now: token.class.database_now,
+              ), :satisfied?
             end
           end
           status =

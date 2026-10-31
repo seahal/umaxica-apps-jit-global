@@ -1,0 +1,6 @@
+# WU-A6 ORG Passkey rename and authentication context
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had uncommitted changes affecting implementation and tests.
+- The existing Passkey name committer file passed before the new case (8 runs, 60 assertions). The added public-operation case uses one Operator, the same target and evidence key, and separate Normal and Standby tokens with equivalent scoped synthetic proof. Normal changes the description and creates one source audit event; Standby is denied, leaves the name and audit count unchanged, and does not consume its prior synthetic proof.
+- `PARALLEL_WORKERS=1 bin/rails test test/operations/identity_passkey_name_committer_test.rb test/operations/passkey_mutation_authorization_test.rb test/operations/identity_credential_removal_committer_test.rb` passed (34 runs, 332 assertions, 0 failures, 0 errors, 0 skips). RuboCop and scoped whitespace validation passed for the changed test. No application code was modified.
+- This tests a public operation using directly seeded proof, not the complete Normal WebAuthn journey or an HTTP endpoint. It does not establish all AC-41 operations, independent failure orderings, or a Standby Root login.

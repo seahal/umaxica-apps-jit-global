@@ -21,9 +21,6 @@ class EmailCredentialRegistrationOtpDeliveryGuard
       in [ClientEmailCeremonyTransaction, ClientEmail]
         [Client, ClientToken, ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction,
          ClientStepUpSession, ClientAuthAdmissionBinding, StepUpScopeCatalog::APP,]
-      in [VisitorEmailCeremonyTransaction, VisitorEmail]
-        [Visitor, VisitorToken, VisitorEmailStatus::UNVERIFIED, VisitorStepUpCeremonyTransaction,
-         VisitorStepUpSession, VisitorAuthAdmissionBinding, StepUpScopeCatalog::COM,]
       in [OperatorEmailCeremonyTransaction, OperatorEmail]
         [Operator, OperatorToken, OperatorEmailStatus::UNVERIFIED, nil, nil, nil, nil]
       else raise ArgumentError, "unsupported Email registration delivery realm"
@@ -83,8 +80,7 @@ class EmailCredentialRegistrationOtpDeliveryGuard
     parent = bootstrap_model.find_by(transaction_id: reference)
     return false unless parent
 
-    token_key = (transaction.surface == "app") ? :user_token_id : :visitor_token_id
-    session = bootstrap_session_model.lock.find_by(token_key => token.id)
+    session = bootstrap_session_model.lock.find_by(user_token_id: token.id)
     return false unless session && session.step_up_ceremony_transaction_ref == reference
 
     parent.with_lock do
@@ -124,9 +120,6 @@ class EmailCredentialRegistrationOtpDeliveryGuard
       when ClientEmail
         email.user_id == owner.id && token.user_id == owner.id && device_session.user_id == owner.id &&
         email.user_email_status_id == pending_status
-      when VisitorEmail
-        email.visitor_id == owner.id && token.visitor_id == owner.id && device_session.visitor_id == owner.id &&
-        email.visitor_email_status_id == pending_status
       when OperatorEmail
         email.staff_id == owner.id && token.staff_id == owner.id && device_session.staff_id == owner.id &&
         email.staff_email_status_id == pending_status
@@ -137,7 +130,7 @@ class EmailCredentialRegistrationOtpDeliveryGuard
 
   def source_available?(now)
     case email
-    when ClientEmail, VisitorEmail
+    when ClientEmail
       email.accessible?(now) && !email.binding_finalized_at && !email.binding_released?
     when OperatorEmail then email.staff_email_status_id == pending_status
     else raise ArgumentError, "unsupported Email registration candidate"
@@ -148,7 +141,7 @@ class EmailCredentialRegistrationOtpDeliveryGuard
     now = transaction.class.database_now
     bound_root = CredentialRegistrationOtpSessionValue.load(session_ref: transaction.session_ref).root_ref
     return false unless bound_root == token.public_id && token.active_status?(now) && device_session.usable? &&
-      device_session.current_refresh_token_id == token.id
+      token.device_session_id == device_session.id && device_session.current_refresh_token_id == token.id
     return false unless transaction.operation == "registration" && transaction.purpose == "credential_registration" &&
       transaction.actor_ref == owner.public_id && transaction.email_candidate_ref == email.public_id &&
       transaction.normalized_email_digest == email.address_digest

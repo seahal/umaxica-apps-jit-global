@@ -125,17 +125,6 @@ class BranchCoverageBatch27ValuesLibEasyArmsTest < ActiveSupport::TestCase
     assert_nil TimezoneIdentifier.normalize("Not/A/Real/Zone")
   end
 
-  test "SingleUseToken consume_once blank digest" do
-    klass =
-      Class.new(ApplicationRecord) do
-        self.table_name = "client_tokens"
-        include SingleUseToken
-      end
-
-    assert_nil klass.consume_once_by_digest!(digest: "")
-    assert_nil klass.consume_once_by_digest!(digest: nil)
-  end
-
   test "TokenStatusManagement discarded and currently_valid_at arms" do
     token = ClientToken.new
     if token.has_attribute?(:discard_at)

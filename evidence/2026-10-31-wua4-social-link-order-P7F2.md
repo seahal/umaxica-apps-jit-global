@@ -1,0 +1,6 @@
+# Social-link authorization consumption order
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained extensive uncommitted changes affecting this result.
+- The APP social-link completion now returns the validated in-memory candidate from the OP device/token transaction after consuming the Step-Up evidence, candidate and grant, then attempts the Zenith identity link while the Client lock remains held. A Google identity already owned by another Client still returns conflict; the public HTTP test now also observes the spent candidate and Step-Up and refusal of a replay. The original owner's identity remains in place.
+- Before the change, `test/integration/social_auth_link_test.rb` passed 16 runs and 107 assertions. After the change, that test and `test/integration/acme_social_link_completion_test.rb` passed 19 runs and 136 assertions. The changed controller and integration test passed RuboCop and scoped `git diff --check`; two subsequent formatting-only corrections were included in the RuboCop check.
+- The tests use the regular test transaction environment. Independent-connection verification of the first commit, a source-database failure after that commit, and crash-window recovery were not performed. This is partial XDB-12 work, not full acceptance.

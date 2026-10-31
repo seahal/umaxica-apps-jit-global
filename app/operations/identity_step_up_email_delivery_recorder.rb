@@ -7,38 +7,45 @@ class IdentityStepUpEmailDeliveryRecorder
     public
 
     def call!(credential:, transaction_ref:, generation:, encrypted_code:)
-      actor, transaction_model, session_model, token_key, mailer = binding_for(credential)
+      actor, transaction_model, session_model, mailer = binding_for(credential)
       unless transaction_ref.is_a?(String) && transaction_ref.present? &&
           generation.is_a?(Integer) && generation.positive?
         raise ArgumentError, "invalid step-up email delivery reference"
       end
 
-      transaction = nil
-      session_record = nil
-      eligible =
-        actor.class.connection_class_for_self.connected_to(role: :writing) do
-          actor.with_lock do
-            credential.with_lock do
-              next false unless actor.login_allowed? && credential_valid?(credential)
+      transaction = session_record = nil
+      actor.class.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          credential.with_lock do
+            next false unless actor.login_allowed? && credential_valid?(credential)
 
-              transaction_model.connection_owner.connected_to(role: :writing) do
-                transaction = transaction_model.find_by(transaction_id: transaction_ref)
-                next false unless transaction && transaction.actor_ref == actor.public_id
+            transaction_model.connection_owner.connected_to(role: :writing) do
+              transaction = transaction_model.find_by(transaction_id: transaction_ref)
+              next false unless transaction && transaction.actor_ref == actor.public_id
 
-                session_record = session_model.find_by(step_up_ceremony_transaction_ref: transaction_ref)
-                next false unless session_record
+              session_record = session_model.find_by(step_up_ceremony_transaction_ref: transaction_ref)
+              next false unless session_record
 
-                token = token_for(session_record, token_key)
+              token = ClientToken.find(session_record.user_token_id)
+              device = token.device_session_record!
+              device.with_lock do
                 token.with_lock do
-                  session_record.with_lock do
-                    transaction.with_lock do
+                  next false unless current_device?(actor, token, device)
+
+                  transaction.with_lock do
+                    session_record.with_lock do
                       now = transaction_model.database_now
-                      next false unless delivery_pending?(
+                      next false unless session_record.user_token_id == token.id && delivery_pending?(
                         transaction, session_record, token, actor, credential,
                         generation, now,
                       )
 
-                      payload_matches?(transaction, credential, session_record, generation, encrypted_code)
+                      next false unless payload_matches?(transaction, credential, session_record, generation, encrypted_code)
+
+                      delivered = deliver_mail!(mailer, credential, encrypted_code)
+                      session_record.mark_bound_email_delivery!(
+                        transaction: transaction, generation: generation, success: delivered,
+                      ) && delivered
                     end
                   end
                 end
@@ -46,20 +53,18 @@ class IdentityStepUpEmailDeliveryRecorder
             end
           end
         end
-      return false unless eligible
-
-      # SMTP runs outside database locks. The terminal transaction and generation are checked
-      # again when recording delivery, so a late job cannot revive canceled or replaced proof.
-      delivered = deliver_mail!(mailer, credential, encrypted_code)
-      session_record.mark_bound_email_delivery!(
-        transaction: transaction, generation: generation, success: delivered,
-      ) && delivered
+      end
     rescue Net::SMTPError, IOError, Timeout::Error, SocketError
       session_record&.mark_bound_email_delivery!(transaction: transaction, generation: generation, success: false)
       false
     end
 
     private
+
+    def current_device?(actor, token, device)
+      device.usable? && device.user_id == actor.id && token.device_session_id == device.id &&
+        device.current_refresh_token_id == token.id
+    end
 
     def payload_matches?(transaction, credential, record, generation, encrypted_code)
       code = OutboundSensitivePayload.decrypt_email_otp(encrypted_code)
@@ -82,38 +87,21 @@ class IdentityStepUpEmailDeliveryRecorder
       case credential
       when ClientEmail
         actor = credential.association(:user).tap { |owner| owner.reset_scope }.scope.take!
-        [actor, ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token, Email::App::OtpMailer]
-      when VisitorEmail
-        actor = credential.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
-        [actor, VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token, Email::Com::OtpMailer]
+        [actor, ClientStepUpCeremonyTransaction, ClientStepUpSession, Email::App::OtpMailer]
       else
         raise ArgumentError, "step-up email surface unsupported"
       end
     end
 
-    def token_for(session_record, token_key)
-      case token_key
-      when :user_token then ClientToken.find(session_record.user_token_id)
-      when :visitor_token then VisitorToken.find(session_record.visitor_token_id)
-      else raise ArgumentError, "unsupported step-up token association"
-      end
-    end
-
     def credential_valid?(credential)
-      statuses =
-        case credential
-        when ClientEmail then [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP]
-        when VisitorEmail then [VisitorEmailStatus::VERIFIED, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP]
-        end
-      status_key = credential.is_a?(ClientEmail) ? :user_email_status_id : :visitor_email_status_id
-      credential.class.where(
+      credential.class.effective_binding.where(
         :id => credential.id,
-        status_key => statuses,
+        :user_email_status_id => [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
       ).where("discard_at > clock_timestamp()").exists?
     end
 
     def delivery_pending?(transaction, record, token, actor, credential, generation, now)
-      owned = token.is_a?(ClientToken) ? token.user_id == actor.id : token.visitor_id == actor.id
+      owned = token.user_id == actor.id
       owned && token.active_status? && token.public_id == transaction.session_ref &&
         transaction.purpose == "step_up" && transaction.status == "pending" && !transaction.expired?(now: now) &&
         transaction.allowed_methods_array.include?("email_otp") &&

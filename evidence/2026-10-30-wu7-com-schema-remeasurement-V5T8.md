@@ -1,0 +1,6 @@
+# WU-7 local com schema remeasurement
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree had staged, unstaged and untracked changes affecting the result.
+- Rails runners in test and development queried database identity, table counts, column types/nullability and aggregate non-NULL counts. Test com setting has 2 parent and 2 consent rows, 3 binding-method and 5 DBSC-status reference rows, and no binding or Web Push rows. Both parent jtis are NULL and both legacy token digests are non-NULL. Development com setting has no parent, consent, binding or Web Push rows and the same reference counts. These observations do not authorize data destruction.
+- A development structure dump was generated to a temporary path via `ActiveRecord::Tasks::DatabaseTasks.structure_dump`: 1,974 lines, including browser-binding and Web Push tables. The worktree `db/com_setting_structure.sql` has 18 lines and both staged and unstaged changes; it was not replaced. This is a schema-dump discrepancy, not proof that either database is suitable for destructive migration.
+- The execution ticket was expanded with the measured column-level proposed shape and unresolved data treatment. No migration, backup, restore rehearsal, production or Neon operation was performed. WU-7 remains incomplete.

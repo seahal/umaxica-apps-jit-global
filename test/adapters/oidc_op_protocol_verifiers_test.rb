@@ -53,6 +53,30 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
     assert_equal 0, @jwks_fetches
   end
 
+  test "non ES384 OP tokens are refused before fetching keys" do
+    cases = [
+      [access_payload, OidcOpAccessTokenVerifier::TOKEN_TYPE, :access],
+      [id_payload, OidcOpIdTokenVerifier::TOKEN_TYPE, :id],
+      [access_payload, OidcOpLogoutTokenVerifier::TOKEN_TYPE, :logout],
+    ]
+
+    cases.each do |payload, typ, kind|
+      token = JWT.encode(payload, "untrusted-key", "HS256", { kid: "unknown", typ: typ })
+      verifier =
+        case kind
+        when :access then access_verifier(token: token)
+        when :id then id_verifier(token: token)
+        when :logout
+          OidcOpLogoutTokenVerifier.new(
+            logout_token: token, client_id: CLIENT_ID, issuer: ISSUER, jwks_client: jwks_client,
+          )
+        end
+
+      assert_not_predicate verifier.call, :success?, kind.to_s
+      assert_equal 0, @jwks_fetches, kind.to_s
+    end
+  end
+
   # D-144: a kid absent from a fresh fetch is invalid without another fetch inside the window;
   # after the window a new lease may fetch again.
   test "an unknown kid absent from a fresh fetch is refused until the refetch window passes" do

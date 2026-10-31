@@ -69,6 +69,10 @@ module JitSecurityJwtRegistry
     "VISA_COM" => "https://visa.umaxica.com",
     "VISA_ORG" => "https://visa.umaxica.org",
   }.freeze
+  PREFERENCE_REALM_ISSUERS = {
+    "preference_app" => { issuer: "https://www.umaxica.app", audience: "app" },
+    "preference_org" => { issuer: "https://www.umaxica.org", audience: "org" },
+  }.freeze
 
   ConfigurationError = Class.new(StandardError)
 
@@ -179,6 +183,20 @@ module JitSecurityJwtRegistry
       audiences: preference_hosts_from_boot_config,
       revoked_kids: source.csv("PREFERENCE_JWT_REVOKED_KIDS"),
     )
+    com_active_kid = source.value("PREFERENCE_COM_JWT_ACTIVE_KID")
+    raise ConfigurationError, "com preference active kid is missing" if com_active_kid.blank?
+
+    records["preference_com"] = build_keyset_issuer(
+      source: source,
+      id: "preference_com",
+      private_keyset_name: :PREFERENCE_COM_JWT_PRIVATE_KEYSET,
+      public_keyset_name: :PREFERENCE_COM_JWT_PUBLIC_KEYSET,
+      active_kid: com_active_kid,
+      issuer: source.value("PREFERENCE_COM_JWT_ISSUER"),
+      audiences: [source.value("PREFERENCE_COM_JWT_AUDIENCE")].compact.freeze,
+      revoked_kids: source.csv("PREFERENCE_COM_JWT_REVOKED_KIDS"),
+    )
+    records.merge!(build_preference_realm_issuers(source))
 
     SURFACE_NAMESPACES.each do |namespace|
       records["surface:#{namespace}"] = build_surface_issuer(namespace, source: source)
@@ -188,6 +206,25 @@ module JitSecurityJwtRegistry
     end
 
     records.freeze
+  end
+
+  def build_preference_realm_issuers(source)
+    PREFERENCE_REALM_ISSUERS.to_h do |id, configuration|
+      prefix = id.upcase
+      [
+        id,
+        build_keyset_issuer(
+          source: source,
+          id: id,
+          private_keyset_name: :"#{prefix}_JWT_PRIVATE_KEYSET",
+          public_keyset_name: :"#{prefix}_JWT_PUBLIC_KEYSET",
+          active_kid: source.value("#{prefix}_JWT_ACTIVE_KID"),
+          issuer: configuration.fetch(:issuer),
+          audiences: [configuration.fetch(:audience)].freeze,
+          revoked_kids: source.csv("#{prefix}_JWT_REVOKED_KIDS"),
+        ),
+      ]
+    end
   end
 
   def build_keyset_issuer(source:, id:, private_keyset_name:, public_keyset_name:, active_kid:, issuer:,
@@ -266,9 +303,11 @@ module JitSecurityJwtRegistry
     raise ConfigurationError, "missing required OIDC client configuration: #{missing.join(", ")}"
   end
 
-  # In an RP cell process only the records it signs with must carry a private key; every other
-  # record is verification-only there (its public keyset still loads).
+  # Com preference verification can run with public keys only. Its writer requires the private
+  # key at issuance; this capability does not depend on a runtime role selector.
+  # In an RP cell process only the records it signs with must carry a private key.
   def private_key_required?(record)
+    return false if PREFERENCE_REALM_ISSUERS.key?(record.id) || record.id == "preference_com"
     return true unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
 
     RuntimeRole.rp_private_env_names.include?(private_env_name_for(record.id))
@@ -279,6 +318,9 @@ module JitSecurityJwtRegistry
     case kind
     when "auth" then "AUTH_JWT_PRIVATE_KEYSET"
     when "preference" then "PREFERENCE_JWT_PRIVATE_KEYSET"
+    when "preference_com" then "PREFERENCE_COM_JWT_PRIVATE_KEYSET"
+    when "preference_app" then "PREFERENCE_APP_JWT_PRIVATE_KEYSET"
+    when "preference_org" then "PREFERENCE_ORG_JWT_PRIVATE_KEYSET"
     when "surface" then "JWT_#{namespace}_PRIVATE_KEY"
     when "oidc_client" then "OIDC_CLIENT_#{namespace}_PRIVATE_KEY"
     else raise ConfigurationError, "unknown JWT issuer record #{record_id.inspect}"
@@ -321,8 +363,23 @@ module JitSecurityJwtRegistry
   def validate!(records = issuers)
     records.each_value { |record| validate_record!(record) }
     validate_global_kid_uniqueness!(records)
+    validate_preference_realm_key_separation!(records)
     validate_jump_issuer_records!(records)
     true
+  end
+
+  def validate_preference_realm_key_separation!(records)
+    preference_ids = %w(preference preference_app preference_com preference_org)
+    preference_ids.each do |id|
+      current = records.fetch(id)
+      current_keys = current.keys.values.map { |key| key.public_key.public_to_der }
+      (preference_ids - [id]).each do |other_id|
+        other_keys = records.fetch(other_id).keys.values.map { |key| key.public_key.public_to_der }
+        if other_keys.any? { |key| current_keys.include?(key) }
+          raise ConfigurationError, "#{id} key material is shared with #{other_id}"
+        end
+      end
+    end
   end
 
   def validate_jump_public_keyset!(namespace, raw)
@@ -505,6 +562,7 @@ module JitSecurityJwtRegistry
                        :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
                        :private_key_required?, :private_env_name_for, :required_oidc_client_namespaces,
                        :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
+                       :validate_preference_realm_key_separation!,
                        :validate_jump_public_keyset!, :validate_jump_issuer_records!, :validate_jump_kid!,
                        :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,
                        :insecure_default_kid_allowed?, :reserved_env_kid?

@@ -18,12 +18,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
   # been refactored. Each entry is the controller source path relative to Rails.root.
   # Do not add new entries without a documented reason.
   KNOWN_VIOLATIONS = [
-    # Sign::Com::Sign::Up::* inheriting from Sign::Com::Sign::Up::* base controllers.
-
-    # Sign::Com::Sign::Up::Check cross-family inheritance.
-    # Note: com/up/check/email/otps and com/up/check/telephone/birthdates and otps are
-    # also PERMITTED_LOCAL_BASES for the sign/sign/up layer, so not listed here.
-
     # Sign::Org::Sign::Up::* inheriting from Sign::Org::Sign::Up::* base controllers.
 
   ].to_set.freeze
@@ -52,29 +46,12 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/up/telephones_controller.rb
     app/controllers/auth/app/verification/emails_controller.rb
     app/controllers/auth/app/verification/redeliveries_controller.rb
-    app/controllers/auth/com/sign/in/challenges_controller.rb
-    app/controllers/auth/com/sign/in/emails_controller.rb
-    app/controllers/auth/com/sign/in/guards_controller.rb
-    app/controllers/auth/com/sign/in/passkeys_controller.rb
-    app/controllers/auth/com/sign/up/check/email/birthdates_controller.rb
-    app/controllers/auth/com/sign/up/check/email/otps_controller.rb
-    app/controllers/auth/com/sign/up/check/telephone/birthdates_controller.rb
-    app/controllers/auth/com/sign/up/check/telephone/otps_controller.rb
-    app/controllers/auth/com/sign/up/check/telephone/passkeys_controller.rb
-    app/controllers/auth/com/sign/up/emails_controller.rb
-    app/controllers/auth/com/sign/up/guard/emails_controller.rb
-    app/controllers/auth/com/sign/up/guard/telephones_controller.rb
-    app/controllers/auth/com/sign/up/telephones_controller.rb
-    app/controllers/auth/com/verification/emails_controller.rb
-    app/controllers/auth/com/verification/redeliveries_controller.rb
     app/controllers/auth/org/sign/in/guards_controller.rb
     app/controllers/auth/org/sign/in/passkeys_controller.rb
     app/controllers/auth/org/sign/up/invitations_controller.rb
     app/controllers/base/app/jwks_controller.rb
-    app/controllers/base/com/jwks_controller.rb
     app/controllers/base/org/jwks_controller.rb
     app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb
-    app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb
   ).to_set.freeze
 
   # Patterns that are always forbidden regardless of allowlist status.

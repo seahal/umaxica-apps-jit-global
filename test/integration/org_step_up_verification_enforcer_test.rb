@@ -280,6 +280,8 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
     get(auth_org_verification_handoff_path(ri: "jp"), headers: @auth_headers)
 
     assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
     form = response.parsed_body.at_css("form")
     fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     post(form["action"], params: fields, headers: @auth_headers)
@@ -301,6 +303,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
     get(new_base_org_identity_passkey_url(ri: "jp", host: @base_host), headers: @base_headers)
 
     assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
     post(auth_org_verification_passkey_options_path(ri: "jp"), headers: @auth_headers)
 
     assert_response :bad_request

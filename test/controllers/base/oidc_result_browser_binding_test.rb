@@ -9,8 +9,6 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
     [
       ["app", "core-app-jp", "client", ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
        Client, ClientToken, :user_id, ClientStatus::ACTIVE,],
-      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-       Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE,],
       ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
        Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE,],
     ].each do |surface, client_id, realm, visa_host, auth_host, actor_model, token_model, owner_key, active_status|

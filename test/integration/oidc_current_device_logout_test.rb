@@ -10,7 +10,7 @@ require_relative "../support/oidc_rp_logout_hint_helper"
 class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
   include OidcRpLogoutHintHelper
 
-  fixtures :clients, :visitors, :operators, :client_token_kinds, :visitor_token_kinds, :operator_token_kinds
+  fixtures :clients, :operators, :client_token_kinds, :operator_token_kinds
 
   CASES = {
     "app" => {
@@ -20,6 +20,8 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       participant: OpAppAuthorityStopParticipant,
       target: OpAppAuthorityStopRootTarget,
       owner: :user,
+      preference: AppPreference,
+      base_host: :base_service,
       root: :client_token,
       kind: :user_token_kind_id,
       kind_value: ClientTokenKind::BROWSER_WEB,
@@ -28,21 +30,6 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       core_host: :core_service,
       warp_host: :warp_service,
     },
-    "com" => {
-      token: VisitorToken,
-      grant: OpComGrant,
-      stop: OpComAuthorityStop,
-      participant: OpComAuthorityStopParticipant,
-      target: OpComAuthorityStopRootTarget,
-      owner: :visitor,
-      root: :visitor_token,
-      kind: :visitor_token_kind_id,
-      kind_value: VisitorTokenKind::BROWSER_WEB,
-      resource_type: "visitor",
-      visa_host: :visa_corporate,
-      core_host: :core_corporate,
-      warp_host: :warp_corporate,
-    },
     "org" => {
       token: OperatorToken,
       grant: OpOrgGrant,
@@ -50,6 +37,8 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       participant: OpOrgAuthorityStopParticipant,
       target: OpOrgAuthorityStopRootTarget,
       owner: :staff,
+      preference: OrgPreference,
+      base_host: :base_staff,
       root: :operator_token,
       kind: :staff_token_kind_id,
       kind_value: OperatorTokenKind::BROWSER_WEB,
@@ -60,7 +49,7 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
     },
   }.freeze
 
-  test "APP RP logout leaves signed-in COM and ORG browsers usable on their next request" do
+  test "APP RP logout leaves the signed-in ORG browser usable on its next request" do
     app_config = CASES.fetch("app")
     actor = clients(:one)
     root = create_root(app_config, actor)
@@ -69,7 +58,7 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
     browser = open_session
     install_credentials(browser, origin, actor, root, hosts.core_service.host, app_config)
     other_browsers = []
-    [["com", hosts.warp_corporate.host], ["org", hosts.warp_staff.host]].each do |realm, host|
+    [["org", hosts.warp_staff.host]].each do |realm, host|
       config = CASES.fetch(realm)
       other_actor = actor_for(realm)
       other_root = create_root(config, other_actor)
@@ -111,6 +100,280 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
   end
 
   CASES.each do |realm, config|
+    test "#{realm} committed logout reissues the anonymous Preference JWT after a successful stop" do
+      actor = actor_for(realm)
+      root = create_root(config, actor)
+      browser = visa_browser(config, actor, root)
+      stage_no_hint(browser)
+      preference_class = config.fetch(:preference)
+      before_count = preference_class.count
+
+      browser.post("/oidc/logout/confirmation?ri=jp&lx=en")
+
+      assert_equal 303, browser.response.status
+      assert_predicate root.reload, :revoked?
+      assert_equal before_count + 1, preference_class.count
+      token = browser.cookies[PreferenceCookieName.anonymous_jwt]
+      hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+      host = realm == "app" ? hosts.visa_service.host : hosts.visa_staff.host
+      claims = PreferenceToken.decode(token, host:, jwt_issuer_id: "preference_#{realm}")
+      preference = preference_class.find_by!(public_id: claims.fetch("sub"))
+
+      active_status_id = realm == "app" ? AppPreference::ACTIVE_STATUS_ID : OrgPreference::ACTIVE_STATUS_ID
+      assert_equal active_status_id, preference.status_id
+      [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
+       PreferenceCookieName.anonymous_experience,].each do |name|
+        assert_includes browser.response.headers["Set-Cookie"].to_s, "#{name}="
+      end
+    end
+
+    test "#{realm} committed logout copies stored display, consent, Web Push, receipt, and binding" do
+      actor = actor_for(realm)
+      root = create_root(config, actor)
+      browser = visa_browser(config, actor, root)
+      stage_no_hint(browser)
+      hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+      if realm == "app"
+        visa_host = hosts.visa_service.host
+        base_host = hosts.base_service.host
+        preference_class = AppPreference
+        status_class = AppPreferenceStatus
+        prefix = "App"
+        active_status_id = AppPreference::ACTIVE_STATUS_ID
+        receipt_class = AppPreferenceConsentReceipt
+        web_push_option_class = AppPreferenceWebPushOption
+        web_push_class = AppPreferenceWebPush
+        binding_class = AppPreferenceBrowserBinding
+        theme_option_id = AppPreferenceThemeOption::DARK
+        language_option_id = AppPreferenceLanguageOption::EN
+        region_option_id = AppPreferenceRegionOption::US
+        web_push_enabled_id = AppPreferenceWebPushOption::ENABLED
+      else
+        visa_host = hosts.visa_staff.host
+        base_host = hosts.base_staff.host
+        preference_class = OrgPreference
+        status_class = OrgPreferenceStatus
+        prefix = "Org"
+        active_status_id = OrgPreference::ACTIVE_STATUS_ID
+        receipt_class = OrgPreferenceConsentReceipt
+        web_push_option_class = OrgPreferenceWebPushOption
+        web_push_class = OrgPreferenceWebPush
+        binding_class = OrgPreferenceBrowserBinding
+        theme_option_id = OrgPreferenceThemeOption::DARK
+        language_option_id = OrgPreferenceLanguageOption::EN
+        region_option_id = OrgPreferenceRegionOption::US
+        web_push_enabled_id = OrgPreferenceWebPushOption::ENABLED
+      end
+      status_class.ensure_defaults!
+      decision_time = preference_class.database_now
+      expires_at = Time.at(
+        decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL.to_i,
+      ).utc
+      source = preference_class.create!(
+        status_id: active_status_id,
+        jti: JitSecurityJwtJtiGenerator.generate,
+        last_issued_at: decision_time,
+        last_issued_expires_at: expires_at,
+      )
+
+      snapshot = {}
+      PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
+        option_class = PreferenceClassRegistry.option_class(prefix, type)
+        option_class.ensure_defaults!
+        option_id =
+          case type
+          when :theme then theme_option_id
+          when :language then language_option_id
+          when :region then region_option_id
+          else PreferenceClassRegistry.default_option_id(prefix, type)
+          end
+        option = option_class.find_by!(id: option_id)
+        PreferenceClassRegistry.record_class(prefix, type).create!(preference_id: source.id, option_id: option.id)
+        snapshot[type.to_s] = option.name unless type == :region
+      end
+
+      source_cookie = PreferenceClassRegistry.cookie_class(prefix).create!(
+        preference_id: source.id, consented: true, functional: true, performant: false, targetable: true,
+      )
+      source_receipt = receipt_class.create!(
+        preference_id: source.id, version: SecureRandom.uuid, recorded_at: decision_time,
+      )
+      web_push_option_class.ensure_defaults!
+      source_push = web_push_class.create!(preference_id: source.id, option_id: web_push_enabled_id)
+      binding_value = PreferenceBrowserBinding.mint_value
+      source_binding = binding_class.create!(
+        preference_id: source.id, digest: PreferenceBrowserBinding.digest_for(binding_value),
+      )
+
+      # Deliberately make the signed display projection disagree with persisted state. Sign-out must copy
+      # the database row rather than treating the browser cookie as a source of Preference values.
+      cookie_snapshot = snapshot.merge("theme" => "system", "language" => "ja")
+      token = PreferenceToken.encode(
+        cookie_snapshot,
+        host: visa_host,
+        preference_type: preference_class.name,
+        public_id: source.public_id,
+        jti: source.jti,
+        jwt_issuer_id: "preference_#{realm}",
+        issued_at: decision_time,
+      )
+      browser.cookies << Rack::Test::Cookie.new(
+        "#{PreferenceCookieName.anonymous_jwt}=#{Rack::Utils.escape(token)}", URI.parse("https://#{visa_host}/"),
+      )
+      browser.cookies << Rack::Test::Cookie.new(
+        "#{PreferenceBrowserBinding::COOKIE_NAME}=#{binding_value}", URI.parse("https://#{base_host}/"),
+      )
+
+      browser.post("/oidc/logout/confirmation?ri=jp&lx=en")
+
+      assert_equal 303, browser.response.status
+      assert_predicate root.reload, :revoked?
+      claims = PreferenceToken.decode(
+        browser.cookies[PreferenceCookieName.anonymous_jwt],
+        host: visa_host, jwt_issuer_id: "preference_#{realm}",
+      )
+      target = config.fetch(:preference).find_by!(public_id: claims.fetch("sub"))
+
+      retired_status_id = realm == "app" ? AppPreference::RETIRED_STATUS_ID : OrgPreference::RETIRED_STATUS_ID
+      active_status_id = realm == "app" ? AppPreference::ACTIVE_STATUS_ID : OrgPreference::ACTIVE_STATUS_ID
+      assert_equal retired_status_id, source.reload.status_id
+      assert_equal active_status_id, target.status_id
+      assert_equal "dark", claims.fetch("preferences").fetch("theme")
+      assert_equal "en", claims.fetch("preferences").fetch("language")
+      PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
+        record_class = PreferenceClassRegistry.record_class(realm.capitalize, type)
+        assert_equal record_class.find_by!(preference_id: source.id).option_id,
+                     record_class.find_by!(preference_id: target.id).option_id, type.to_s
+      end
+
+      target_cookie = PreferenceClassRegistry.cookie_class(realm.capitalize).find_by!(preference_id: target.id)
+      source_consent = [
+        source_cookie.consented, source_cookie.functional, source_cookie.performant, source_cookie.targetable,
+      ]
+      target_consent = [
+        target_cookie.consented, target_cookie.functional, target_cookie.performant, target_cookie.targetable,
+      ]
+      assert_equal source_consent, target_consent
+      target_receipt = (realm == "app" ? AppPreferenceConsentReceipt : OrgPreferenceConsentReceipt)
+        .find_by!(preference_id: target.id)
+      assert_equal [source_receipt.version, source_receipt.recorded_at], [target_receipt.version, target_receipt.recorded_at]
+      target_push = (realm == "app" ? AppPreferenceWebPush : OrgPreferenceWebPush).find_by!(preference_id: target.id)
+      assert_equal source_push.option_id, target_push.option_id
+      target_binding = (realm == "app" ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding)
+        .find_by!(preference_id: target.id)
+      assert_equal source_binding.digest, target_binding.digest
+      assert_not_includes browser.response.headers["Set-Cookie"].to_s, "#{PreferenceBrowserBinding::COOKIE_NAME}="
+      browser.host!(base_host)
+      assert_equal binding_value, browser.cookies[PreferenceBrowserBinding::COOKIE_NAME]
+    end
+
+    test "#{realm} Preference copy failure rolls back its setting transaction after logout commits" do
+      actor = actor_for(realm)
+      root = create_root(config, actor)
+      browser = visa_browser(config, actor, root)
+      stage_no_hint(browser)
+      hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+      if realm == "app"
+        visa_host = hosts.visa_service.host
+        preference_class = AppPreference
+        status_class = AppPreferenceStatus
+        prefix = "App"
+        active_status_id = AppPreference::ACTIVE_STATUS_ID
+        receipt_class = AppPreferenceConsentReceipt
+        cookie_class = AppPreferenceCookie
+      else
+        visa_host = hosts.visa_staff.host
+        preference_class = OrgPreference
+        status_class = OrgPreferenceStatus
+        prefix = "Org"
+        active_status_id = OrgPreference::ACTIVE_STATUS_ID
+        receipt_class = OrgPreferenceConsentReceipt
+        cookie_class = OrgPreferenceCookie
+      end
+      status_class.ensure_defaults!
+      PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
+        PreferenceClassRegistry.option_class(prefix, type).ensure_defaults!
+      end
+      decision_time = preference_class.database_now
+      expires_at = Time.at(
+        decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL.to_i,
+      ).utc
+      source = preference_class.create!(
+        status_id: active_status_id,
+        jti: JitSecurityJwtJtiGenerator.generate,
+        last_issued_at: decision_time,
+        last_issued_expires_at: expires_at,
+      )
+      PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
+        PreferenceClassRegistry.record_class(prefix, type).create!(
+          preference_id: source.id,
+          option_id: PreferenceClassRegistry.default_option_id(prefix, type),
+        )
+      end
+      source_cookie = cookie_class.create!(
+        preference_id: source.id, consented: true, functional: true, performant: false, targetable: true,
+      )
+      source_receipt = receipt_class.create!(
+        preference_id: source.id, version: SecureRandom.uuid, recorded_at: decision_time,
+      )
+      snapshot = PreferenceWriteBoundary::ANONYMOUS_DISPLAY_TYPES.each_with_object({}) do |type, values|
+        record_class = PreferenceClassRegistry.record_class(prefix, type)
+        record = record_class.find_by!(preference_id: source.id)
+        option = PreferenceClassRegistry.option_class(prefix, type).find(record.option_id)
+        values[type.to_s] = option.name
+      end
+      token = PreferenceToken.encode(
+        snapshot,
+        host: visa_host,
+        preference_type: preference_class.name,
+        public_id: source.public_id,
+        jti: source.jti,
+        jwt_issuer_id: "preference_#{realm}",
+        issued_at: decision_time,
+      )
+      browser.cookies << Rack::Test::Cookie.new(
+        "#{PreferenceCookieName.anonymous_jwt}=#{Rack::Utils.escape(token)}", URI.parse("https://#{visa_host}/"),
+      )
+      old_token = browser.cookies[PreferenceCookieName.anonymous_jwt]
+      row_count = preference_class.count
+      failure = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "receipt writer unavailable" }
+
+      receipt_class.stub(:create!, failure) do
+        browser.post("/oidc/logout/confirmation?ri=jp&lx=en")
+      end
+
+      assert_equal 303, browser.response.status
+      assert_predicate root.reload, :revoked?
+      assert_equal row_count, preference_class.count
+      assert_equal active_status_id, source.reload.status_id
+      assert_equal source_cookie.attributes, cookie_class.find_by!(preference_id: source.id).attributes
+      assert_equal source_receipt.attributes, receipt_class.find_by!(preference_id: source.id).attributes
+      assert_equal old_token, browser.cookies[PreferenceCookieName.anonymous_jwt]
+      [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
+       PreferenceCookieName.anonymous_experience,].each do |name|
+        assert_not_includes browser.response.headers["Set-Cookie"].to_s, "#{name}="
+      end
+      assert_not browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].present?
+    end
+
+    test "#{realm} committed logout remains successful when Preference issuance fails" do
+      actor = actor_for(realm)
+      root = create_root(config, actor)
+      browser = visa_browser(config, actor, root)
+      stage_no_hint(browser)
+      preference_class = config.fetch(:preference)
+      before_count = preference_class.count
+
+      PreferenceToken.stub(:encode, nil) do
+        browser.post("/oidc/logout/confirmation?ri=jp&lx=en")
+      end
+
+      assert_equal 303, browser.response.status
+      assert_predicate root.reload, :revoked?
+      assert_equal before_count, preference_class.count
+      assert_not browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].present?
+    end
+
     test "#{realm} authorization coordinator failure without redirect renders JSON" do
       actor = actor_for(realm)
       root = create_root(config, actor)
@@ -158,12 +421,17 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 200, browser.response.status
+        assert_equal "strict-origin", browser.response.headers["Referrer-Policy"]
         page = Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']")
 
         assert page
         props = JSON.parse(page.text).fetch("props")
 
         assert_equal "/oidc/logout/confirmation?#{{ ri: region }.to_query}", props.fetch("form").fetch("action")
+        browser.get("/oidc/logout", params: { ri: region })
+
+        assert_equal 200, browser.response.status
+        assert_equal "strict-origin", browser.response.headers["Referrer-Policy"]
       end
     end
 
@@ -237,6 +505,7 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 400, browser.response.status
+      assert_equal "no-referrer", browser.response.headers["Referrer-Policy"]
       assert_equal "invalid_request", browser.response.parsed_body.fetch("error")
       assert_equal "id_token_hint is invalid", browser.response.parsed_body.fetch("error_description")
       assert_not_predicate root.reload, :revoked?
@@ -826,7 +1095,6 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
   def actor_for(realm)
     case realm
     when "app" then clients(:one)
-    when "com" then visitors(:reserved_visitor)
     when "org" then Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
@@ -854,10 +1122,6 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
     when "app" then Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
-    )
-    when "com" then Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
     )
     when "org" then Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,

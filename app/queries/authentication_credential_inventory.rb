@@ -42,7 +42,6 @@ class AuthenticationCredentialInventory
     writer =
       case actor
       when Client then AppZenithRecord
-      when Visitor then ComZenithRecord
       when Operator then OrgZenithRecord
       else raise ArgumentError, "credential inventory actor unavailable"
       end
@@ -106,7 +105,7 @@ class AuthenticationCredentialInventory
 
   def normal_step_up_methods
     methods = []
-    methods << :email_otp if (actor.is_a?(Client) || actor.is_a?(Visitor)) && contact_email_count.positive?
+    methods << :email_otp if actor.is_a?(Client) && contact_email_count.positive?
     methods << :passkey if active_passkey_count.positive?
     methods << :totp if active_totp_count.positive?
     methods
@@ -128,14 +127,12 @@ class AuthenticationCredentialInventory
       case actor
       when Client
         actor.client_emails.effective_binding.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
-      when Visitor
-        actor.visitor_emails.effective_binding.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
       when Operator
         return 0
       else
         raise ArgumentError, "credential inventory actor unavailable"
       end
-    scope = scope.where.not(id: excluding.id) if excluding.is_a?(ClientEmail) || excluding.is_a?(VisitorEmail)
+    scope = scope.where.not(id: excluding.id) if excluding.is_a?(ClientEmail)
     scope.where("discard_at > ?", decision_time)
       .where("step_up_otp_locked_until IS NULL OR step_up_otp_locked_until <= ?", decision_time).count
   end
@@ -172,14 +169,6 @@ class AuthenticationCredentialInventory
       )
     end
 
-    if actor.respond_to?(:visitor_emails)
-      return count_scope(
-        actor.visitor_emails.effective_binding.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
-          .where("discard_at > ?", decision_time),
-        "VisitorEmail",
-      )
-    end
-
     if actor.respond_to?(:staff_emails)
       return count_scope(
         actor.staff_emails.where(
@@ -202,15 +191,6 @@ class AuthenticationCredentialInventory
           user_identity_telephone_status_id: AuthMethodGuard::VERIFIED_TELEPHONE_STATUSES,
         ).where("discard_at > ?", decision_time),
         "ClientTelephone",
-      )
-    end
-
-    if actor.respond_to?(:visitor_telephones)
-      return count_scope(
-        actor.visitor_telephones.effective_binding.where(
-          visitor_telephone_status_id: AuthMethodGuard::VISITOR_VERIFIED_TELEPHONE_STATUSES,
-        ).where("discard_at > ?", decision_time),
-        "VisitorTelephone",
       )
     end
 
@@ -239,15 +219,6 @@ class AuthenticationCredentialInventory
       )
     end
 
-    if actor.respond_to?(:visitor_passkeys)
-      return count_scope(
-        actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE).where(
-          "discard_at > ?",
-          decision_time,
-        ), "VisitorPasskey",
-      )
-    end
-
     if actor.respond_to?(:staff_passkeys)
       return count_scope(actor.staff_passkeys.where(status_id: OperatorPasskeyStatus::ACTIVE), "OperatorPasskey")
     end
@@ -267,10 +238,6 @@ class AuthenticationCredentialInventory
       "discard_at > ?",
       decision_time,
     ) if actor.respond_to?(:client_passkeys)
-    return actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE).where(
-      "discard_at > ?",
-      decision_time,
-    ) if actor.respond_to?(:visitor_passkeys)
     return actor.staff_passkeys.where(status_id: OperatorPasskeyStatus::ACTIVE) if actor.respond_to?(:staff_passkeys)
 
     nil

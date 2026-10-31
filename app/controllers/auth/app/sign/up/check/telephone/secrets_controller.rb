@@ -6,6 +6,7 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
   include SurfaceInertiaPage
 
   AUTHENTICATION_MODE = :guest
+  sign_entry_classification! :sign_up
   declare_authentication_mode! :guest
   before_action :load_sign_up_ticket
   before_action :validate_sign_up_checkpoint_contact!
@@ -60,7 +61,7 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       **sign_up_flow_binding_params, ri: current_region_identifier,
                                      pt: signed_pt_param,
     )
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/app/secret_presentations/create", layout: false, locals: {
       confirmation_url: path, cancel_url: path, checkpoint_version: @sign_up_ticket.checkpoint_version,
     }

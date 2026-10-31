@@ -41,6 +41,7 @@ module BaseStepUpCancellation
       )
     end
 
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/shared/cancellation_continuation", layout: false,
                                                     locals: { action_url: request.path,
                                                               transaction_ref: reference,

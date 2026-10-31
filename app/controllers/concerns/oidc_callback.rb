@@ -483,7 +483,6 @@ module OidcCallback
     session_class =
       case oidc_resource_type.to_s
       when "operator" then OpOrgGrant
-      when "visitor" then OpComGrant
       when "client" then OpAppGrant
       else raise ArgumentError, "unsupported OIDC RP resource type"
       end
@@ -493,7 +492,6 @@ module OidcCallback
     connection =
       case oidc_resource_type.to_s
       when "operator" then OpBaseOrgRecord
-      when "visitor" then OpBaseComRecord
       else OpBaseAppRecord
       end
     connection.connected_to(role: :writing) do

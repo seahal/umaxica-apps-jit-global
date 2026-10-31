@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-// The base/app and base/com dashboard, identity, welcome, standing and sign-out screens left the
-// shared ERB templates under `app/views/base/shared`. `Link` is stubbed to the anchor it produces
+// The base/app dashboard, identity, welcome, standing and sign-out screens left the
+// shared ERB templates under `app/views/base/shared`. two.md WU-3 removed the corporate
+// equivalents, which no longer exist. `Link` is stubbed to the anchor it produces
 // so the static markup stays assertable outside a booted Inertia application.
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -21,13 +22,6 @@ const { default: AppWelcomeShow } = await import("@/pages/base/app/welcomes/show
 const { default: AppStandingShow } = await import("@/pages/base/app/identity/standings/show");
 const { default: AppSignOutEdit } = await import("@/pages/base/app/sign_outs/edit");
 const { default: AppOidcLogoutShow } = await import("@/pages/base/app/oidc/logouts/show");
-
-const { default: ComDashboardShow } = await import("@/pages/base/com/dashboards/show");
-const { default: ComIdentityShow } = await import("@/pages/base/com/identities/show");
-const { default: ComWelcomeShow } = await import("@/pages/base/com/welcomes/show");
-const { default: ComStandingShow } = await import("@/pages/base/com/identity/standings/show");
-const { default: ComSignOutEdit } = await import("@/pages/base/com/sign_outs/edit");
-const { default: ComOidcLogoutShow } = await import("@/pages/base/com/oidc/logouts/show");
 
 const warning = {
   heading: "Add another sign-in method",
@@ -98,7 +92,11 @@ describe("SignOutConfirmation", () => {
         title="Sign out"
         active
         description="You will need to sign in again."
-        form={{ action: "/sign/out", submit: "Sign out", confirm_description: "Ends this session." }}
+        form={{
+          action: "/sign/out",
+          submit: "Sign out",
+          confirm_description: "Ends this session.",
+        }}
         home_link={{ label: "Home", href: "/" }}
       />,
     );
@@ -155,7 +153,7 @@ describe("SignOutConfirmation", () => {
   });
 });
 
-describe("base/app and base/com page modules", () => {
+describe("base/app page modules", () => {
   it("re-export the shared components for their own surface", () => {
     expect(AppDashboardShow).toBe(SurfaceDashboard);
     expect(AppIdentityShow).toBe(SurfaceDashboard);
@@ -163,12 +161,5 @@ describe("base/app and base/com page modules", () => {
     expect(AppStandingShow).toBe(StandingShow);
     expect(AppSignOutEdit).toBe(SignOutConfirmation);
     expect(AppOidcLogoutShow).toBe(SignOutConfirmation);
-
-    expect(ComDashboardShow).toBe(SurfaceDashboard);
-    expect(ComIdentityShow).toBe(SurfaceDashboard);
-    expect(ComWelcomeShow).toBe(WelcomeShow);
-    expect(ComStandingShow).toBe(StandingShow);
-    expect(ComSignOutEdit).toBe(SignOutConfirmation);
-    expect(ComOidcLogoutShow).toBe(SignOutConfirmation);
   });
 });

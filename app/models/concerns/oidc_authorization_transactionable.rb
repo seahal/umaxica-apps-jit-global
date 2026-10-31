@@ -30,7 +30,7 @@ module OidcAuthorizationTransactionable
     validates :transaction_id, :surface, :intent, :client_id, :redirect_uri, :response_type, :scope, :state,
               :nonce, :code_challenge, :code_challenge_method, :login_challenge, :login_challenge_expires_at,
               :expires_at, :status, presence: true
-    validates :surface, inclusion: { in: %w(app com org) }
+    validates :surface, inclusion: { in: %w(app org) }
     validates :intent, inclusion: { in: %w(authentication sign_in sign_up invitation reauthentication step_up) }
     validates :response_type, inclusion: { in: ["code"] }
     validates :oidc_prompt, inclusion: { in: OidcAuthorizeRequestResolver::SUPPORTED_PROMPTS }, allow_nil: true
@@ -82,8 +82,6 @@ module OidcAuthorizationTransactionable
     def connection_owner
       if self <= OpBaseAppRecord
         OpBaseAppRecord
-      elsif self <= OpBaseComRecord
-        OpBaseComRecord
       elsif self <= OpBaseOrgRecord
         OpBaseOrgRecord
       else

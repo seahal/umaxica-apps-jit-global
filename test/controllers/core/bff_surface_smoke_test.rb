@@ -5,7 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_token_kinds, :com_preference_binding_methods, :com_preferences,
+  fixtures :clients, :client_token_kinds, :com_preferences,
            :operators, :operator_token_kinds
 
   SURFACES = [
@@ -16,14 +16,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: "surface:CORE_APP",
       resource_type: "client",
       client_id: "core-app-jp",
-    },
-    {
-      host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_corporate.host),
-      acme_host: Rails.configuration.x.boot_config.fetch(:hosts).acme_corporate.host,
-      token_refresh_path: "/api/v0/token/refresh",
-      jwt_issuer_id: "surface:CORE_COM",
-      resource_type: "visitor",
-      client_id: "core-com-jp",
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_staff.host),
@@ -77,7 +69,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
     session_class, association =
       case surface.fetch(:resource_type)
       when "operator" then [OpOrgGrant, :operator_token]
-      when "visitor" then [OpComGrant, :visitor_token]
       else [OpAppGrant, :client_token]
       end
     rp_session = session_class.create!(
@@ -120,15 +111,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       ).order(created_at: :desc).first ||
         OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
       [staff, token]
-    when "visitor"
-      VisitorStatus.ensure_defaults!
-      VisitorVisibility.ensure_defaults!
-      visitor = Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-        visibility_id: VisitorVisibility::VISITOR,
-      )
-      token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      [visitor, token]
     else
       user = clients(:one)
       token = ClientToken.where(user: user).where("discard_at > ?", Time.current).order(created_at: :desc).first ||

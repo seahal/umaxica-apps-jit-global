@@ -1,0 +1,7 @@
+# WU-7 com cookie names
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contained uncommitted changes affecting this result.
+- The previous implementation dropped the required secure cookie prefixes when the general secure-cookie setting was false. Com preference, experience and binding names now remain `__Secure-preference`, `__Secure-experience`, and `__Host-preference_binding` in either setting. Their existing writers set Secure; the binding writer remains host-only. Three existing com test callers were updated to use the fixed name.
+- `bin/rails test test/controllers/concerns/preference_browser_binding_test.rb test/controllers/concerns/preference/cookie_name_test.rb test/integration/anonymous_com_preference_write_journey_test.rb test/integration/anonymous_com_web_push_initialization_test.rb test/integration/anonymous_com_web_push_api_test.rb test/controllers/warp/com/roots_controller_test.rb`: 101 runs, 891 assertions, 0 failures, 0 errors, 0 skips. The existing response tests inspect Secure, HttpOnly, Path, SameSite and Domain attributes.
+- `bin/rails test test/integration/acme_preference_test.rb -n '/com_domain_region_write_puts/'`: 1 run, 9 assertions, 0 failures, 0 errors, 0 skips. RuboCop passed for the changed cookie name and binding test; it corrected two formatting offenses in the modified integration file.
+- No browser-based verification, migration or full suite was run. Realm-specific keys and the lifecycle/schema changes remain incomplete.

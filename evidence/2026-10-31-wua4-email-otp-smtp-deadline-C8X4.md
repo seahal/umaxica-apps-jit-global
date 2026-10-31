@@ -1,0 +1,7 @@
+# OTP SMTP transport deadline
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; uncommitted worktree changes affected the result.
+- APP and ORG OTP mailers using the standard `Mail::SMTP` transport now wrap only that SMTP transport with a 15-second total deadline. Existing SMTP settings are retained. Other delivery methods are left intact. Interceptors and OTP guards execute outside the timed transport call.
+- A local loopback SMTP peer accepted a connection and did not send its greeting; an explicit 0.05-second test deadline interrupted the SMTP call with `Net::ReadTimeout`. APP and ORG mailer tests confirmed the standard SMTP method is wrapped; the test delivery method remains unchanged. No external email was sent.
+- The expanded adapter, mailer, binding, suspension and Step-Up delivery tests passed (40 runs, 212 assertions, no failures or errors). After a visibility-only lint correction, the adapter and surface mailer files passed again (14 runs, 107 assertions). Scoped RuboCop passed. The initial new adapter test failed with two missing-class errors before implementation.
+- Real SMTP and the full 15-second interval were not exercised. The deadline applies only to the standard `Mail::SMTP` class, not other/custom transports. A timeout may occur after remote acceptance. Existing Step-Up behavior marks transport failures as failed and its verifier requires delivered status; that conflict with two.md §12.2 remains unresolved and needs the already documented persisted-shape review. No claim is made that a timed-out Step-Up code remains usable.

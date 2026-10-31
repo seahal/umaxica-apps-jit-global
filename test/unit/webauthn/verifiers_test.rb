@@ -9,7 +9,6 @@ module Webauthn
     include WebauthnFakeClientHelper
 
     APP_CONFIG = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.app", origin: "https://auth.umaxica.app")
-    COM_CONFIG = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.com", origin: "https://auth.umaxica.com")
     ORG_CONFIG = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: "https://auth.umaxica.org")
 
     setup do
@@ -26,21 +25,17 @@ module Webauthn
       assert_equal "auth.umaxica.app", options.rp.id
     end
 
-    test "registration discoverability is required independently on app com and org" do
+    test "registration discoverability is required independently on app and org" do
       app_options = RegistrationVerifier.options_for(
         config: APP_CONFIG, user_id: "app-user", user_name: "app@example.com", surface: :app,
-      )
-      com_options = RegistrationVerifier.options_for(
-        config: COM_CONFIG, user_id: "com-user", user_name: "com@example.com", surface: :com,
       )
       org_options = RegistrationVerifier.options_for(
         config: ORG_CONFIG, user_id: "org-user", user_name: "org@example.com", surface: :org,
       )
 
       assert_equal "required", app_options.authenticator_selection[:resident_key]
-      assert_equal "required", com_options.authenticator_selection[:resident_key]
       assert_equal "required", org_options.authenticator_selection[:resident_key]
-      [app_options, com_options, org_options].each do |options|
+      [app_options, org_options].each do |options|
         assert_equal "required", options.authenticator_selection[:user_verification]
       end
     end
@@ -99,7 +94,7 @@ module Webauthn
     end
 
     test "registration options request credProps on every surface" do
-      [[APP_CONFIG, :app], [COM_CONFIG, :com], [ORG_CONFIG, :org]].each do |config, surface|
+      [[APP_CONFIG, :app], [ORG_CONFIG, :org]].each do |config, surface|
         options = RegistrationVerifier.options_for(config: config, user_id: "u", user_name: "n", surface: surface)
 
         assert_equal({ credProps: true }, options.extensions)
@@ -163,7 +158,7 @@ module Webauthn
 
       assert_raises(WebAuthn::Error) do
         AssertionVerifier.verify!(
-          credential_params: params, challenge: challenge, config: COM_CONFIG,
+          credential_params: params, challenge: challenge, config: ORG_CONFIG,
           public_key: passkey[:public_key], sign_count: passkey[:sign_count], purpose: :direct_sign_in,
         )
       end

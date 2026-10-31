@@ -103,8 +103,6 @@ class RecoveryPasscodeTopUp
 
   def max_secret_count_limit
     case credential_class.name
-    when "VisitorSecretCredential"
-      credential_class::MAX_SECRETS_PER_VISITOR
     when "OperatorSecretCredential"
       credential_class::MAX_SECRETS_PER_STAFF
     end
@@ -118,8 +116,6 @@ class RecoveryPasscodeTopUp
 
   def secret_credential_relation
     case credential_class.name
-    when "VisitorSecretCredential"
-      actor.visitor_secret_credentials
     when "OperatorSecretCredential"
       actor.staff_secret_credentials
     else
@@ -157,8 +153,6 @@ class RecoveryPasscodeTopUp
 
   def recovery_kind_association
     case credential_class.name
-    when "VisitorSecretCredential"
-      :visitor_secret_credential_kind
     when "OperatorSecretCredential"
       :staff_secret_credential_kind
     end
@@ -176,7 +170,7 @@ class RecoveryPasscodeTopUp
 
   def recovery_status_association
     credential_class.reflect_on_all_associations(:belongs_to).find do |association|
-      [:visitor_secret_credential_status, :staff_secret_credential_status].include?(association.name)
+      association.name == :staff_secret_credential_status
     end&.name
   end
 

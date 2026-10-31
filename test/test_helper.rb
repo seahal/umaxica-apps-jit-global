@@ -198,8 +198,6 @@ module AuthenticationHarness
     case binding
     when ClientAuthAdmissionBinding
       ClientAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
-    when VisitorAuthAdmissionBinding
-      VisitorAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
     when OperatorAuthAdmissionBinding
       OperatorAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
     else
@@ -211,8 +209,6 @@ module AuthenticationHarness
     case binding
     when ClientAuthAdmissionBinding
       ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
-    when VisitorAuthAdmissionBinding
-      VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
     when OperatorAuthAdmissionBinding
       OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
     else
@@ -224,8 +220,6 @@ module AuthenticationHarness
     case binding
     when ClientAuthAdmissionBinding
       ClientOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
-    when VisitorAuthAdmissionBinding
-      VisitorOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
     when OperatorAuthAdmissionBinding
       OperatorOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
     else
@@ -236,7 +230,6 @@ module AuthenticationHarness
   def contact_owner_for_test(contact)
     case contact
     when ClientEmail, ClientTelephone then Client.find(contact.user_id)
-    when VisitorEmail, VisitorTelephone then Visitor.find(contact.visitor_id)
     else raise ArgumentError, "unsupported Contact class: #{contact.class.name}"
     end
   end
@@ -342,15 +335,6 @@ module AuthenticationHarness
         staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
         staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
       )
-    when Visitor
-      VisitorToken.create!(
-        authentication_epoch: 0,
-        visitor_id: resource.id,
-        visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-        visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-        visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-      )
     else
       raise ArgumentError, "unsupported authenticated resource: #{resource.class.name}"
     end
@@ -360,7 +344,6 @@ module AuthenticationHarness
     case resource
     when Client then ClientToken
     when Operator then OperatorToken
-    when Visitor then VisitorToken
     else
       raise ArgumentError, "unsupported authenticated resource: #{resource.class.name}"
     end
@@ -370,7 +353,6 @@ module AuthenticationHarness
     case resource
     when Client then :user_id
     when Operator then :staff_id
-    when Visitor then :visitor_id
     else
       raise ArgumentError, "unsupported authenticated resource: #{resource.class.name}"
     end
@@ -383,7 +365,6 @@ module AuthenticationHarness
       case resource
       when Client then "client"
       when Operator then "operator"
-      when Visitor then "visitor"
       end
 
     AuthenticationToken.encode(
@@ -488,12 +469,11 @@ module ActiveSupport
     end
 
     # Sign Entry Sentry is an availability gate, so ordinary regression tests
-    # begin with all six explicitly registered paths available. Blocked-path
+    # begin with all four explicitly registered paths available. Blocked-path
     # tests flip only their own flag.
     setup do
       %i(
         sign_in_available_app sign_up_available_app
-        sign_in_available_com sign_up_available_com
         sign_in_available_org sign_up_available_org
       ).each { |feature| Flipper.enable(feature) }
     end

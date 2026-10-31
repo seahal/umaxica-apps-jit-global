@@ -11,7 +11,6 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
     def model_for(surface)
       case surface.to_s
       when "app" then ClientOidcAuthorizationTransaction
-      when "com" then VisitorOidcAuthorizationTransaction
       when "org" then OperatorOidcAuthorizationTransaction
       else
         raise ArgumentError, "unsupported OIDC authorization surface: #{surface.inspect}"

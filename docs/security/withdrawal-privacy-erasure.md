@@ -1,14 +1,12 @@
 # Withdrawal and Privacy Erasure Boundary
 
-This document describes the implemented `app` and `com` withdrawal boundary for `Client` and
-`Visitor` subjects. It does not define `org` operator withdrawal, workspace closure, billing
-closure, or legal workflow policy.
+This document describes the implemented `app` withdrawal boundary for `Client` subjects. It does
+not define `org` operator withdrawal, workspace closure, billing closure, or legal workflow policy.
 
 ## Authentication Boundary
 
-Normal authentication is only for active `Client` and `Visitor` subjects. The current-resource
-resolver rejects deactivated, suspended, withdrawn, or terminated subjects before they become
-`current_client` or `current_visitor`.
+Normal authentication is only for active Clients. The current-resource resolver rejects
+deactivated, suspended, withdrawn, or terminated subjects before they become `current_client`.
 
 HTML requests from such subjects are sent to the withdrawal session entry route for the matching
 surface. JSON and API requests receive `403` with `WITHDRAWAL_REQUIRED`. Refresh-token and edge
@@ -21,9 +19,11 @@ current resource.
 
 ## Ceremony Re-entry
 
-The `app` and `com` surfaces expose withdrawal session entry routes for suspended subjects that have
-lost the ceremony cookie. Re-entry uses the existing email OTP channel for verification before
-issuing a new ceremony cookie.
+The `app` surface exposes a withdrawal session entry route for suspended subjects that have lost
+the ceremony cookie. Re-entry uses the existing email OTP channel for verification before issuing
+a new ceremony cookie. The completion locks the Client and Email and rechecks the withdrawal
+eligibility and the current verified Email binding after OTP verification. If that recheck fails,
+the OTP may already be consumed, but no new withdrawal ceremony is issued.
 
 The entry response is intentionally generic for unknown, active, and otherwise ineligible subjects.
 Entering an email address alone is not enough to issue a ceremony. Active subjects do not receive a
@@ -31,19 +31,19 @@ withdrawal ceremony.
 
 ## Privacy Erasure Requests
 
-Privacy erasure requests are separate from normal withdrawal. They are stored in subject-local
-tables for `Client` and `Visitor` subjects and track request kind, jurisdiction, request source,
-status, response due date, denial reason, retention exception, legal-hold blocking, and final
-response timestamps.
+Privacy erasure requests are separate from normal withdrawal. Existing Client requests remain in
+subject-local storage and retain their status and history. While the purpose-specific authorization
+contract is pending, the self-service submission endpoint refuses requests even when the caller has
+a valid withdrawal ceremony. The refusal does not create a request, processor notification, job or
+occurrence. Existing request status remains readable through the withdrawal ceremony.
 
-Self-service erasure requests are created through a valid withdrawal ceremony. A received request is
-cancelled when the subject recovers. Verified, processing, completed, partially denied, failed, or
-legal-hold-blocked requests block normal self-service recovery.
+A received request is cancelled when the subject recovers. Verified, processing, completed,
+partially denied, failed, or legal-hold-blocked requests block normal self-service recovery.
 
 ## Retention Holds
 
-Retention holds are stored separately for `Client` and `Visitor` subjects. Active holds block
-purge/shred processing. Released and expired holds do not block purge.
+Retention holds are stored separately for Client subjects. Active holds block purge/shred
+processing. Released and expired holds do not block purge.
 
 When a hold blocks purge for a subject with an open privacy request, the request is marked
 `blocked_by_legal_hold`. Subject lifecycle state remains the source of truth for recoverability and
@@ -61,8 +61,8 @@ raw IP addresses. User agents are stored as digests when included.
 
 ## Processor Notifications
 
-Privacy erasure requests create processor notification rows and enqueue Solid Queue jobs. The job is
-idempotent: terminal notifications are left unchanged, an implemented processor may move its row to
+Previously created processor notifications retain their existing delivery and recovery paths. The job
+is idempotent: terminal notifications are left unchanged, an implemented processor may move its row to
 `NOTIFIED` only after its adapter has authenticated and normalized a receipt bound to the notification,
 processor, delivery generation, and generation-scoped idempotency digest. Retries in one delivery
 generation reuse that idempotency identity; authorized recovery creates a new generation and identity.

@@ -124,19 +124,24 @@ ALTER SEQUENCE public.com_preference_adult_content_gates_id_seq OWNED BY public.
 
 
 --
--- Name: com_preference_binding_methods; Type: TABLE; Schema: public; Owner: -
+-- Name: com_preference_browser_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.com_preference_binding_methods (
-    id bigint NOT NULL
+CREATE TABLE public.com_preference_browser_bindings (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    digest character varying(64) NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT com_preference_browser_bindings_digest_format CHECK (((digest)::text ~ '^[0-9a-f]{64}$'::text))
 );
 
 
 --
--- Name: com_preference_binding_methods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: com_preference_browser_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE public.com_preference_binding_methods_id_seq
+CREATE SEQUENCE public.com_preference_browser_bindings_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -145,10 +150,43 @@ CREATE SEQUENCE public.com_preference_binding_methods_id_seq
 
 
 --
--- Name: com_preference_binding_methods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: com_preference_browser_bindings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE public.com_preference_binding_methods_id_seq OWNED BY public.com_preference_binding_methods.id;
+ALTER SEQUENCE public.com_preference_browser_bindings_id_seq OWNED BY public.com_preference_browser_bindings.id;
+
+
+--
+-- Name: com_preference_consent_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.com_preference_consent_receipts (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    version uuid NOT NULL,
+    recorded_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: com_preference_consent_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.com_preference_consent_receipts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: com_preference_consent_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.com_preference_consent_receipts_id_seq OWNED BY public.com_preference_consent_receipts.id;
 
 
 --
@@ -157,9 +195,7 @@ ALTER SEQUENCE public.com_preference_binding_methods_id_seq OWNED BY public.com_
 
 CREATE TABLE public.com_preference_cookies (
     id bigint NOT NULL,
-    consent_version uuid,
     consented boolean DEFAULT false NOT NULL,
-    consented_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     functional boolean DEFAULT false NOT NULL,
     performant boolean DEFAULT false NOT NULL,
@@ -306,34 +342,6 @@ CREATE SEQUENCE public.com_preference_date_formats_id_seq
 --
 
 ALTER SEQUENCE public.com_preference_date_formats_id_seq OWNED BY public.com_preference_date_formats.id;
-
-
---
--- Name: com_preference_dbsc_statuses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_preference_dbsc_statuses (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_preference_dbsc_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_preference_dbsc_statuses_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_preference_dbsc_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_preference_dbsc_statuses_id_seq OWNED BY public.com_preference_dbsc_statuses.id;
 
 
 --
@@ -641,7 +649,8 @@ ALTER SEQUENCE public.com_preference_regions_id_seq OWNED BY public.com_preferen
 --
 
 CREATE TABLE public.com_preference_statuses (
-    id bigint NOT NULL
+    id bigint NOT NULL,
+    CONSTRAINT chk_com_preference_statuses_id CHECK ((id = ANY (ARRAY[(1)::bigint, (2)::bigint])))
 );
 
 
@@ -845,28 +854,79 @@ ALTER SEQUENCE public.com_preference_timezones_id_seq OWNED BY public.com_prefer
 
 
 --
+-- Name: com_preference_web_push_options; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.com_preference_web_push_options (
+    id bigint NOT NULL,
+    CONSTRAINT com_preference_web_push_options_closed CHECK ((id = ANY (ARRAY[(0)::bigint, (1)::bigint])))
+);
+
+
+--
+-- Name: com_preference_web_push_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.com_preference_web_push_options_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: com_preference_web_push_options_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.com_preference_web_push_options_id_seq OWNED BY public.com_preference_web_push_options.id;
+
+
+--
+-- Name: com_preference_web_pushes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.com_preference_web_pushes (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    option_id bigint NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: com_preference_web_pushes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.com_preference_web_pushes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: com_preference_web_pushes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.com_preference_web_pushes_id_seq OWNED BY public.com_preference_web_pushes.id;
+
+
+--
 -- Name: com_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.com_preferences (
     id bigint NOT NULL,
-    binding_method_id bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    dbsc_challenge text,
-    dbsc_challenge_issued_at timestamp(6) with time zone,
-    dbsc_public_key jsonb,
-    dbsc_session_id character varying,
-    dbsc_status_id bigint DEFAULT 0 NOT NULL,
-    jti character varying,
+    jti character varying NOT NULL,
     public_id character varying(21) NOT NULL,
-    replaced_by_id bigint,
     status_id bigint DEFAULT 2 NOT NULL,
-    token_digest bytea,
     updated_at timestamp(6) with time zone NOT NULL,
-    used_at timestamp(6) with time zone,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT com_preferences_purged_at_not_null NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT com_preferences_discarded_at_not_null NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    last_issued_at timestamp(6) with time zone NOT NULL,
+    last_issued_expires_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_com_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
@@ -914,10 +974,17 @@ ALTER TABLE ONLY public.com_preference_adult_content_gates ALTER COLUMN id SET D
 
 
 --
--- Name: com_preference_binding_methods id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: com_preference_browser_bindings id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.com_preference_binding_methods ALTER COLUMN id SET DEFAULT nextval('public.com_preference_binding_methods_id_seq'::regclass);
+ALTER TABLE ONLY public.com_preference_browser_bindings ALTER COLUMN id SET DEFAULT nextval('public.com_preference_browser_bindings_id_seq'::regclass);
+
+
+--
+-- Name: com_preference_consent_receipts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_consent_receipts ALTER COLUMN id SET DEFAULT nextval('public.com_preference_consent_receipts_id_seq'::regclass);
 
 
 --
@@ -953,13 +1020,6 @@ ALTER TABLE ONLY public.com_preference_date_format_options ALTER COLUMN id SET D
 --
 
 ALTER TABLE ONLY public.com_preference_date_formats ALTER COLUMN id SET DEFAULT nextval('public.com_preference_date_formats_id_seq'::regclass);
-
-
---
--- Name: com_preference_dbsc_statuses id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_preference_dbsc_statuses ALTER COLUMN id SET DEFAULT nextval('public.com_preference_dbsc_statuses_id_seq'::regclass);
 
 
 --
@@ -1082,6 +1142,20 @@ ALTER TABLE ONLY public.com_preference_timezones ALTER COLUMN id SET DEFAULT nex
 
 
 --
+-- Name: com_preference_web_push_options id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_web_push_options ALTER COLUMN id SET DEFAULT nextval('public.com_preference_web_push_options_id_seq'::regclass);
+
+
+--
+-- Name: com_preference_web_pushes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_web_pushes ALTER COLUMN id SET DEFAULT nextval('public.com_preference_web_pushes_id_seq'::regclass);
+
+
+--
 -- Name: com_preferences id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1113,11 +1187,19 @@ ALTER TABLE ONLY public.com_preference_adult_content_gates
 
 
 --
--- Name: com_preference_binding_methods com_preference_binding_methods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: com_preference_browser_bindings com_preference_browser_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.com_preference_binding_methods
-    ADD CONSTRAINT com_preference_binding_methods_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.com_preference_browser_bindings
+    ADD CONSTRAINT com_preference_browser_bindings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: com_preference_consent_receipts com_preference_consent_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_consent_receipts
+    ADD CONSTRAINT com_preference_consent_receipts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1158,14 +1240,6 @@ ALTER TABLE ONLY public.com_preference_date_format_options
 
 ALTER TABLE ONLY public.com_preference_date_formats
     ADD CONSTRAINT com_preference_date_formats_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_preference_dbsc_statuses com_preference_dbsc_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_preference_dbsc_statuses
-    ADD CONSTRAINT com_preference_dbsc_statuses_pkey PRIMARY KEY (id);
 
 
 --
@@ -1305,6 +1379,22 @@ ALTER TABLE ONLY public.com_preference_timezones
 
 
 --
+-- Name: com_preference_web_push_options com_preference_web_push_options_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_web_push_options
+    ADD CONSTRAINT com_preference_web_push_options_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: com_preference_web_pushes com_preference_web_pushes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_web_pushes
+    ADD CONSTRAINT com_preference_web_pushes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: com_preferences com_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1332,6 +1422,20 @@ CREATE INDEX index_com_preference_adult_content_gates_on_option_id ON public.com
 --
 
 CREATE UNIQUE INDEX index_com_preference_adult_content_gates_on_preference_id ON public.com_preference_adult_content_gates USING btree (preference_id);
+
+
+--
+-- Name: index_com_preference_browser_bindings_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_com_preference_browser_bindings_on_preference_id ON public.com_preference_browser_bindings USING btree (preference_id);
+
+
+--
+-- Name: index_com_preference_consent_receipts_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_com_preference_consent_receipts_on_preference_id ON public.com_preference_consent_receipts USING btree (preference_id);
 
 
 --
@@ -1482,24 +1586,17 @@ CREATE UNIQUE INDEX index_com_preference_timezones_on_preference_id ON public.co
 
 
 --
--- Name: index_com_preferences_on_binding_method_id; Type: INDEX; Schema: public; Owner: -
+-- Name: index_com_preference_web_pushes_on_option_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_com_preferences_on_binding_method_id ON public.com_preferences USING btree (binding_method_id);
-
-
---
--- Name: index_com_preferences_on_dbsc_session_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_com_preferences_on_dbsc_session_id ON public.com_preferences USING btree (dbsc_session_id);
+CREATE INDEX index_com_preference_web_pushes_on_option_id ON public.com_preference_web_pushes USING btree (option_id);
 
 
 --
--- Name: index_com_preferences_on_dbsc_status_id; Type: INDEX; Schema: public; Owner: -
+-- Name: index_com_preference_web_pushes_on_preference_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_com_preferences_on_dbsc_status_id ON public.com_preferences USING btree (dbsc_status_id);
+CREATE UNIQUE INDEX index_com_preference_web_pushes_on_preference_id ON public.com_preference_web_pushes USING btree (preference_id);
 
 
 --
@@ -1517,38 +1614,10 @@ CREATE UNIQUE INDEX index_com_preferences_on_public_id ON public.com_preferences
 
 
 --
--- Name: index_com_preferences_on_purge_eligible_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_preferences_on_purge_eligible_at ON public.com_preferences USING btree (purge_eligible_at);
-
-
---
--- Name: index_com_preferences_on_replaced_by_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_preferences_on_replaced_by_id ON public.com_preferences USING btree (replaced_by_id);
-
-
---
 -- Name: index_com_preferences_on_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_com_preferences_on_status_id ON public.com_preferences USING btree (status_id);
-
-
---
--- Name: index_com_preferences_on_token_digest; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_preferences_on_token_digest ON public.com_preferences USING btree (token_digest);
-
-
---
--- Name: index_com_preferences_on_used_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_preferences_on_used_at ON public.com_preferences USING btree (used_at);
 
 
 --
@@ -1563,7 +1632,7 @@ CREATE TRIGGER com_preferences_public_id_immutability BEFORE UPDATE OF public_id
 --
 
 ALTER TABLE ONLY public.com_preference_languages
-    ADD CONSTRAINT fk_com_preference_languages_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_language_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_languages_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_language_options(id);
 
 
 --
@@ -1571,7 +1640,7 @@ ALTER TABLE ONLY public.com_preference_languages
 --
 
 ALTER TABLE ONLY public.com_preference_regions
-    ADD CONSTRAINT fk_com_preference_regions_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_region_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_regions_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_region_options(id);
 
 
 --
@@ -1579,7 +1648,7 @@ ALTER TABLE ONLY public.com_preference_regions
 --
 
 ALTER TABLE ONLY public.com_preference_themes
-    ADD CONSTRAINT fk_com_preference_themes_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_theme_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_themes_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_theme_options(id);
 
 
 --
@@ -1587,23 +1656,7 @@ ALTER TABLE ONLY public.com_preference_themes
 --
 
 ALTER TABLE ONLY public.com_preference_timezones
-    ADD CONSTRAINT fk_com_preference_timezones_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_timezone_options(id) NOT VALID;
-
-
---
--- Name: com_preferences fk_com_preferences_on_binding_method_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_com_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.com_preference_binding_methods(id) NOT VALID;
-
-
---
--- Name: com_preferences fk_com_preferences_on_dbsc_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_com_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.com_preference_dbsc_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_timezones_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_timezone_options(id);
 
 
 --
@@ -1611,7 +1664,7 @@ ALTER TABLE ONLY public.com_preferences
 --
 
 ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_com_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.com_preference_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.com_preference_statuses(id);
 
 
 --
@@ -1619,7 +1672,7 @@ ALTER TABLE ONLY public.com_preferences
 --
 
 ALTER TABLE ONLY public.com_preference_languages
-    ADD CONSTRAINT fk_rails_0b04f4dc33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_0b04f4dc33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1628,14 +1681,6 @@ ALTER TABLE ONLY public.com_preference_languages
 
 ALTER TABLE ONLY public.com_preference_page_sizes
     ADD CONSTRAINT fk_rails_182ca7a637 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
-
-
---
--- Name: com_preferences fk_rails_1c704c910f; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_rails_1c704c910f FOREIGN KEY (replaced_by_id) REFERENCES public.com_preferences(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -1655,11 +1700,19 @@ ALTER TABLE ONLY public.com_preference_motions
 
 
 --
+-- Name: com_preference_web_pushes fk_rails_296906b060; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_web_pushes
+    ADD CONSTRAINT fk_rails_296906b060 FOREIGN KEY (option_id) REFERENCES public.com_preference_web_push_options(id);
+
+
+--
 -- Name: com_preference_timezones fk_rails_2fe4a93e4f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.com_preference_timezones
-    ADD CONSTRAINT fk_rails_2fe4a93e4f FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_2fe4a93e4f FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1692,6 +1745,14 @@ ALTER TABLE ONLY public.com_preference_adult_content_gates
 
 ALTER TABLE ONLY public.com_preference_page_sizes
     ADD CONSTRAINT fk_rails_6592e2e710 FOREIGN KEY (option_id) REFERENCES public.com_preference_page_size_options(id);
+
+
+--
+-- Name: com_preference_web_pushes fk_rails_743f817a62; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_web_pushes
+    ADD CONSTRAINT fk_rails_743f817a62 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1735,6 +1796,14 @@ ALTER TABLE ONLY public.com_preference_currencies
 
 
 --
+-- Name: com_preference_browser_bindings fk_rails_abf5d82f3b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_browser_bindings
+    ADD CONSTRAINT fk_rails_abf5d82f3b FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
+
+
+--
 -- Name: com_preference_currencies fk_rails_bb82354100; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1751,11 +1820,19 @@ ALTER TABLE ONLY public.com_preference_densities
 
 
 --
+-- Name: com_preference_consent_receipts fk_rails_c05c777c81; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.com_preference_consent_receipts
+    ADD CONSTRAINT fk_rails_c05c777c81 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
+
+
+--
 -- Name: com_preference_regions fk_rails_da840219b9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.com_preference_regions
-    ADD CONSTRAINT fk_rails_da840219b9 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_da840219b9 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1763,7 +1840,7 @@ ALTER TABLE ONLY public.com_preference_regions
 --
 
 ALTER TABLE ONLY public.com_preference_cookies
-    ADD CONSTRAINT fk_rails_e59f447fe4 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_e59f447fe4 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1771,7 +1848,7 @@ ALTER TABLE ONLY public.com_preference_cookies
 --
 
 ALTER TABLE ONLY public.com_preference_themes
-    ADD CONSTRAINT fk_rails_ff9fc0eb33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ff9fc0eb33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1781,6 +1858,22 @@ ALTER TABLE ONLY public.com_preference_themes
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261031001941'),
+('20261031001458'),
+('20261030223545'),
+('20261030223107'),
+('20261030215026'),
+('20261030214649'),
+('20261030214029'),
+('20261030213804'),
+('20261030213544'),
+('20261030213406'),
+('20261030213206'),
+('20261030212135'),
+('20261030211212'),
+('20261030164914'),
+('20261030120000'),
+('20261029213000'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261013035716'),

@@ -12,26 +12,50 @@ class ContactAuditDeliveryJob < ApplicationJob
     end
 
     deliver_source!(ClientContactAuditOutbox, "app", batch_size)
-    deliver_source!(VisitorContactAuditOutbox, "com", batch_size)
   end
 
   private
 
   def deliver_source!(model, surface, batch_size)
+    first_failure = nil
     model.connection_class_for_self.connected_to(role: :writing) do
-      model.where(acknowledged_at: nil).order(:id).limit(batch_size).each do |event|
-        event.with_lock do
-          next if event.acknowledged_at
+      upper_id = model.where(acknowledged_at: nil).maximum(:id)
+      return unless upper_id
 
-          audit = persist_chronicle!(event, surface)
-          unless identity_matches?(audit, event, surface)
-            raise ArgumentError, "Contact Chronicle event identity conflicts with its Source"
+      cursor = nil
+      loop do
+        scope = model.where(acknowledged_at: nil, id: ..upper_id).order(:id)
+        scope = scope.where("id > ?", cursor) if cursor
+        events = scope.limit(batch_size).to_a
+        break if events.empty?
+
+        events.each do |event|
+          begin
+            event.with_lock do
+              next if event.acknowledged_at
+
+              audit = persist_chronicle!(event, surface)
+              unless identity_matches?(audit, event, surface)
+                raise ArgumentError, "Contact Chronicle event identity conflicts with its Source"
+              end
+
+              event.update!(acknowledged_at: model.database_now)
+            end
+          rescue StandardError => e
+            first_failure ||= e
+            Rails.error.report(
+              e,
+              handled: false,
+              context: {
+                job: self.class.name, source_model: model.name, surface: surface, event_uuid: event.event_uuid,
+              },
+            )
           end
-
-          event.update!(acknowledged_at: model.database_now)
         end
+        cursor = events.last.id
       end
     end
+    raise first_failure if first_failure
   end
 
   def identity_matches?(audit, event, surface)

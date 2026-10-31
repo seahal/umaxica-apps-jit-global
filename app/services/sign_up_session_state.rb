@@ -3,8 +3,8 @@
 
 # Central authority for every session key that belongs to the sign-up flow.
 #
-# Different surfaces (app / com) historically introduced their own key names,
-# so this class owns the surface-specific mapping and provides:
+# Historically each surface introduced its own key names, so this class owns the
+# surface-specific mapping and provides:
 #
 #   - typed accessors (cycle_payload, sequence_id, telephone_otp, ...)
 #   - clear_all! for cancel / completion paths
@@ -21,18 +21,6 @@ class SignUpSessionState
       telephone_otp: :user_telephone_registration,
       existing_email: :sign_up_existing_email_id,
       existing_email_skip_otp: :sign_up_existing_email_skip_otp,
-      age_restricted: :sign_app_up_age_restricted,
-    }.freeze,
-    com: {
-      cycle_locator: :com_sign_up_flow_locator,
-      # Every corporate-surface controller reads and writes :auth_com_up_sequence_id
-      # (sign_up_sequence_session_key). The former :sign_com_up_sequence_id here was
-      # written by nothing, so clear_all! left the real sequence id in the session.
-      sequence_id: :auth_com_up_sequence_id,
-      telephone_otp: :visitor_telephone_registration,
-      existing_email: :sign_com_up_existing_visitor_email_id,
-      existing_email_skip_otp: :sign_com_up_existing_visitor_email_skip_otp,
-      age_restricted: :sign_com_up_age_restricted,
     }.freeze,
   }.freeze
 
@@ -108,18 +96,6 @@ class SignUpSessionState
       @session.delete(@keys.fetch(:existing_email_skip_otp))
     else
       @session[@keys.fetch(:existing_email_skip_otp)] = true
-    end
-  end
-
-  def age_restricted?
-    @session[@keys.fetch(:age_restricted)] == true
-  end
-
-  def age_restricted=(value)
-    if value
-      @session[@keys.fetch(:age_restricted)] = true
-    else
-      @session.delete(@keys.fetch(:age_restricted))
     end
   end
 

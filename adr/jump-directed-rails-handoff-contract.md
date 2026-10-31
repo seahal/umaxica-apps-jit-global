@@ -254,6 +254,9 @@ URL/request binding and the directed source policy. It then MUST independently v
 protocol-specific condition of its own operation, including state, nonce, PKCE, authorization code
 validity, transaction state, CSRF and authorization.
 
+The `src` claim is an origin, not a URL with a path, query or fragment; the receiver rejects those
+components instead of discarding them before matching the configured source.
+
 Arriving through Jump does not make `redirect_uri`, `return_to`, `next`, `redirect_to`, `continue`
 or any other follow-on redirect parameter trustworthy. A verified return only removes `rt` and
 re-enters the same URL on the receiving host; a receiver that redirects further validates that

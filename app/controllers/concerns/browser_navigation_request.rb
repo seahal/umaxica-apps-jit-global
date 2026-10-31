@@ -19,6 +19,10 @@ module BrowserNavigationRequest
       NAVIGATION_DESTINATIONS.include?(request.headers["Sec-Fetch-Dest"].to_s)
   end
 
+  def document_navigation_request?
+    browser_navigation_request? && request.headers["Sec-Fetch-Dest"].to_s == "document"
+  end
+
   # A request that declares a destination other than a top-level document (for example `iframe`).
   # A missing header is not a framed destination: the caller decides (owner, 2026-10-27, D-197: the
   # Visa confirmation then renders its non-consuming form).

@@ -13,7 +13,7 @@ module Security
       self.fixture_table_names = []
 
       DIRECT_WRITE =
-        /\b(?:ClientPasskey|VisitorPasskey|OperatorPasskey|(?:client|visitor|staff|operator)_passkeys)
+        /\b(?:ClientPasskey|OperatorPasskey|(?:client|staff|operator)_passkeys)
           \.(?:create!?|create_with|find_or_create_by!?|create_or_find_by!?|insert_all!?|insert!?|upsert_all|upsert)\b/x
 
       test "application code creates Passkeys only through PasskeyRegistrationOperation" do

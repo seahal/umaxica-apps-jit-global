@@ -46,7 +46,7 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "other-login-event"
   end
 
-  test "base com and org settings shell routes are removed" do
+  test "base com settings shell route is removed and org settings belongs to the base console" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
         "http://#{ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")}/settings",
@@ -54,31 +54,13 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
       )
     end
 
-    assert_raises(ActionController::RoutingError) do
+    assert_equal(
+      { controller: "base/org/settings", action: "show" },
       Rails.application.routes.recognize_path(
         "http://#{ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")}/settings",
         method: :get,
-      )
-    end
-  end
-
-  test "base com identity owns non-ceremony identity settings" do
-    helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
-
-    %w(
-      base_com_identity_email
-      base_com_identity_telephone
-      base_com_identity_birthdate
-      base_com_identity_secret
-      base_com_identity_session
-      base_com_identity_activit
-      base_com_identity_withdrawal
-    ).each do |prefix|
-      assert helper_names.any? { |name| name.start_with?(prefix) }, "#{prefix} must exist"
-    end
-
-    assert_includes helper_names, "new_base_com_identity_withdrawal_path"
-    assert_includes helper_names, "edit_base_com_identity_withdrawal_path"
+      ),
+    )
   end
 
   test "base org identity owns non-ceremony identity settings" do
@@ -97,29 +79,21 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "base com withdrawal has the same self service route shape as app" do
+  test "base com no longer owns identity or withdrawal routes" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
 
-    assert_equal(
-      { controller: "base/com/identity/withdrawals", action: "new" },
-      Rails.application.routes.recognize_path("http://#{host}/identity/withdrawal/new", method: :get),
-    )
-    assert_equal(
-      { controller: "base/com/identity/withdrawals", action: "edit" },
-      Rails.application.routes.recognize_path("http://#{host}/identity/withdrawal/edit", method: :get),
-    )
-    assert_equal(
-      { controller: "base/com/identity/withdrawals", action: "create" },
-      Rails.application.routes.recognize_path("http://#{host}/identity/withdrawal", method: :post),
-    )
-    assert_equal(
-      { controller: "base/com/identity/withdrawals", action: "update" },
-      Rails.application.routes.recognize_path("http://#{host}/identity/withdrawal", method: :patch),
-    )
-    assert_equal(
-      { controller: "base/com/identity/withdrawals", action: "destroy" },
-      Rails.application.routes.recognize_path("http://#{host}/identity/withdrawal", method: :delete),
-    )
+    [
+      ["/identity/withdrawal/new", :get],
+      ["/identity/withdrawal/edit", :get],
+      ["/identity/withdrawal", :post],
+      ["/identity/withdrawal", :patch],
+      ["/identity/withdrawal", :delete],
+      ["/identity/emails", :get],
+    ].each do |path, method|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}#{path}", method: method)
+      end
+    end
   end
 
   test "base org withdrawal is informational get only" do
@@ -137,15 +111,6 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{host}/identity/withdrawal", method: :delete)
     end
-  end
-
-  test "base com identity routes load controllers" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    host! host
-
-    get base_com_identity_emails_url(ri: "jp", host: host)
-
-    assert_not_equal 404, response.status
   end
 
   test "base org identity routes load controllers" do
@@ -259,10 +224,8 @@ class BaseSettingsAuthoritySlice1GTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private

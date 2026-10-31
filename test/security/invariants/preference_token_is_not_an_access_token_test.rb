@@ -16,7 +16,7 @@ module Security
               params: { preference_region: { option_id: "JP" } }
 
         assert_response :redirect
-        preference_token = cookies[PreferenceCookieName.access(production: false, surface: :app)]
+        preference_token = cookies[PreferenceCookieName.anonymous_jwt]
 
         assert_predicate preference_token, :present?
 
@@ -33,7 +33,7 @@ module Security
               params: { preference_region: { option_id: "JP" } }
 
         assert_response :redirect
-        preference_token = cookies[PreferenceCookieName.access(production: false, surface: :app)]
+        preference_token = cookies[PreferenceCookieName.anonymous_jwt]
 
         assert_predicate preference_token, :present?
 

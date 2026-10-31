@@ -12,11 +12,18 @@ class ClientSecretManualReattemptIssuer
     def call!(actor_context:, token:, predecessor:, purge_after:)
       validate_input!(actor_context, token, predecessor, purge_after)
 
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            actor_context.subject.with_lock(requires_new: true) do
-              create_or_return_successor!(actor_context, token, predecessor)
+      AppZenithRecord.connected_to(role: :writing) do
+        actor_context.subject.with_lock(requires_new: true) do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientToken.transaction do
+              device = token.device_session_record!
+              device.with_lock do
+                unless device.usable? && device.user_id == actor_context.subject.id
+                  raise Denied, "Secret reattempt device is unavailable"
+                end
+
+                create_or_return_successor!(actor_context, token, predecessor, device)
+              end
             end
           end
         end
@@ -38,20 +45,29 @@ class ClientSecretManualReattemptIssuer
 
     end
 
-    def create_or_return_successor!(context, token, predecessor)
+    def create_or_return_successor!(context, token, predecessor, device)
       actor = context.subject
+      raise Denied, "Secret reattempt actor is unavailable" unless actor.login_allowed?
+
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
-      raise Denied, "Secret reattempt session is unavailable" unless current
+      unless current && current.device_session_id == device.id && device.current_refresh_token_id == current.id
+        raise Denied, "Secret reattempt session is unavailable"
+      end
+
+      predecessor = ClientSecretIssuance.lock.find_by(
+        id: predecessor.id, public_id: predecessor.public_id, client_id: actor.id,
+      )
+      raise Denied, "Secret reattempt predecessor is unavailable" unless predecessor
 
       validate_predecessor!(actor, current, predecessor)
 
+      now = Client.database_now
+      ensure_current_step_up!(actor, current, predecessor, now)
       successor_attempt = predecessor.attempt_number + 1
       successor = find_successor(actor, predecessor, successor_attempt)
       return successor if successor
 
       ensure_predecessor_is_latest!(actor, predecessor)
-      now = Client.database_now
-      ensure_current_step_up!(actor, current, now)
       ensure_manual_secret_capacity!(actor, now)
       create_successor!(context, actor, current, predecessor, successor_attempt, now)
     end
@@ -83,13 +99,13 @@ class ClientSecretManualReattemptIssuer
 
     end
 
-    def ensure_current_step_up!(actor, current, now)
+    def ensure_current_step_up!(actor, current, predecessor, now)
       requirement = StepUpRequirement.new(
         scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
         phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
         purpose: "step_up", audience: "step_up:app", session_binding: current.public_id,
         token_binding: current.public_id, require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+        actor_ref: actor.public_id, resource_ref: predecessor.public_id, tenant_ref: nil,
       )
       unless current.active_status?(now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?

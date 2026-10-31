@@ -13,7 +13,7 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
 
 ## FLOW-1 — Scope and authority
 
-- Basis: F01/F06, AUTH-1/4, SESSION-1–4. Scope: actual app/com/org sign-in/up families, Email,
+- Basis: F01/F06, AUTH-1/4, SESSION-1–4. Scope: actual app/org sign-in/up families, Email,
   discoverable passkey, social Google/Apple, org Entra normal/emergency and applicable MFA,
   capacity, checkpoint, selector and Auth/Base/OIDC handoff. Unsupported combinations remain
   unsupported.
@@ -27,18 +27,18 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   tests, including
   [root establishment](../../test/integration/root_login_establishment_flow_test.rb). Full
   family/surface matrix is planned where tests are missing; one app test does not certify all.
-- APP/COM ordinary authentication admission opens only Sign In; Sign Up requires the persisted
+- APP ordinary authentication admission opens only Sign In; Sign Up requires the persisted
   `prompt=create` or the Binding's server-fixed Switch selection. Wrong-intent GET and POST
   requests leave the Binding and admission unconsumed, and a later request cannot reinterpret an
   admitted ceremony by changing its path or parameters.
-- Every APP/COM/ORG Binding has a required immutable OP-issued 30-minute curfew and an explicit,
+- Every APP/ORG Binding has a required immutable OP-issued 30-minute curfew and an explicit,
   purpose-constrained intent. Switch copies its original curfew across repeated switches. A
   re-verification Binding records `not_applicable`; NULL does not select an intent. For an
   `authentication_handoff`, the Auth ceremony expires at the exact stored Binding curfew and is
   active immediately before it, but expired at and after it. The 60-second Binding expiry governs
   redemption only; it does not shorten the ceremony or replace the curfew. The acceptance code's
   shorter lifetime remains independent of curfew storage.
-- APP/COM sign-up Flows have one immutable Admission owner. Concurrent creation admits at most
+- APP sign-up Flows have one immutable Admission owner. Concurrent creation admits at most
   one in-progress Flow per Binding, while terminal history remains distinct. Binding collection
   retains every child until it is terminal, physically purgeable and either cleanup completed or
   registration completed; collection deletes the Flow rows before their restrictive Binding and
@@ -65,16 +65,16 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   [app phase regression tests](../../test/integration/sign_up_phase_regression_app_test.rb) and
   [step refusal tests](../../test/policies/sign_up_step_gate_refusals_test.rb), measuring
   before/after records and response. The local sign-in slice also has public-boundary coverage in
-  [app MFA admission tests](../../test/controllers/auth/app/in/challenges_controller_test.rb),
-  [com MFA admission tests](../../test/controllers/auth/com/in/challenges_controller_test.rb), and
-  the app/com passkey and MFA controller tests; these references establish only the scenarios they
+  [app MFA admission tests](../../test/controllers/auth/app/in/challenges_controller_test.rb) and
+  the app passkey and MFA controller tests; these references establish only the scenarios they
   actually exercise. Other families/surfaces require explicit planned-to-actual test references.
 
-The corresponding COM Email sign-up phase cases are in
-`test/integration/sign_up_phase_regression_com_test.rb`. APP and COM MFA admission tests also
-exercise contradictory GET/HEAD, missing/malformed/wrong-surface mutation bindings, and terminal
-replay without token issuance. These are separate surface boundaries. ORG's normal Entra/passkey and
-emergency paths retain their own contracts; APP/COM MFA coverage is not evidence for ORG.
+The `com` surface no longer owns a credential ceremony, so it has no Email sign-up phase case and no
+MFA admission case after the corporate anonymous-surface change; its former tests were removed with
+the controllers they exercised rather than skipped. APP MFA admission tests also exercise
+contradictory GET/HEAD, missing/malformed/wrong-surface mutation bindings, and terminal replay
+without token issuance. ORG's normal Entra/passkey and emergency paths retain their own contracts;
+APP MFA coverage is not evidence for ORG.
 
 ## FLOW-3 — Unsafe phase violation and terminal absorption
 
@@ -109,7 +109,7 @@ emergency paths retain their own contracts; APP/COM MFA coverage is not evidence
   labels/raw PKs are not authority. No raw locator nonce exposure or OAuth state/PKCE/CSRF/pt reuse.
 - Check codec, Rails-generated URLs/bodies, session locator and HTTP tests. Existing app phase tests
   are a starting reference, not complete cross-family coverage; planned gaps must be named. The
-  codec and app/com public controller references above must be checked against the current HEAD, not
+  codec and APP public controller references above must be checked against the current HEAD, not
   merely found by path. No JS Back/History API state is needed to decide a server request.
 
 ## FLOW-5 — Concurrent progression and committed work
@@ -124,7 +124,7 @@ emergency paths retain their own contracts; APP/COM MFA coverage is not evidence
   transactions, device sessions or refresh/session tokens. Artifact cleanup cannot bypass terminal
   admission; all consumers must refuse unusable proof. Keep separate original-operation bounded
   receipts without fresh success or deadline extension (CONTACT-4).
-- APP/COM cleanup rechecks unfinished registration under the principal writer lock after the
+- APP cleanup rechecks unfinished registration under the principal writer lock after the
   terminal Flow lock. Contact, pending Passkey, audit outbox and actor retention changes share
   one principal transaction. A failed write leaves all artifacts pending for retry; a registration
   committed while cleanup waits is preserved. APP Secret sign-up operations and telephone Passkey

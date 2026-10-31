@@ -39,7 +39,7 @@ class RpSessionRevoker < ApplicationService
 
   # The Browser Session's root and every grant under it, as one `root` stop.
   def stop_root(root)
-    unless [ClientToken, VisitorToken, OperatorToken].include?(root.class)
+    unless [ClientToken, OperatorToken].include?(root.class)
       raise ArgumentError, "unsupported Base Browser Session class: #{root.class.name}"
     end
     return 0 if root.revoked?

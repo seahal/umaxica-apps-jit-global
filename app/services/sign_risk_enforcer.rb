@@ -24,11 +24,14 @@ class SignRiskEnforcer
   # D-172 S-1: a risk stop ends every root of the principal with an epoch cutoff, through the
   # identity-stop path (Zenith event under the actor lock, then the OP apply with its retry).
   def self.revoke!(resource)
-    event =
-      resource.class.transaction do
-        IdentityAuthenticationStopRecorder.call(actor: resource.class.lock.find(resource.id), reason: "sign_risk")
+    delivery_result = nil
+    resource.class.transaction do
+      event = IdentityAuthenticationStopRecorder.call(actor: resource.class.lock.find(resource.id), reason: "sign_risk")
+      resource.class.current_transaction.after_commit do
+        delivery_result = OpIdentityEventInvalidator.deliver(event:)
       end
-    OpIdentityEventInvalidator.deliver(event:)
+    end
+    delivery_result
   end
 
   def self.require_step_up!(resource)

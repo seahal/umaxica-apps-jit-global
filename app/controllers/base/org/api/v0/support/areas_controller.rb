@@ -50,16 +50,9 @@ module Base
               if avatar_actor.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP)
                 areas << { label: t("base.org.admin.support.clients"), href: base_org_support_clients_path }
               end
-              if avatar_actor.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM)
-                areas << { label: t("base.org.admin.support.visitors"), href: base_org_support_visitors_path }
-              end
               if avatar_actor.capability?(OperatorCapabilityGrant::ENFORCEMENT_READ_APP)
                 areas << { label: t("base.org.admin.support.enforcement_app"),
                            href: base_org_support_app_enforcement_cases_path, }
-              end
-              if avatar_actor.capability?(OperatorCapabilityGrant::ENFORCEMENT_READ_COM)
-                areas << { label: t("base.org.admin.support.enforcement_com"),
-                           href: base_org_support_com_enforcement_cases_path, }
               end
               areas
             end

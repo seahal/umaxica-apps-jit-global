@@ -14,11 +14,6 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::NOTHING)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::NOTHING)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.ensure_defaults!
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
     OperatorTokenKind.find_or_create_by!(id: OperatorTokenKind::BROWSER_WEB)
     OperatorTokenStatus.find_or_create_by!(id: OperatorTokenStatus::NOTHING)
     OperatorTokenStatus.find_or_create_by!(id: OperatorTokenStatus::ACTIVE)
@@ -93,25 +88,6 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
     assert_predicate current.reload, :currently_usable?
   end
 
-  test "revokes every session except the current one for a visitor" do
-    visitor = create_visitor
-    current = create_visitor_token(visitor)
-    other = create_visitor_token(visitor)
-    requirement = grant_step_up!(visitor, current)
-
-    result = AuthenticationOtherSessionsRevoker.call(
-      owner: visitor,
-      sessions: visitor.visitor_tokens.session_inventory,
-      current_token: current,
-      current_session_public_id: current.public_id,
-      step_up_requirement: requirement,
-    )
-
-    assert_equal [other.public_id], result.revoked_tokens.map(&:public_id)
-    assert_not_predicate other.reload, :currently_usable?
-    assert_predicate current.reload, :currently_usable?
-  end
-
   test "revokes nothing when the current session is the only one" do
     client = client_without_sessions
     current = create_client_token(client)
@@ -155,10 +131,6 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
     client = client_without_sessions
     client_token = create_client_token(client)
     pairs << [client, client_token, create_client_token(client), -> { create_client_token(client) }]
-
-    visitor = create_visitor
-    visitor_token = create_visitor_token(visitor)
-    pairs << [visitor, visitor_token, create_visitor_token(visitor), -> { create_visitor_token(visitor) }]
 
     operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
@@ -229,40 +201,16 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
     )
   end
 
-  def create_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    Visitor.create!(
-      status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-    )
-  end
-
-  def create_visitor_token(visitor)
-    VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      public_id: PublicId.generate,
-      discard_at: 1.day.from_now,
-    )
-  end
-
   def token_relation_for(owner)
     case owner
     when Client then owner.client_tokens.session_inventory
-    when Visitor then owner.visitor_tokens.session_inventory
     when Operator then owner.staff_tokens.session_inventory
     else raise ArgumentError, "unsupported session owner"
     end
   end
 
   def grant_step_up!(owner, token)
-    surface = owner.is_a?(Client) ? "app" : (owner.is_a?(Visitor) ? "com" : "org")
+    surface = owner.is_a?(Client) ? "app" : "org"
     methods = owner.is_a?(Operator) ? [:passkey] : %i(passkey totp email_otp)
     now = token.class.database_now
     token.update!(

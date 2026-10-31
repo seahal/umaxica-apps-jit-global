@@ -30,6 +30,7 @@ module Auth
         PROVIDERS = %w(entra).freeze
 
         AUTHENTICATION_MODE = :guest
+        sign_entry_classification! :parent_intent
 
         before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }, only: %i(new create)
 

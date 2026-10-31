@@ -28,10 +28,8 @@ module Security
         app/controllers/base/com/application_controller.rb
         app/controllers/base/org/application_controller.rb
         app/controllers/base/app/authority_controller.rb
-        app/controllers/base/com/authority_controller.rb
         app/controllers/base/org/authority_controller.rb
         app/controllers/auth/app/application_controller.rb
-        app/controllers/auth/com/application_controller.rb
         app/controllers/auth/org/application_controller.rb
       ).freeze
 

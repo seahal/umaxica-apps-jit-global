@@ -83,10 +83,7 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
     assert_not ClientPersonaOwnership.exists?(client_persona_id: persona.id)
   end
 
-  test "applies the same reviewed contract to all six surface-local resource families" do
-    VisitorIdentityState.ensure_defaults!
-    VisitorStatus.ensure_defaults!
-    VisitorVisibility.ensure_defaults!
+  test "applies the same reviewed contract to all four surface-local resource families" do
     OperatorIdentityState.ensure_defaults!
     OperatorStatus.ensure_defaults!
     OperatorVisibility.ensure_defaults!
@@ -94,8 +91,6 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
     cases = [
       reviewed_client_persona_case,
       reviewed_enterprise_case,
-      reviewed_individual_case,
-      reviewed_company_case,
       reviewed_agent_case,
       reviewed_bureau_case,
     ]
@@ -153,31 +148,6 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
     )
     resource = I18n.with_locale(:en) { Enterprise.create!(name: "Enterprise", title: "Enterprise") }
     reviewed_case(:app, :enterprise, resource, owner)
-  end
-
-  def reviewed_individual_case
-    owner = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    identity = VisitorIdentity.create!(
-      issuer: "https://id.example.test",
-      subject: "all-six-individual",
-      audience: "acme_com",
-      source_record_id: owner.id,
-      status_id: VisitorIdentityState::ACTIVE,
-    )
-    resource = I18n.with_locale(:en) { Individual.create!(visitor_identity: identity, title: "Individual") }
-    reviewed_case(:com, :individual, resource, owner)
-  end
-
-  def reviewed_company_case
-    owner = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    resource = I18n.with_locale(:en) { Company.create!(name: "Company", title: "Company") }
-    reviewed_case(:com, :company, resource, owner)
   end
 
   def reviewed_agent_case

@@ -5,6 +5,36 @@ require "test_helper"
 class DomainAuthorityProtocolTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  test "Base authority lookup accepts only active actor realms" do
+    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+
+    assert_equal hosts.base_service, hosts.base_for_resource_type("client")
+    assert_equal hosts.base_staff, hosts.base_for_resource_type("operator")
+    assert_equal hosts.base_staff, hosts.base_for_resource_type("staff")
+    [nil, "", false, "unknown", "visitor", "customer"].each do |resource_type|
+      assert_raises(ArgumentError) { hosts.base_for_resource_type(resource_type) }
+    end
+  end
+
+  test "identity authority clients reject retired and unknown surfaces before making a request" do
+    request = ActionDispatch::TestRequest.create
+    %w(app org).each do |surface|
+      assert_instance_of AvatarAuthorityClient,
+                         AvatarAuthorityClient.new(surface: surface, access_token: "token", persona: "person")
+      assert_instance_of MembershipAuthorityClient,
+                         MembershipAuthorityClient.new(surface: surface, access_token: "token", persona: "person")
+    end
+    ["com", "", "unknown", nil].each do |surface|
+      assert_raises(KeyError) { AvatarAuthorityClient.new(surface: surface, access_token: "token", persona: "person") }
+      assert_raises(KeyError) do
+        MembershipAuthorityClient.new(surface: surface, access_token: "token", persona: "person")
+      end
+      assert_raises(KeyError) do
+        OrgAdminAuthorityClient.new(surface: surface, access_token: "token", browser_request: request)
+      end
+    end
+  end
+
   test "group lookup escapes the reference as one path segment and preserves owner refusals" do
     connection = Faraday.new
     reference = "../other?admin=true#fragment"

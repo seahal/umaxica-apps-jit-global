@@ -37,7 +37,7 @@ class OidcRealmBindingTest < ActiveSupport::TestCase
         code: "code",
         redirect_uri: "https://rp.example.test/callback",
         client_id: "rp",
-        expected_resource_type: "visitor",
+        expected_resource_type: "operator",
         code_store: store,
       )
     end

@@ -1,0 +1,7 @@
+# WU-A4 TOTP enrollment candidate display device binding
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting implementation and tests.
+- The existing issuer file passed before the change (6 runs, 47 assertions). A new public-query case showed that a revoked device still received its candidate: 1 run, 2 assertions, 1 failure.
+- The display query now locks owner, device and token, checks device usability, ownership and current-token binding, and checks the existing permission before loading and returning the candidate. Tests confirm a valid device can read its candidate and revoked or superseded devices cannot, with candidate proof and parent state unchanged.
+- The query and issuer, verifier and finalizer operation files passed together (20 runs, 251 assertions, 0 failures, 0 errors, 0 skips). RuboCop passed for the changed query and test.
+- Two existing Auth TOTP controller cases failed with errors before reaching their intended checks: `test_admitted_GET_new_starts_no_candidate_and_preserves_the_deadline` and `test_admitted_enrollment_POST_and_redisplay_retain_the_same_encrypted_candidate`. Both IDs appear in `plans/2026-10-28-baseline-failing-tests.md`; both encountered a nil lookup in their test setup at lines 179 and 272 respectively. This run does not verify HTTP behavior after device revocation. Independent-connection races and finalization ordering/audit remain open.

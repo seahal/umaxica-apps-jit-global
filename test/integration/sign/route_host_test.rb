@@ -19,18 +19,6 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "sign com named root route points at sign/com/roots#index" do
-    with_boot_config(sign_corporate_host: "auth.com.example.test") do
-      route = Rails.application.routes.named_routes[:auth_com_root]
-
-      assert_equal "/", route.path.spec.to_s
-      assert_equal "auth/com/roots", route.defaults[:controller]
-      assert_equal "index", route.defaults[:action]
-    end
-  ensure
-    Rails.application.reload_routes!
-  end
-
   test "sign org routes match AUTH_STAFF_URL" do
     with_boot_config(sign_staff_host: "auth.org.example.test") do
       host!("auth.org.example.test")
@@ -44,24 +32,24 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "sign routes accept internal origin and cloudflared public hosts" do
+  test "sign routes claim app and org hosts and leave the corporate host unknown" do
     with_boot_config(
       sign_service_host: "auth.umaxica.app",
       sign_corporate_host: "auth.umaxica.com",
       sign_staff_host: "auth.umaxica.org",
     ) do
       {
-        "auth.app.localhost" => "auth/app/roots",
-        "auth.com.localhost" => "auth/com/roots",
-        "auth.org.localhost" => "auth/org/roots",
-        "auth.umaxica.app" => "auth/app/roots",
-        "auth.umaxica.com" => "auth/com/roots",
-        "auth.umaxica.org" => "auth/org/roots",
-      }.each do |host, controller|
+        "auth.app.localhost" => %w(auth/app/roots index),
+        "auth.com.localhost" => %w(unknown_hosts show),
+        "auth.org.localhost" => %w(auth/org/roots index),
+        "auth.umaxica.app" => %w(auth/app/roots index),
+        "auth.umaxica.com" => %w(unknown_hosts show),
+        "auth.umaxica.org" => %w(auth/org/roots index),
+      }.each do |host, (controller, action)|
         route = Rails.application.routes.recognize_path("http://#{host}/", method: :get)
 
         assert_equal controller, route[:controller]
-        assert_equal "index", route[:action]
+        assert_equal action, route[:action]
       end
     end
   ensure

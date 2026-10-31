@@ -20,7 +20,6 @@ class TelephoneCredentialRegistrationOtpFormQuery
     @surface =
       case [actor, token, telephone, transaction]
       in [Client, ClientToken, ClientTelephone, ClientTelephoneCeremonyTransaction] then "app"
-      in [Visitor, VisitorToken, VisitorTelephone, VisitorTelephoneCeremonyTransaction] then "com"
       in [Operator, OperatorToken, OperatorTelephone, OperatorTelephoneCeremonyTransaction] then "org"
       else raise ArgumentError, "unsupported Telephone registration form realm"
       end
@@ -43,8 +42,6 @@ class TelephoneCredentialRegistrationOtpFormQuery
     case actor
     when Client
       token.user_id == actor.id && telephone.user_id == actor.id && token_device_session.user_id == actor.id
-    when Visitor
-      token.visitor_id == actor.id && telephone.visitor_id == actor.id && token_device_session.visitor_id == actor.id
     when Operator
       token.staff_id == actor.id && telephone.staff_id == actor.id && token_device_session.staff_id == actor.id
     end
@@ -52,7 +49,7 @@ class TelephoneCredentialRegistrationOtpFormQuery
 
   def source_available?
     case telephone
-    when ClientTelephone, VisitorTelephone
+    when ClientTelephone
       telephone.accessible?(telephone.class.database_now) && !telephone.binding_released?
     when OperatorTelephone
       [OperatorTelephoneStatus::UNVERIFIED, OperatorTelephoneStatus::VERIFIED].include?(telephone.staff_telephone_status_id)
@@ -61,7 +58,7 @@ class TelephoneCredentialRegistrationOtpFormQuery
 
   def candidate_ref
     case telephone
-    when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
+    when ClientTelephone, OperatorTelephone then telephone.public_id
     end
   end
 

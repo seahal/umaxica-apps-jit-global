@@ -7,14 +7,17 @@ stateDiagram-v2
     state "consumed" as consumed
     state "expired" as expired
     [*] --> empty
+    %% The issuer checks the current usable device before issuing.
     empty --> pending: issue_bound_email_code!
     pending --> pending: issue_bound_email_code!
     delivered --> pending: issue_bound_email_code!
     failed --> pending: issue_bound_email_code!
     consumed --> pending: issue_bound_email_code!
     expired --> pending: issue_bound_email_code!
+    %% Delivery eligibility and SMTP hold the current owner and Ticket locks.
     pending --> delivered: mark_bound_email_delivery! success
     pending --> failed: mark_bound_email_delivery! failure
+    %% The verifier checks the current usable device before consuming.
     delivered --> consumed: consume_bound_email_code!
     pending --> expired: clock reaches code deadline
     delivered --> expired: clock reaches code deadline

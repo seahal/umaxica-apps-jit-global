@@ -36,18 +36,6 @@ class OpAuthorityStopCommitter
       root_key: :client_token_id,
       resource_type: "client",
     },
-    "com" => {
-      stop: OpComAuthorityStop,
-      root_target: OpComAuthorityStopRootTarget,
-      grant_target: OpComAuthorityStopGrantTarget,
-      epoch_cutoff: OpComAuthorityStopEpochCutoff,
-      participant: OpComAuthorityStopParticipant,
-      root: VisitorToken,
-      grant: OpComGrant,
-      device: VisitorDeviceSession,
-      root_key: :visitor_token_id,
-      resource_type: "visitor",
-    },
     "org" => {
       stop: OpOrgAuthorityStop,
       root_target: OpOrgAuthorityStopRootTarget,
@@ -106,11 +94,11 @@ class OpAuthorityStopCommitter
     end
 
     def realm_for_root(root)
-      { ClientToken => "app", VisitorToken => "com", OperatorToken => "org" }.fetch(root.class)
+      { ClientToken => "app", OperatorToken => "org" }.fetch(root.class)
     end
 
     def realm_for_grant(grant)
-      { OpAppGrant => "app", OpComGrant => "com", OpOrgGrant => "org" }.fetch(grant.class)
+      { OpAppGrant => "app", OpOrgGrant => "org" }.fetch(grant.class)
     end
 
     def stop_class(realm) = REALMS.fetch(realm.to_s).fetch(:stop)
@@ -299,7 +287,6 @@ class OpAuthorityStopCommitter
   def grant_root_id(target)
     case target
     when OpAppGrant then target.client_token_id
-    when OpComGrant then target.visitor_token_id
     when OpOrgGrant then target.operator_token_id
     else raise ArgumentError, "unsupported authority-stop grant #{target.class}"
     end

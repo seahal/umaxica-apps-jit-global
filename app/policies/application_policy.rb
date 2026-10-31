@@ -113,8 +113,6 @@ class ApplicationPolicy < ActionPolicy::Base
       record.user_id == user.id
     elsif user.is_a?(Operator) && record.respond_to?(:staff_id)
       record.staff_id == user.id
-    elsif defined?(Visitor) && user.is_a?(Visitor) && record.respond_to?(:visitor_id)
-      record.visitor_id == user.id
     else
       false
     end
@@ -128,8 +126,7 @@ class ApplicationPolicy < ActionPolicy::Base
 
   def same_user_record_type?
     (user.is_a?(Client) && record.is_a?(Client)) ||
-      (user.is_a?(Operator) && record.is_a?(Operator)) ||
-      (defined?(Visitor) && user.is_a?(Visitor) && record.is_a?(Visitor))
+      (user.is_a?(Operator) && record.is_a?(Operator))
   end
 
   # adr/operator-capability-authorization.md: the only grant check org administrative policies use.

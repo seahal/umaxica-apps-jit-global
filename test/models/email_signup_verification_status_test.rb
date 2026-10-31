@@ -5,12 +5,10 @@ require "test_helper"
 class EmailSignupVerificationStatusTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %i(original foreign_browser wrong_code).each do |input|
       test "#{surface} Email signup status writer validates #{input} consumed evidence" do
         email_model, flow_model, status_key, pending_status, verified_status =
@@ -18,9 +16,6 @@ class EmailSignupVerificationStatusTest < ActiveSupport::TestCase
           when "app"
             [ClientEmail, ClientSignUpFlow, :user_email_status_id,
              ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, ClientEmailStatus::VERIFIED_WITH_SIGN_UP,]
-          when "com"
-            [VisitorEmail, VisitorSignUpFlow, :visitor_email_status_id,
-             VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP,]
           end
         email = email_model.new(raw_address: "status-writer-#{SecureRandom.hex(8)}@example.test", confirm_policy: true)
         owner = EmailSignUpCandidateCreator.call(email: email)

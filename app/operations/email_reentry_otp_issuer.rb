@@ -38,7 +38,6 @@ class EmailReentryOtpIssuer
     def components(email)
       case email
       when ClientEmail then ["app", ClientEmailCeremonyTransaction, Notify::App::OtpNotifier]
-      when VisitorEmail then ["com", VisitorEmailCeremonyTransaction, Notify::Com::OtpNotifier]
       when OperatorEmail then ["org", OperatorEmailCeremonyTransaction, Notify::Org::OtpNotifier]
       else raise ArgumentError, "unsupported reentry email identifier"
       end
@@ -48,6 +47,9 @@ class EmailReentryOtpIssuer
       email.with_lock do
         now = email.class.database_now
         next nil if email.locked?(now: now) || email.otp_cooldown_active?(now: now)
+        next nil if email.is_a?(ClientEmail) &&
+          !(email.binding_effective? && email.accessible?(now) &&
+            ClientEmail::EDITABLE_SUBSCRIPTION_PREFERENCE_STATUS_IDS.include?(email.user_email_status_id))
 
         transaction = create_transaction_with_generated_references!(
           transaction_model: transaction_model, actor_ref: owner_reference(email), session_ref: session_ref,
@@ -63,7 +65,6 @@ class EmailReentryOtpIssuer
     def owner_reference(email)
       case email
       when ClientEmail then Client.find(email.user_id).public_id
-      when VisitorEmail then Visitor.find(email.visitor_id).public_id
       when OperatorEmail then Operator.find(email.staff_id).public_id
       else raise ArgumentError, "unsupported reentry email identifier"
       end

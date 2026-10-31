@@ -181,29 +181,6 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
     assert_predicate response.location, :present?
   end
 
-  test "com anonymous prompt=none returns login_required" do
-    host = visa_host_for_test_surface(:com)
-    client = OidcClientRegistry.find!("core-com-jp")
-
-    get visa_com_oauth_authorization_url(
-      host: host,
-      response_type: "code",
-      client_id: "core-com-jp",
-      redirect_uri: client.redirect_uris_by_realm.fetch("visitor").first,
-      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-      code_challenge_method: "S256",
-      state: "state",
-      nonce: "nonce",
-      scope: "openid profile",
-      prompt: "none",
-    ), headers: { "Host" => host }
-
-    assert_oidc_error_redirect(
-      error: "login_required",
-      redirect_uri: client.redirect_uris_by_realm.fetch("visitor").first,
-    )
-  end
-
   test "org anonymous prompt=none returns login_required" do
     host = visa_host_for_test_surface(:org)
     client = OidcClientRegistry.find!("core-org-jp")

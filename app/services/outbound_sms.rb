@@ -1,6 +1,9 @@
 # typed: false
 # frozen_string_literal: true
 
+require "timeout"
+require "net/protocol"
+
 class OutboundSms < ApplicationService
   PROVIDERS = {
     "aws_sns" => OutboundSmsProvidersAwsSns,
@@ -9,10 +12,14 @@ class OutboundSms < ApplicationService
 
   SUSPENDED_ERROR = "outbound sms channel is suspended"
 
-  def self.deliver_now(to:, title:, body:)
+  def self.deliver_now(to:, title:, body:, timeout: nil)
+    if !timeout.nil? && (!timeout.is_a?(Numeric) || !timeout.finite? || !timeout.positive?)
+      raise ArgumentError, "transport timeout must be a finite positive number"
+    end
     return suspended_result if suspended?
 
-    response = provider.send_message(to: to, title: title, body: body)
+    # Only the disposable provider request is interrupted; the delivery audit runs afterward.
+    response = Timeout.timeout(timeout, Net::ReadTimeout) { provider.send_message(to: to, title: title, body: body) }
     record_delivery_event_safely(
       "provider_accepted",
       metadata: provider_acceptance_metadata(response),
@@ -27,9 +34,11 @@ class OutboundSms < ApplicationService
     return suspended_result if suspended?
 
     provider
-    Outbound::SmsDeliveryJob.perform_later(
+    enqueued = Outbound::SmsDeliveryJob.perform_later(
       encrypted_payload: OutboundSensitivePayload.encrypt_sms_delivery(to:, title:, body:, otp_binding:, otp_code:),
     )
+    raise ActiveJob::EnqueueError, "SMS queue did not accept the job" unless enqueued
+
     record_delivery_event_safely("enqueued")
     OutboundResult.accepted(channel: :sms)
   rescue StandardError => e

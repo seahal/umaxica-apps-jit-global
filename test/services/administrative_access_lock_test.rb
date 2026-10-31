@@ -5,6 +5,35 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AdministrativeAccessLockTest < ActiveSupport::TestCase
+  test "lock and unlock use the writer clock when the application clock is behind" do
+    client = clients(:one)
+    operator = operators(:one)
+    database_marker = Client.database_now
+
+    travel_to(database_marker - 1.hour) do
+      OpIdentityEventInvalidator.stub(:deliver, :applied) do
+        AdministrativeAccessLock.lock!(account: client, operator:, reason_code: "security_incident")
+
+        assert_operator client.reload.token_valid_after_at, :>=, database_marker
+
+        AdministrativeAccessLock.unlock!(account: client, operator:, reason_code: "operator_error_recovery")
+
+        assert_operator client.reload.token_valid_after_at, :>=, database_marker
+      end
+    end
+  end
+
+  test "a reserved operator does not permit locking the last available operator" do
+    target = operators(:one)
+    operator = operators(:two)
+    Operator.where.not(id: target.id).find_each { |other| other.update!(status_id: OperatorStatus::RESERVED) }
+
+    assert_raises(AdministrativeAccessLock::LastEnabledOperatorError) do
+      AdministrativeAccessLock.lock!(account: target, operator: operator, reason_code: "security_incident")
+    end
+    assert_predicate target.reload, :access_enabled?
+  end
+
   test "locks client access, revokes sessions, and records account access event" do
     client = clients(:one)
     operator = operators(:one)

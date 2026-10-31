@@ -12,11 +12,10 @@
 class OrgPreferenceStatus < OrgSettingRecord
   include ReferenceRecord
 
-  # Fixed IDs - do not modify these values
-  DELETED = 1
-  NOTHING = 2
+  RETIRED = 1
+  ACTIVE = 2
 
-  DEFAULTS = [DELETED, NOTHING].freeze
+  DEFAULTS = [RETIRED, ACTIVE].freeze
 
   has_many :org_preferences,
            class_name: "OrgPreference",

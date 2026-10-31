@@ -58,6 +58,19 @@ shared behavior.
 - Operator-managed configuration stays under `/configurator`. It must not be mixed with user
   self-service setting routes or anonymous preference routes.
 
+## Owner-approved migration: Base ORG settings (2026-10-31, WU-X1)
+
+The owner approved a one-route exception to the generic `/configurator` path for the existing Base
+ORG management entry: it moves from `/configuration` to `/settings` on the Base ORG host. This
+route is distinct from Auth APP and ORG `/settings`, which remain surface-local identity settings
+on their Auth hosts. Matching path text does not share controllers, sessions, authorization, or
+state across those hosts.
+
+The Auth ORG `/configuration` transfer endpoint is removed. No `/configuration` alias or redirect
+is retained. The Base ORG endpoint remains closed until it has an authoritative settings data
+source. This migration is specific to Base ORG; `/configurator` remains the generic path for new
+operator-managed configuration routes.
+
 ## Related
 
 - `adr/preference-soft-bubble-doctrine.md`

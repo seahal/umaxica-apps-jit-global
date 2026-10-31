@@ -9,8 +9,6 @@ class LayoutControllerContractTest < ActiveSupport::TestCase
   CONTROLLERS = {
     "app/controllers/auth/app/application_controller.rb" => ["Auth::App::ApplicationController",
                                                              "auth/app/application",],
-    "app/controllers/auth/com/application_controller.rb" => ["Auth::Com::ApplicationController",
-                                                             "auth/com/application",],
     "app/controllers/auth/org/application_controller.rb" => ["Auth::Org::ApplicationController",
                                                              "auth/org/application",],
     "app/controllers/base/app/application_controller.rb" => ["Base::App::ApplicationController",
@@ -21,8 +19,6 @@ class LayoutControllerContractTest < ActiveSupport::TestCase
                                                              "base/org/application",],
     "app/controllers/core/app/application_controller.rb" => ["Core::App::ApplicationController",
                                                              "core/app/application",],
-    "app/controllers/core/com/application_controller.rb" => ["Core::Com::ApplicationController",
-                                                             "core/com/application",],
     "app/controllers/core/org/application_controller.rb" => ["Core::Org::ApplicationController",
                                                              "core/org/application",],
     "app/controllers/warp/app/application_controller.rb" => ["Warp::App::ApplicationController",

@@ -123,8 +123,8 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
-  test "configuration console denies an operator that holds no grant" do
-    get base_org_configuration_url(ri: "jp", host: @host), headers: @headers
+  test "settings console denies an operator that holds no grant" do
+    get base_org_settings_url(ri: "jp", host: @host), headers: @headers
 
     assert_response :redirect
   end
@@ -137,6 +137,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
 
   test "support console opens with support.console.read and lists only granted areas" do
     [OperatorCapabilityGrant::SUPPORT_CONSOLE_READ,
+     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
      OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM,].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @operator,
@@ -156,7 +157,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
         section.fetch("items")
       }.map { |item| item.fetch("href") }
 
-    assert_equal [base_org_support_visitors_path(ri: "jp")], hrefs
+    assert_equal [base_org_support_clients_path(ri: "jp")], hrefs
   end
 
   test "iam console opens with iam.capability.read" do
@@ -184,7 +185,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
     )
 
     [base_org_audit_index_url(ri: "jp", host: @host), base_org_billing_index_url(ri: "jp", host: @host),
-     base_org_system_index_url(ri: "jp", host: @host), base_org_configuration_url(ri: "jp", host: @host),].each do |url|
+     base_org_system_index_url(ri: "jp", host: @host), base_org_settings_url(ri: "jp", host: @host),].each do |url|
       get url, headers: @headers
 
       assert_not_equal 200, response.status, "expected #{url} to stay closed"

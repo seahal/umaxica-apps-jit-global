@@ -54,7 +54,7 @@ module SignErrorResponses
       Rails.logger.info(
         JitLogEvent.format(
           event,
-          surface: request.path.include?("/com/") ? :com : :app,
+          surface: :app,
           region: params[:ri],
           request_id: request.request_id,
           reason: reason,

@@ -4,7 +4,7 @@ require "test_helper"
 
 # Fact comparisons keep normalized PII and lookup digests out of assertion diagnostics.
 class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     %w(email telephone).each do |channel|
       %i(active retained).each do |lifetime|
         %i(model database).each do |boundary|
@@ -15,10 +15,6 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
                 [ClientEmail, clients(:one), :user_id, :raw_address, :address_digest, :address]
               when ["app", "telephone"]
                 [ClientTelephone, clients(:one), :user_id, :raw_number, :number_digest, :number]
-              when ["com", "email"]
-                [VisitorEmail, visitors(:reserved_visitor), :visitor_id, :raw_address, :address_digest, :address]
-              when ["com", "telephone"]
-                [VisitorTelephone, visitors(:reserved_visitor), :visitor_id, :raw_number, :number_digest, :number]
               when ["org", "email"]
                 [OperatorEmail, operators(:one), :staff_id, :raw_address, :address_digest, :address]
               when ["org", "telephone"]
@@ -65,7 +61,6 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
             competing_owner =
               case realm
               when "app" then Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-              when "com" then Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
               when "org" then Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
               end
             competing_attributes = attributes.merge(owner_key => competing_owner.id)
@@ -110,7 +105,7 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
   end
 
   %w(email telephone).each do |channel|
-    test "equivalent #{channel} identifiers occupy independent APP COM and ORG namespaces" do
+    test "equivalent #{channel} identifiers occupy independent APP and ORG namespaces" do
       identifier =
         (channel == "email") ? "independent-namespace-#{SecureRandom.hex(8)}@example.test" :
           "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}"
@@ -118,15 +113,11 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
         (channel == "email") ? " #{identifier.upcase} " :
           "0#{identifier.delete_prefix("+81")[0, 2]}-#{identifier[-8, 4]}-#{identifier[-4, 4]}"
       records = []
-      %w(app com org).each do |realm|
+      %w(app org).each do |realm|
         model, owner, owner_key, input_key, digest_column =
           case [realm, channel]
           when ["app", "email"] then [ClientEmail, clients(:one), :user_id, :raw_address, :address_digest]
           when ["app", "telephone"] then [ClientTelephone, clients(:one), :user_id, :raw_number, :number_digest]
-          when ["com",
-                "email",] then [VisitorEmail, visitors(:reserved_visitor), :visitor_id, :raw_address, :address_digest]
-          when ["com", "telephone"]
-            [VisitorTelephone, visitors(:reserved_visitor), :visitor_id, :raw_number, :number_digest]
           when ["org", "email"] then [OperatorEmail, operators(:one), :staff_id, :raw_address, :address_digest]
           when ["org", "telephone"] then [OperatorTelephone, operators(:one), :staff_id, :raw_number, :number_digest]
           else raise ArgumentError, "unsupported test identifier domain"
@@ -145,10 +136,10 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
         records << [record, digest_column]
       end
 
-      assert_equal 3, records.size
+      assert_equal 2, records.size
       digests = records.map { |record, column| record.reload[column] }
 
-      assert_equal 3, digests.uniq.size, "Independent realm keys must not create a global identifier namespace"
+      assert_equal 2, digests.uniq.size, "Independent realm keys must not create a global identifier namespace"
     end
   end
 end

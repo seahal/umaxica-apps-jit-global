@@ -81,7 +81,7 @@ class OperatorEmailRegistrationOtpFinalizer
   def root_current?
     now = OperatorEmailCeremonyTransaction.database_now
     token.active_status?(now) && token_device_session.usable? &&
-      token_device_session.current_refresh_token_id == token.id
+      token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
   def current_policy?

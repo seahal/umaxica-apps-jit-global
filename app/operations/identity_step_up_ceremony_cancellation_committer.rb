@@ -68,8 +68,6 @@ class IdentityStepUpCeremonyCancellationCommitter
       case [actor, token, transaction]
       in [Client, ClientToken, ClientStepUpCeremonyTransaction] if token.user_id == actor.id
         [ClientStepUpSession, ClientAuthCeremonySession]
-      in [Visitor, VisitorToken, VisitorStepUpCeremonyTransaction] if token.visitor_id == actor.id
-        [VisitorStepUpSession, VisitorAuthCeremonySession]
       in [Operator, OperatorToken, OperatorStepUpCeremonyTransaction]
         unless token.staff_id == actor.id && !token.standby_authentication_context?
           raise IdentityStepUpCeremonyContract::Error.new(
@@ -90,7 +88,6 @@ class IdentityStepUpCeremonyCancellationCommitter
     def owned_record?(record, token)
       case record
       when ClientStepUpSession then record.user_token_id == token.id
-      when VisitorStepUpSession then record.visitor_token_id == token.id
       when OperatorStepUpSession then record.staff_token_id == token.id
       end
     end

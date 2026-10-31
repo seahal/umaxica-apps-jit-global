@@ -1,0 +1,30 @@
+stateDiagram-v2
+    state "ACTIVE" as available
+    state "RETIRED" as retired
+
+    [*] --> available: create preference
+    available --> retired: PreferenceLifecycle#retire! / locked reset
+
+    note right of available
+      A successful save stores the signed issuance
+      and expiry timestamps in the same transaction.
+      Chronicle and setting commits are separate.
+      Model validation and the reference-table check
+      allow only ACTIVE and RETIRED IDs.
+    end note
+
+    note right of retired
+      The reset transaction also creates a new
+      available row. Failed signing rolls back both.
+      Reset audit targets the retired row; an audit
+      write failure also rolls back the setting work.
+      The last issued expiry remains unchanged.
+      Its consent receipt remains on the old row;
+      the replacement starts without a receipt.
+      Cookie emission follows both commit attempts.
+      A second retirement is rejected.
+      Model validation rejects reactivation.
+      The issuance deadline elapses at the last
+      expiry plus 30 days; references and holds
+      still require separate checks before deletion.
+    end note

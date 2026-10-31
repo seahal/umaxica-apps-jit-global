@@ -215,7 +215,6 @@ class BaseSelectorBootstrapAuthority
     status_class =
       case principal
       when Client then ClientStatus
-      when Visitor then VisitorStatus
       when Operator then OperatorStatus
       else raise ArgumentError, "unsupported bootstrap principal: #{principal.class.name}"
       end
@@ -234,8 +233,6 @@ class BaseSelectorBootstrapAuthority
     case config.surface
     when :app
       ClientPersonaCreator.call(**attributes, client_identity: identity)
-    when :com
-      IndividualCreator.call(**attributes, visitor_identity: identity)
     when :org
       AgentCreator.call(**attributes, operator_identity: identity)
     else
@@ -254,8 +251,6 @@ class BaseSelectorBootstrapAuthority
     case config.surface
     when :app
       EnterpriseCreator.call(**attributes)
-    when :com
-      CompanyCreator.call(**attributes)
     when :org
       BureauCreator.call(**attributes)
     else
@@ -288,7 +283,7 @@ class BaseSelectorBootstrapAuthority
 
   def provision_avatar!(account:, collective:)
     # The avatar hook is always part of the surface bootstrap interface.
-    # App persists an avatar; com/org traverse the same hook and return nil.
+    # App persists an avatar; org traverses the same hook and returns nil.
     return nil unless config.provision_default_avatar
 
     unless AvatarPermissionResolver.call(
@@ -341,8 +336,6 @@ class BaseSelectorBootstrapAuthority
       AvatarPersonaBinding.find_or_create_by!(avatar: avatar, persona: account)
     when Agent
       AvatarAgentBinding.find_or_create_by!(avatar: avatar, agent: account)
-    when Individual
-      AvatarIndividualBinding.find_or_create_by!(avatar: avatar, individual: account)
     else
       raise ArgumentError, "unsupported account class: #{account.class.name}"
     end
@@ -354,8 +347,6 @@ class BaseSelectorBootstrapAuthority
       :persona
     when Agent
       :agent
-    when Individual
-      :individual
     else
       raise ArgumentError, "unsupported account class: #{account.class.name}"
     end

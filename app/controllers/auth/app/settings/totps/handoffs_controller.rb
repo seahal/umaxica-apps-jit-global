@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Auth::App::Settings::Totps::HandoffsController < Auth::App::ApplicationController
+  # D-59: TOTP enrollment handoff is a step-up ceremony, not a Sign Entry.
+  sign_entry_classification! :excluded, reason: "signed-in settings surface, not a sign entry"
+
   include AuthStepUpCeremonyContext
   include AuthStepUpResultHandoff
 

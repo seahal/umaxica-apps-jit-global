@@ -66,12 +66,9 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
     client_connection = ClientOidcConnection.create!(user: @user, client_id: "core-app-jp")
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     operator_connection = OperatorOidcConnection.create!(staff: operator, client_id: "core-org-jp")
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    visitor_connection = VisitorOidcConnection.create!(visitor: visitor, client_id: "core-com-jp")
 
     assert_equal client_connection.user_tokens.session_inventory, client_connection.active_tokens
     assert_equal operator_connection.staff_tokens.session_inventory, operator_connection.active_tokens
-    assert_equal visitor_connection.visitor_tokens.session_inventory, visitor_connection.active_tokens
   end
 
   test "including class must define actor foreign key" do

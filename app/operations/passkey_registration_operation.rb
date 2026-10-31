@@ -9,9 +9,9 @@
 class PasskeyRegistrationOperation
   CONFIG = {
     ClientPasskey => { owner_class: Client, owner_key: :user_id },
-    VisitorPasskey => { owner_class: Visitor, owner_key: :visitor_id },
     OperatorPasskey => { owner_class: Operator, owner_key: :staff_id },
   }.freeze
+  REGISTRATION_AUDIT_EVENTS = %w(passkey.registered.signup passkey.registered.settings).freeze
 
   class << self
     public
@@ -23,12 +23,13 @@ class PasskeyRegistrationOperation
       constraint = cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
       %w(
         index_client_passkeys_on_webauthn_id
-        index_visitor_passkeys_on_webauthn_id
         index_operator_passkeys_on_webauthn_id
       ).include?(constraint)
     end
 
-    def call!(actor:, passkey: nil, passkey_class: nil, attributes: nil, audit: nil)
+    def call!(actor:, audit:, passkey: nil, passkey_class: nil, attributes: nil)
+      raise ArgumentError, "Passkey registration requires audit data" unless audit.is_a?(Hash)
+
       passkey_class ||= passkey.class
       config =
         CONFIG.fetch(passkey_class) do
@@ -38,19 +39,30 @@ class PasskeyRegistrationOperation
       unless actor.is_a?(owner_class)
         raise ArgumentError, "#{passkey_class} requires an actor from #{owner_class}"
       end
+      unless REGISTRATION_AUDIT_EVENTS.include?(audit.fetch(:event_type).to_s)
+        raise ArgumentError, "Passkey registration requires a registration audit event"
+      end
+      if audit[:actor_ref].present? && audit[:actor_ref] != actor.public_id
+        raise ArgumentError, "Passkey registration audit actor does not match its owner"
+      end
 
       owner_key = config.fetch(:owner_key)
       record = passkey || passkey_class.new(attributes || {})
       unless record.is_a?(passkey_class) && record.new_record?
         raise ArgumentError, "Passkey registration requires a new #{passkey_class}"
       end
+      if record[owner_key].present? && record[owner_key] != actor.id
+        raise ArgumentError, "Passkey registration owner does not match its credential"
+      end
 
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.class.transaction(requires_new: true) do
           actor.lock!
+          raise ArgumentError, "Passkey registration owner is unavailable" unless actor.login_allowed?
+
           record[owner_key] = actor.id
           record.save!
-          record_audit!(record, actor, audit) if audit
+          record_audit!(record, actor, audit)
           record
         end
       end

@@ -1,0 +1,6 @@
+# WU-A6 current Standby policy checks
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting implementation and tests.
+- `PARALLEL_WORKERS=1 bin/rails test test/controllers/auth/org/sign_ins_controller_test.rb test/controllers/auth/org/verification/emergency_step_up_prohibition_test.rb test/policies/standby_authentication_context_policy_test.rb test/unit/security/authentication_context_operation_inventory_test.rb` passed (24 runs, 24,411 assertions, 0 failures, 0 errors, 0 skips).
+- The tested current policy rejects Standby Step-Up admission and freshness while the context layer preserves Normal and Standby scope parity. The inventory test enumerates policy rule names but calls `AuthenticationContextValue#permits_rule?`, not each protected public action under real Normal and Standby sessions. Its assertion count therefore does not establish AC-41's per-operation HTTP behavior.
+- The ORG Emergency Auth test and these policy checks do not demonstrate a Standby Root while the normal Sign In Sentry is blocked. That Root path still lacks a reviewed exact verified Flow/OIDC/ceremony binding and context propagation. No production code or migration was changed by this check.

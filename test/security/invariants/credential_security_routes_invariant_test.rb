@@ -53,7 +53,6 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
 
   test "legacy permanent secret credentials expose no sign-in eligibility interface" do
     models = [
-      [VisitorSecretCredential, VisitorSecretCredentialKind],
       [OperatorSecretCredential, OperatorSecretCredentialKind],
     ]
 
@@ -69,7 +68,6 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
       assert_not kind_class.const_defined?(:ALLOWED_FOR_SECRET_SIGN_IN, false)
     end
 
-    assert_equal 1, VisitorSecretCredentialKind::LOGIN
     assert_equal 2, OperatorSecretCredentialKind::LOGIN
   end
 

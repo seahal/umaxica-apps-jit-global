@@ -6,7 +6,11 @@ require "test_helper"
 class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  test "all sixteen canonical Jump issuers publish the exact RT signing key" do
+  # two.md WU-3 removes every corporate credential/protocol host. The canonical Jump RT
+  # namespaces stay registered (their removal is outside WU-3), but only the app and org hosts
+  # still publish a JWKS route; the corporate namespaces are verified against the same registry
+  # keyset in process.
+  test "canonical Jump issuers sign RT and the routing surfaces publish the exact signing key" do
     # Other tests intentionally reload the process-global registry with fixture keys. Rebuild it
     # from the restored process environment so this cross-host contract is order-independent.
     JitSecurityJwtRegistry.reload!
@@ -41,15 +45,21 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       assert_equal origin, claims.fetch("iss"), namespace
       assert_equal "ES384", header.fetch("alg"), namespace
       assert_equal "reuse", claims.fetch("rpl"), namespace
-      host! URI.parse(origin).host
-      https!
-      get "/.well-known/jwks.json"
+      published = if namespace.end_with?("_COM")
+                    # Same wire shape as the HTTP route: the registry hash uses symbol keys.
+                    JSON.parse(JSON.generate(JitSecurityJwtRegistry.jwks_for("surface:#{namespace}")))
+                  else
+                    host! URI.parse(origin).host
+                    https!
+                    get "/.well-known/jwks.json"
 
-      assert_response :ok
-      keys = response.parsed_body.fetch("keys")
+                    assert_response :ok
+                    response.parsed_body
+                  end
+      keys = published.fetch("keys")
 
       assert_includes 1..JitSecurityJwtRegistry::MAX_JUMP_PUBLISHED_JWKS_KEYS, keys.size, namespace
-      assert_operator JSON.generate(response.parsed_body).bytesize,
+      assert_operator JSON.generate(published).bytesize,
                       :<=,
                       JitSecurityJwtRegistry::MAX_JUMP_PUBLISHED_JWKS_BYTES,
                       namespace
@@ -65,7 +75,7 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       published_keys[namespace] = keys
       verified, = JWT.decode(
         token, nil, true, algorithms: ["ES384"],
-                          jwks: JWT::JWK::Set.new(response.parsed_body),
+                          jwks: JWT::JWK::Set.new(published),
                           verify_iss: true, iss: origin, verify_aud: true, aud: "https://jump.umaxica.net",
       )
 

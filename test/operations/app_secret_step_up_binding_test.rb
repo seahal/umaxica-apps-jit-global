@@ -161,13 +161,10 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     end
   end
 
-  test "com and org retain their existing Secret management scope and reject app resource paths" do
-    %w(com org).each do |surface|
+  test "org retains its existing Secret management scope and rejects app resource paths" do
+    %w(org).each do |surface|
       actor, token =
         case surface
-        when "com"
-          visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [visitor, VisitorToken.create!(authentication_epoch: 0, visitor: visitor)]
         when "org"
           operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
           [operator, OperatorToken.create!(authentication_epoch: 0, staff: operator)]

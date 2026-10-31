@@ -145,8 +145,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
       get "/actor-support/acme-app-policy", to: "base/app/actor_support#policy"
       get "/actor-support/acme-org", to: "base/org/actor_support#show"
       get "/actor-support/acme-org-policy", to: "base/org/actor_support#policy"
-      get "/actor-support/acme-com", to: "base/com/actor_support#show"
-      get "/actor-support/acme-com-policy", to: "base/com/actor_support#policy"
     end
   end
 
@@ -197,8 +195,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
         rp_family, rp_surface = {
           ENV.fetch("PUBLIC_BASE_SERVICE_URL") => %w(base app),
           "base.app.localhost" => %w(base app),
-          ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => %w(base com),
-          "base.com.localhost" => %w(base com),
           ENV.fetch("PUBLIC_BASE_STAFF_URL") => %w(base org),
           "base.org.localhost" => %w(base org),
         }.fetch(rp_host)
@@ -330,8 +326,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
         rp_family, rp_surface = {
           ENV.fetch("PUBLIC_BASE_SERVICE_URL") => %w(base app),
           "base.app.localhost" => %w(base app),
-          ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => %w(base com),
-          "base.com.localhost" => %w(base com),
           ENV.fetch("PUBLIC_BASE_STAFF_URL") => %w(base org),
           "base.org.localhost" => %w(base org),
         }.fetch(rp_host)
@@ -424,120 +418,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
     assert_nil Actor.tld
   end
 
-  test "sign com request falls back to null preference when no db record or prf claim exists" do
-    host = ENV.fetch("PRIVATE_BASE_CORPORATE_URL")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-
-    host!(host)
-    http_headers_3 =
-      begin
-        rp_headers = as_visitor_headers(visitor, host: host)
-        rp_host = rp_headers["Host"]
-        begin
-          Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-        rescue ActionController::RoutingError
-          nil
-        end
-        rp_family, rp_surface = {
-          ENV.fetch("PUBLIC_BASE_SERVICE_URL") => %w(base app),
-          "base.app.localhost" => %w(base app),
-          ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => %w(base com),
-          "base.com.localhost" => %w(base com),
-          ENV.fetch("PUBLIC_BASE_STAFF_URL") => %w(base org),
-          "base.org.localhost" => %w(base org),
-        }.fetch(rp_host)
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "com"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpComGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpComGrant.create!(
-              authentication_epoch: 0,
-              visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "visitor",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "visitor",
-                                     ), client_id: rp_client.client_id,
-            )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
-    get "/actor-support/acme-com", params: { ri: "jp" }, headers: http_headers_3
-
-    assert_response :success
-
-    snapshot = response.parsed_body
-
-    assert_equal "Visitor", snapshot["actor_class"]
-    assert_equal visitor.id, snapshot["actor_id"]
-    assert_equal "ActorValuesContext", snapshot["current_actor_class"]
-    assert_equal "Visitor", snapshot["current_actor_actor_class"]
-    assert_equal visitor.id, snapshot["current_actor_actor_id"]
-    assert_equal "Visitor", snapshot["current_resource_class"]
-    assert_equal visitor.id, snapshot["current_resource_id"]
-    assert_equal "visitor", snapshot["actor_type"]
-    assert_equal "visitor", snapshot["whoami"]
-    assert snapshot["signed_in"]
-    assert snapshot["signed_up"]
-    assert_equal "com", snapshot["tld"]
-    assert_equal({ "visitor" => "com" }, { snapshot["whoami"] => snapshot["tld"] })
-    assert_predicate snapshot["preference"], :present?
-    # No resource preference record exists, but the session preference payload is
-    # default-seeded, so Actor.preferences hydrates to non-null defaults.
-    assert_not snapshot["preference"]["null"]
-    assert_equal "ja", snapshot["preference"]["language"]
-    assert_equal "jpy", snapshot["preference"]["currency"]
-    assert_equal "iso", snapshot["preference"]["date_format"]
-    assert_equal "24", snapshot["preference"]["time_format"]
-    assert_equal "standard", snapshot["preference"]["motion"]
-    assert_equal "standard", snapshot["preference"]["density"]
-    assert_equal "infinity", snapshot["preference"]["page_size"]
-
-    assert_equal Unauthenticated.instance, Actor.actor
-    assert_equal :unauthenticated, Actor.actor_type
-    assert_equal Actor::Authentication::NULL, Actor.authn
-    assert_equal Actor::Configuration::NULL, Actor.configuration
-    assert_equal Actor::Preference::NULL, Actor.preferences
-    assert_nil Actor.tld
-  end
 
   test "unauthenticated request exposes unauthenticated current_actor context" do
     host = ENV.fetch("PRIVATE_BASE_SERVICE_URL")
@@ -579,8 +459,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
         rp_family, rp_surface = {
           ENV.fetch("PUBLIC_BASE_SERVICE_URL") => %w(base app),
           "base.app.localhost" => %w(base app),
-          ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => %w(base com),
-          "base.com.localhost" => %w(base com),
           ENV.fetch("PUBLIC_BASE_STAFF_URL") => %w(base org),
           "base.org.localhost" => %w(base org),
         }.fetch(rp_host)
@@ -671,8 +549,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
         rp_family, rp_surface = {
           ENV.fetch("PUBLIC_BASE_SERVICE_URL") => %w(base app),
           "base.app.localhost" => %w(base app),
-          ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => %w(base com),
-          "base.com.localhost" => %w(base com),
           ENV.fetch("PUBLIC_BASE_STAFF_URL") => %w(base org),
           "base.org.localhost" => %w(base org),
         }.fetch(rp_host)
@@ -751,8 +627,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
         rp_family, rp_surface = {
           ENV.fetch("PUBLIC_BASE_SERVICE_URL") => %w(base app),
           "base.app.localhost" => %w(base app),
-          ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => %w(base com),
-          "base.com.localhost" => %w(base com),
           ENV.fetch("PUBLIC_BASE_STAFF_URL") => %w(base org),
           "base.org.localhost" => %w(base org),
         }.fetch(rp_host)
@@ -862,13 +736,10 @@ class ActorSupportLifecycleTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -900,13 +771,6 @@ class ActorSupportLifecycleTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -928,23 +792,6 @@ class ActorSupportLifecycleTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -959,17 +806,9 @@ class ActorSupportLifecycleTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -1157,31 +996,6 @@ class ActorSupportLifecycleTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
@@ -1195,8 +1009,7 @@ class ActorSupportLifecycleTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

@@ -19,8 +19,6 @@ class TelephoneCredentialRegistrationOtpDeliveryGuard
       case [transaction, telephone]
       in [ClientTelephoneCeremonyTransaction, ClientTelephone]
         [Client, ClientToken, ClientTelephoneStatus::UNVERIFIED, "app"]
-      in [VisitorTelephoneCeremonyTransaction, VisitorTelephone]
-        [Visitor, VisitorToken, VisitorTelephoneStatus::UNVERIFIED, "com"]
       in [OperatorTelephoneCeremonyTransaction, OperatorTelephone]
         [Operator, OperatorToken, OperatorTelephoneStatus::UNVERIFIED, "org"]
       else raise ArgumentError, "unsupported Telephone registration delivery realm"
@@ -67,10 +65,6 @@ class TelephoneCredentialRegistrationOtpDeliveryGuard
       when ClientTelephone
         telephone.user_id == owner.id && token.user_id == owner.id && device_session.user_id == owner.id &&
         telephone.user_telephone_status_id == pending_status
-      when VisitorTelephone
-        telephone.visitor_id == owner.id && token.visitor_id == owner.id &&
-        device_session.visitor_id == owner.id &&
-        telephone.visitor_telephone_status_id == pending_status
       when OperatorTelephone
         telephone.staff_id == owner.id && token.staff_id == owner.id && device_session.staff_id == owner.id &&
         telephone.staff_telephone_status_id == pending_status
@@ -81,7 +75,7 @@ class TelephoneCredentialRegistrationOtpDeliveryGuard
 
   def source_pending?(now)
     case telephone
-    when ClientTelephone, VisitorTelephone
+    when ClientTelephone
       telephone.accessible?(now) && !telephone.binding_finalized_at && !telephone.binding_released?
     when OperatorTelephone then telephone.staff_telephone_status_id == pending_status
     end
@@ -89,7 +83,7 @@ class TelephoneCredentialRegistrationOtpDeliveryGuard
 
   def candidate_ref
     case telephone
-    when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
+    when ClientTelephone, OperatorTelephone then telephone.public_id
     end
   end
 
@@ -97,7 +91,7 @@ class TelephoneCredentialRegistrationOtpDeliveryGuard
     now = transaction.class.database_now
     bound_root = CredentialRegistrationOtpSessionValue.load(session_ref: transaction.session_ref).root_ref
     return false unless bound_root == token.public_id && token.active_status?(now) && device_session.usable? &&
-      device_session.current_refresh_token_id == token.id
+      token.device_session_id == device_session.id && device_session.current_refresh_token_id == token.id
     return false unless transaction.surface == surface && transaction.operation == "registration" &&
       transaction.purpose == "credential_registration" && transaction.actor_ref == owner.public_id &&
       transaction.telephone_candidate_ref == candidate_ref &&

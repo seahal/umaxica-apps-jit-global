@@ -6,8 +6,6 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
   [
     ["app", "PUBLIC_BASE_SERVICE_URL", ClientSignInFlow, ClientToken, :user_id,
      :user_token_kind_id, ClientTokenKind::BROWSER_WEB,],
-    ["com", "PUBLIC_BASE_CORPORATE_URL", VisitorSignInFlow, VisitorToken, :visitor_id,
-     :visitor_token_kind_id, VisitorTokenKind::BROWSER_WEB,],
     ["org", "PUBLIC_BASE_STAFF_URL", OperatorSignInFlow, OperatorToken, :staff_id,
      :staff_token_kind_id, OperatorTokenKind::BROWSER_WEB,],
   ].each do |surface, host_key, flow_model, token_model, owner_key, kind_key, kind|
@@ -19,7 +17,6 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       actor =
         case surface
         when "app" then clients(:one)
-        when "com" then visitors(:reserved_visitor)
         when "org" then operators(:one)
         end
       token = token_model.create!(:authentication_epoch => 0, owner_key => actor.id, kind_key => kind)
@@ -28,7 +25,6 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
         rp_cookie_pairs =
           begin
             rp_client_id = { "app" => "base-app-ww",
-                             "com" => "base-com-ww",
                              "org" => "base-org-ww", }.fetch(surface)
             rp_surface = surface
             rp_host = host
@@ -38,13 +34,10 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
             rp_key = [rp_client_id, rp_token.public_id]
             rp_client = OidcClientRegistry.find!(rp_client_id)
             rp_resource_type = { "app" => "client",
-                                 "com" => "visitor",
                                  "org" => "operator", }.fetch(rp_surface)
             rp_model = { "app" => OpAppGrant,
-                         "com" => OpComGrant,
                          "org" => OpOrgGrant, }.fetch(rp_surface)
             rp_token_key = { "app" => :client_token,
-                             "com" => :visitor_token,
                              "org" => :operator_token, }.fetch(rp_surface)
             if @base_browser_rp_credentials[rp_key] ||
                 (rp_token.currently_usable? &&
@@ -90,7 +83,7 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       end
       token.reload
       before = token.attributes.slice(
-        "user_token_status_id", "visitor_token_status_id", "staff_token_status_id", "discard_at",
+        "user_token_status_id", "staff_token_status_id", "discard_at",
         "refresh_token_digest", "last_step_up_at",
       )
       assert_no_difference(-> { flow_model.count }) do
@@ -121,7 +114,6 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
 
   [
     ["app", "PUBLIC_BASE_SERVICE_URL", ClientSignInFlow],
-    ["com", "PUBLIC_BASE_CORPORATE_URL", VisitorSignInFlow],
     ["org", "PUBLIC_BASE_STAFF_URL", OperatorSignInFlow],
   ].each do |surface, host_key, flow_model|
     test "#{surface} explicit anonymous Sign POST issues one real signed Jump to the matching Auth entry" do
@@ -162,7 +154,6 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       start_params = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       binding_model =
         { "app" => ClientAuthAdmissionBinding,
-          "com" => VisitorAuthAdmissionBinding,
           "org" => OperatorAuthAdmissionBinding, }.fetch(surface)
       assert_difference(-> { binding_model.count }, 1) do
         post(
@@ -192,7 +183,6 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       auth_host = ENV.fetch(
         {
           "app" => "PUBLIC_AUTH_SERVICE_URL",
-          "com" => "PUBLIC_AUTH_CORPORATE_URL",
           "org" => "PUBLIC_AUTH_STAFF_URL",
         }.fetch(surface),
       )

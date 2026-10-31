@@ -23,38 +23,63 @@ class OperatorSecretCredentialsDestroy
   def call
     validate_binding!
     @actor.with_lock do
-      @step_up_token.with_lock do
-        verify_step_up!
-        OperatorChronicle.transaction do
-          OperatorSecretCredential.transaction do
-            @secret_credential = OperatorSecretCredential.lock.find_by!(id: @secret_credential.id, staff_id: @actor.id)
-            unless AuthMethodGuard.can_remove_secret_credential?(@actor, @secret_credential)
-              raise ActiveRecord::RecordInvalid, @secret_credential
-            end
+      unless @actor.login_allowed?
+        raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret removal requires an active operator"
+      end
 
-            CredentialSecurityTransition.call(
-              actor: @actor, current_session: @step_up_token, reason: :secret_credential_changed,
-              affected_surface: "org", request: @request,
-            )
-            ensure_audit_dependencies!
-            @secret_credential.discard_now!(purge_after: 1.day)
-            @secret_credential.staff_secret_status_id = OperatorSecretCredential.status_id_for(:deleted)
-            OperatorChronicle.create!(
-              actor: @actor,
-              subject_type: "OperatorSecretCredential",
-              subject_id: @secret_credential.id.to_s,
-              event_id: EVENT_ID,
-              occurred_at: Time.current,
-              context: { action: ACTION },
-            )
-            @secret_credential.save!
-          end
+      device = OperatorDeviceSession.find_by(id: @step_up_token.device_session_id, staff_id: @actor.id)
+      unless device
+        raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret removal requires a current device"
+      end
+
+      device.with_lock do
+        unless device.usable? && device.current_refresh_token_id == @step_up_token.id
+          raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret removal requires a current device"
         end
+
+        mutate_with_current_device!(device)
       end
     end
   end
 
   private
+
+  def mutate_with_current_device!(device)
+    @step_up_token.with_lock do
+      unless @step_up_token.device_session_id == device.id
+        raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret removal requires a current session"
+      end
+
+      verify_step_up!
+      OperatorChronicle.transaction do
+        OperatorSecretCredential.transaction do
+          @secret_credential = OperatorSecretCredential.lock.find_by!(
+            id: @secret_credential.id, staff_id: @actor.id,
+          )
+          unless AuthMethodGuard.can_remove_secret_credential?(@actor, @secret_credential)
+            raise ActiveRecord::RecordInvalid, @secret_credential
+          end
+
+          CredentialSecurityTransition.call(
+            actor: @actor, current_session: @step_up_token, reason: :secret_credential_changed,
+            affected_surface: "org", request: @request,
+          )
+          ensure_audit_dependencies!
+          @secret_credential.discard_now!(purge_after: 1.day)
+          @secret_credential.staff_secret_status_id = OperatorSecretCredential.status_id_for(:deleted)
+          OperatorChronicle.create!(
+            actor: @actor,
+            subject_type: "OperatorSecretCredential",
+            subject_id: @secret_credential.id.to_s,
+            event_id: EVENT_ID,
+            occurred_at: Time.current,
+            context: { action: ACTION },
+          )
+          @secret_credential.save!
+        end
+      end
+    end
+  end
 
   def validate_binding!
     unless @actor.is_a?(Operator) && @actor.persisted? && @secret_credential.is_a?(OperatorSecretCredential) &&

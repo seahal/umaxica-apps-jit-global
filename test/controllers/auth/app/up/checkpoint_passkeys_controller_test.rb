@@ -350,13 +350,12 @@ module Auth::App::Up
       assert_predicate response.parsed_body["error"], :present?
     end
 
-    test "telephone sign up rejects one day before the sixteenth birthday with sixteen birthday copy" do
+    test "telephone sign up rejects today and tomorrow without halting its checkpoint" do
       now = Client.database_now.in_time_zone("Asia/Tokyo")
-      sixteenth_birthday = now.to_date - 16.years
       travel_to now do
         telephone, cycle =
           begin
-            fv5023 = "under16"
+            fv5023 = "birthdate-boundary"
             fv5017 = verify_telephone_via_otp!
             fv5016 = current_sign_up_flow(fv5017)
 
@@ -440,28 +439,29 @@ module Auth::App::Up
             [fv5017, fv5016]
           end
 
-        patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding), params: {
-          requirement: "birthdate",
-          birthdate: (sixteenth_birthday + 1.day).iso8601,
-          checkpoint_version: cycle.reload.checkpoint_version,
-        }
+        [now.to_date, now.to_date + 1.day].each do |birthdate|
+          patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding), params: {
+            requirement: "birthdate",
+            birthdate: birthdate.iso8601,
+            checkpoint_version: cycle.reload.checkpoint_version,
+          }
 
-        assert_response :success
-        assert_includes response.body, "16歳の誕生日"
-        assert_not_includes response.body, "13歳の誕生日"
-        assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
-        assert_not cycle.requirement_cleared?(:birthdate)
-        assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
+          assert_response :unprocessable_content
+          assert_equal I18n.t("sign.shared.birthdate.errors.not_before_today"), response.body
+          assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
+          assert_not cycle.requirement_cleared?(:birthdate)
+          assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
+          assert_nil contact_owner_for_test(telephone).reload.birthdate
+        end
       end
     end
 
-    test "telephone sign up allows the sixteenth birthday" do
+    test "telephone sign up accepts a birthdate one day before the service date" do
       now = Client.database_now.in_time_zone("Asia/Tokyo")
-      sixteenth_birthday = now.to_date - 16.years
       travel_to now do
         telephone, cycle =
           begin
-            fv5012 = "sixteen"
+            fv5012 = "yesterday"
             fv5006 = verify_telephone_via_otp!
             fv5005 = current_sign_up_flow(fv5006)
 
@@ -547,13 +547,14 @@ module Auth::App::Up
 
         patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding), params: {
           requirement: "birthdate",
-          birthdate: sixteenth_birthday.iso8601,
+          birthdate: (now.to_date - 1.day).iso8601,
           checkpoint_version: cycle.reload.checkpoint_version,
         }
 
         assert_response :redirect
         assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
         assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
+        assert_equal (now.to_date - 1.day).iso8601, contact_owner_for_test(telephone).reload.birthdate
       end
     end
 

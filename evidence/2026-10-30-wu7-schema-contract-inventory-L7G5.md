@@ -1,0 +1,6 @@
+# WU-7 local com setting schema inventory
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had staged, unstaged and untracked changes affecting the result. These checks read the local test com setting database; they did not alter schema or target production or Neon.
+- Three `RAILS_ENV=test bin/rails runner` inspection scripts queried Rails connection metadata. Fifteen com child tables each had a non-null, unique `preference_id` with a foreign key to `com_preferences`. The 12 option-bearing tables had non-null `option_id` and a foreign key to the corresponding com option table. The four consent flags, receipt `version` and `recorded_at`, and binding digest were non-null.
+- The parent had non-null `public_id`, `jti`, `status_id`, `last_issued_at` and `last_issued_expires_at`; unique indexes on `public_id` and `jti`; and a status foreign key. The 12 retired token, DBSC, retention and explicit-field columns named in the inspection were absent.
+- This checks live test-database metadata, not migration reconstruction or production schema. The repository-wide drift command previously failed as recorded in `2026-10-30-wu7-com-schema-regeneration-G5F2.md`. Full-suite baseline-external failures remain outstanding.

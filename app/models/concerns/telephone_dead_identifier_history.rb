@@ -32,7 +32,6 @@ module TelephoneDeadIdentifierHistory
     history_model, owner_model, owner_key, realm =
       case self
       when ClientTelephone then [ClientTelephoneHistory, Client, :user_id, "app"]
-      when VisitorTelephone then [VisitorTelephoneHistory, Visitor, :visitor_id, "com"]
       when OperatorTelephone then [OperatorTelephoneHistory, Operator, :staff_id, "org"]
       else raise ArgumentError, "unsupported telephone archive model"
       end
@@ -51,13 +50,11 @@ module TelephoneDeadIdentifierHistory
       held =
         case owner
         when Client then owner.client_retention_holds.active_at(now).exists?
-        when Visitor then owner.visitor_retention_holds.active_at(now).exists?
         when Operator then false
         end
       enforcement =
         case owner
         when Client then AppEnforcementCase
-        when Visitor then ComEnforcementCase
         when Operator then OrgEnforcementCase
         end
       if held || enforcement.principal_effect_blocking?(owner.public_id, :withdrawal_purge_blocked) ||
@@ -88,7 +85,7 @@ module TelephoneDeadIdentifierHistory
   end
 
   def refuse_retained_telephone_destruction!(current, now)
-    return unless current.is_a?(ClientTelephone) || current.is_a?(VisitorTelephone)
+    return unless current.is_a?(ClientTelephone)
     return if current.discard_at == Float::INFINITY && current.purge_eligible_at == Float::INFINITY
     return if current.lapsed?(now) && current.purgeable?(now)
 

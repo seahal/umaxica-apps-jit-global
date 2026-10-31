@@ -6,8 +6,8 @@ require "test_helper"
 class IdentityEmailCeremonyReplayStoreTest < ActiveSupport::TestCase
   test "for returns stores for known surfaces and rejects an unknown surface" do
     assert_kind_of IdentityEmailCeremonyReplayStore, IdentityEmailCeremonyReplayStore.for(:app)
-    assert_kind_of IdentityEmailCeremonyReplayStore, IdentityEmailCeremonyReplayStore.for(:com)
     assert_kind_of IdentityEmailCeremonyReplayStore, IdentityEmailCeremonyReplayStore.for(:org)
+
     assert_raises(IdentityEmailCeremonyContract::Error) do
       IdentityEmailCeremonyReplayStore.for(:invalid)
     end

@@ -9,6 +9,14 @@ class Base::App::Identity::PasskeysController < Base::App::Identity::BaseControl
 
   public
 
+  def show
+    @passkey = current_client.client_passkeys.active.find_by!(public_id: params.expect(:id))
+    authorize!(@passkey, to: :show?, with: ClientPasskeyPolicy)
+    return if require_step_up!(scope: "settings_passkey") == false
+
+    super
+  end
+
   def update
     @passkey = current_client.client_passkeys.active.find_by!(public_id: params.expect(:id))
     authorize!(@passkey, to: :update?, with: ClientPasskeyPolicy)
@@ -18,9 +26,11 @@ class Base::App::Identity::PasskeysController < Base::App::Identity::BaseControl
     IdentityPasskeyNameCommitter.call!(
       actor: current_client, token: current_session_token, passkey: @passkey, description: description.to_s.strip,
     )
-    redirect_to(passkey_path(passkey_reference(@passkey)), status: :see_other)
+    redirect_to(passkeys_path, status: :see_other)
   rescue IdentityPasskeyNameCommitter::Denied
     render plain: VerificationBase::STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
+  rescue IdentityPasskeyNameCommitter::DependencyFailure
+    head :service_unavailable
   rescue ActiveRecord::RecordInvalid, ActionController::ParameterMissing
     render inertia: passkey_show_component, props: passkey_show_props(error: I18n.t("errors.messages.invalid_request")),
            status: :unprocessable_content
@@ -53,7 +63,9 @@ class Base::App::Identity::PasskeysController < Base::App::Identity::BaseControl
       raise ArgumentError, "Passkey management requires its current policy"
     end
 
-    ClientPasskeyPolicy.new(ClientPasskey, user: current_client).management_requirement(token: current_session_token)
+    ClientPasskeyPolicy.new(@passkey || ClientPasskey, user: current_client).management_requirement(
+      token: current_session_token,
+    )
   end
 
   def registration_surface = "app"

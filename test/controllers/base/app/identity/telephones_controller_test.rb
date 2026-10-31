@@ -202,6 +202,7 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
       user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
     )
 
+    @token.reload.update!(last_step_up_resource_ref: telephone.public_id)
     get edit_base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
 
     assert_response :success
@@ -270,6 +271,7 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
     )
 
     telephone.finalize_binding!
+    @token.reload.update!(last_step_up_resource_ref: telephone.public_id)
     delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
 
     assert_redirected_to base_app_identity_telephones_path(ri: "jp")
@@ -290,6 +292,7 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
     )
 
     telephone.finalize_binding!
+    @token.reload.update!(last_step_up_resource_ref: telephone.public_id)
     delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
 
     assert_redirected_to base_app_identity_telephones_path(ri: "jp")

@@ -21,11 +21,74 @@ class ClientSecretManualReattemptIssuerTest < ActiveSupport::TestCase
 
   teardown { ENV["APP_SECRET_ISSUANCE_TTL_SECONDS"] = @previous_issuance_ttl }
 
+  test "a withdrawn Client cannot reattempt a payload-failed issuance" do
+    predecessor = ClientSecretManualReservationIssuer.call!(
+      actor_context: @context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    @token.reload.update!(last_step_up_resource_ref: predecessor.public_id)
+    ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
+      actor_context: @context, token: @token, issuance: predecessor, purge_after: 1.day,
+    )
+    predecessor.reload
+    now = Client.database_now
+    @actor.update!(withdrawn_at: now, terminated_at: now)
+
+    assert_no_difference ["ClientSecretIssuance.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretManualReattemptIssuer::Denied) do
+        ClientSecretManualReattemptIssuer.call!(
+          actor_context: @context, token: @token, predecessor: predecessor, purge_after: 1.day,
+        )
+      end
+    end
+  end
+
+  test "a revoked device cannot reattempt a payload-failed issuance" do
+    predecessor = ClientSecretManualReservationIssuer.call!(
+      actor_context: @context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    @token.reload.update!(last_step_up_resource_ref: predecessor.public_id)
+    ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
+      actor_context: @context, token: @token, issuance: predecessor, purge_after: 1.day,
+    )
+    predecessor.reload
+    @token.device_session_record!.revoke!
+
+    assert_no_difference ["ClientSecretIssuance.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretManualReattemptIssuer::Denied) do
+        ClientSecretManualReattemptIssuer.call!(
+          actor_context: @context, token: @token, predecessor: predecessor, purge_after: 1.day,
+        )
+      end
+    end
+  end
+
+  test "a superseded device token cannot reattempt a payload-failed issuance" do
+    predecessor = ClientSecretManualReservationIssuer.call!(
+      actor_context: @context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    @token.reload.update!(last_step_up_resource_ref: predecessor.public_id)
+    ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
+      actor_context: @context, token: @token, issuance: predecessor, purge_after: 1.day,
+    )
+    device = @token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: @actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference ["ClientSecretIssuance.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretManualReattemptIssuer::Denied) do
+        ClientSecretManualReattemptIssuer.call!(
+          actor_context: @context, token: @token, predecessor: predecessor, purge_after: 1.day,
+        )
+      end
+    end
+  end
+
   test "payload-failed predecessor creates one exact successor and repeated POST returns it" do
     operation = SecureRandom.uuid
     predecessor = ClientSecretManualReservationIssuer.call!(
       actor_context: @context, token: @token, operation_id: operation, expires_after: 1.minute,
     )
+    @token.reload.update!(last_step_up_resource_ref: predecessor.public_id)
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
       actor_context: @context, token: @token, issuance: predecessor, purge_after: 1.day,
     )
@@ -66,6 +129,7 @@ class ClientSecretManualReattemptIssuerTest < ActiveSupport::TestCase
     predecessor = ClientSecretManualReservationIssuer.call!(
       actor_context: @context, token: @token, operation_id: operation, expires_after: 1.minute,
     )
+    @token.reload.update!(last_step_up_resource_ref: predecessor.public_id)
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
       actor_context: @context, token: @token, issuance: predecessor, purge_after: 1.day,
     )
@@ -93,6 +157,7 @@ class ClientSecretManualReattemptIssuerTest < ActiveSupport::TestCase
       )
     end
 
+    @token.reload.update!(last_step_up_resource_ref: unfailed.public_id)
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
       actor_context: @context, token: @token, issuance: unfailed, purge_after: 1.day,
     )

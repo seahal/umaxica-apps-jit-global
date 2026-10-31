@@ -11,6 +11,7 @@ module Auth
           include ::SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_in
 
           before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
           before_action :ensure_pending_mfa!

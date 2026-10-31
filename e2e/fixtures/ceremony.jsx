@@ -21,7 +21,6 @@ switch (screen) {
     content = (
       <SignUpMethodChoice
         title="Choose a registration method"
-        suspended_notice={null}
         methods={[
           { key: "email", label: "Email registration", href: "/synthetic/email" },
           { key: "telephone", label: "Telephone registration", href: "/synthetic/telephone" },

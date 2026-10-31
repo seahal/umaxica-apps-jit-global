@@ -51,7 +51,8 @@ class WarpRouteContractTest < ActionDispatch::IntegrationTest
       warp_corporate_host: "www-jp.umaxica.com",
       warp_staff_host: "www-jp.umaxica.org",
     ) do
-      %w(app com org).each do |surface|
+      # two.md WU-3: Warp com keeps only public read-only pages, so it serves no Preference API.
+      %w(app org).each do |surface|
         host = "www-jp.umaxica.#{surface}"
         { "theme" => "themes", "cookie" => "cookies" }.each do |resource, controller|
           url = "https://#{host}/api/v0/preferences/#{resource}"
@@ -84,9 +85,16 @@ class WarpRouteContractTest < ActionDispatch::IntegrationTest
       warp_corporate_host: "www-jp.umaxica.com",
       warp_staff_host: "www-jp.umaxica.org",
     ) do
+      # two.md WU-3: Warp com keeps only public read-only pages, so it starts no sign ceremony.
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("https://www-jp.umaxica.com/sign", method: :get)
+      end
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("https://www-jp.umaxica.com/oidc/callback", method: :get)
+      end
+
       {
         "https://www-jp.umaxica.app" => "warp/app",
-        "https://www-jp.umaxica.com" => "warp/com",
         "https://www-jp.umaxica.org" => "warp/org",
       }.each do |origin, prefix|
         recognized = Rails.application.routes.recognize_path("#{origin}/sign", method: :get)

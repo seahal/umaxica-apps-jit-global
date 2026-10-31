@@ -8,8 +8,6 @@ class IdentitySecretCredentialCeremonyReplayStoreTest < ActiveSupport::TestCase
     assert_kind_of IdentitySecretCredentialCeremonyReplayStore,
                    IdentitySecretCredentialCeremonyReplayStore.for(:app)
     assert_kind_of IdentitySecretCredentialCeremonyReplayStore,
-                   IdentitySecretCredentialCeremonyReplayStore.for(:com)
-    assert_kind_of IdentitySecretCredentialCeremonyReplayStore,
                    IdentitySecretCredentialCeremonyReplayStore.for(:org)
     assert_raises(IdentitySecretCredentialCeremonyContract::Error) do
       IdentitySecretCredentialCeremonyReplayStore.for(:invalid)
@@ -35,7 +33,7 @@ class IdentitySecretCredentialCeremonyReplayStoreTest < ActiveSupport::TestCase
     assert_equal "transaction is not found", error.message
   end
 
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} generated ceremony transaction and grant references are NanoID-21 values" do
       transaction = IdentitySecretCredentialCeremonyReplayStore.for(surface).create_transaction!(
         actor_ref: "actor-#{surface}", session_ref: "session-#{surface}", operation: "enrollment",

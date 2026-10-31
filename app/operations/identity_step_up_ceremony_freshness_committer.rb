@@ -23,7 +23,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
           credential =
             case actor
             when Operator then credentials.lock.find_by!(external_id: transaction.verified_credential_ref)
-            when Client, Visitor then credentials.lock.find_by!(public_id: transaction.verified_credential_ref)
+            when Client then credentials.lock.find_by!(public_id: transaction.verified_credential_ref)
             end
           finalize_ticket!(
             actor: actor, token: token, transaction: transaction, requirement: requirement,
@@ -148,8 +148,8 @@ class IdentityStepUpCeremonyFreshnessCommitter
 
           current_token.with_lock do
             previous_token = token.class.lock.find_by(public_id: transaction.session_ref)
-            session_record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
             transaction.with_lock do
+              session_record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
               finalize_locked_reauthentication!(
                 actor:, current_token:, previous_token:, transaction:, requirement:, payload:, digest:,
                 session_record:, ceremony_model:, credentials:, credential:,
@@ -223,7 +223,6 @@ class IdentityStepUpCeremonyFreshnessCommitter
     def session_owned_by?(record, token)
       case token
       when ClientToken then record.user_token_id == token.id
-      when VisitorToken then record.visitor_token_id == token.id
       when OperatorToken then record.staff_token_id == token.id
       end
     end
@@ -237,13 +236,6 @@ class IdentityStepUpCeremonyFreshnessCommitter
         end
 
         [ClientStepUpSession, ClientAuthCeremonySession, credential_scope(actor, transaction.method)]
-      when VisitorToken
-        unless actor.is_a?(Visitor) && token.visitor_id == actor.id &&
-            transaction.is_a?(VisitorStepUpCeremonyTransaction)
-          raise IdentityStepUpCeremonyContract::Error.new("COM binding mismatch", code: "session_binding_mismatch")
-        end
-
-        [VisitorStepUpSession, VisitorAuthCeremonySession, credential_scope(actor, transaction.method)]
       when OperatorToken
         unless actor.is_a?(Operator) && token.staff_id == actor.id &&
             transaction.is_a?(OperatorStepUpCeremonyTransaction) &&
@@ -266,11 +258,6 @@ class IdentityStepUpCeremonyFreshnessCommitter
           .where("discard_at > clock_timestamp()")
       in [Client, "totp"]
         actor.client_totp_credentials.where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
-      in [Visitor, "passkey"]
-        actor.visitor_passkeys.active.where("discard_at > clock_timestamp()")
-      in [Visitor, "email_otp"]
-        actor.visitor_emails.effective_binding.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
-          .where("discard_at > clock_timestamp()")
       in [Operator, "passkey"]
         actor.staff_passkeys.active
       else
@@ -353,7 +340,6 @@ class IdentityStepUpCeremonyFreshnessCommitter
     def actor_matches_token?(actor, token)
       case [actor, token]
       in [Client, ClientToken] then token.user_id == actor.id
-      in [Visitor, VisitorToken] then token.visitor_id == actor.id
       in [Operator, OperatorToken] then token.staff_id == actor.id
       else false
       end

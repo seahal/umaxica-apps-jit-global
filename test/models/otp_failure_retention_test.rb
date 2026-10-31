@@ -14,7 +14,7 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   ).freeze
 
   test "retired identifier proof columns are absent from the PostgreSQL schema" do
-    [ClientEmail, ClientTelephone, VisitorEmail, VisitorTelephone, OperatorEmail, OperatorTelephone].each do |model|
+    [ClientEmail, ClientTelephone, OperatorEmail, OperatorTelephone].each do |model|
       model.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
         columns = connection.columns(model.table_name).map(&:name)
 
@@ -33,7 +33,7 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientEmail, VisitorEmail, OperatorEmail, ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
+  [ClientEmail, OperatorEmail, ClientTelephone, OperatorTelephone].each do |model|
     test "#{model.name} does not expose identifier-owned HOTP lifecycle methods or stored proof fields" do
       record = model.new
 
@@ -48,20 +48,16 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientEmail, VisitorEmail, OperatorEmail, ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
+  [ClientEmail, OperatorEmail, ClientTelephone, OperatorTelephone].each do |model|
     test "#{model.name} issuance and resend retain failure boundaries and deny MAX and MAX plus one" do
       owner_model, root_model, owner_key, active_status, policy, channel =
         case model.name
         when "ClientEmail"
           [Client, ClientToken, :user_id, ClientStatus::ACTIVE, EmailOtpPolicy, :email]
-        when "VisitorEmail"
-          [Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE, EmailOtpPolicy, :email]
         when "OperatorEmail"
           [Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE, EmailOtpPolicy, :email]
         when "ClientTelephone"
           [Client, ClientToken, :user_id, ClientStatus::ACTIVE, TelephoneOtpPolicy, :telephone]
-        when "VisitorTelephone"
-          [Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE, TelephoneOtpPolicy, :telephone]
         when "OperatorTelephone"
           [Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE, TelephoneOtpPolicy, :telephone]
         end
@@ -109,14 +105,10 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
         case model.name
         when "ClientEmail"
           [Client, ClientToken, :user_id, ClientStatus::ACTIVE, :email]
-        when "VisitorEmail"
-          [Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE, :email]
         when "OperatorEmail"
           [Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE, :email]
         when "ClientTelephone"
           [Client, ClientToken, :user_id, ClientStatus::ACTIVE, :telephone]
-        when "VisitorTelephone"
-          [Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE, :telephone]
         when "OperatorTelephone"
           [Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE, :telephone]
         end
@@ -187,16 +179,13 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientEmail, VisitorEmail, OperatorEmail].each do |model|
+  [ClientEmail, OperatorEmail].each do |model|
     test "#{model.name} resend after finite lockout expires retains failures and admits a new active challenge" do
       owner, root, owner_attributes =
         case model.name
         when "ClientEmail"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), { user: actor }]
-        when "VisitorEmail"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), { visitor: actor }]
         when "OperatorEmail"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), { staff: actor }]
@@ -221,16 +210,13 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
+  [ClientTelephone, OperatorTelephone].each do |model|
     test "#{model.name} resend after finite lockout expires retains failures and admits a new active challenge" do
       owner, root, owner_attributes =
         case model.name
         when "ClientTelephone"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), { user: actor }]
-        when "VisitorTelephone"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), { visitor: actor }]
         when "OperatorTelephone"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), { staff: actor }]
@@ -418,15 +404,13 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
 
   test "Email and Telephone do not include the superseded shared OTP policy" do
     assert_not_includes ClientEmail.included_modules.map(&:name), "OtpLockable"
-    assert_not_includes VisitorEmail.included_modules.map(&:name), "OtpLockable"
     assert_not_includes OperatorEmail.included_modules.map(&:name), "OtpLockable"
     assert_not_includes ClientTelephone.included_modules.map(&:name), "OtpLockable"
-    assert_not_includes VisitorTelephone.included_modules.map(&:name), "OtpLockable"
     assert_not_includes OperatorTelephone.included_modules.map(&:name), "OtpLockable"
   end
 
   test "Email and Telephone binding lifecycles do not share a stateful concern" do
-    [ClientEmail, VisitorEmail, ClientTelephone, VisitorTelephone].each do |model|
+    [ClientEmail, ClientTelephone].each do |model|
       assert_not_includes model.included_modules.map(&:name), "ContactBinding"
     end
   end

@@ -12,7 +12,7 @@ module OidcClientRegistry
 
   DEFAULT_ALLOWED_SCOPES = %w(openid profile email).freeze
 
-  VisitorAccount =
+  ClientConfiguration =
     Data.define(
       :client_id, :client_secret, :redirect_uris, :redirect_uris_by_realm, :post_logout_redirect_uris,
       :aud, :resource_type,
@@ -37,7 +37,7 @@ module OidcClientRegistry
   module_function
 
   # @param client_id [String]
-  # @return [VisitorAccount, nil]
+  # @return [ClientConfiguration, nil]
   def find(client_id)
     config = clients[client_id.to_s]
     return nil unless config
@@ -50,7 +50,7 @@ module OidcClientRegistry
     all_redirect_uris = redirect_uris_by_realm.values.flatten
     all_redirect_uris.uniq!
 
-    VisitorAccount.new(
+    ClientConfiguration.new(
       client_id: client_id.to_s,
       client_secret: resolve_secret_credential(client_id.to_s),
       redirect_uris: all_redirect_uris,
@@ -69,7 +69,7 @@ module OidcClientRegistry
   end
 
   # @param client_id [String]
-  # @return [VisitorAccount]
+  # @return [ClientConfiguration]
   # @raise [ClientNotFound]
   def find!(client_id)
     find(client_id) || raise(ClientNotFound, "Unknown OIDC client: #{client_id}")
@@ -78,7 +78,7 @@ module OidcClientRegistry
   # @param client_id [String]
   # @param uri [String]
   # @param resource_type [String, nil] when given, the redirect_uri must be registered for this
-  #   realm (client/operator/visitor) specifically, not merely registered anywhere for the client.
+  #   realm (client/operator) specifically, not merely registered anywhere for the client.
   # @return [Boolean]
   def valid_redirect_uri?(client_id, uri, resource_type: nil)
     client = find(client_id)
@@ -90,9 +90,7 @@ module OidcClientRegistry
     client = find(client_id)
     return false unless OidcRedirectUriPolicy.valid_post_logout_redirect_uri?(client, uri)
 
-    # Registered post_logout URIs mix all three realms in one list; a logout on
-    # one surface must not redirect to another surface's host.
-    logout_uri_resource_type(uri) == normalize_resource_type(resource_type)
+    normalize_resource_type(client.resource_type) == normalize_resource_type(resource_type)
   end
 
   # @param client_id [String]
@@ -247,73 +245,6 @@ module OidcClientRegistry
     []
   end
 
-  def logout_uri_resource_type(uri)
-    host = URI.parse(uri.to_s).host.to_s
-    return "operator" if logout_hosts_for("operator").include?(host)
-    return "visitor" if logout_hosts_for("visitor").include?(host)
-
-    "client"
-  rescue URI::InvalidURIError
-    nil
-  end
-
-  def logout_hosts_for(resource_type)
-    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    case normalize_resource_type(resource_type)
-    when "operator" then operator_logout_hosts(hosts)
-    when "visitor" then visitor_logout_hosts(hosts)
-    else client_logout_hosts(hosts)
-    end
-  end
-
-  def operator_logout_hosts(hosts)
-    [
-      normalize_host(hosts.sign_staff),
-      normalize_host(hosts.auth_staff),
-      normalize_host(hosts.base_staff),
-      normalize_host(hosts.core_staff),
-      normalize_host(hosts.warp_staff),
-      configured_logout_host("PUBLIC_EDIT_STAFF_URL"),
-      configured_logout_host("PUBLIC_TECH_STAFF_URL"),
-      configured_logout_host("PRIVATE_AUTH_STAFF_URL"),
-      configured_logout_host("PUBLIC_AUTH_STAFF_URL"),
-      configured_logout_host("BASE_STAFF_URL"),
-    ].compact_blank.uniq
-  end
-
-  def visitor_logout_hosts(hosts)
-    [
-      normalize_host(hosts.sign_corporate),
-      normalize_host(hosts.auth_corporate),
-      normalize_host(hosts.base_corporate),
-      normalize_host(hosts.core_corporate),
-      normalize_host(hosts.warp_corporate),
-      configured_logout_host("PRIVATE_AUTH_CORPORATE_URL"),
-      configured_logout_host("PUBLIC_AUTH_CORPORATE_URL"),
-      configured_logout_host("BASE_CORPORATE_URL"),
-    ].compact_blank.uniq
-  end
-
-  def client_logout_hosts(hosts)
-    [
-      normalize_host(hosts.sign_service),
-      normalize_host(hosts.auth_service),
-      normalize_host(hosts.base_service),
-      normalize_host(hosts.core_service),
-      normalize_host(hosts.warp_service),
-      configured_logout_host("PRIVATE_AUTH_SERVICE_URL"),
-      configured_logout_host("PUBLIC_AUTH_SERVICE_URL"),
-      configured_logout_host("BASE_SERVICE_URL"),
-    ].compact_blank.uniq
-  end
-
-  def configured_logout_host(name)
-    value = ENV[name]
-    return if value.nil?
-
-    normalize_host(value)
-  end
-
   def redirect_uris_by_realm_for(config)
     return config[:redirect_uris_by_realm] if config[:redirect_uris_by_realm]
 
@@ -323,8 +254,8 @@ module OidcClientRegistry
   def normalize_resource_type(resource_type)
     case resource_type.to_s
     when "operator", "staff" then "operator"
-    when "visitor", "customer" then "visitor"
-    else "client"
+    when "client" then "client"
+    else raise ArgumentError, "unsupported OIDC resource type"
     end
   end
 
@@ -338,7 +269,6 @@ module OidcClientRegistry
   private_class_method :clients, :build_clients, :client_config_signature,
                        :resolve_secret_credential, :domains_from_redirect_uris,
                        :redirect_uris_by_realm_for,
-                       :logout_uri_resource_type, :logout_hosts_for,
                        :normalize_resource_type, :metadata_auth_method, :normalize_allowed_scopes,
                        :normalize_host
 end

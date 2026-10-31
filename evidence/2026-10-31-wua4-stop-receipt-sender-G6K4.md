@@ -1,0 +1,7 @@
+# Identity-stop receipt sender isolation
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Substantial uncommitted worktree changes affected the implementation and tests.
+- The receipt table permits the same event ID under distinct issuer/realm/client keys. Before this change, two direct-delivery tests using another issuer or client and a sweep test using another client all showed the foreign receipt suppressing the APP stop: 3 runs, 4 assertions, 3 failures.
+- Direct delivery and sweep now scope receipt lookup to the fixed sender. Direct delivery also rejects a matching-key receipt with a different event type or committed time; the sweep routes those mismatches through that check rather than skipping them. Tests cover APP foreign issuer/client, ORG foreign client, matching-key type/time conflicts, and the sweep paths.
+- `PARALLEL_WORKERS=1 bin/rails test test/operations/op_identity_event_invalidator_test.rb test/jobs/op_identity_event_sweep_job_test.rb test/models/op_inbound_receipt_uniqueness_test.rb test/services/administrative_access_lock_test.rb test/services/oidc_access_token_authenticator_test.rb`: 46 runs, 255 assertions, no failures, errors or skips. Scoped RuboCop passed.
+- The receipt has no actor or cutoff fields; matching sender, type and time alone does not verify those facts against the authority-stop record. Historical collision inventory, concurrent delivery, production data and a full suite remain unverified.

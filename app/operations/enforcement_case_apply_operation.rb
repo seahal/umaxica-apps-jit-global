@@ -13,6 +13,8 @@
 # This was EnforcementCaseApplicable#apply!. It is a use case, not model behaviour: it coordinates
 # an account lock and a session revocation that both reach outside the Case aggregate.
 class EnforcementCaseApplyOperation
+  class CaseNoLongerActive < StandardError; end
+
   def self.call(...)
     new(...).call
   end
@@ -28,18 +30,11 @@ class EnforcementCaseApplyOperation
   end
 
   def call
-    unless %w(draft pending_approval).include?(enforcement_case.state)
-      raise EnforcementCaseApplicable::InvalidStateTransitionError,
-            "Case #{enforcement_case.public_id} is already #{enforcement_case.state}"
-    end
-    if enforcement_case.requires_approval? && enforcement_case.approved_by_operator_public_id.blank?
-      raise EnforcementCaseApplicable::ApprovalRequiredError,
-            "Case #{enforcement_case.public_id} requires approval before it can be applied"
-    end
-
     # A failure here rolls the transaction back: nothing was decided or performed, so the Case keeps
     # its committed state (draft or pending_approval) and the error propagates unchanged.
     enforcement_case.class.transaction do
+      current = enforcement_case.persisted? ? enforcement_case.class.lock.find(enforcement_case.id) : enforcement_case
+      validate_current_case!(current)
       enforcement_case.close_superseded_effects!
       enforcement_case.state = "active"
       enforcement_case.save!
@@ -47,25 +42,46 @@ class EnforcementCaseApplyOperation
     end
 
     perform_committed_side_effects!
-    true
   end
+
+  # Retry only the principal-side effect for an already committed decision. The effect itself
+  # rechecks the Case under the principal lock so an end racing this retry cannot relock it.
+  def reconcile_principal_access!
+    perform_principal_access_effect!
+  end
+  public :reconcile_principal_access!
 
   private
 
-  # The decision is committed; a failure from here marks the Case failed for reconciliation.
+  # The decision remains active when a downstream effect fails.
   def perform_committed_side_effects!
-    perform_principal_access_effect!
-    enforcement_case.revoke_method_sessions!
-    write_approval_event!
-    enforcement_case.write_audit_event_once!("applied", actor_operator_public_id: actor_operator_public_id)
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
-    # rubocop:disable Rails/SkipsModelValidations
-    enforcement_case.update_column(:state, "failed") if enforcement_case.persisted?
-    # rubocop:enable Rails/SkipsModelValidations
-    raise e
+    return false unless perform_principal_access_effect!
+
+    enforcement_case.with_lock do
+      next false unless enforcement_case.state == "active" && enforcement_case.ended_at.nil?
+
+      enforcement_case.revoke_method_sessions!
+      write_approval_event!
+      enforcement_case.write_audit_event_once!("applied", actor_operator_public_id: actor_operator_public_id)
+      true
+    end
   end
 
   attr_reader :enforcement_case, :actor_operator_public_id, :step_up_token, :step_up_requirement
+
+  def validate_current_case!(current)
+    unless %w(draft pending_approval).include?(current.state)
+      raise EnforcementCaseApplicable::InvalidStateTransitionError,
+            "Case #{current.public_id} is already #{current.state}"
+    end
+    if current.requires_approval? && current.approved_by_operator_public_id.blank?
+      raise EnforcementCaseApplicable::ApprovalRequiredError,
+            "Case #{current.public_id} requires approval before it can be applied"
+    end
+    return if current.equal?(enforcement_case) || current.attributes == enforcement_case.attributes
+
+    raise EnforcementCaseApplicable::InvalidStateTransitionError, "Case #{current.public_id} changed before apply"
+  end
 
   def validate_step_up_pair!
     return if step_up_token.nil? && step_up_requirement.nil?
@@ -90,7 +106,7 @@ class EnforcementCaseApplyOperation
 
   def perform_principal_access_effect!
     effect = enforcement_case.principal_effect_record
-    return unless effect&.access_blocking?
+    return true unless effect&.access_blocking?
 
     principal = enforcement_case.class.principal_class.find_by!(public_id: enforcement_case.principal_public_id)
     operator = ::Operator.find_by!(public_id: enforcement_case.applied_by_operator_public_id)
@@ -102,6 +118,12 @@ class EnforcementCaseApplyOperation
       reason_note: enforcement_case.reason_note,
       ticket_id: enforcement_case.ticket_id,
       metadata: { enforcement_case_public_id: enforcement_case.public_id },
-    )
+    ) do
+      enforcement_case.lock!
+      raise CaseNoLongerActive unless enforcement_case.state == "active" && enforcement_case.ended_at.nil?
+    end
+    true
+  rescue CaseNoLongerActive
+    false
   end
 end

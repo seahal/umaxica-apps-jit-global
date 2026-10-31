@@ -37,6 +37,82 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
     )
   end
 
+  test "a revoked device cannot finalize a verified Passkey registration" do
+    attestation = @fake.create(challenge: @challenge, user_verified: true)
+    IdentityPasskeyRegistrationVerificationCommitter.call!(
+      actor: @actor, token: @token, transaction: @transaction, session_record: @record, config: @config,
+      reference: @reference, credential_params: attestation, description: "Laptop",
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: @transaction, ceremony_session_ref: @ceremony.id.to_s,
+    )
+    @token.device_session_record!.revoke!
+
+    assert_no_difference ["ClientPasskey.count", "ClientPasskeyAuditOutbox.count"] do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationFinalCommitter.call!(
+          actor: @actor, token: @token, transaction: @transaction, raw_result: result.code,
+        )
+      end
+    end
+    assert_not_predicate @transaction.reload, :consumed?
+  end
+
+  test "a revoked device cannot record a Passkey registration candidate" do
+    attestation = @fake.create(challenge: @challenge, user_verified: true)
+    @token.device_session_record!.revoke!
+
+    assert_no_difference "IdentityPasskeyCeremonyCandidate.count" do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationVerificationCommitter.call!(
+          actor: @actor, token: @token, transaction: @transaction, session_record: @record, config: @config,
+          reference: @reference, credential_params: attestation, description: "Laptop",
+        )
+      end
+    end
+    assert_equal "pending", @transaction.reload.status
+  end
+
+  test "a superseded token cannot record a Passkey registration candidate" do
+    attestation = @fake.create(challenge: @challenge, user_verified: true)
+    device = @token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: @actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference "IdentityPasskeyCeremonyCandidate.count" do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationVerificationCommitter.call!(
+          actor: @actor, token: @token, transaction: @transaction, session_record: @record, config: @config,
+          reference: @reference, credential_params: attestation, description: "Laptop",
+        )
+      end
+    end
+    assert_equal "pending", @transaction.reload.status
+  end
+
+  test "a superseded device token cannot finalize a verified Passkey registration" do
+    attestation = @fake.create(challenge: @challenge, user_verified: true)
+    IdentityPasskeyRegistrationVerificationCommitter.call!(
+      actor: @actor, token: @token, transaction: @transaction, session_record: @record, config: @config,
+      reference: @reference, credential_params: attestation, description: "Laptop",
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: @transaction, ceremony_session_ref: @ceremony.id.to_s,
+    )
+    device = @token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: @actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference ["ClientPasskey.count", "ClientPasskeyAuditOutbox.count"] do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationFinalCommitter.call!(
+          actor: @actor, token: @token, transaction: @transaction, raw_result: result.code,
+        )
+      end
+    end
+    assert_not_predicate @transaction.reload, :consumed?
+  end
+
   test "Auth records a verified candidate and creates no credential and no freshness" do
     attestation = @fake.create(challenge: @challenge, user_verified: true)
 

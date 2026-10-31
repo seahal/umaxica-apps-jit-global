@@ -3,14 +3,6 @@
 
 class IdentitySecretCredentialCeremonyFinalCommitter
   CONFIG = {
-    "com" => {
-      record_class: VisitorSecretCredential,
-      owner_association: :visitor_secret_credentials,
-      status_key: :visitor_secret_credential_status_id,
-      active_status_id: VisitorSecretCredentialStatus::ACTIVE,
-      revoked_status_id: VisitorSecretCredentialStatus::REVOKED,
-      max_count: VisitorSecretCredential::MAX_SECRETS_PER_VISITOR,
-    },
     "org" => {
       record_class: OperatorSecretCredential,
       owner_association: :staff_secret_credentials,

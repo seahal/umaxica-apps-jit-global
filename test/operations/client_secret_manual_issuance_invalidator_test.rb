@@ -3,6 +3,62 @@
 require "test_helper"
 
 class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
+  test "a revoked device cannot cancel a Secret issuance" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    token.device_session_record!.revoke!
+
+    assert_no_difference "ClientSecretAuditOutbox.count" do
+      assert_raises(ClientSecretManualIssuanceInvalidator::Denied) do
+        ClientSecretManualIssuanceInvalidator.call!(
+          actor_context: context, token: token, issuance: issuance, purge_after: 1.day,
+        )
+      end
+    end
+    assert_nil issuance.reload.canceled_at
+  end
+
+  test "a superseded device token cannot cancel a Secret issuance" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    device = token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference "ClientSecretAuditOutbox.count" do
+      assert_raises(ClientSecretManualIssuanceInvalidator::Denied) do
+        ClientSecretManualIssuanceInvalidator.call!(
+          actor_context: context, token: token, issuance: issuance, purge_after: 1.day,
+        )
+      end
+    end
+    assert_nil issuance.reload.canceled_at
+  end
+
   test "owner cancellation discards pending candidates clears payload releases capacity and preserves the session" do
     actor = clients(:one)
     token = client_tokens(:one)
@@ -17,6 +73,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Pending fixture", password: raw,
@@ -87,6 +144,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     snapshot = issuance.reload.attributes
     token.update!(last_step_up_at: nil)
@@ -116,6 +174,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Pending fixture", password: raw,
@@ -153,6 +212,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: operation_id, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     assert_no_difference("ClientSecretCredential.count") do
       assert_difference("ClientSecretAuditOutbox.count", 1) do
         ClientSecretManualIssuanceInvalidator.call!(
@@ -160,6 +220,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
         )
       end
     end
+    token.reload.update!(last_step_up_at: ClientToken.database_now, last_step_up_resource_ref: nil)
     assert_no_difference("ClientSecretIssuance.count") do
       result = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: operation_id, expires_after: 1.minute,
@@ -189,6 +250,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     [
       { last_step_up_at: nil }, { last_step_up_scope: "settings_passkey" }, { last_step_up_method: "secret" },
       { last_step_up_at: ClientToken.database_now - StepUpRequirement::DEFAULT_TTL - 1.second },
@@ -269,6 +331,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       browser_session_ref: token.public_id, planned_count: 1, expires_at: now - 1.second,
       created_at: now - 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: expired.public_id)
     snapshot = expired.attributes
     assert_no_difference("ClientSecretAuditOutbox.count") do
       result = ClientSecretManualIssuanceInvalidator.call!(
@@ -287,6 +350,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
         **facts, client: actor, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
                  browser_session_ref: token.public_id,
       )
+      token.reload.update!(last_step_up_resource_ref: terminal.public_id)
       assert_no_difference("ClientSecretAuditOutbox.count") do
         assert_raises(ClientSecretManualIssuanceInvalidator::Denied) do
           ClientSecretManualIssuanceInvalidator.call!(
@@ -312,6 +376,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
 
     assert_raises(ActiveRecord::RecordInvalid) { issuance.update!(canceled_at: Client.database_now) }
     assert_nil issuance.reload.canceled_at

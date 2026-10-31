@@ -25,6 +25,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     @issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    @token.reload.update!(last_step_up_resource_ref: @issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: @token, issuance: @issuance)
     @raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: @token, issuance: @issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: @token, issuance: @issuance)

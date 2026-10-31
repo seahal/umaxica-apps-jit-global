@@ -18,7 +18,6 @@ class DpopProofStatePurgeJob < ApplicationJob
   PURGEABLE_MODELS = [
     ClientDpopProofState,
     OperatorDpopProofState,
-    VisitorDpopProofState,
   ].freeze
 
   def perform(batch_size: 500)

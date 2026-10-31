@@ -10,6 +10,7 @@ module Auth
           include SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :open
+          sign_entry_classification! :sign_in
           declare_authentication_mode! :open
 
           prepend_before_action :authenticate_sign_in_sequence_actor!

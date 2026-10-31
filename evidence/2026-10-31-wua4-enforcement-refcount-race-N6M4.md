@@ -1,0 +1,7 @@
+# Enforcement release and concurrent blocking Case
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had uncommitted changes affecting this result.
+- A nontransactional APP test paused the first Case's end immediately before principal unlock, applied a second blocking Case, and resumed end. Before the fix the final principal was enabled (1 run, 5 assertions, 1 failure). OP delivery was stubbed.
+- End now rechecks for another blocking Case while holding the principal row lock before changing access. In the same race, the second Case remained in force and the principal remained locked. A separate ORG end-first race confirmed that a late apply does not relock an already ended Case; OP delivery was stubbed.
+- After the fix and formatting, `PARALLEL_WORKERS=1 bin/rails test test/concurrency/enforcement_reconciliation_end_race_test.rb test/models/enforcement_case_apply_ordering_test.rb test/services/administrative_access_lock_test.rb test/operations/enforcement_case_end_missing_principal_test.rb test/jobs/enforcement_expiry_job_test.rb test/jobs/enforcement_reconciliation_job_test.rb` passed: 29 runs, 139 assertions, no failures or errors. Scoped RuboCop passed for the service, end operation, and concurrency test.
+- This does not test real OP delivery, the ORG apply-first or separate-Case refcount races, an outer Source transaction, automatic repair following crashes, or audit rediscovery after failed end.

@@ -13,7 +13,6 @@ class IdColumnTypeTest < ActiveSupport::TestCase
     [
       ClientNotificationRecord,
       OperatorNotificationRecord,
-      VisitorNotificationRecord,
       MemberNotification,
       OperatorNotification,
     ].each do |model|

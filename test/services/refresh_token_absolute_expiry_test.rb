@@ -6,12 +6,10 @@ require "test_helper"
 class RefreshTokenAbsoluteExpiryTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses,
-           :visitors, :visitor_statuses, :visitor_token_kinds, :visitor_token_statuses,
-           :visitor_token_binding_methods, :visitor_token_dbsc_statuses,
            :operators, :operator_statuses, :operator_token_kinds, :operator_token_statuses,
            :operator_token_binding_methods, :operator_token_dbsc_statuses
 
-  %i(app com org).each do |surface|
+  %i(app org).each do |surface|
     test "#{surface} refresh rotation preserves the fixed absolute session deadline" do
       model = token_model_for(surface)
       database_time = model.database_now
@@ -67,7 +65,6 @@ class RefreshTokenAbsoluteExpiryTest < ActiveSupport::TestCase
   def token_model_for(surface)
     case surface
     when :app then ClientToken
-    when :com then VisitorToken
     when :org then OperatorToken
     end
   end
@@ -81,12 +78,6 @@ class RefreshTokenAbsoluteExpiryTest < ActiveSupport::TestCase
         authentication_epoch: 0,
         user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: expires_at,
-      )
-    when :com
-      VisitorToken.create!(
-        authentication_epoch: 0,
-        visitor: visitors(:reserved_visitor), visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: expires_at,
       )
     when :org
       OperatorToken.create!(

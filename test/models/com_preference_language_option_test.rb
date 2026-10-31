@@ -13,7 +13,7 @@ require "test_helper"
 
 class ComPreferenceLanguageOptionTest < ActiveSupport::TestCase
   setup do
-    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::NOTHING)
+    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::ACTIVE)
   end
 
   test "can be created" do
@@ -24,7 +24,11 @@ class ComPreferenceLanguageOptionTest < ActiveSupport::TestCase
 
   test "has many com_preference_languages" do
     option = ComPreferenceLanguageOption.create!(id: 99)
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     language = ComPreferenceLanguage.create!(preference: preference, option: option)
 
     assert_includes option.com_preference_languages, language
@@ -32,7 +36,11 @@ class ComPreferenceLanguageOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = ComPreferenceLanguageOption.create!(id: 99)
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     ComPreferenceLanguage.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

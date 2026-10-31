@@ -5,7 +5,6 @@ module PreferenceGlobal
   extend ActiveSupport::Concern
   include PreferenceBase
   include PreferenceLocalization
-  include PreferenceSignOutRotation
 
   PUBLIC_CONTEXT_KEYS = RequestContextContract.public_keys
   PARAM_CONTEXT_KEYS = (RequestContextContract.required_keys + RequestContextContract.optional_overlay_keys).freeze
@@ -73,6 +72,20 @@ module PreferenceGlobal
   end
 
   def preference_context_from_hash(preferences)
+    if anonymous_preference_payload?(@preference_payload)
+      return {
+        lx: normalized_preference_value(preferences, "language"),
+        tz: preferences["timezone"],
+        ct: theme_short_code(preferences["theme"]),
+        cu: normalized_preference_value(preferences, "currency"),
+        df: normalized_preference_value(preferences, "date_format"),
+        tf: normalized_preference_value(preferences, "time_format"),
+        mo: normalized_preference_value(preferences, "motion"),
+        dn: normalized_preference_value(preferences, "density"),
+        ps: normalized_preference_value(preferences, "page_size"),
+      }
+    end
+
     {
       ri: normalized_preference_value(preferences, "ri"),
       lx: normalized_preference_value(preferences, "lx"),
@@ -92,6 +105,12 @@ module PreferenceGlobal
   end
 
   private
+
+  # Surfaces with a canonical preference writer override this on their application controller.
+  # The browser request and preference cookie never choose the account receiving a mirrored write.
+  def preference_write_actor
+    preference_current_resource
+  end
 
   def normalized_param_ri
     request_context_ri
@@ -281,11 +300,9 @@ module PreferenceGlobal
 
   def set_locale
     locale = normalized_locale(requested_context[:lx])
+    locale ||= normalized_locale(cookie_context[:lx]) if anonymous_preference_payload?(@preference_payload)
     locale ||= Actor.preferences.locale if defined?(Actor)
     I18n.locale = locale if locale.present?
-    return unless preference_state_write_request?
-
-    write_preference_cookie(PreferenceBase::LANGUAGE_COOKIE_KEY, I18n.locale.to_s.downcase)
   end
 
   # The only request-time writer of Time.zone. It always resolves to a concrete
@@ -297,10 +314,7 @@ module PreferenceGlobal
     timezone = Actor.preferences.timezone if timezone.blank? && defined?(Actor)
     timezone_value = TimezoneIdentifier.resolve(timezone)
     Time.zone = timezone_value
-    return unless preference_state_write_request?
-
-    session[:timezone] = timezone_value
-    write_preference_cookie(PreferenceBase::TIMEZONE_COOKIE_KEY, timezone_value)
+    session[:timezone] = timezone_value if !request.get? && !request.head?
   end
 
   private :preference_context_from_hash, :normalized_preference_value

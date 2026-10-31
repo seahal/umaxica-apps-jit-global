@@ -6,6 +6,10 @@ stateDiagram-v2
     state "terminated predicate" as terminated
     state "withdrawn_at fact (overlapping)" as withdrawn
     [*] --> active
+    note right of active
+        Suspension and termination record the stop with the actor and
+        delivers it after the actor transaction commits.
+    end note
     active --> active: start withdrawal request
     active --> suspended: suspend!
     closing --> suspended: suspend!

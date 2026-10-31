@@ -15,7 +15,6 @@ module AppSignUpCheckpointPage
   extend ActiveSupport::Concern
 
   CHECKPOINT_COMPONENT = "auth/app/sign/up/checkpoints/show"
-  AGE_RESTRICTED_COMPONENT = "auth/app/sign/up/checkpoints/age_restricted"
 
   private
 
@@ -109,20 +108,5 @@ module AppSignUpCheckpointPage
         pt: signed_pt_param,
       ),
     }
-  end
-
-  def render_sign_up_age_restricted
-    response.headers["Cache-Control"] = "no-store, private"
-    @sign_up_age_restricted_message = I18n.t("sign.app.registration.checkpoint.age_restricted")
-    @sign_up_age_restricted_restart_path = sign_up_restart_path
-
-    render inertia: AGE_RESTRICTED_COMPONENT,
-           props: {
-             title: t("sign.app.registration.checkpoint.age_restricted"),
-             message: @sign_up_age_restricted_message,
-             retry_message: t("sign.app.registration.checkpoint.age_restricted_retry"),
-             back: { label: t("actions.back"), href: @sign_up_age_restricted_restart_path },
-           },
-           status: :ok
   end
 end

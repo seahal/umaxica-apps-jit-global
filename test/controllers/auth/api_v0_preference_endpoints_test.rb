@@ -3,9 +3,9 @@
 
 require "test_helper"
 
-# The auth surfaces' browser preference JSON endpoints. Each surface owns its
-# own theme and cookie controller over the shared PreferencesBaseController, so
-# the read and the authorized write are asserted per surface.
+# The Auth surfaces expose read-only browser Preference JSON endpoints. Base is the sole
+# interactive browser writer; these routes continue to serve verified display state and refuse
+# mutations.
 class AuthApiV0PreferenceEndpointsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
@@ -15,17 +15,6 @@ class AuthApiV0PreferenceEndpointsTest < ActionDispatch::IntegrationTest
     host! host
 
     get auth_app_api_v0_preferences_theme_url(ri: "jp", host: host), headers: { "Host" => host }
-
-    assert_response :success
-    assert_predicate response.parsed_body["theme"], :present?
-  end
-
-  test "com theme endpoint answers the current theme over TLS" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    https!
-    host! host
-
-    get auth_com_api_v0_preferences_theme_url(ri: "jp", host: host), headers: { "Host" => host }
 
     assert_response :success
     assert_predicate response.parsed_body["theme"], :present?
@@ -53,19 +42,18 @@ class AuthApiV0PreferenceEndpointsTest < ActionDispatch::IntegrationTest
     assert_includes response.parsed_body.keys, "show_banner"
   end
 
-  test "app theme write records the new theme for the browser session" do
+  test "app theme mutation is refused without creating Preference state" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     https!
     host! host
+    preference_count = AppPreference.count
 
     patch auth_app_api_v0_preferences_theme_url(ri: "jp", host: host), as: :json,
                                                                        params: { theme: "dr" },
                                                                        headers: { "Host" => host }
 
-    assert_response :success
-
-    get auth_app_api_v0_preferences_theme_url(ri: "jp", host: host), headers: { "Host" => host }
-
-    assert_equal "dr", response.parsed_body["theme"]
+    assert_response :forbidden
+    assert_equal preference_count, AppPreference.count
+    assert_nil response.headers["Set-Cookie"]
   end
 end

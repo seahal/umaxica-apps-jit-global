@@ -1,0 +1,7 @@
+# WU-A4 Passkey Step-Up device binding
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting implementation and tests.
+- The APP and ORG Passkey Step-Up operation files initially passed (8 runs, 50 assertions). New revoked-device and synchronous revocation-during-signature cases for both surfaces failed before the change (4 runs, 4 assertions, 4 failures).
+- The verifier now checks the locked owner-bound current device and token before challenge consumption, and rechecks them with the session and pending parent under Ticket locks before recording evidence. A post-signature refusal leaves the challenge consumed and the source sign counter advanced but writes no Ticket evidence. Existing challenge replay exception behavior is retained. APP and ORG cases also reject an already superseded token before challenge consumption.
+- APP/ORG Passkey, APP TOTP and freshness operation files passed together (40 runs, 244 assertions, 0 failures, 0 errors, 0 skips). RuboCop passed after formatting corrections. The APP/ORG Step-Up diagrams and transition inventory were updated.
+- Revocation during signature verification was injected synchronously under transactional fixtures. This does not establish independent-connection commit orders or all races with owner/credential changes. WU-A10 versioning and the broader cross-database failure requirements remain incomplete.

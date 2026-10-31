@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpReceiptTest < ActiveSupport::TestCase
-  [ClientTelephoneCeremonyTransaction, VisitorTelephoneCeremonyTransaction].each do |model|
+  [ClientTelephoneCeremonyTransaction].each do |model|
     test "#{model} finalized registration keeps only bounded same-code reconciliation evidence" do
       reference = SecureRandom.uuid
       session_ref = CredentialRegistrationOtpSessionValue.for(

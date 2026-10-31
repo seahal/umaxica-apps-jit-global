@@ -5,39 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
-  test "purge removes cross-database children for a visitor" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    VisitorNotificationRecord.create!(visitor: visitor)
-    VisitorAccount.create!(visitor: visitor)
-
-    assert_difference -> { VisitorNotificationRecord.count }, -1 do
-      assert_difference -> { VisitorAccount.count }, -1 do
-        RetentionCrossDatabaseChildPurge.call(actor: visitor)
-      end
-    end
-  end
-
-  test "visitor purge retries the remaining database after a partial failure" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    notification = VisitorNotificationRecord.create!(visitor: visitor)
-    account = VisitorAccount.create!(visitor: visitor)
-
-    VisitorAccount.stub(:where, ->(*) { raise ActiveRecord::StatementInvalid, "synthetic child database failure" }) do
-      assert_raises(ActiveRecord::StatementInvalid) do
-        RetentionCrossDatabaseChildPurge.call(actor: visitor)
-      end
-    end
-
-    assert_not VisitorNotificationRecord.exists?(notification.id)
-    assert VisitorAccount.exists?(account.id)
-
-    RetentionCrossDatabaseChildPurge.call(actor: visitor)
-
-    assert_not VisitorNotificationRecord.exists?(notification.id)
-    assert_not VisitorAccount.exists?(account.id)
-    assert_nothing_raised { RetentionCrossDatabaseChildPurge.call(actor: visitor) }
-  end
-
   test "purge removes operator notification records for an operator" do
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     OperatorNotificationRecord.create!(operator: operator)

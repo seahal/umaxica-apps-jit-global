@@ -65,7 +65,6 @@ describe("OrgSignUpEntry", () => {
   const props = {
     title: "運営メンバー登録",
     description: "登録は招待制です",
-    suspended_notice: null,
     recruit: { prompt: "興味がありますか", label: "採用情報", href: "/careers" },
     sign_in_link: { label: "ログイン", href: "/org/sign/in" },
     cancel_link: { label: "Cancel", href: BACK.href },
@@ -81,18 +80,6 @@ describe("OrgSignUpEntry", () => {
     expect(cancel?.querySelector("a")?.getAttribute("href")).toBe(BACK.href);
     expect(cancel?.querySelector("button, form")).toBeNull();
     expect(page?.querySelector("header a")).toBeNull();
-  });
-
-  it("shows the suspension notice alone when sign-up is switched off", () => {
-    const screen = mount(
-      <OrgSignUpEntry
-        {...props}
-        suspended_notice="現在受け付けていません"
-      />,
-    );
-
-    expect(screen.text("[data-test-id='sign-up-suspended']")).toBe("現在受け付けていません");
-    expect(screen.container.querySelectorAll("a")).toHaveLength(0);
   });
 
   it("offers the recruiting route and the sign-in link", () => {

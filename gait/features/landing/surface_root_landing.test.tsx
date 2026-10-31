@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import RootLanding, { type RootLandingProps } from "@/features/landing/RootLanding";
 import CoreAppRootsIndex from "@/pages/core/app/roots/index";
-import CoreComRootsIndex from "@/pages/core/com/roots/index";
 import CoreOrgRootsIndex from "@/pages/core/org/roots/index";
 import PalmAppRootsIndex from "@/pages/palm/app/roots/index";
 import WarpAppRootsIndex from "@/pages/warp/app/roots/index";
@@ -56,7 +55,6 @@ describe("Core, Warp, and Palm root pages", () => {
   // for the shared landing.
   it.each([
     ["core/app", CoreAppRootsIndex],
-    ["core/com", CoreComRootsIndex],
     ["core/org", CoreOrgRootsIndex],
     ["warp/app", WarpAppRootsIndex],
     ["warp/com", WarpComRootsIndex],

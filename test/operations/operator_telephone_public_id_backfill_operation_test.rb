@@ -97,7 +97,7 @@ class OperatorTelephonePublicIdBackfillOperationTest < ActiveSupport::TestCase
         )
       end
     end
-    [nil, ClientTelephone.all, VisitorTelephone.all].each do |scope|
+    [nil, ClientTelephone.all].each do |scope|
       assert_raises(ArgumentError) do
         OperatorTelephonePublicIdBackfillOperation.call(scope: scope, dry_run: false, batch_size: 1)
       end

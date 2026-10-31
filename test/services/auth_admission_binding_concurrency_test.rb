@@ -8,7 +8,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} simultaneous exact Base confirmations converge on one immutable proof without admission" do
       issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,

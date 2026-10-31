@@ -11,16 +11,15 @@ class StylesheetTagsTest < ActiveSupport::TestCase
     "app/views/layouts/base/com/application.html.erb" => "entrypoints/base/com",
     "app/views/layouts/base/org/application.html.erb" => "entrypoints/base/org",
     "app/views/layouts/auth/app/application.html.erb" => "entrypoints/sign/app",
-    "app/views/layouts/auth/com/application.html.erb" => "entrypoints/sign/com",
     "app/views/layouts/auth/org/application.html.erb" => "entrypoints/sign/org",
   }.freeze
 
   # One Inertia layout per user-facing FQDN, each loading only its own surface entrypoint.
   INERTIA_LAYOUTS = %w(
     base/app base/com base/org
-    auth/app auth/com auth/org
+    auth/app auth/org
     warp/app warp/com warp/org
-    core/app core/com core/org
+    core/app core/org
     palm/app
   ).to_h do |surface|
     family, boundary = surface.split("/")
@@ -35,7 +34,6 @@ class StylesheetTagsTest < ActiveSupport::TestCase
     app/views/layouts/warp/com/application.html.erb
     app/views/layouts/warp/org/application.html.erb
     app/views/layouts/core/app/application.html.erb
-    app/views/layouts/core/com/application.html.erb
     app/views/layouts/core/org/application.html.erb
     app/views/layouts/jump/app/application.html.erb
     app/views/layouts/jump/com/application.html.erb
@@ -48,7 +46,6 @@ class StylesheetTagsTest < ActiveSupport::TestCase
     app/views/layouts/base/com/application.html.erb
     app/views/layouts/base/org/application.html.erb
     app/views/layouts/auth/app/application.html.erb
-    app/views/layouts/auth/com/application.html.erb
     app/views/layouts/auth/org/application.html.erb
   ).freeze
 

@@ -38,13 +38,6 @@ class RefreshTokenReuseActivityRecorder
         @token.association(:user).tap { |owner| owner.reset_scope }.scope.take!,
         "app",
       ]
-    when VisitorToken
-      [
-        ClientChronicle,
-        ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
-        @token.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!,
-        "com",
-      ]
     when OperatorToken
       [
         OperatorChronicle,

@@ -59,6 +59,8 @@ require_relative "../lib/realm_identifier_encryption_key_provider"
 require_relative "../lib/app_config_loader"
 require_relative "../lib/request_body_size_limit"
 require_relative "../lib/credential_deletion_finalizer"
+require_relative "../lib/auth_phase_refusal_response_boundary"
+require_relative "../lib/visa_csp_report_response_boundary"
 require_relative "../lib/trusted_forwarded_headers"
 require_relative "../lib/umaxica/test_environment/database_safety"
 
@@ -151,6 +153,8 @@ module Jit
     config.middleware.insert_after(ActionDispatch::RequestId, RequestBodySizeLimit)
     # Outside ShowExceptions so a confirmed credential deletion survives an exception response.
     config.middleware.insert_before(ActionDispatch::ShowExceptions, CredentialDeletionFinalizer)
+    config.middleware.insert_before(CredentialDeletionFinalizer, AuthPhaseRefusalResponseBoundary)
+    config.middleware.insert_before(0, VisaCspReportResponseBoundary)
     config.x.boot_config = AppConfigLoader.load!
     # No processor delivery adapter is enabled until its authenticated request/receipt
     # contract is implemented. The empty registry is intentionally fail-closed: a notification

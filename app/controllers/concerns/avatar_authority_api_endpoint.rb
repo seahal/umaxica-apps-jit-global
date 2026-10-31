@@ -14,7 +14,6 @@ module AvatarAuthorityApiEndpoint
 
   REALMS = {
     "app" => { client_id: "base-app-ww", resource_type: "client", grant: "OpAppGrant" },
-    "com" => { client_id: "base-com-ww", resource_type: "visitor", grant: "OpComGrant" },
     "org" => { client_id: "base-org-ww", resource_type: "operator", grant: "OpOrgGrant" },
   }.freeze
 

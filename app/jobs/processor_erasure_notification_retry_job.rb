@@ -16,7 +16,6 @@ class ProcessorErasureNotificationRetryJob < ApplicationJob
     end
 
     enqueue_due(ClientProcessorErasureNotification, "app", limit)
-    enqueue_due(VisitorProcessorErasureNotification, "com", limit)
   end
 
   private

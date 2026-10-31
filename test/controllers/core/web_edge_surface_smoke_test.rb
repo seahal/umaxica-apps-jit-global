@@ -10,19 +10,11 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
       host: ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
       cookie_path: "/api/v0/preferences/cookie",
       theme_path: "/api/v0/preferences/theme",
-      dbsc_path: "/api/v0/preferences/dbsc",
-    },
-    {
-      host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
-      cookie_path: "/api/v0/preferences/cookie",
-      theme_path: "/api/v0/preferences/theme",
-      dbsc_path: "/api/v0/preferences/dbsc",
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL"),
       cookie_path: "/api/v0/preferences/cookie",
       theme_path: "/api/v0/preferences/theme",
-      dbsc_path: "/api/v0/preferences/dbsc",
     },
   ].freeze
 
@@ -63,10 +55,6 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
       assert_equal "application/json", response.media_type
       assert_equal "dr", response.parsed_body.fetch("theme")
 
-      post "https://#{host}#{surface.fetch(:dbsc_path)}", params: { ri: "jp" }, as: :json
-
-      assert_response :unprocessable_content
-      assert_equal "missing_proof", response.parsed_body.fetch("error_code")
     end
   end
 end

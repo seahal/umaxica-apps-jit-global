@@ -17,6 +17,7 @@ module Auth
       # State validation is applied to ALL providers (including Apple).
       # Apple and Google return state in the query string.
       class OmniauthCallbacksController < ::Auth::App::ApplicationController
+        sign_entry_classification! :parent_intent
         include SocialAuth
 
         include ExternalAuthenticationEndpoint
@@ -229,7 +230,8 @@ module Auth
           )
         end
 
-        def handle_successful_auth(user, intent, provider_name, identity, existing_account: nil, pt: nil, entry: nil)
+        def handle_successful_auth(user, intent, provider_name, identity, existing_account: nil, pt: nil,
+                                   entry: nil)
           _ = entry
           Rails.logger.debug(
             JitLogEvent.format(
@@ -441,7 +443,8 @@ module Auth
           )
           if result[:status] == :authentication_evidence_recorded && auth_ceremony_authorization_transaction
             redirect_to_sign_in_sequence!(pt:, status: :see_other)
-          elsif %i(authentication_evidence_recorded mfa_required).include?(result[:status]) && result[:redirect_path]
+          elsif %i(authentication_evidence_recorded
+                   mfa_required).include?(result[:status]) && result[:redirect_path]
             redirect_to(result.fetch(:redirect_path), status: :see_other)
           else
             refusal = sign_in_result_from_session_result(result, actor: user)

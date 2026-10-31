@@ -1,0 +1,6 @@
+# WU-7 Chronicle commit failure
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting the result.
+- A nontransactional request test injects a Chronicle adapter failure before COMMIT after the setting transaction has committed a reset. It observed 503, a retired original row and committed replacement, no reset audit, and no preference cookie emission. Before the change it failed because the existing generic error log did not identify the partial setting commit.
+- The write boundary now logs `preference.write.setting_committed_audit_failed` and request ID when the setting transaction returned before a rescued Chronicle failure. The documentation records the separate commit and its limits. The commit-failure, same-JWT concurrency and consent receipt tests passed: 18 runs, 194 assertions, zero failures, errors or skips. RuboCop autocorrected formatting in the two affected Ruby files.
+- This is a pre-COMMIT injected error, not a network failure with unknown commit outcome. It does not repair a missing audit and cannot log a process interruption between commits. Full-suite comparison remains outstanding. The test removed only the synthetic rows and audits it created.

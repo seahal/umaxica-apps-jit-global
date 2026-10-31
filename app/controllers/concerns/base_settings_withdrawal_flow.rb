@@ -135,8 +135,6 @@ module BaseSettingsWithdrawalFlow
     case actor
     when Client
       actor.client_withdrawal_flows.active.recent_first.first
-    when Visitor
-      actor.visitor_withdrawal_flows.active.recent_first.first
     end
   end
 
@@ -158,7 +156,6 @@ module BaseSettingsWithdrawalFlow
   def privacy_request_blocks_recovery?(actor)
     case actor
     when Client then actor.client_privacy_requests.open_for_recovery_block.exists?
-    when Visitor then actor.visitor_privacy_requests.open_for_recovery_block.exists?
     else
       false
     end

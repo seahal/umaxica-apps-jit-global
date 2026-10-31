@@ -5,6 +5,8 @@ require "aws-sdk-sns"
 
 module Outbound
   class SmsDeliveryJob < ApplicationJob
+    OTP_TRANSPORT_TIMEOUT = 15
+
     queue_as :default
 
     retry_on Aws::SNS::Errors::ServiceError, wait: :polynomially_longer, attempts: 5
@@ -35,7 +37,6 @@ module Outbound
       flow_model, telephone_model, transaction_model =
         case binding.surface
         when "app" then [ClientSignUpFlow, ClientTelephone, ClientTelephoneCeremonyTransaction]
-        when "com" then [VisitorSignUpFlow, VisitorTelephone, VisitorTelephoneCeremonyTransaction]
         else raise ArgumentError, "unsupported Telephone signup delivery realm"
         end
       flow = flow_model.find_by(public_id: binding.flow_ref)
@@ -48,7 +49,7 @@ module Outbound
       TelephoneSignUpOtpDeliveryGuard.call(
         flow: flow, telephone: telephone, transaction: transaction, generation: binding.generation,
         destination: payload.fetch(:to), code: payload.fetch(:otp_code),
-      ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
+      ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body), timeout: OTP_TRANSPORT_TIMEOUT) }
     end
 
     def deliver_current_registration_otp(payload)
@@ -56,7 +57,6 @@ module Outbound
       transaction_model, telephone_model =
         case binding.surface
         when "app" then [ClientTelephoneCeremonyTransaction, ClientTelephone]
-        when "com" then [VisitorTelephoneCeremonyTransaction, VisitorTelephone]
         when "org" then [OperatorTelephoneCeremonyTransaction, OperatorTelephone]
         else raise ArgumentError, "unsupported Telephone registration delivery realm"
         end
@@ -67,7 +67,7 @@ module Outbound
       TelephoneCredentialRegistrationOtpDeliveryGuard.call(
         transaction: transaction, telephone: telephone, generation: binding.generation,
         destination: payload.fetch(:to), code: payload.fetch(:otp_code),
-      ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
+      ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body), timeout: OTP_TRANSPORT_TIMEOUT) }
     end
   end
 end

@@ -29,7 +29,6 @@ module SessionLimitResolutionTransactionable
   def self.model_for(actor)
     case actor
     when Client then ClientSessionLimitResolutionTransaction
-    when Visitor then VisitorSessionLimitResolutionTransaction
     when Operator then OperatorSessionLimitResolutionTransaction
     else
       raise FlowConfigurationError, "unsupported session-limit resolution actor: #{actor.class.name}"
@@ -41,7 +40,6 @@ module SessionLimitResolutionTransactionable
     def resolution_actor_class
       case name
       when "ClientSessionLimitResolutionTransaction" then Client
-      when "VisitorSessionLimitResolutionTransaction" then Visitor
       when "OperatorSessionLimitResolutionTransaction" then Operator
       else
         raise FlowConfigurationError, "#{name} has no resolution actor class"
@@ -51,7 +49,6 @@ module SessionLimitResolutionTransactionable
     def resolution_token_class
       case name
       when "ClientSessionLimitResolutionTransaction" then ClientToken
-      when "VisitorSessionLimitResolutionTransaction" then VisitorToken
       when "OperatorSessionLimitResolutionTransaction" then OperatorToken
       else
         raise FlowConfigurationError, "#{name} has no resolution token class"
@@ -61,7 +58,6 @@ module SessionLimitResolutionTransactionable
     def resolution_device_session_class
       case name
       when "ClientSessionLimitResolutionTransaction" then ClientDeviceSession
-      when "VisitorSessionLimitResolutionTransaction" then VisitorDeviceSession
       when "OperatorSessionLimitResolutionTransaction" then OperatorDeviceSession
       else
         raise FlowConfigurationError, "#{name} has no resolution device-session class"
@@ -71,7 +67,6 @@ module SessionLimitResolutionTransactionable
     def resolution_sign_in_flow_class
       case name
       when "ClientSessionLimitResolutionTransaction" then ClientSignInFlow
-      when "VisitorSessionLimitResolutionTransaction" then VisitorSignInFlow
       when "OperatorSessionLimitResolutionTransaction" then OperatorSignInFlow
       else
         raise FlowConfigurationError, "#{name} has no resolution sign-in-flow class"
@@ -81,7 +76,6 @@ module SessionLimitResolutionTransactionable
     def resolution_oidc_authorization_transaction_class
       case name
       when "ClientSessionLimitResolutionTransaction" then ClientOidcAuthorizationTransaction
-      when "VisitorSessionLimitResolutionTransaction" then VisitorOidcAuthorizationTransaction
       when "OperatorSessionLimitResolutionTransaction" then OperatorOidcAuthorizationTransaction
       else
         raise FlowConfigurationError, "#{name} has no resolution authorization-transaction class"
@@ -91,7 +85,6 @@ module SessionLimitResolutionTransactionable
     def resolution_state_class
       case name
       when "ClientSessionLimitResolutionTransaction" then ClientSessionLimitResolutionState
-      when "VisitorSessionLimitResolutionTransaction" then VisitorSessionLimitResolutionState
       when "OperatorSessionLimitResolutionTransaction" then OperatorSessionLimitResolutionState
       else
         raise FlowConfigurationError, "#{name} has no resolution state class"
@@ -527,7 +520,6 @@ module SessionLimitResolutionTransactionable
 
     case token
     when ClientToken then token.user_id == actor.id
-    when VisitorToken then token.visitor_id == actor.id
     when OperatorToken then token.staff_id == actor.id
     else false
     end
@@ -561,7 +553,7 @@ module SessionLimitResolutionTransactionable
   def record_resolution_audit!(operation, actor:)
     audit_class =
       case actor
-      when Client, Visitor then ClientChronicle
+      when Client then ClientChronicle
       when Operator then OperatorChronicle
       else
         raise FlowConfigurationError, "unsupported session-limit resolution actor: #{actor.class.name}"

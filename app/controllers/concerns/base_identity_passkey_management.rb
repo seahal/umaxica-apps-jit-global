@@ -34,6 +34,7 @@ module BaseIdentityPasskeyManagement
   def new
     authorize!(passkey_class, to: :new?)
     apply_base_browser_continuation_headers!
+    response.headers["Referrer-Policy"] = "strict-origin"
     restart_binding = base_registration_restart_binding!(scope: "settings_passkey", method: :passkey)
     render "base/shared/credential_registration", layout: false,
                                                   locals: { action_url: passkeys_path, restart_binding: }
@@ -78,7 +79,6 @@ module BaseIdentityPasskeyManagement
   def passkey_relation
     case identity_actor
     when Client then identity_actor.client_passkeys.active
-    when Visitor then identity_actor.visitor_passkeys.active
     when Operator then identity_actor.staff_passkeys.active
     else raise ArgumentError, "unsupported passkey owner"
     end
@@ -123,7 +123,6 @@ module BaseIdentityPasskeyManagement
   def identity_path
     case registration_surface
     when "app" then base_app_identity_path(ri: params[:ri])
-    when "com" then base_com_identity_path(ri: params[:ri])
     when "org" then base_org_identity_path(ri: params[:ri])
     else raise ArgumentError, "unsupported passkey surface"
     end
@@ -132,7 +131,6 @@ module BaseIdentityPasskeyManagement
   def passkeys_path
     case registration_surface
     when "app" then base_app_identity_passkeys_path(ri: params[:ri])
-    when "com" then base_com_identity_passkeys_path(ri: params[:ri])
     when "org" then base_org_identity_passkeys_path(ri: params[:ri])
     else raise ArgumentError, "unsupported passkey surface"
     end
@@ -141,7 +139,6 @@ module BaseIdentityPasskeyManagement
   def passkey_path(public_id)
     case registration_surface
     when "app" then base_app_identity_passkey_path(public_id, ri: params[:ri])
-    when "com" then base_com_identity_passkey_path(public_id, ri: params[:ri])
     when "org" then base_org_identity_passkey_path(public_id, ri: params[:ri])
     else raise ArgumentError, "unsupported passkey surface"
     end
@@ -152,7 +149,7 @@ module BaseIdentityPasskeyManagement
   def passkey_reference(passkey)
     case passkey
     when OperatorPasskey then passkey.external_id
-    when ClientPasskey, VisitorPasskey then passkey.public_id
+    when ClientPasskey then passkey.public_id
     else raise ArgumentError, "unsupported passkey credential"
     end
   end
@@ -160,7 +157,6 @@ module BaseIdentityPasskeyManagement
   def new_passkey_path
     case registration_surface
     when "app" then new_base_app_identity_passkey_path(ri: params[:ri])
-    when "com" then new_base_com_identity_passkey_path(ri: params[:ri])
     when "org" then new_base_org_identity_passkey_path(ri: params[:ri])
     else raise ArgumentError, "unsupported passkey surface"
     end
@@ -170,7 +166,6 @@ module BaseIdentityPasskeyManagement
     query = { entry_ref: entry_ref, ri: params[:ri], host: registration_auth_host, protocol: "https" }
     case registration_surface
     when "app" then new_auth_app_verification_registration_passkey_url(**query)
-    when "com" then new_auth_com_verification_registration_passkey_url(**query)
     when "org" then new_auth_org_verification_registration_passkey_url(**query)
     else raise ArgumentError, "unsupported passkey surface"
     end
@@ -179,7 +174,6 @@ module BaseIdentityPasskeyManagement
   def registration_auth_host
     case registration_surface
     when "app" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     else raise ArgumentError, "unsupported passkey surface"
     end

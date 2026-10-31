@@ -41,6 +41,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
             last_step_up_aal: "aal2", last_step_up_method: "passkey",
             last_step_up_session_public_id: fx0_token.public_id, last_step_up_purpose: "step_up",
             last_step_up_audience: "step_up:app", last_step_up_credential_ref: @passkey.public_id,
+            last_step_up_resource_ref: @email.public_id,
             last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
             last_step_up_full_reauthentication: false,
           )

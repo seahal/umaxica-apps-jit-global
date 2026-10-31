@@ -5,40 +5,29 @@ require "test_helper"
 class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
   setup do
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
-    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} resending one admitted email challenge preserves another flow's code and proof" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       first, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       second, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -81,27 +70,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} released binding proof cannot authorize a successor owner" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -109,23 +88,13 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
       original = ceremony.reload.email_otp_context.deep_dup
       contact.release_binding!
       address = contact.address
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        successor = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        successor = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      successor = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       unchanged = successor.reload.attributes
       result = ceremony.verify_email_otp!(code: code)
 
@@ -136,24 +105,14 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} an unadmitted continuity cannot issue email evidence" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
+      model = ClientAuthCeremonySession
       ceremony, = model.issue!
       assert_raises(AuthCeremonySession::InvalidTransition) do
         ceremony.issue_email_otp!(contact: contact, destination: contact.address)
@@ -164,27 +123,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} database refuses malformed OTP context versions" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -201,27 +150,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} OTP and committed result deadlines cannot outlive their parent" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -238,27 +177,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} database preserves committed OTP proof against clearing or replacement" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -281,7 +210,7 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -295,7 +224,7 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
         surface: surface.to_sym, purpose: :authentication, channel: :email,
         destination_digest: IdentifierBlindIndex.bidx_for_email(destination, realm: surface.to_sym), valid: true,
       )
-      assert_no_difference ["Client.count", "Visitor.count", "ClientEmail.count", "VisitorEmail.count"] do
+      assert_no_difference ["Client.count", "ClientEmail.count"] do
         5.times { assert_not ceremony.verify_email_otp!(code: "000000").success? }
       end
 
@@ -309,27 +238,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
     [-1, 0, 1].each do |microseconds|
       test "#{surface} OTP expiry boundary #{microseconds} microseconds is checked with the locked Ticket clock" do
         address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-        if surface == "app"
-          owner = Client.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-          )
-          contact = owner.client_emails.create!(
-            address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-        else
-          owner = Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-          )
-          contact = owner.visitor_emails.create!(
-            address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-        end
+        owner = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+        )
+        contact = owner.client_emails.create!(
+          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+        ).tap(&:finalize_binding!)
         issuance = OidcTestEntry.issue!(
           surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
-        model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+        model = ClientAuthCeremonySession
         ceremony, = model.rotate_and_admit!(
           admission_purpose: "authentication_handoff",
           authorization_transaction_ref: issuance.transaction.transaction_id,
@@ -354,27 +273,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} committed result has a separate deadline and survives the original OTP deadline" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -406,34 +315,24 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
     test "#{surface} a correctly digested challenge with a different parent cannot authorize this flow" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-      if surface == "app"
-        owner = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-        )
-        contact = owner.client_emails.create!(
-          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      else
-        owner = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-        )
-        contact = owner.visitor_emails.create!(
-          address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).tap(&:finalize_binding!)
-      end
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+      )
+      contact = owner.client_emails.create!(
+        address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).tap(&:finalize_binding!)
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       ceremony, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
       issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+      model = ClientAuthCeremonySession
       other, = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
       )
@@ -460,27 +359,17 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
     }.each do |field, foreign_value|
       test "#{surface} correctly digested foreign #{field} refuses before comparison" do
         address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
-        if surface == "app"
-          owner = Client.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-          )
-          contact = owner.client_emails.create!(
-            address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-        else
-          owner = Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-          )
-          contact = owner.visitor_emails.create!(
-            address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-        end
+        owner = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+        )
+        contact = owner.client_emails.create!(
+          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+        ).tap(&:finalize_binding!)
         issuance = OidcTestEntry.issue!(
           surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
-        model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+        model = ClientAuthCeremonySession
         ceremony, = model.rotate_and_admit!(
           admission_purpose: "authentication_handoff",
           authorization_transaction_ref: issuance.transaction.transaction_id,

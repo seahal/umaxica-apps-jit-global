@@ -5,7 +5,6 @@ module SurfaceRouteAliasHelper
   PREFIX_MAP = {
     "auth_app_" => "sign_app_",
     "auth_org_" => "sign_org_",
-    "auth_com_" => "sign_com_",
     "base_app_" => "acme_app_",
     "base_org_" => "acme_org_",
     "base_com_" => "acme_com_",

@@ -15,7 +15,6 @@ module PreferenceClassRegistry
     motion
     density
     page_size
-    adult_content_gate
   ).freeze
 
   TYPE_KEY_MAP = {
@@ -28,7 +27,6 @@ module PreferenceClassRegistry
     :motion => :motion,
     :density => :density,
     :page_size => :page_size,
-    :adult_content_gate => :adult_content_gate,
     :colortheme => :theme,
     :theme => :theme,
     "Timezone" => :timezone,
@@ -40,7 +38,6 @@ module PreferenceClassRegistry
     "Motion" => :motion,
     "Density" => :density,
     "PageSize" => :page_size,
-    "AdultContentGate" => :adult_content_gate,
     "Colortheme" => :theme,
     "Theme" => :theme,
   }.freeze
@@ -64,7 +61,6 @@ module PreferenceClassRegistry
         motion: AppPreferenceMotionOption,
         density: AppPreferenceDensityOption,
         page_size: AppPreferencePageSizeOption,
-        adult_content_gate: AppPreferenceAdultContentGateOption,
       }.freeze,
       record_classes: {
         timezone: AppPreferenceTimezone,
@@ -77,7 +73,6 @@ module PreferenceClassRegistry
         motion: AppPreferenceMotion,
         density: AppPreferenceDensity,
         page_size: AppPreferencePageSize,
-        adult_content_gate: AppPreferenceAdultContentGate,
       }.freeze,
     }.freeze,
     "Com" => {
@@ -98,7 +93,6 @@ module PreferenceClassRegistry
         motion: ComPreferenceMotionOption,
         density: ComPreferenceDensityOption,
         page_size: ComPreferencePageSizeOption,
-        adult_content_gate: ComPreferenceAdultContentGateOption,
       }.freeze,
       record_classes: {
         timezone: ComPreferenceTimezone,
@@ -111,7 +105,6 @@ module PreferenceClassRegistry
         motion: ComPreferenceMotion,
         density: ComPreferenceDensity,
         page_size: ComPreferencePageSize,
-        adult_content_gate: ComPreferenceAdultContentGate,
       }.freeze,
     }.freeze,
     "Org" => {
@@ -132,7 +125,6 @@ module PreferenceClassRegistry
         motion: OrgPreferenceMotionOption,
         density: OrgPreferenceDensityOption,
         page_size: OrgPreferencePageSizeOption,
-        adult_content_gate: OrgPreferenceAdultContentGateOption,
       }.freeze,
       record_classes: {
         timezone: OrgPreferenceTimezone,
@@ -145,7 +137,6 @@ module PreferenceClassRegistry
         motion: OrgPreferenceMotion,
         density: OrgPreferenceDensity,
         page_size: OrgPreferencePageSize,
-        adult_content_gate: OrgPreferenceAdultContentGate,
       }.freeze,
     }.freeze,
     "Client" => {
@@ -161,7 +152,6 @@ module PreferenceClassRegistry
         motion: ClientPreferenceMotionOption,
         density: ClientPreferenceDensityOption,
         page_size: ClientPreferencePageSizeOption,
-        adult_content_gate: ClientPreferenceAdultContentGateOption,
       }.freeze,
       record_classes: {
         timezone: ClientPreferenceTimezone,
@@ -174,7 +164,6 @@ module PreferenceClassRegistry
         motion: ClientPreferenceMotion,
         density: ClientPreferenceDensity,
         page_size: ClientPreferencePageSize,
-        adult_content_gate: ClientPreferenceAdultContentGate,
       }.freeze,
     }.freeze,
     "Operator" => {
@@ -190,7 +179,6 @@ module PreferenceClassRegistry
         motion: OperatorPreferenceMotionOption,
         density: OperatorPreferenceDensityOption,
         page_size: OperatorPreferencePageSizeOption,
-        adult_content_gate: OperatorPreferenceAdultContentGateOption,
       }.freeze,
       record_classes: {
         timezone: OperatorPreferenceTimezone,
@@ -203,36 +191,6 @@ module PreferenceClassRegistry
         motion: OperatorPreferenceMotion,
         density: OperatorPreferenceDensity,
         page_size: OperatorPreferencePageSize,
-        adult_content_gate: OperatorPreferenceAdultContentGate,
-      }.freeze,
-    }.freeze,
-    "Visitor" => {
-      preference: VisitorPreference,
-      option_classes: {
-        timezone: VisitorPreferenceTimezoneOption,
-        language: VisitorPreferenceLanguageOption,
-        region: VisitorPreferenceRegionOption,
-        theme: VisitorPreferenceThemeOption,
-        currency: VisitorPreferenceCurrencyOption,
-        date_format: VisitorPreferenceDateFormatOption,
-        time_format: VisitorPreferenceTimeFormatOption,
-        motion: VisitorPreferenceMotionOption,
-        density: VisitorPreferenceDensityOption,
-        page_size: VisitorPreferencePageSizeOption,
-        adult_content_gate: VisitorPreferenceAdultContentGateOption,
-      }.freeze,
-      record_classes: {
-        timezone: VisitorPreferenceTimezone,
-        language: VisitorPreferenceLanguage,
-        region: VisitorPreferenceRegion,
-        theme: VisitorPreferenceTheme,
-        currency: VisitorPreferenceCurrency,
-        date_format: VisitorPreferenceDateFormat,
-        time_format: VisitorPreferenceTimeFormat,
-        motion: VisitorPreferenceMotion,
-        density: VisitorPreferenceDensity,
-        page_size: VisitorPreferencePageSize,
-        adult_content_gate: VisitorPreferenceAdultContentGate,
       }.freeze,
     }.freeze,
   }.freeze
@@ -292,7 +250,6 @@ module PreferenceClassRegistry
     when :time_format then option::HOUR_24
     when :motion, :density then option::STANDARD
     when :page_size then option::PER_INFINITY
-    when :adult_content_gate then option::NOTHING
     end
   end
 

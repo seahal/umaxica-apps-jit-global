@@ -18,11 +18,6 @@ class OperatorPreferenceRegionOption < OrgPrincipalRecord
 
   DEFAULTS = [NOTHING, US, JP].freeze
 
-  has_many :staff_preference_regions,
-           class_name: "OperatorPreferenceRegion",
-           foreign_key: :option_id,
-           inverse_of: :option,
-           dependent: :restrict_with_error
 
   def self.ensure_defaults!
     insert_missing_fixed_ids!(DEFAULTS)

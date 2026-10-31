@@ -41,7 +41,6 @@ class OidcConnectionRecorder < ApplicationService
   def connection_model
     case resource
     when Operator then OperatorOidcConnection
-    when Visitor then VisitorOidcConnection
     else ClientOidcConnection
     end
   end

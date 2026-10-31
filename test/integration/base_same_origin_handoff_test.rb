@@ -8,13 +8,11 @@ require "test_helper"
 class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
   SURFACES = [
     { tld: "app", host_env: "PUBLIC_BASE_SERVICE_URL", core_client_id: "core-app-jp" },
-    { tld: "com", host_env: "PUBLIC_BASE_CORPORATE_URL", core_client_id: "core-com-jp" },
     { tld: "org", host_env: "PUBLIC_BASE_STAFF_URL", core_client_id: "core-org-jp" },
   ].freeze
 
   setup do
     ClientIdentityState.ensure_defaults!
-    VisitorIdentityState.ensure_defaults!
     OperatorIdentityState.ensure_defaults!
   end
 
@@ -160,48 +158,6 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
     assert_equal "https://#{visa_host}", jump_payload_from_location(response.location).fetch("iss")
   end
 
-  test "Visa com authorize returns a base-com-ww code to the Base callback through Jump" do
-    base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    visa_host = visa_host_for_tld("com")
-    host! visa_host
-    https!
-    visitor = visitors(:reserved_visitor)
-    token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-      authentication_event_at: Time.current,
-    )
-    access_token = AuthenticationToken.encode(
-      visitor, host: visa_host, session_public_id: token.public_id, resource_type: "visitor",
-               jwt_issuer_id: JitSecurityJwtRegistry.surface("VISA_COM").id,
-    )
-    state = SecureRandom.urlsafe_base64(32)
-
-    get "/oauth/authorize", params: {
-      response_type: "code",
-      client_id: "base-com-ww",
-      redirect_uri: "https://#{base_host}/oidc/callback",
-      scope: "openid profile",
-      state: state,
-      nonce: SecureRandom.urlsafe_base64(32),
-      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest(SecureRandom.urlsafe_base64(48)), padding: false),
-      code_challenge_method: "S256",
-      ri: "jp",
-    }, headers: { "Authorization" => "Bearer #{access_token}" }
-
-    assert_response :found
-    gateway = URI.parse(response.location)
-    callback = URI.parse(jump_rt_url_from_location_for_test(response.location))
-    query = Rack::Utils.parse_nested_query(callback.query)
-
-    assert_equal "jump.umaxica.net", gateway.host
-    assert_equal base_host, callback.host
-    assert_equal "/oidc/callback", callback.path
-    assert_predicate query.fetch("code"), :present?
-    assert_equal state, query.fetch("state")
-    assert_equal "https://#{visa_host}", jump_payload_from_location(response.location).fetch("iss")
-  end
 
   test "Visa org authorize returns a base-org-ww code to the Base callback through Jump" do
     base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")

@@ -15,10 +15,8 @@ authority to invent new state.
 | --- | --------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------- |
 | W8  | Preference explicit update        | Preference write endpoint   | Persist an intentional preference update from PATCH/PUT/DELETE/POST.                                                         | No                            | non-GET preference endpoints                                                                       |
 | W9  | Preference reset/rebootstrap      | Preference reset endpoint   | Retire or replace the current shared preference and rebootstrap a fresh preference.                                          | No                            | explicit reset/delete endpoint                                                                     |
-| W10 | Cookie consent write              | Web/API preference endpoint | Persist cookie-consent flags and reissue preference token state.                                                             | No                            | `/api/v0/preferences/cookie` on Base, Auth, Core, and Warp; Base `/edge/v0/cookie`; preference cookie screens |
-| W11 | Theme write                       | Web/API preference endpoint | Persist theme choice and reissue preference token state.                                                                     | No                            | `/api/v0/preferences/theme` on Base, Auth, Core, and Warp; preference theme screens    |
-| W12 | Login-time adoption               | Authentication lifecycle    | Sync shared App/Org/Com preference values with Client/Operator/Visitor local preference values.                              | No                            | successful login/adoption flow                                                                     |
-| W13 | Com/Visitor adoption              | Authentication lifecycle    | Sync shared Com preference values with Visitor local preference values, symmetric with App/Org adoption.                     | No                            | successful login/adoption flow                                                                     |
+| W10 | Cookie consent write              | Web/API preference endpoint | Persist cookie-consent flags and receipt, then issue the committed Preference snapshot.                                      | No                            | Base app/org/com API and preference cookie screens                                                  |
+| W11 | Theme write                       | Web/API preference endpoint | Persist the submitted theme and issue the committed Preference snapshot.                                                     | No                            | Base app/org/com preference endpoints                                                              |
 | W16 | OIDC callback                     | Protocol callback           | Exchange code, create or update local session/token state, and complete callback lifecycle.                                  | No                            | OIDC callback endpoints                                                                            |
 | W17 | Social/auth callback              | Protocol callback           | Complete external login callback state and create or update local session/token state.                                       | No                            | social/OIDC ceremony callbacks                                                                     |
 | W18 | Maintenance or repair task        | Explicit operator task      | Repair, admin, or maintenance writes performed outside ordinary read-only request handling.                                  | No                            | explicitly invoked tasks only                                                                      |
@@ -29,6 +27,10 @@ returns through read-only preference loading for `GET`/`HEAD`; `transparent_refr
 rejects browser navigation; and authenticated session activity tracking defaults off for
 `GET`/`HEAD`. The preference transport and authentication refresh records are changed only at their
 explicit write endpoints. W16-W17 remain separate protocol-callback write boundaries.
+
+W12 and W13, the former App/Org/Com login-time preference adoption writes, were retired on
+2026-10-31. Visa APP/ORG now performs one-way explicit-field sign-in reflection and a separate
+database-sourced sign-out rebuild through `PreferenceWriteBoundary`; neither is a GET/HEAD exception.
 
 ## CI Direction
 

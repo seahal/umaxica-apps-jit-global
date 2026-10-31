@@ -14,6 +14,8 @@ module PreferenceWebThemeActions
   end
 
   def update
+    return unless require_preference_browser_writer!
+
     theme = requested_theme_value
     if theme.nil?
       render_preference_browser_api_invalid_fields(["/theme"])

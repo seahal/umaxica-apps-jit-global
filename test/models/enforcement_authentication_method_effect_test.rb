@@ -16,13 +16,6 @@ class EnforcementAuthenticationMethodEffectTest < ActiveSupport::TestCase
       principal: -> { clients(:one) },
     },
     {
-      name: "com",
-      effect_model: ComEnforcementAuthenticationMethodEffect,
-      case_model: ComEnforcementCase,
-      method: "passkey",
-      principal: -> { visitors(:reserved_visitor) },
-    },
-    {
       name: "org",
       effect_model: OrgEnforcementAuthenticationMethodEffect,
       case_model: OrgEnforcementCase,

@@ -259,7 +259,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
       { occurred_at: chronicle.occurred_at + 1.second },
       { metadata: {} },
       { actor_type: "Client", actor_id: actor.id },
-      { subject_type: "Visitor" },
+      { subject_type: "Operator" },
       { changeset: { "unexpected" => "change" } },
     ].each do |conflicting|
       # A corrupted durable record is an input to the public purge boundary.
@@ -308,6 +308,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 2.seconds,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
@@ -318,6 +319,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up-for-revocation", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
     )
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,

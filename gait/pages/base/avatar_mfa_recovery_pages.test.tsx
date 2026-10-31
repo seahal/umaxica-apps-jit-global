@@ -11,7 +11,6 @@ vi.mock("@inertiajs/react", () => ({
 
 const { default: OrgAvatarShow } = await import("@/pages/base/org/avatars/show");
 const { default: OrgMfaResetShow } = await import("@/pages/base/org/identity/mfa/resets/show");
-const { default: ComMfaResetShow } = await import("@/pages/base/com/identity/mfa/resets/show");
 const { default: AppRecoverySecretShow } =
   await import("@/pages/base/app/identity/recovery_secrets/show");
 
@@ -83,24 +82,10 @@ describe("base/org AvatarShow", () => {
   });
 });
 
-describe("base/org and base/com MfaResetShow", () => {
+describe("base/org MfaResetShow", () => {
   it("explains on base/org that the reset is unavailable and links back", () => {
     const html = renderToStaticMarkup(
       <OrgMfaResetShow
-        title="Multi factor reset"
-        reset_unavailable="Reset is unavailable."
-        back_link={{ label: "Back", href: "/identity" }}
-      />,
-    );
-
-    expect(html).toContain("Multi factor reset");
-    expect(html).toContain("Reset is unavailable.");
-    expect(html).toContain('href="/identity"');
-  });
-
-  it("explains on base/com that the reset is unavailable and links back", () => {
-    const html = renderToStaticMarkup(
-      <ComMfaResetShow
         title="Multi factor reset"
         reset_unavailable="Reset is unavailable."
         back_link={{ label: "Back", href: "/identity" }}

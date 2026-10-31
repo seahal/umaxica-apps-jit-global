@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Shared withdraw/recovery logic for accounts (Client, Operator, Visitor)
+# Shared withdraw/recovery logic for accounts (Client, Operator)
 module Withdrawable
   extend ActiveSupport::Concern
 

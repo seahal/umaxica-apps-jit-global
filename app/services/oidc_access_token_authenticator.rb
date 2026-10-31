@@ -144,7 +144,6 @@ class OidcAccessTokenAuthenticator < ApplicationService
   def base_session_actor_matches?(base_session, resource)
     case resource_type
     when "operator" then base_session.staff_id == resource.id
-    when "visitor" then base_session.visitor_id == resource.id
     else base_session.user_id == resource.id
     end
   end
@@ -152,7 +151,6 @@ class OidcAccessTokenAuthenticator < ApplicationService
   def resource_class_for_resource_type
     case resource_type
     when "operator" then Operator
-    when "visitor" then Visitor
     else Client
     end
   end
@@ -160,7 +158,6 @@ class OidcAccessTokenAuthenticator < ApplicationService
   def token_class_for_resource_type
     case resource_type
     when "operator" then OperatorToken
-    when "visitor" then VisitorToken
     else ClientToken
     end
   end

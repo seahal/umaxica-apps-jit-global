@@ -246,12 +246,11 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case usage
     when OpAppGrant then "client"
     when OpOrgGrant then "operator"
-    when OpComGrant then "visitor"
     end
   end
 
   def resource_type_for_usage_class(usage_class)
-    { OpAppGrant => "client", OpOrgGrant => "operator", OpComGrant => "visitor" }.fetch(usage_class)
+    { OpAppGrant => "client", OpOrgGrant => "operator" }.fetch(usage_class)
   end
 
   def resolve_refresh_usage
@@ -322,8 +321,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case resource_type
     when "operator"
       Operator.find_by(id: root_token.staff_id) if root_token.is_a?(OperatorToken)
-    when "visitor"
-      Visitor.find_by(id: root_token.visitor_id) if root_token.is_a?(VisitorToken)
     when "client"
       Client.find_by(id: root_token.user_id) if root_token.is_a?(ClientToken)
     end
@@ -465,7 +462,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def oidc_connection_class_for(resource_type)
     case resource_type.to_s
     when "operator" then OperatorOidcConnection
-    when "visitor" then VisitorOidcConnection
     when "client" then ClientOidcConnection
     else
       raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
@@ -685,7 +681,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def authorization_transaction_class_for(resource_type)
     case resource_type.to_s
     when "client" then ClientOidcAuthorizationTransaction
-    when "visitor" then VisitorOidcAuthorizationTransaction
     when "operator" then OperatorOidcAuthorizationTransaction
     else
       raise ArgumentError, "unsupported OIDC authorization resource type: #{resource_type.inspect}"
@@ -716,7 +711,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def surface_for_resource_type(resource_type)
     case resource_type.to_s
     when "client" then "app"
-    when "visitor" then "com"
     when "operator" then "org"
     end
   end
@@ -762,7 +756,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
     case authorization_code.resource_type
     when "operator" then Operator.find_by(public_id: public_id)
-    when "visitor" then Visitor.find_by(public_id: public_id)
     when "client" then Client.find_by(public_id: public_id)
     end
   end
@@ -773,7 +766,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
     case authorization_code.resource_type
     when "operator" then OperatorToken.find_by(public_id: ref)
-    when "visitor" then VisitorToken.find_by(public_id: ref)
     when "client" then ClientToken.find_by(public_id: ref)
     end
   end
@@ -849,7 +841,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def rp_session_class_for(resource_type)
     case resource_type
     when "operator" then OpOrgGrant
-    when "visitor" then OpComGrant
     when "client" then OpAppGrant
     end
   end
@@ -1092,7 +1083,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
   # The grant's root and device-session associations, named per realm.
   def grant_parent_attributes(usage_class, root_token, device_session)
     prefix =
-      { OpAppGrant => "client", OpComGrant => "visitor", OpOrgGrant => "operator" }.fetch(usage_class) do
+      { OpAppGrant => "client", OpOrgGrant => "operator" }.fetch(usage_class) do
         raise ArgumentError, "unsupported RP Session class: #{usage_class.name}"
       end
     { "#{prefix}_token": root_token, "#{prefix}_device_session": device_session }
@@ -1102,7 +1093,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case root_token
     when ClientToken then OpAppGrant
     when OperatorToken then OpOrgGrant
-    when VisitorToken then OpComGrant
     else
       raise ArgumentError, "unsupported root token class: #{root_token.class.name}"
     end
@@ -1154,7 +1144,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def device_session_for_root_token(root_token)
     case root_token
     when ClientToken then ClientDeviceSession.find_by(id: root_token.device_session_id)
-    when VisitorToken then VisitorDeviceSession.find_by(id: root_token.device_session_id)
     when OperatorToken then OperatorDeviceSession.find_by(id: root_token.device_session_id)
     else
       raise ArgumentError, "unsupported root token class: #{root_token.class.name}"
@@ -1165,8 +1154,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case device_session
     when ClientDeviceSession
       device_session.client_tokens.find_by(id: device_session.current_refresh_token_id)
-    when VisitorDeviceSession
-      device_session.visitor_tokens.find_by(id: device_session.current_refresh_token_id)
     when OperatorDeviceSession
       device_session.staff_tokens.find_by(id: device_session.current_refresh_token_id)
     else
@@ -1178,7 +1165,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case root_token
     when ClientToken then resource.is_a?(Client) && root_token.user_id == resource.id
     when OperatorToken then resource.is_a?(Operator) && root_token.staff_id == resource.id
-    when VisitorToken then resource.is_a?(Visitor) && root_token.visitor_id == resource.id
     else false
     end
   end
@@ -1187,7 +1173,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     ttl =
       case root_token
       when OperatorToken then SecurityTokenLifetimes::OPERATOR_REFRESH_TOKEN_TTL
-      when VisitorToken then SecurityTokenLifetimes::VISITOR_REFRESH_TOKEN_TTL
       else SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
       end
     SessionAbsoluteExpiryValue.cap(
@@ -1206,7 +1191,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def connection_class_for(resource_type)
     case resource_type
     when "operator" then OpBaseOrgRecord
-    when "visitor" then OpBaseComRecord
     when "client" then OpBaseAppRecord
     else
       raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
@@ -1229,7 +1213,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def client_for_resource_type(client, resource_type)
-    OidcClientRegistry::VisitorAccount.new(
+    OidcClientRegistry::ClientConfiguration.new(
       client_id: client.client_id,
       client_secret: client.client_secret,
       redirect_uris: client.redirect_uris,
@@ -1264,6 +1248,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def expected_realm_configured?
-    %w(client operator visitor).include?(expected_resource_type.to_s)
+    %w(client operator).include?(expected_resource_type.to_s)
   end
 end

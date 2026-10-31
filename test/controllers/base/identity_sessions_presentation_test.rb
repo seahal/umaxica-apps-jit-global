@@ -6,8 +6,6 @@ require "test_helper"
 class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses,
-           :visitors, :visitor_statuses, :visitor_token_kinds, :visitor_token_statuses,
-           :visitor_token_binding_methods, :visitor_token_dbsc_statuses,
            :operators, :operator_statuses, :operator_token_kinds, :operator_token_statuses,
            :operator_token_binding_methods, :operator_token_dbsc_statuses
 
@@ -56,10 +54,6 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     assert_equal base_app_sessions_path(ri: "jp"), page.fetch("props").dig("back_link", "href")
   end
 
-  test "com session inventory contains only user-facing fields and refuses self-revocation" do
-    assert_session_contract(:com)
-  end
-
   test "org session inventory contains only user-facing fields and refuses self-revocation" do
     assert_session_contract(:org)
   end
@@ -68,17 +62,12 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     assert_expired_session_cannot_authenticate(:app)
   end
 
-  test "com rejects an otherwise valid Access Token after its session absolute expiry" do
-    assert_expired_session_cannot_authenticate(:com)
-  end
-
   test "org rejects an otherwise valid Access Token after its session absolute expiry" do
     assert_expired_session_cannot_authenticate(:org)
   end
 
   def assert_session_contract(surface)
     principal, token, host, resource_type = create_actor_session_token(surface)
-    create_other_com_session(principal) if surface == :com
     create_other_org_session(principal, except: token) if surface == :org
     access_token = authenticate_session(surface, principal, token, host, resource_type)
     open_session do |test_session|
@@ -196,15 +185,6 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
         user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       )
       [principal, token, host, "client"]
-    when :com
-      host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-      principal = visitors(:reserved_visitor)
-      token = VisitorToken.create!(
-        authentication_epoch: 0,
-        visitor: principal, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
-      )
-      [principal, token, host, "visitor"]
     when :org
       host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
       principal = operators(:one)
@@ -217,14 +197,6 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       )
       [principal, token, host, "operator"]
     end
-  end
-
-  def create_other_com_session(visitor)
-    VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
   end
 
   def create_other_org_session(operator, except:)
@@ -247,7 +219,6 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     rp_class, owner_key =
       case surface
       when :app then [OpAppGrant, :client_token]
-      when :com then [OpComGrant, :visitor_token]
       when :org then [OpOrgGrant, :operator_token]
       end
     now = rp_class.database_now

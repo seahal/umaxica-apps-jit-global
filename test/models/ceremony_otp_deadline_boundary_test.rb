@@ -3,7 +3,7 @@
 require "test_helper"
 
 class CeremonyOtpDeadlineBoundaryTest < ActiveSupport::TestCase
-  [ClientEmailCeremonyTransaction, VisitorEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
+  [ClientEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} delivery refuses OTP deadline and nearest representable later instant" do
       transaction = model.create_transaction!(
         actor_ref: "deadline-actor", session_ref: "deadline-browser",
@@ -36,7 +36,7 @@ class CeremonyOtpDeadlineBoundaryTest < ActiveSupport::TestCase
       assert_not transaction.email_otp_deliverable?(generation: transaction.otp_generation, at: deadline + 0.000001)
     end
   end
-  [ClientTelephoneCeremonyTransaction, VisitorTelephoneCeremonyTransaction,
+  [ClientTelephoneCeremonyTransaction,
    OperatorTelephoneCeremonyTransaction,].each do |model|
     test "#{model.name} delivery refuses OTP deadline and nearest representable later instant" do
       transaction = model.create_transaction!(

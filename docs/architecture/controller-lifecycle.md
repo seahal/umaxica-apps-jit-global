@@ -162,14 +162,15 @@ or `Actor.preferences` exposes the needed value. Writes remain in the preference
 surface-specific models because shared preference and actor-local preference are stored separately.
 
 Here, "shared preference" means `AppPreference`, `OrgPreference`, or `ComPreference`: the
-login-independent surface preference state. "Actor-local preference" means `UserPreference`,
-`OperatorPreference`, or `VisitorPreference`: the account-local state for the current runtime actor.
-This is not Rails `session`, and it is not the `Actor` CurrentAttributes object.
+login-independent surface preference state. "Actor-local preference" means `ClientPreference` or
+`OperatorPreference`: the account-local state for the current runtime actor. COM has no actor-local
+preference. This is not Rails `session`, and it is not the `Actor` CurrentAttributes object.
 
-`/preference`, `/setting`, and `/configurator` are distinct URL responsibilities. `/preference` owns
-login-independent preference edits, `/setting` owns signed-in user self-service settings, and
-`/configurator` owns operator-managed configuration. Existing plural `/settings` routes are a
-compatibility gap, not the target language for new route work.
+`/preference`, `/setting`, and `/configurator` have distinct responsibilities. Current surface-local
+`/settings` routes are documented in [`preference.md`](preference.md#url-role-boundary): Auth APP
+and ORG own identity self-service on their Auth hosts, while Base ORG owns its separate management
+entry on the Base ORG host. Shared path text does not share a controller or lifecycle.
+`/configurator` remains the generic path for new operator-managed configuration.
 
 ## Cookie Key Compatibility
 
@@ -191,6 +192,9 @@ registers no callbacks from `included do`; controllers that need locale/timezone
 reflection can rely on `Actor.preferences` being complete. These two gaps are resolved as of the
 2026-07-17 controller-layer audit.
 
-Some preference setup code still has deliberate side effects, including preference token reissue,
-cookie writes, refresh token lifetime updates, and login-time adoption. Those effects should remain
-inside preference/authentication concerns and must not be moved into `set_current_context`.
+Preference persistence effects now run only through the explicit writer boundary: Base owns save and
+reset, while Visa APP/ORG invokes sign-in reflection or sign-out rebuilding after the matching
+authentication transition commits. Preference token and cookie issuance happens only after the
+setting transaction commits. Authentication-token refresh remains an independent authenticated
+protocol; it does not rotate Preference state. Do not move any of these explicit write effects into
+`set_current_context` or ordinary GET/HEAD callbacks.

@@ -4,6 +4,8 @@
 module ActorSupport
   extend ActiveSupport::Concern
 
+  include ::PreferenceRequestOverlay
+
   class ResolutionError < StandardError; end
 
   def current_actor
@@ -213,6 +215,8 @@ module ActorSupport
       token: token,
       requirement: step_up_requirement(scope: scope),
     )
+  rescue ActiveRecord::RecordNotFound
+    raise
   rescue StandardError => e
     raise_actor_resolution_error!(:step_up, e)
   end
@@ -248,9 +252,8 @@ module ActorSupport
   # no Preference JWT cookie, so they fall back to the default preference values
   # (theme sy) plus the request overlay. Actor::Preference::NULL is reserved for
   # an unbound context, not for "visitor has not chosen a theme yet".
-  def resolved_current_preference(resource)
-    cookie = resolved_current_cookie(resource, preference_record: nil)
-
+  def resolved_current_preference(_resource)
+    cookie = Actor::Preference::NULL_COOKIE
     payload_preferences = current_preference_payload_preferences
     if payload_preferences.present?
       return preference_with_request_overlay(
@@ -269,117 +272,6 @@ module ActorSupport
     load_access_token_payload if respond_to?(:load_access_token_payload, true)
     preferences = preference_payload_preferences
     preferences if preferences.is_a?(Hash) && preferences.present?
-  end
-
-  def resolved_current_cookie(resource, preference_record: :__resolve__)
-    preference_record = resolved_resource_preference(resource) if preference_record == :__resolve__
-    if preference_record.present?
-      return Actor::Preference.cookie_from(
-        consented: preference_record.consented,
-        functional: preference_record.functional,
-        performant: preference_record.performant,
-        targetable: preference_record.targetable,
-        consent_version: preference_record.try(:consent_version),
-        consented_at: preference_record.consented_at,
-      )
-    end
-
-    if respond_to?(:preference_payload_preferences, true)
-      payload_preferences = preference_payload_preferences
-      if payload_preferences.is_a?(Hash)
-        return Actor::Preference.cookie_from(
-          consented: payload_preferences["consented"],
-          functional: payload_preferences["functional"],
-          performant: payload_preferences["performant"],
-          targetable: payload_preferences["targetable"],
-          consent_version: payload_preferences["consent_version"],
-          consented_at: payload_preferences["consented_at"],
-        )
-      end
-    end
-
-    Actor::Preference::NULL_COOKIE
-  end
-
-  def resolved_resource_preference(resource)
-    association_name = resource_preference_association_name(resource)
-    return if association_name.blank? || !resource.respond_to?(association_name)
-
-    reset_resource_preference_association(resource, association_name)
-    resource.public_send(association_name)
-  end
-
-  def resource_preference_association_name(resource)
-    return if resource.blank?
-
-    if resource.respond_to?(:operator?) && resource.operator?
-      :staff_preference
-    elsif resource.respond_to?(:visitor?) && resource.visitor?
-      :visitor_preference
-    else
-      :user_preference
-    end
-  end
-
-  def reset_resource_preference_association(resource, association_name)
-    return unless resource.respond_to?(:association)
-
-    resource.association(association_name).reset
-  rescue ActiveRecord::AssociationNotFoundError
-    nil
-  end
-
-  def preference_with_request_overlay(preference)
-    return preference unless respond_to?(:requested_context, true)
-
-    context = requested_context
-    return preference if context.blank?
-
-    Actor::Preference.new(
-      language: overlay_language(context, preference),
-      region: context[:ri] || preference.region,
-      timezone: context[:tz] || preference.timezone,
-      theme: context[:ct] || preference.theme,
-      currency: context[:cu] || preference.currency,
-      date_format: context[:df] || preference.date_format,
-      time_format: context[:tf] || preference.time_format,
-      motion: context[:mo] || preference.motion,
-      density: context[:dn] || preference.density,
-      page_size: context[:ps] || preference.page_size,
-      cookie: preference.cookie,
-      null: preference.null?,
-      explicit_fields: preference.explicit_fields,
-    )
-  end
-
-  # Resolve the request-overlay language.
-  #
-  # Priority:
-  #   1. explicit `lx` param      - the user asked for this language directly
-  #   2. explicitly saved language - a language the user chose on purpose must not
-  #                                  be overridden by a region context param (?ri)
-  #   3. region-derived locale    - seeds the language for users who have not set
-  #                                  one yet (?ri=jp -> ja, ?ri=us -> en)
-  #   4. preference default       - final fallback (default language is "ja")
-  #
-  # Explicitness, not whole-record null?, gates step 2: a hydrated preference is
-  # never null (default child records always exist), so region seeding for unset
-  # users relies on the per-field explicit marker.
-  def overlay_language(context, preference)
-    context[:lx] ||
-      (preference.language_explicit? ? preference.language : nil) ||
-      locale_from_request_region(context[:ri]) ||
-      preference.language
-  end
-
-  def locale_from_request_region(region)
-    return if region.blank?
-    return locale_from_region(region) if respond_to?(:locale_from_region, true)
-
-    {
-      "jp" => "ja",
-      "us" => "en",
-    }[region.to_s.downcase]
   end
 
   def set_current_observability

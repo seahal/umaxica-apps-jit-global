@@ -27,18 +27,6 @@ class CoverageOperatorAuthHarness < ApplicationController
   def record_audit(*) = (@audit_recorded = true)
 end
 
-class CoverageVisitorAuthHarness < ApplicationController
-  include AuthenticationVisitor
-
-  attr_accessor :resource
-
-  def current_resource = resource
-
-  def authenticate! = (@authenticated = true)
-
-  def record_audit(*) = (@audit_recorded = true)
-end
-
 class CoverageThresholdAuthenticationHelpersTest < ActiveSupport::TestCase
   def active_double(active)
     Object.new.tap do |object|
@@ -78,19 +66,4 @@ class CoverageThresholdAuthenticationHelpersTest < ActiveSupport::TestCase
     assert_not_predicate harness, :am_i_owner?
   end
 
-  test "visitor authentication concern exposes current and active visitor predicates" do
-    harness = CoverageVisitorAuthHarness.new
-
-    assert_nil harness.current_visitor
-    assert_not_predicate harness, :logged_in_visitor?
-    assert_not_predicate harness, :active_visitor?
-    harness.resource = active_double(true)
-
-    assert_same harness.resource, harness.current_visitor
-    assert_predicate harness, :logged_in_visitor?
-    assert_predicate harness, :active_visitor?
-    assert_not_predicate harness, :am_i_user?
-    assert_not_predicate harness, :am_i_staff?
-    assert_not_predicate harness, :am_i_owner?
-  end
 end

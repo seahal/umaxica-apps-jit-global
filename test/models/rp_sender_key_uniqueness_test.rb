@@ -5,13 +5,10 @@ require "test_helper"
 class RpSenderKeyUniquenessTest < ActiveSupport::TestCase
   CELLS = [
     [RpBaseAppEventReceipt, RpBaseAppOpSessionBinding, RpBaseAppIdentityBinding, RpBaseAppPrincipal],
-    [RpBaseComEventReceipt, RpBaseComOpSessionBinding, RpBaseComIdentityBinding, RpBaseComPrincipal],
     [RpBaseOrgEventReceipt, RpBaseOrgOpSessionBinding, RpBaseOrgIdentityBinding, RpBaseOrgPrincipal],
     [RpCoreAppEventReceipt, RpCoreAppOpSessionBinding, RpCoreAppIdentityBinding, RpCoreAppPrincipal],
-    [RpCoreComEventReceipt, RpCoreComOpSessionBinding, RpCoreComIdentityBinding, RpCoreComPrincipal],
     [RpCoreOrgEventReceipt, RpCoreOrgOpSessionBinding, RpCoreOrgIdentityBinding, RpCoreOrgPrincipal],
     [RpWarpAppEventReceipt, RpWarpAppOpSessionBinding, RpWarpAppIdentityBinding, RpWarpAppPrincipal],
-    [RpWarpComEventReceipt, RpWarpComOpSessionBinding, RpWarpComIdentityBinding, RpWarpComPrincipal],
     [RpWarpOrgEventReceipt, RpWarpOrgOpSessionBinding, RpWarpOrgIdentityBinding, RpWarpOrgPrincipal],
     [RpPalmAppEventReceipt, RpPalmAppOpSessionBinding, RpPalmAppIdentityBinding, RpPalmAppPrincipal],
     [RpTechOrgEventReceipt, RpTechOrgOpSessionBinding, RpTechOrgIdentityBinding, RpTechOrgPrincipal],

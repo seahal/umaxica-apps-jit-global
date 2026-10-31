@@ -1,0 +1,7 @@
+# Email OTP queue refusal
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contained uncommitted changes affecting the result.
+- The installed Noticed ephemeral delivery method ignores the result of its delivery job's `perform_later` and returns the notifier. An injected false return was therefore treated as success by the APP notifier (1 run, 1 assertion, 1 failure before the change).
+- APP and ORG OTP notifiers now validate the Noticed configuration, use the existing email delivery entry point with its recipient context, and raise `ActiveJob::EnqueueError` if the configured enqueue is refused. They require exactly the existing single email delivery. A nontransactional APP signup resend test confirmed a refused enqueue retained the new Ticket generation and Source cooldown and did not write the email-enqueued Chronicle event.
+- `PARALLEL_WORKERS=1 bin/rails test test/notifiers/notify/otp_notifiers_test.rb test/notifiers/notify/email_sign_up_otp_delivery_test.rb test/notifiers/notify/email_reentry_otp_delivery_test.rb test/operations/sign_up_otp_delivery_concurrency_test.rb test/operations/email_sign_up_otp_issuer_test.rb test/mailers/email/auth_email_otp_delivery_binding_test.rb` passed: 48 runs, 415 assertions, no failures or errors. Scoped RuboCop passed after whitespace correction.
+- The refusal was simulated; actual queue failure, the required HTTP 503, the initial signup progress/issuance transaction, and deferred enqueue behavior under external transactions were not tested or resolved.

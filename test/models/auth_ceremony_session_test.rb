@@ -6,7 +6,6 @@ require "test_helper"
 class AuthCeremonySessionTest < ActiveSupport::TestCase
   CASES = [
     ClientAuthCeremonySession,
-    VisitorAuthCeremonySession,
     OperatorAuthCeremonySession,
   ].freeze
 

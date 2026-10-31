@@ -4,9 +4,9 @@ require "test_helper"
 
 class CeremonyOtpFiniteDeadlineTest < ActiveSupport::TestCase
   [
-    [ClientEmailCeremonyTransaction, :email], [VisitorEmailCeremonyTransaction, :email],
+    [ClientEmailCeremonyTransaction, :email],
     [OperatorEmailCeremonyTransaction, :email], [ClientTelephoneCeremonyTransaction, :telephone],
-    [VisitorTelephoneCeremonyTransaction, :telephone], [OperatorTelephoneCeremonyTransaction, :telephone],
+    [OperatorTelephoneCeremonyTransaction, :telephone],
   ].each do |model, channel|
     test "#{model.name} infinite parent or proof deadlines cannot admit delivery or verification" do
       %i(expires_at otp_expires_at).product([Float::INFINITY, -Float::INFINITY]).each do |column, invalid_deadline|

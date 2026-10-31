@@ -1,11 +1,4 @@
-# == Schema Information
-#
-# Table name: org_preference_statuses
-# Database name: org_setting
-#
-#  id :bigint           not null, primary key
-#
-nothing:
+active:
   id: 2
-deleted:
+retired:
   id: 1

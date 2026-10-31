@@ -81,7 +81,7 @@ class OperatorTelephoneLegacyReferenceInventoryTest < ActiveSupport::TestCase
   end
 
   test "inventory refuses absent and other realm or channel scopes" do
-    [nil, ClientTelephoneCeremonyTransaction.all, VisitorTelephoneCeremonyTransaction.all,
+    [nil, ClientTelephoneCeremonyTransaction.all,
      OperatorEmailCeremonyTransaction.all, OperatorTelephone.all,].each do |scope|
       assert_raises(ArgumentError) { OperatorTelephoneLegacyReferenceInventory.call(scope: scope) }
     end

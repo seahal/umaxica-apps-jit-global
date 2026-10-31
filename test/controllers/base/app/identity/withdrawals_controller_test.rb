@@ -137,14 +137,16 @@ class Base::App::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
     assert_response :success
     assert_equal "Early personal data erasure", inertia_props.fetch("title")
 
-    assert_difference("ClientPrivacyRequest.count", 1) do
+    assert_no_difference("ClientPrivacyRequest.count") do
       post base_app_identity_privacy_erasure_url(ri: "jp", host: @host), headers: { "Host" => @host }
     end
+
+    assert_response :forbidden
 
     get base_app_identity_privacy_erasure_status_url(ri: "jp", host: @host), headers: { "Host" => @host }
 
     assert_response :success
-    assert_predicate inertia_props.fetch("privacy_request"), :present?
+    assert_nil inertia_props.fetch("privacy_request")
   end
 
   test "the withdrawal ceremony session can be ended from the recovery page" do

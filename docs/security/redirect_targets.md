@@ -35,6 +35,9 @@ Rails MUST classify the final destination against the initiating surface before 
 | Any other external website | Away through `https://away.umaxica.net`, subject to explicit destination authorization. |
 
 Subdomain changes remain separate trust boundaries even when both hosts are owned by Umaxica.
+The current `CommonRedirect` surface redirect checks scheme, host and effective port before
+converting an absolute URL to a local path. Other absolute destinations enter its existing Jump
+path; this does not implement the pending Away gateway selection described above.
 Sharing only a TLD is insufficient to qualify for Jump: `umaxica.app` and `example.app` are separate
 domains. Classification MUST use normalized, explicitly registered application domains and exact
 origin matching, rather than substring tests or a guessed last-two-label domain. Scheme or port

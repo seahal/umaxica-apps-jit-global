@@ -38,13 +38,6 @@ class BaseOauthTokenRateLimitTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "base com oauth token endpoint rate limits repeated requests" do
-    assert_token_endpoint_rate_limit(
-      host: visa_host_for_test_surface(:com),
-      url_helper: ->(host:) { visa_com_oauth_token_url(host: host) },
-    )
-  end
-
   test "base org oauth token endpoint rate limits repeated requests" do
     assert_token_endpoint_rate_limit(
       host: visa_host_for_test_surface(:org),

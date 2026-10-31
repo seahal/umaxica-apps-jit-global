@@ -25,7 +25,6 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
   test "core route contract accepts the private ingress alias alongside the public host" do
     aliases = {
       "PRIVATE_CORE_SERVICE_URL" => ["core-service.private.example", "core/app"],
-      "PRIVATE_CORE_CORPORATE_URL" => ["core-corporate.private.example", "core/com"],
       "PRIVATE_CORE_STAFF_URL" => ["core-staff.private.example", "core/org"],
     }
 
@@ -47,12 +46,10 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
   test "core route contract still accepts the public host while the private alias is set" do
     with_env(
       "PRIVATE_CORE_SERVICE_URL" => "core-service.private.example",
-      "PRIVATE_CORE_CORPORATE_URL" => "core-corporate.private.example",
       "PRIVATE_CORE_STAFF_URL" => "core-staff.private.example",
     ) do
       {
         CORE_APP_HOST => "core/app",
-        CORE_COM_HOST => "core/com",
         CORE_ORG_HOST => "core/org",
       }.each do |host, module_prefix|
         assert_recognizes(
@@ -77,7 +74,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
   end
 
   test "core surfaces do not expose dashboards" do
-    [CORE_APP_HOST, CORE_COM_HOST, CORE_ORG_HOST, CORE_NET_HOST, CORE_DEV_HOST].each do |host|
+    [CORE_APP_HOST, CORE_ORG_HOST, CORE_NET_HOST, CORE_DEV_HOST].each do |host|
       assert_raises(ActionController::RoutingError) do
         Rails.application.routes.recognize_path("http://#{host}/dashboard", method: :get)
       end
@@ -138,11 +135,6 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "core/app/api/v0/preferences/themes", action: "update" },
       { path: "http://#{CORE_APP_HOST}/api/v0/preferences/theme", method: :patch },
-    )
-
-    assert_recognizes(
-      { controller: "core/app/api/v0/preferences/dbsc", action: "create" },
-      { path: "http://#{CORE_APP_HOST}/api/v0/preferences/dbsc", method: :post },
     )
 
     assert_recognizes(
@@ -217,136 +209,22 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "core com route contract" do
+  test "core com host is unclaimed" do
     assert_recognizes(
-      { controller: "core/com/roots", action: "index" },
+      { controller: "unknown_hosts", action: "show" },
       { path: "http://#{CORE_COM_HOST}/", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "core/com/well_known/jwks", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/.well-known/jwks.json", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/healths", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/health", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/health/livenesses", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/health/liveness", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/health/readinesses", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/health/readiness", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/health/startups", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/health/startup", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/csp_violation_reports", action: "create" },
-      { path: "http://#{CORE_COM_HOST}/csp-violation-report", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/preferences/cookies", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/preferences/cookie", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/preferences/cookies", action: "update" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/preferences/cookie", method: :patch },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/preferences/themes", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/preferences/theme", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/preferences/themes", action: "update" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/preferences/theme", method: :patch },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/preferences/dbsc", action: "create" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/preferences/dbsc", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/sessions", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/session", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/api/v0/token/refreshes", action: "create" },
-      { path: "http://#{CORE_COM_HOST}/api/v0/token/refresh", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/oidc/callback", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/sign/entries", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/sign", method: :get },
-    )
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sign/callback", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/oidc/authorization", method: :get)
-    end
-
-    assert_recognizes(
-      { controller: "core/com/sign/outs", action: "new" },
-      { path: "http://#{CORE_COM_HOST}/sign/out/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/sign/outs", action: "edit" },
-      { path: "http://#{CORE_COM_HOST}/sign/out/edit", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "core/com/sign/outs", action: "create" },
-      { path: "http://#{CORE_COM_HOST}/sign/out", method: :post },
-    )
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sign/out/complete", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sign/out", method: :delete)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sso/authorize", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sso/logout", method: :post)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/auth/acme", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/auth/acme/callback", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/oidc/backchannel/logout", method: :post)
+    [
+      "/health",
+      "/health/liveness",
+      "/api/v0/preferences/theme",
+      "/api/v0/preferences/cookie",
+      "/.well-known/jwks.json",
+    ].each do |path|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}#{path}", method: :get)
+      end
     end
   end
 
@@ -404,11 +282,6 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "core/org/api/v0/preferences/themes", action: "update" },
       { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/theme", method: :patch },
-    )
-
-    assert_recognizes(
-      { controller: "core/org/api/v0/preferences/dbsc", action: "create" },
-      { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/dbsc", method: :post },
     )
 
     assert_recognizes(
@@ -675,7 +548,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
   end
 
   test "core rails remains transitional and does not expose authorization server endpoints" do
-    [CORE_APP_HOST, CORE_COM_HOST, CORE_ORG_HOST, CORE_NET_HOST, CORE_DEV_HOST].each do |host|
+    [CORE_APP_HOST, CORE_ORG_HOST, CORE_NET_HOST, CORE_DEV_HOST].each do |host|
       %w(/authorize /token /userinfo /jwks /oauth/authorize /oauth/token /oauth/userinfo /oauth/jwks).each do |path|
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)

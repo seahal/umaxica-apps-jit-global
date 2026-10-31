@@ -117,19 +117,14 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     gateway = URI.parse(response.location)
     jump_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     auth_location = jump_payload.fetch("url")
-    reference = Rack::Utils.parse_query(URI.parse(auth_location).query).fetch("entry_ref")
     auth_browser = open_session
     auth_browser.https!
     auth_browser.host!(@auth_host)
     auth_browser.get(auth_location)
 
-    admission_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
-    csrf = admission_form.at_css('input[name="authenticity_token"]')["value"]
-    auth_browser.post(
-      admission_form["action"], params: {
-        entry_ref: reference, authenticity_token: csrf,
-      },
-    )
+    assert_equal [303, "/ceremony_bindings"],
+                 [auth_browser.response.status, URI.parse(auth_browser.response.location).path]
+    auth_browser.get(auth_browser.response.location)
 
     assert_equal 303, auth_browser.response.status
     confirmation = URI.parse(auth_browser.response.location)
@@ -144,13 +139,8 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
                                  )
 
     auth_browser.get(response.location)
-    continuation = auth_browser.response.parsed_body.at_css("form")
-    continuation_fields = continuation.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-    auth_browser.post(
-      continuation["action"], params: continuation_fields,
-                              headers: { "Origin" => "https://#{@auth_host}", "Sec-Fetch-Site" => "same-origin" },
-    )
 
+    assert_equal 303, auth_browser.response.status
     auth_browser.get(new_auth_org_verification_passkey_path(ri: "jp"))
 
     page = Nokogiri::HTML(auth_browser.response.body)
@@ -159,7 +149,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.response = { "success" => true }
     auth_browser.post(
       panel.fetch("options_url"), params: { "cf-turnstile-response" => "test-only" },
-                                  headers: { "X-CSRF-Token" => csrf }, as: :json,
+                                  as: :json,
     )
 
     assert_equal 200, auth_browser.response.status
@@ -169,7 +159,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     auth_browser.post(
       panel.fetch("verification_url"),
       params: { credential: assertion, challenge_id: options.fetch("challenge_id") },
-      headers: { "X-CSRF-Token" => csrf }, as: :json,
+      as: :json,
     )
 
     assert_equal 200, auth_browser.response.status
@@ -184,8 +174,8 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     )
 
     assert_equal 303, auth_browser.response.status
-    assert_nil auth_browser.cookies[AuthenticationCookieName.access]
-    assert_nil auth_browser.cookies[AuthenticationCookieName.refresh]
+    assert_equal [nil, nil], [auth_browser.cookies[AuthenticationCookieName.access],
+                              auth_browser.cookies[AuthenticationCookieName.refresh],]
     completion = URI.parse(auth_browser.response.location)
     get completion.request_uri, headers: base_headers
     result_form = response.parsed_body.at_css("form")
@@ -205,8 +195,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     assert_equal screen_path, URI.parse(response.location).request_uri
     assert_equal "consumed", transaction.reload.status
     assert_equal transaction.verified_at, @token.reload.last_step_up_at
-    assert_equal "support_session_revoke", @token.last_step_up_scope
-    assert_equal "step_up:org", @token.last_step_up_audience
+    assert_equal ["support_session_revoke", "step_up:org"], [@token.last_step_up_scope, @token.last_step_up_audience]
     assert_equal @token.public_id, @token.last_step_up_session_public_id
     assert_equal "passkey", @token.last_step_up_method
     assert_equal "aal1", @token.last_step_up_aal
@@ -371,6 +360,63 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :forbidden
+  end
+
+  test "an Emergency session cannot execute protected support revocation" do
+    [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
+     OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
+      OperatorCapabilityGrant.create!(
+        operator: @operator, origin: "bootstrap", capability: capability,
+        reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
+      )
+    end
+    @token.update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    access = AuthenticationToken.encode(
+      @operator, host: @base_host, session_public_id: @token.public_id,
+                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+    )
+    headers = { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
+    rp_client = OidcClientRegistry.find!("base-org-ww")
+    rp_root = @token.reload
+    rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
+    rp_record = OpOrgGrant.find_by(
+      device_session_id: rp_root.device_session_id,
+      oidc_client_id: rp_client.client_id,
+      revoked_at: nil,
+    )
+    rp_record ||= OpOrgGrant.create!(
+      authentication_epoch: 0,
+      operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
+      refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
+    )
+    rp_access = AuthenticationTokenService.encode(
+      @operator, host: @base_host, resource_type: "operator", session_public_id: rp_root.public_id,
+                 base_session_public_id: rp_root.public_id, oidc_sid: rp_record.public_id, oidc_jti: rp_record.oidc_jti,
+                 expires_at: OpOrgGrant.database_now + 10.minutes, scopes: %w(openid profile),
+                 issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: rp_client.client_id,
+    )
+    headers["Cookie"] = "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(access)}; " \
+                        "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}; " \
+                        "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_record.issue_refresh_token!)}"
+
+    target_session = ClientToken.create!(authentication_epoch: 0, user: @client)
+    mutation_browser = open_session
+    mutation_browser.https!
+    assert_no_difference -> { OperatorStepUpCeremonyTransaction.count } do
+      mutation_browser.post(
+        base_org_support_client_revocations_url(@client.public_id, host: @base_host),
+        params: { reason_code: "security_incident", operation_id: SecureRandom.uuid }, headers: headers,
+      )
+    end
+
+    assert_equal 403, mutation_browser.response.status
+    assert_not_predicate target_session.reload, :revoked?
+    assert_nil @token.reload.last_step_up_at
   end
 
   %i(session surface).each do |mismatch|

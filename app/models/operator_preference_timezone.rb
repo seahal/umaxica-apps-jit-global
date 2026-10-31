@@ -23,10 +23,10 @@
 #  fk_staff_preference_timezones_on_preference_id  (preference_id => operator_preferences.id)
 #
 class OperatorPreferenceTimezone < OrgPrincipalRecord
-  belongs_to :preference, class_name: "OperatorPreference", inverse_of: :staff_preference_timezone
+  belongs_to :preference, class_name: "OperatorPreference", inverse_of: :operator_preference_timezone
   belongs_to :option,
              class_name: "OperatorPreferenceTimezoneOption",
-             inverse_of: :staff_preference_timezones
+             inverse_of: :operator_preference_timezones
   validates :preference_id, uniqueness: true
   before_validation :set_option_id
 

@@ -57,8 +57,8 @@ module RuntimeRole
   end
 
   # Private signing material an RP cell process may hold (one.md section 1: "RP execution has no OP
-  # signing key"): its own private_key_jwt client key, its surface's Jump RT key, and the
-  # preference cookie keyset every surface signs with. Public keysets are not restricted.
+  # signing key"): its own private_key_jwt client key and its surface's Jump RT key. Preference
+  # JWTs are signed only through Base/Visa writers; RP readers receive public keysets only.
   def rp_private_env_names(name = current)
     raise UnknownRole, "#{name} is not an RP cell role" unless RP_ROLES.include?(name)
 
@@ -68,7 +68,6 @@ module RuntimeRole
     [
       "OIDC_CLIENT_#{client_namespace.upcase}_PRIVATE_KEY",
       "JWT_#{surface_namespace.upcase}_PRIVATE_KEY",
-      "PREFERENCE_JWT_PRIVATE_KEYSET",
     ].freeze
   end
 
@@ -104,7 +103,7 @@ module RuntimeRole
   BASE_RP_PREFIXES = %w(
     sign/entries sign/interruptions oidc/callbacks oidc/closures sign/cookie_purges roots
     switchers accounts organizations avatars avatar_ownership_transfers dashboard_avatar_images groups
-    group_avatar_memberships billing billings iam support audit configurations system
+    group_avatar_memberships billing billings iam support audit settings system
     identity identities verification verifications secrets secret_issuances secret_presentations
     selectors welcomes social sign_outs api/v0/identity api/v0/membership
   ).freeze

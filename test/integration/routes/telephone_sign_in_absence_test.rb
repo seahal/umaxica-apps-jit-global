@@ -9,10 +9,9 @@ require "test_helper"
 class TelephoneSignInAbsenceTest < ActionDispatch::IntegrationTest
   AUTH_HOSTS = [
     ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-    ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
   ].freeze
 
-  test "sign-in telephone otp endpoint is not routable on any auth surface" do
+  test "sign-in telephone otp endpoint is not routable on the app auth surface" do
     AUTH_HOSTS.each do |host|
       assert_raises(ActionController::RoutingError, "telephone sign-in OTP is routable on #{host}") do
         Rails.application.routes.recognize_path(
@@ -23,7 +22,7 @@ class TelephoneSignInAbsenceTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "sign-in email otp endpoint stays routable on every auth surface" do
+  test "sign-in email otp endpoint stays routable on the app auth surface" do
     AUTH_HOSTS.each do |host|
       recognized = Rails.application.routes.recognize_path(
         "http://#{host}/web/v0/in/email/otp",
@@ -31,7 +30,7 @@ class TelephoneSignInAbsenceTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal "create", recognized[:action]
-      assert_match(%r{\Aauth/(app|com)/web/v0/in/email/otps\z}, recognized[:controller])
+      assert_equal "auth/app/web/v0/in/email/otps", recognized[:controller]
     end
   end
 

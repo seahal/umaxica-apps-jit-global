@@ -7,6 +7,18 @@ require "test_helper"
 class Email::SurfaceMailersTest < ActionMailer::TestCase
   include ActiveJob::TestHelper
 
+  test "APP and ORG OTP messages bound to SMTP use the deadline transport" do
+    [Email::App::OtpMailer, Email::Org::OtpMailer].each do |mailer|
+      mailer.stub(:delivery_method, :smtp) do
+        message = mailer.with(
+          encrypted_hotp_token: encrypted_otp("123456"), email_address: "recipient@example.test",
+        ).create.message
+
+        assert_instance_of OtpSmtpDelivery, message.delivery_method
+      end
+    end
+  end
+
   test "app otp mailer sends verification code from app sender" do
     mail = Email::App::OtpMailer.with(
       encrypted_hotp_token: encrypted_otp("123456"),
@@ -44,34 +56,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
     assert_not_includes mail.subject, "123456"
   end
 
-  test "com otp mailer sends verification code from com sender" do
-    mail = Email::Com::OtpMailer.with(
-      encrypted_hotp_token: encrypted_otp("654321"),
-      email_address: "visitor@example.com",
-    ).create
-
-    assert_equal I18n.t("mail.email.com.otp_mailer.create.subject"), mail.subject
-    assert_equal ["visitor@example.com"], mail.to
-    assert_equal ["otp@umaxica.com"], mail.from
-    assert_match "654321", mail.text_part.body.decoded
-  end
-
-  test "com sign-up and sign-in otp mails use the matching purpose-specific subjects" do
-    {
-      sign_up: "mail.email.com.otp_mailer.create.subjects.sign_up",
-      sign_in: "mail.email.com.otp_mailer.create.subjects.sign_in",
-    }.each do |purpose, translation_key|
-      mail = Email::Com::OtpMailer.with(
-        encrypted_hotp_token: encrypted_otp("654321"),
-        email_address: "visitor@example.com",
-        purpose: purpose,
-      ).create
-
-      assert_equal I18n.t(translation_key), mail.subject
-      assert_not_includes mail.subject, "654321"
-    end
-  end
-
   test "org otp mailer sends verification code from org sender" do
     mail = Email::Org::OtpMailer.with(
       encrypted_hotp_token: encrypted_otp("999888"),
@@ -89,9 +73,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
       [Email::App::OtpMailer, "mail-app-public-id", "app-token",
        ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
        "/identity/emails/registration/edit",],
-      [Email::Com::OtpMailer, "mail-com-public-id", "com-token",
-       ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-       "/identity",],
       [Email::Org::OtpMailer, "mail-org-public-id", "org-token", ENV.fetch("PUBLIC_BASE_STAFF_URL"),
        "/identity",],
     ].each do |mailer, public_id, token, host, path|
@@ -129,7 +110,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
   test "alert mailers send a generic alert payload per surface" do
     [
       [Email::App::AlertMailer, "alert@umaxica.app"],
-      [Email::Com::AlertMailer, "alert@umaxica.com"],
       [Email::Org::AlertMailer, "alert@umaxica.org"],
     ].each do |mailer, sender|
       mail = mailer.with(email_address: "target@example.com", title: "Alert title", body: "Alert body").notice
@@ -144,7 +124,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
   test "promotional mailers send from promotional addresses per surface" do
     [
       [Email::App::PromotionalMailer, "promotion@umaxica.app"],
-      [Email::Com::PromotionalMailer, "promotion@umaxica.com"],
       [Email::Org::PromotionalMailer, "promotion@umaxica.org"],
     ].each do |mailer, sender|
       mail = mailer.with(
@@ -165,7 +144,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
   test "promotional mailers omit unsafe cta urls" do
     [
       Email::App::PromotionalMailer,
-      Email::Com::PromotionalMailer,
       Email::Org::PromotionalMailer,
     ].each do |mailer|
       mail = mailer.with(
@@ -184,7 +162,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
   test "promotional mailers omit cta urls with credentials" do
     [
       Email::App::PromotionalMailer,
-      Email::Com::PromotionalMailer,
       Email::Org::PromotionalMailer,
     ].each do |mailer|
       mail = mailer.with(
@@ -202,7 +179,6 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
   test "promotional mailers can set unsubscribe headers per surface" do
     [
       [Email::App::PromotionalMailer, ClientEmail.new(public_id: "app-email-public-id"), "promotion@umaxica.app"],
-      [Email::Com::PromotionalMailer, VisitorEmail.new(public_id: "com-email-public-id"), "promotion@umaxica.com"],
       [Email::Org::PromotionalMailer, OperatorEmail.new(public_id: "org-email-public-id"), "promotion@umaxica.org"],
     ].each do |mailer, email_record, sender|
       mail = mailer.with(

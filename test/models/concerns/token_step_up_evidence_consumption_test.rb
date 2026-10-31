@@ -25,16 +25,6 @@ class TokenStepUpEvidenceConsumptionTest < ActiveSupport::TestCase
     end
   end
 
-  test "COM evidence authorizes one operation and a second consumption is refused" do
-    token = evidence_token(visitor)
-
-    token.consume_step_up_evidence!(requirement: requirement(token), now: NOW)
-
-    assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
-      token.consume_step_up_evidence!(requirement: requirement(token), now: NOW)
-    end
-  end
-
   test "ORG evidence authorizes one operation and a second consumption is refused" do
     token = evidence_token(operator, method: "passkey")
 
@@ -110,8 +100,6 @@ class TokenStepUpEvidenceConsumptionTest < ActiveSupport::TestCase
   private
 
   def client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-
-  def visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
   def operator
     Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)

@@ -12,7 +12,7 @@ class OidcOpIdTokenVerifier
   ALGORITHM = "ES384"
   TOKEN_TYPE = "id-token+jwt"
   REQUIRED_CLAIMS = %w(iss aud exp nbf iat sub nonce jti sid typ act).freeze
-  RESOURCE_TYPE_BY_REALM = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
+  RESOURCE_TYPE_BY_REALM = { "app" => "client", "org" => "operator" }.freeze
   CLOCK_SKEW_LEEWAY_SECONDS = 30
 
   def initialize(id_token:, client_id:, realm:, issuer:, expected_nonce:, jwks_client:,

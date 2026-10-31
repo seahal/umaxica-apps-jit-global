@@ -13,7 +13,6 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
     ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
     ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
     ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-    ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
     ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
     ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
     ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),

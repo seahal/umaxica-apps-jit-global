@@ -545,6 +545,8 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
         assert_equal OperatorTelephoneStatus::UNVERIFIED, telephone.reload.staff_telephone_status_id
         assert_nil issued.transaction.reload.consumed_at
       when "ticket_fault"
+        original_step_up_at = @token.reload.last_step_up_at
+
         issued.transaction.stub(:consume_registration_result!, -> { raise ActiveRecord::StatementInvalid }) do
           assert_raises(ActiveRecord::StatementInvalid) do
             OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
@@ -553,6 +555,10 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
 
         assert_equal OperatorTelephoneStatus::VERIFIED, telephone.reload.staff_telephone_status_id
         assert_nil issued.transaction.reload.consumed_at
+        assert_equal original_step_up_at, @token.reload.last_step_up_at
+        assert_predicate StepUpResolver.call(
+          token: @token, requirement: arguments.fetch(:requirement), now: @token.class.database_now,
+        ), :satisfied?
         assert_equal :finalized, OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
         assert_predicate issued.transaction.reload, :consumed?
         deadline = issued.transaction.otp_result_expires_at

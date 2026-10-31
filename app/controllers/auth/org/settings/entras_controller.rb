@@ -18,6 +18,9 @@ module Auth
       # all, decided the same way Auth::Org::Social::SessionsController decides
       # it so that a kill switch closes both entry points together.
       class EntrasController < ::Auth::Org::ApplicationController
+        # D-59: the settings surface shows the Entra link; it is not a Sign Entry.
+        sign_entry_classification! :excluded, reason: "signed-in settings surface, not a sign entry"
+
         include ::SurfaceInertiaPage
         include ::ExternalAuthenticationEndpoint
 

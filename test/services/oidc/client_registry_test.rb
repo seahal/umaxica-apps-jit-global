@@ -104,7 +104,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   test "valid_post_logout_redirect_uri? binds registered uris to the requesting realm" do
     clients_by_realm = {
       "client" => OidcClientRegistry.find!("core-app-jp"),
-      "visitor" => OidcClientRegistry.find!("core-com-jp"),
       "operator" => OidcClientRegistry.find!("core-org-jp"),
     }
 
@@ -178,25 +177,23 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "all expected clients are registered" do
     expected = %w(
-      core-app-jp core-com-jp core-org-jp warp-app-jp warp-com-jp warp-org-jp edit-org-ww palm-app-jp tech-org-ww
+      core-app-jp core-org-jp warp-app-jp warp-org-jp edit-org-ww palm-app-jp tech-org-ww
     )
 
     expected.each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
-      assert_not_nil client, "VisitorAccount #{client_id} should be registered"
-      assert_predicate client.redirect_uris, :present?, "VisitorAccount #{client_id} should have redirect_uris"
-      assert_predicate client.aud, :present?, "VisitorAccount #{client_id} should have aud"
+      assert_not_nil client, "ClientConfiguration #{client_id} should be registered"
+      assert_predicate client.redirect_uris, :present?, "ClientConfiguration #{client_id} should have redirect_uris"
+      assert_predicate client.aud, :present?, "ClientConfiguration #{client_id} should have aud"
     end
   end
 
   test "clients expose explicit allowed scopes" do
     expectations = {
       "core-app-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "core-com-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "core-org-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "warp-app-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "warp-com-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "warp-org-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "edit-org-ww" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "palm-app-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
@@ -223,14 +220,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "client", client.resource_type, "#{client_id} should be client type"
-    end
-  end
-
-  test "com clients have visitor resource_type" do
-    %w(core-com-jp warp-com-jp).each do |client_id|
-      client = OidcClientRegistry.find(client_id)
-
-      assert_equal "visitor", client.resource_type, "#{client_id} should be visitor type"
     end
   end
 
@@ -375,7 +364,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   private
 
   def visitor_account(overrides = {})
-    OidcClientRegistry::VisitorAccount.new(
+    OidcClientRegistry::ClientConfiguration.new(
       client_id: "test_client",
       client_secret: "secret",
       redirect_uris: ["https://client.example/auth/callback"],

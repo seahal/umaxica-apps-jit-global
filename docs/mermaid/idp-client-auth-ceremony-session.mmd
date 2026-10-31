@@ -28,3 +28,8 @@ stateDiagram-v2
         TTL expiry makes active? false without a state write.
         rotate_and_admit! starts a replacement row admitted.
     end note
+    note right of cancelled
+        App Switch locks parent then session, rechecks
+        progress, and commits cancellation only after
+        its handoff has been generated successfully.
+    end note

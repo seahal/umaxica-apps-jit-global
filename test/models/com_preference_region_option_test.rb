@@ -13,7 +13,7 @@ require "test_helper"
 
 class ComPreferenceRegionOptionTest < ActiveSupport::TestCase
   setup do
-    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::NOTHING)
+    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::ACTIVE)
   end
 
   test "can be created" do
@@ -24,7 +24,11 @@ class ComPreferenceRegionOptionTest < ActiveSupport::TestCase
 
   test "has many com_preference_regions" do
     option = ComPreferenceRegionOption.create!(id: 99)
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     region = ComPreferenceRegion.create!(preference: preference, option: option)
 
     assert_includes option.com_preference_regions, region
@@ -32,7 +36,11 @@ class ComPreferenceRegionOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = ComPreferenceRegionOption.create!(id: 99)
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     ComPreferenceRegion.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

@@ -51,22 +51,26 @@ previously shipped as defects, so static tests reject their reintroduction.
 - RP IDs differ across app/com/org, so one authenticator creates separate credentials for each
   surface. Cross-surface credential sharing and duplication do not occur within this architecture;
   see `docs/security/webauthn-rp-id-origin-boundary.md`.
+- The com surface issues no Passkey ceremony after the WU-3 anonymous-com change. Its RP
+  configuration keys and surface value remain for the other surfaces' separation checks, but no
+  com route reaches them.
 
 ## Discoverable Direct Sign-in
 
-- App and com direct Passkey options are anonymous and do not accept an identifier as an account
-  selection input. Their `allowCredentials` response is empty (or omitted by the serializer), so
-  no real credential ID, credential count, credential length, or account/Passkey existence is
-  disclosed during options issuance.
-- Direct app/com verification resolves the surface-local passkey from the assertion credential ID,
-  then verifies the assertion with that row's saved public key. The browser's `userHandle`, any
-  submitted identifier, and client-side metadata are not identity authorities.
+- APP direct Passkey options are identifier-first and anonymous above that: the identifier selects a
+  candidate Identity, and the `allowCredentials` response is empty, so no real credential ID,
+  credential count, credential length, or account/Passkey existence is disclosed during options
+  issuance.
+- APP verification resolves the app-local passkey from the assertion credential ID, then verifies
+  the assertion with that row's saved public key. The browser's `userHandle`, any submitted
+  identifier, and client-side metadata are not identity authorities beyond the initial selection.
 - Verification rechecks ACTIVE credential status, active actor state, verified-PII and existing
   session-limit rules (full-access limit, waiting slot, refusal) before establishing a session. A disabled, revoked,
   unknown, or cross-surface credential fails with the existing generic unauthorized contract.
-- All three surfaces require discoverable credentials (`residentKey: "required"`) at registration.
-  Existing non-discoverable app/com credentials need re-registration. Existing non-discoverable
-  Org keys retain normal Entra-bound sign-in but require re-registration for Emergency Access.
+- Every Passkey surface requires discoverable credentials (`residentKey: "required"`) at
+  registration. Existing non-discoverable app credentials need re-registration. Existing
+  non-discoverable Org keys retain normal Entra-bound sign-in but require re-registration for
+  Emergency Access.
 - Org Emergency options return no credential descriptors and retain fixed-length selected-Operator
   binding, including a non-authenticating sentinel for unknown/ineligible selections. Org normal
   sign-in, MFA and Step-Up retain their actor-scoped descriptor behavior and security checks.

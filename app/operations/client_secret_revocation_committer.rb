@@ -3,6 +3,8 @@
 class ClientSecretRevocationCommitter
   class Denied < StandardError; end
 
+  class DependencyFailure < StandardError; end
+
   class << self
     public
 
@@ -13,17 +15,13 @@ class ClientSecretRevocationCommitter
 
       validate_binding!(actor_context, token, credential)
 
-      # Match management's actor-before-session-before-credential lock order.
-      # Ticket is read/locked only; lifecycle and source audit commit on Zenith.
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            actor_context.subject.with_lock(requires_new: true) do
-              revoke!(actor_context, token, credential, purge_after)
-            end
-          end
+      AppZenithRecord.connected_to(role: :writing) do
+        actor_context.subject.with_lock(requires_new: true) do
+          revoke!(actor_context, token, credential, purge_after)
         end
       end
+    rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+      raise DependencyFailure, "Secret revocation storage is unavailable: #{e.class}"
     end
 
     private
@@ -42,7 +40,6 @@ class ClientSecretRevocationCommitter
       actor = context.subject
       raise Denied, "Secret revocation actor is unavailable" unless actor.login_allowed?
 
-      session, requirement = verify_session!(actor, token)
       owned = ClientSecretCredential.lock.find_by(
         id: credential.id, client_id: actor.id, public_id: credential.public_id,
       )
@@ -53,7 +50,10 @@ class ClientSecretRevocationCommitter
         AuthMethodGuard.can_remove_secret_credential?(actor, owned)
 
       now = ClientSecretCredential.database_now
-      return owned if owned.revoked_at && owned.lapsed?(now)
+      if owned.revoked_at && owned.lapsed?(now)
+        authorize_session!(actor, token, owned, consume: false)
+        return owned
+      end
 
       unless owned.available_at?(at: now)
         raise Denied, "Secret revocation would remove an unavailable or last login credential"
@@ -63,15 +63,31 @@ class ClientSecretRevocationCommitter
       purge_at = (now + purge_after).round(6)
       raise ArgumentError, "Secret retention must advance the database timestamp" unless purge_at > now
 
-      revoked = owned.commit_management_revocation!(actor_context: context, at: now, purge_at: purge_at)
-      # adr/authentication-security-mode.md D3: the Step-Up is spent with the revocation it authorized.
-      session.consume_step_up_evidence!(requirement: requirement)
-      revoked
+      authorize_session!(actor, token, owned, consume: true)
+      owned.commit_management_revocation!(actor_context: context, at: now, purge_at: purge_at)
     rescue ClientSecretCredential::InvalidTransition, TokenStatusManagement::StepUpEvidenceUnavailable => e
       raise Denied, e.message
     end
 
-    def verify_session!(actor, token)
+    def authorize_session!(actor, token, credential, consume:)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          device = token.device_session_record!
+          device.with_lock do
+            raise Denied, "Secret revocation device is unavailable" unless device.usable? && device.user_id == actor.id
+
+            session, requirement = verify_session!(actor, token, credential)
+            unless session.device_session_id == device.id && device.current_refresh_token_id == session.id
+              raise Denied, "Secret revocation session binding changed"
+            end
+
+            session.consume_step_up_evidence!(requirement: requirement) if consume
+          end
+        end
+      end
+    end
+
+    def verify_session!(actor, token, credential)
       current = ClientToken.lock.find_by(id: token.id, user_id: actor.id, public_id: token.public_id)
       raise Denied, "Secret revocation session is unavailable" unless current
 
@@ -82,7 +98,7 @@ class ClientSecretRevocationCommitter
         full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
         session_binding: current.public_id, token_binding: current.public_id, require_session_binding: true,
         ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+        actor_ref: actor.public_id, resource_ref: credential.public_id, tenant_ref: nil,
       )
       unless current.active_status?(now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?

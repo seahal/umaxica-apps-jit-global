@@ -72,7 +72,7 @@ CREATE FUNCTION public.check_staff_identity_telephones_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_b02fca6943b3' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_b02fca6943b3' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_68092a83e365' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_68092a83e365' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -91,7 +91,7 @@ CREATE FUNCTION public.prevent_operator_telephone_public_id_mutation() RETURNS t
 CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_b02fca6943b3' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_68092a83e365' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -101,7 +101,7 @@ CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_dig
 CREATE FUNCTION public.rotate_operator_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_b02fca6943b3' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_68092a83e365' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -6870,7 +6870,7 @@ CREATE TRIGGER operator_telephones_public_id_immutability BEFORE UPDATE OF publi
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
 
 
 --
@@ -6878,7 +6878,7 @@ ALTER TABLE ONLY public.agent_memberships
 --
 
 ALTER TABLE ONLY public.bureau_units
-    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
 
 
 --
@@ -6982,7 +6982,7 @@ ALTER TABLE ONLY public.operator_workspace_accounts
 --
 
 ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT;
 
 
 --
@@ -7006,7 +7006,7 @@ ALTER TABLE ONLY public.organization_entra_connections
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id);
 
 
 --
@@ -7086,7 +7086,7 @@ ALTER TABLE ONLY public.operator_entra_identities
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id);
 
 
 --
@@ -7150,7 +7150,7 @@ ALTER TABLE ONLY public.operator_capability_grants
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
 
 
 --
@@ -7294,7 +7294,7 @@ ALTER TABLE ONLY public.operator_passkeys
 --
 
 ALTER TABLE ONLY public.operator_workspace_account_memberships
-    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE;
 
 
 --
@@ -7366,7 +7366,7 @@ ALTER TABLE ONLY public.operators
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
 
 
 --
@@ -7638,7 +7638,7 @@ ALTER TABLE ONLY public.bureau_view_grants
 --
 
 ALTER TABLE ONLY public.operator_lifecycle_requests
-    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
 
 
 --
@@ -7774,7 +7774,7 @@ ALTER TABLE ONLY public.agent_assignments
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id);
 
 
 --
@@ -7814,7 +7814,7 @@ ALTER TABLE ONLY public.agent_ownerships
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
 
 
 --

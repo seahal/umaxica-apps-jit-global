@@ -49,6 +49,7 @@ module BaseStepUpIntent
       base_token: token, restart_of: params[:restart_of],
     )
     apply_base_browser_continuation_headers!
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/shared/step_up_restart", layout: false,
                                           locals: { action_url: action,
                                                     scope: requirement.scope,
@@ -201,6 +202,7 @@ module BaseStepUpIntent
       "tenant_ref" => requirement.tenant_ref,
     }
     apply_base_browser_continuation_headers!
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/shared/step_up_conflict", layout: false, status: :conflict,
                                            locals: {
                                              scope: requirement.scope,
@@ -265,8 +267,6 @@ module BaseStepUpIntent
       case binding
       when ClientAuthAdmissionBinding
         ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
-      when VisitorAuthAdmissionBinding
-        VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
       when OperatorAuthAdmissionBinding
         OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
       else
@@ -310,14 +310,13 @@ module BaseStepUpIntent
   def redirect_to_step_up_conflict_admission!(entry_ref:, transaction:)
     surface = transaction.surface
     host_env = {
-      "app" => "PUBLIC_AUTH_SERVICE_URL", "com" => "PUBLIC_AUTH_CORPORATE_URL", "org" => "PUBLIC_AUTH_STAFF_URL",
+      "app" => "PUBLIC_AUTH_SERVICE_URL", "org" => "PUBLIC_AUTH_STAFF_URL",
     }.fetch(surface)
 
     if transaction.purpose == "bootstrap" && transaction.allowed_methods_array == ["email_otp"]
       registration_path =
         case surface
         when "app" then new_base_app_identity_emails_registration_path(ri: params[:ri])
-        when "com" then new_base_com_identity_emails_registration_path(ri: params[:ri])
         when "org" then new_base_org_identity_emails_registration_path(ri: params[:ri])
         end
       redirect_to(registration_path, status: :see_other)
@@ -330,8 +329,6 @@ module BaseStepUpIntent
       case surface
       when "app"
         bootstrap ? new_auth_app_verification_setup_url(**route_options) : auth_app_verification_url(**route_options)
-      when "com"
-        bootstrap ? new_auth_com_verification_setup_url(**route_options) : auth_com_verification_url(**route_options)
       when "org"
         bootstrap ? new_auth_org_verification_setup_url(**route_options) : auth_org_verification_url(**route_options)
       end
@@ -354,7 +351,6 @@ module BaseStepUpIntent
   def step_up_intent_surface
     case self.class.name
     when /::App::/ then "app"
-    when /::Com::/ then "com"
     when /::Org::/ then "org"
     else raise ArgumentError, "unsupported step-up surface"
     end
@@ -363,7 +359,6 @@ module BaseStepUpIntent
   def step_up_intent_transaction_model(surface)
     {
       "app" => ClientStepUpCeremonyTransaction,
-      "com" => VisitorStepUpCeremonyTransaction,
       "org" => OperatorStepUpCeremonyTransaction,
     }.fetch(surface)
   end

@@ -8,7 +8,6 @@ class EmailVerificationChallengeableTest < ActiveSupport::TestCase
 
   test "all surface email ceremony transactions share the EVP challenge contract" do
     assert_includes ClientEmailCeremonyTransaction.included_modules, EmailVerificationChallengeable
-    assert_includes VisitorEmailCeremonyTransaction.included_modules, EmailVerificationChallengeable
     assert_includes OperatorEmailCeremonyTransaction.included_modules, EmailVerificationChallengeable
   end
 
@@ -95,8 +94,8 @@ class EmailVerificationChallengeableTest < ActiveSupport::TestCase
 
   test "fallback consumes the EVP challenge while preserving the OTP ceremony" do
     now = Time.zone.parse("2026-07-10 12:00:00")
-    issued = VisitorEmailCeremonyTransaction.issue_evp_challenge!(
-      actor_ref: "visitor-1",
+    issued = ClientEmailCeremonyTransaction.issue_evp_challenge!(
+      actor_ref: "client-5",
       session_ref: "session-5",
       operation: "replacement",
       email_candidate_ref: "email-5",
@@ -275,7 +274,6 @@ class EmailVerificationChallengeableTest < ActiveSupport::TestCase
     forbidden_columns = %w(evp_token evp_nonce raw_token raw_nonce email address)
 
     assert_empty ClientEmailCeremonyTransaction.column_names & forbidden_columns
-    assert_empty VisitorEmailCeremonyTransaction.column_names & forbidden_columns
     assert_empty OperatorEmailCeremonyTransaction.column_names & forbidden_columns
   end
 

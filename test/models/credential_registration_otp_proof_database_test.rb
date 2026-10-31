@@ -7,8 +7,6 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
   [
     [Client, ClientToken, ClientEmail, :user_id, :app, :email],
     [Client, ClientToken, ClientTelephone, :user_id, :app, :telephone],
-    [Visitor, VisitorToken, VisitorEmail, :visitor_id, :com, :email],
-    [Visitor, VisitorToken, VisitorTelephone, :visitor_id, :com, :telephone],
     [Operator, OperatorToken, OperatorEmail, :staff_id, :org, :email],
     [Operator, OperatorToken, OperatorTelephone, :staff_id, :org, :telephone],
   ].each do |owner_model, root_model, contact_model, owner_key, surface, channel|

@@ -19,11 +19,13 @@ during the re-inspection, and this task performed no commit.
 
 ## Current implementation
 
-### Eight-route inventory
+### Four-route inventory
 
 Routes are declared in [config/routes/auth.rb](../../config/routes/auth.rb). Paths below are
-relative to each surface's Auth host; APP and COM remain separate trust boundaries. Entry,
-verification and resend endpoints of a method are one route family, not additional families.
+relative to each surface's Auth host. The `com` Auth host no longer publishes a credential ceremony:
+the corporate domain is an anonymous public surface, so only APP (client) and ORG (operator)
+surfaces own these families. Entry, verification and resend endpoints of a method are one route
+family, not additional families.
 
 | Surface | Purpose | Channel | Route family | Existing binding owner |
 | --- | --- | --- | --- | --- |
@@ -31,13 +33,9 @@ verification and resend endpoints of a method are one route family, not addition
 | APP | Sign-Up | Telephone | `/sign/up/telephone`, `/sign/up/check/telephone/otp` | Client Sign-Up flow/nonce and Telephone ceremony transaction |
 | APP | Sign-In | Email | `/sign/in/email`, `/web/v0/in/email/otp` resend | Client Auth Ceremony Session and parent |
 | APP | Step-Up | Email | `/verification/emails`, member redelivery | Client Step-Up transaction/session |
-| COM | Sign-Up | Email | `/sign/up/email`, `/sign/up/check/email/otp` | Visitor Sign-Up flow/nonce and Email ceremony transaction |
-| COM | Sign-Up | Telephone | `/sign/up/telephone`, `/sign/up/check/telephone/otp` | Visitor Sign-Up flow/nonce and Telephone ceremony transaction |
-| COM | Sign-In | Email | `/sign/in/email`, `/web/v0/in/email/otp` resend | Visitor Auth Ceremony Session and parent |
-| COM | Step-Up | Email | `/verification/emails`, member redelivery | Visitor Step-Up transaction/session |
 
 Telephone is Sign-Up only in this inventory. The accepted new requirement targets the two Email
-Sign-In families; it does not redesign the other six families.
+Sign-In families; it does not redesign the other families.
 
 ### Continuity and authority
 
@@ -60,14 +58,13 @@ Browser Session, OIDC, RP Session and token authority with Base.
 
 ### Sign-In issuance, verification and consumption
 
-The [APP](../../app/controllers/auth/app/sign/in/emails_controller.rb) and
-[COM](../../app/controllers/auth/com/sign/in/emails_controller.rb) controllers issue and verify
+The [APP](../../app/controllers/auth/app/sign/in/emails_controller.rb) controller issues and verifies
 through the admitted ceremony's
 [AuthEmailOtpChallenge](../../app/models/concerns/auth_email_otp_challenge.rb). APP stores the
 Contact ID or dummy address through
-[SignAppInEmailAuthenticationState](../../app/services/sign_app_in_email_authentication_state.rb);
-COM uses separate Rails Session ID/address entries. These are flow lookup state, not independent
-Base credentials. Both loaders check that the ceremony challenge matches the Contact/dummy mode.
+[SignAppInEmailAuthenticationState](../../app/services/sign_app_in_email_authentication_state.rb).
+This is flow lookup state, not an independent Base credential. The loader checks that the ceremony
+challenge matches the Contact/dummy mode.
 
 Issuance creates a six-digit CSPRNG code and UUID generation on `email_otp_context`. The context
 includes surface, purpose, SID digest, parent kind/reference, original Contact/owner, destination
@@ -111,9 +108,8 @@ encrypted/authenticated envelope with a 30-minute TTL. Its purpose includes the 
 admitted Auth SID digest. Payload fields include email kind, target, surface, real/dummy mode and
 Contact/owner/finalized-binding snapshot. It has no explicit ceremony ID or OTP generation field.
 
-The [APP endpoint](../../app/controllers/auth/app/web/v0/in/email/otps_controller.rb) and
-[COM endpoint](../../app/controllers/auth/com/web/v0/in/email/otps_controller.rb) require ceremony
-admission and pass that ceremony plus SID digest to
+The [APP endpoint](../../app/controllers/auth/app/web/v0/in/email/otps_controller.rb) requires
+ceremony admission and passes that ceremony plus SID digest to
 [SignInOtpResender](../../app/services/sign_in_otp_resender.rb). The resender checks surface/model,
 SID agreement, encrypted purpose, Contact snapshot and current challenge, then issues through that
 ceremony. Thus current state is tied to individual ceremony continuity through its SID digest,
@@ -130,7 +126,7 @@ check the owning flow nonce and pending Contact/owner under locks. Transaction l
 session reference from the original flow public ID and nonce digest. Their retained proof handling
 is separate from the Email Sign-In target.
 
-APP/COM verification controllers use `IdentityStepUpEmailCodeIssuer` and
+APP Sign-Up/Step-Up and ORG verification controllers use `IdentityStepUpEmailCodeIssuer` and
 `IdentityStepUpEmailVerificationCommitter`. The
 [StepUpEmailChallenge](../../app/models/concerns/step_up_email_challenge.rb) binds credential,
 generation, transaction and session, checks delivery and expiry, and records consumption under
@@ -140,7 +136,7 @@ all routes or extend the accepted redesign scope.
 ## Accepted target behavior
 
 The ADR requires originating-ceremony and corresponding browser-session continuity binding for
-APP/COM Email Sign-In, fail-closed invalid binding, single consumption, superseded-code invalidation
+APP Email Sign-In, fail-closed invalid binding, single consumption, superseded-code invalidation
 without failure-budget reset, and equally strong resend authorization. The security proof must
 connect issuance to admission, Auth row/cookie and Rails Session continuity; valid cookie presence
 alone is insufficient. Binding secrets remain outside emails, URLs, browser-readable token storage

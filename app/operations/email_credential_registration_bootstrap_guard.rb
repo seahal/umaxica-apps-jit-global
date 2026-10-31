@@ -18,8 +18,6 @@ class EmailCredentialRegistrationBootstrapGuard
       case [actor, token, bootstrap_transaction]
       in [Client, ClientToken, ClientStepUpCeremonyTransaction]
         ["app", ClientStepUpSession, ClientAuthAdmissionBinding, StepUpScopeCatalog::APP]
-      in [Visitor, VisitorToken, VisitorStepUpCeremonyTransaction]
-        ["com", VisitorStepUpSession, VisitorAuthAdmissionBinding, StepUpScopeCatalog::COM]
       else raise ArgumentError, "unsupported Email bootstrap authority realm"
       end
   end
@@ -27,8 +25,7 @@ class EmailCredentialRegistrationBootstrapGuard
   def call
     raise ArgumentError, "Email bootstrap authority requires a block" unless block_given?
 
-    token_key = (surface == "app") ? :user_token_id : :visitor_token_id
-    session = session_model.lock.find_by(token_key => token.id)
+    session = session_model.lock.find_by(user_token_id: token.id)
     return false unless session && session.step_up_ceremony_transaction_ref == parent.transaction_id
 
     parent.lock!

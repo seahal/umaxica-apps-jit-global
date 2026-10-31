@@ -3,7 +3,7 @@
 require "test_helper"
 
 class OpInboundReceiptUniquenessTest < ActiveSupport::TestCase
-  RECEIPTS = [OpAppInboundEventReceipt, OpComInboundEventReceipt, OpOrgInboundEventReceipt].freeze
+  RECEIPTS = [OpAppInboundEventReceipt, OpOrgInboundEventReceipt].freeze
 
   RECEIPTS.each do |receipt_class|
     test "#{receipt_class.name} retains sender partitions and raw dedup enforcement" do

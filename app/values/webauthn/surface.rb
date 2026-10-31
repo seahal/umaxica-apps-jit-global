@@ -48,16 +48,6 @@ module Webauthn
         actor_association_name: :user,
         account_label: "umaxica.app",
       ),
-      com: new(
-        :com,
-        env_prefix: "COM",
-        passkey_class_name: "VisitorPasskey",
-        passkey_status_class_name: "VisitorPasskeyStatus",
-        ceremony_transaction_class_name: "VisitorPasskeyCeremonyTransaction",
-        actor_foreign_key: "visitor_id",
-        actor_association_name: :visitor,
-        account_label: "umaxica.com",
-      ),
       org: new(
         :org,
         env_prefix: "ORG",

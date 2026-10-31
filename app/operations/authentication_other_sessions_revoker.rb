@@ -77,7 +77,6 @@ class AuthenticationOtherSessionsRevoker
   def token_belongs_to_owner?
     case [owner, current_token]
     in [Client, ClientToken] then current_token.user_id == owner.id
-    in [Visitor, VisitorToken] then current_token.visitor_id == owner.id
     in [Operator, OperatorToken] then current_token.staff_id == owner.id
     else false
     end
@@ -87,7 +86,6 @@ class AuthenticationOtherSessionsRevoker
     surface =
       case owner
       when Client then "app"
-      when Visitor then "com"
       when Operator then "org"
       end
     requirement = step_up_requirement

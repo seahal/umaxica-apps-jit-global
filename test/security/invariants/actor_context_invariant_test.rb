@@ -47,6 +47,9 @@ module Security
           "app/controllers/concerns/base_step_up_completion.rb",
           "app/controllers/concerns/core_browser_api_boundary.rb",
           "app/controllers/concerns/verification_base.rb",
+          # Anonymous com lifecycle: installs the com actor for the request and clears it in the
+          # around hook, because the corporate surface has no principal to resolve.
+          "app/controllers/concerns/com_anonymous_actor_context.rb",
         ]
 
         offenders =

@@ -12,8 +12,8 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
     ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"] = @previous_flag
   end
 
-  test "app com and org reject missing Origin with sibling-site metadata despite valid csrf" do
-    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_CORPORATE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
+  test "app and org reject missing Origin with sibling-site metadata despite valid csrf" do
+    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
       host! ENV.fetch(setting)
       https!
       get "/api/v0/session", headers: { "Accept" => "application/json" }
@@ -33,7 +33,7 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "exact same Origin keeps the existing explicit POST refresh refusal contract" do
-    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_CORPORATE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
+    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
       host! ENV.fetch(setting)
       https!
       get "/api/v0/session", headers: { "Accept" => "application/json" }
@@ -54,7 +54,7 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "every surface rejects foreign malformed null and mismatched Origins before refresh" do
-    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_CORPORATE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
+    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
       hostname = ENV.fetch(setting)
       host! hostname
       https!
@@ -78,7 +78,7 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "same Origin contradicting cross-site metadata is refused on every surface" do
-    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_CORPORATE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
+    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
       hostname = ENV.fetch(setting)
       host! hostname
       https!
@@ -99,8 +99,8 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "Origin rejection precedes changes to real app com and org refresh credentials" do
-    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_CORPORATE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
+  test "Origin rejection precedes changes to real app and org refresh credentials" do
+    %w(PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL).each do |setting|
       host! ENV.fetch(setting)
       https!
       get "/api/v0/session", headers: { "Accept" => "application/json" }
@@ -122,15 +122,6 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
             authentication_epoch: 0, client_token: client_tokens(:one), oidc_client_id: "core-app-jp",
             **attributes,
           )
-        when "PUBLIC_CORE_CORPORATE_URL"
-          visitor = Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: 9_117_000_000_000 + SecureRandom.random_number(1_000_000),
-            status_id: VisitorStatus::ACTIVE,
-            birthdate: "2000-01-01",
-          )
-          token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, discard_at: expiry)
-          OpComGrant.create!(authentication_epoch: 0, visitor_token: token, oidc_client_id: "core-com-jp", **attributes)
         when "PUBLIC_CORE_STAFF_URL"
           OpOrgGrant.create!(
             authentication_epoch: 0,

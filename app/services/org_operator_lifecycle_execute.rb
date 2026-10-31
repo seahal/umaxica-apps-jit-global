@@ -20,6 +20,12 @@ class OrgOperatorLifecycleExecute
     invitation = nil
     @stop_events = []
     OrgPrincipalRecord.transaction do
+      if request.action.in?(
+        [OperatorLifecycleRequest::ACTION_WITHDRAW, OperatorLifecycleRequest::ACTION_SUSPEND,
+         OperatorLifecycleRequest::ACTION_TERMINATE,],
+      )
+        Operator.lock_availability_guard!
+      end
       invitation = execute_action!
       request.update!(
         status: OperatorLifecycleRequest::STATUS_EXECUTED,
@@ -27,9 +33,11 @@ class OrgOperatorLifecycleExecute
         executed_at: Time.current,
         invitation_id: invitation&.id,
       )
+      stop_events = @stop_events.dup.freeze
+      OrgPrincipalRecord.current_transaction.after_commit do
+        stop_events.each { |event| OpIdentityEventInvalidator.deliver(event:) }
+      end
     end
-    # The org Zenith commit recorded the stop; the OP revokes older authority after it (one.md 7.5).
-    @stop_events.each { |event| OpIdentityEventInvalidator.deliver(event:) }
 
     OrgOperatorLifecycleResult.new(success: true, request: request, error: nil, invitation: invitation)
   rescue ActiveRecord::RecordInvalid => e
@@ -156,11 +164,8 @@ class OrgOperatorLifecycleExecute
   # It is deleted for real when the operator is purged
   # (RetentionCrossDatabaseChildPurge).
   #
-  # This writes to org_zenith while the surrounding transaction is on
-  # org_principal, so the two are not atomic. The order is chosen so the
-  # surviving inconsistency is the safe one: if the operator update then fails,
-  # the identity is already withdrawn and the person cannot sign in with Entra,
-  # rather than the reverse.
+  # Entra identity and actor records share the org_zenith transaction; OP delivery
+  # follows its commit on a separate connection.
   def withdraw_entra_identity!(target, status_id)
     identity = OperatorEntraIdentity.find_by(operator_id: target.id)
     return if identity.nil?
@@ -171,8 +176,7 @@ class OrgOperatorLifecycleExecute
   def ensure_not_last_active_operator!(target)
     active_count =
       Operator
-        .where(deactivated_at: nil, withdrawn_at: nil)
-        .where(Operator.arel_table[:discard_at].gt(Time.current))
+        .capability_eligible_at(Time.current)
         .where.not(id: target.id)
         .count
     return if active_count.positive?

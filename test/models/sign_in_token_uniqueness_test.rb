@@ -5,7 +5,6 @@ require "test_helper"
 class SignInTokenUniquenessTest < ActiveSupport::TestCase
   CELLS = [
     [Client, ClientStatus::ACTIVE, ClientVisibility::USER, ClientToken, :user, ClientSignInFlow],
-    [Visitor, VisitorStatus::ACTIVE, VisitorVisibility::VISITOR, VisitorToken, :visitor, VisitorSignInFlow],
     [Operator, OperatorStatus::ACTIVE, OperatorVisibility::STAFF, OperatorToken, :staff, OperatorSignInFlow],
   ].freeze
 

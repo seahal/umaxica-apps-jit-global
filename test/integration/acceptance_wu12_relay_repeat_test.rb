@@ -195,10 +195,8 @@ class AcceptanceWu12RelayRepeatTest < ActionDispatch::IntegrationTest
     assert_equal expected_locations.first, repeated_locations.first
   end
 
-  test "A12-5: COM and ORG framed confirmations preserve live bindings" do
+  test "A12-5: ORG framed confirmations preserve live bindings" do
     [
-      ["com", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), "core-com-jp", "visitor",
-       VisitorAuthAdmissionBinding, VisitorAuthCeremonySession,],
       ["org", ENV.fetch("PUBLIC_VISA_STAFF_URL"), "core-org-jp", "operator",
        OperatorAuthAdmissionBinding, OperatorAuthCeremonySession,],
     ].each do |surface, host, client_id, realm, binding_class, ceremony_class|
@@ -234,12 +232,7 @@ class AcceptanceWu12RelayRepeatTest < ActionDispatch::IntegrationTest
         browser.cookies, "#{session_key}=#{Rack::Utils.escape(jar[session_key])}",
         URI.parse("https://#{host}/"),
       )
-      path =
-        if surface == "com"
-          visa_com_ceremony_binding_confirmation_path(binding_ref: binding.confirmation_ref, ri: "jp")
-        else
-          visa_org_ceremony_binding_confirmation_path(binding_ref: binding.confirmation_ref, ri: "jp")
-        end
+      path = visa_org_ceremony_binding_confirmation_path(binding_ref: binding.confirmation_ref, ri: "jp")
       before = [binding.reload.attributes, attached.reload.attributes]
       browser.get(path, headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "iframe" })
 

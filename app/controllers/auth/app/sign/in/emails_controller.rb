@@ -23,6 +23,7 @@ module Auth
           include SessionLimitGate
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_in
 
           prepend_before_action :require_sign_in_ceremony_admission!
           ensure_fqdn_gate_first!
@@ -129,6 +130,13 @@ module Auth
             if result == :cooldown
               render plain: t("sign.app.authentication.email.create.cooldown"), status: :too_many_requests
               return
+            end
+            if result == :delivery_failed
+              load_user_email
+              return if performed?
+
+              @otp_delivery_failed = true
+              return render_email_edit(status: :service_unavailable)
             end
 
             record_sign_in_email_cooldown!(normalized_address)
@@ -265,7 +273,11 @@ module Auth
 
             {
               title: page_t("#{scope}.page_title"),
-              description: page_t("#{scope}.description"),
+              description: if @otp_delivery_failed
+                             t("sign.app.authentication.email.edit.delivery_unavailable")
+                           else
+                             page_t("#{scope}.description")
+                           end,
               form: {
                 action: auth_app_sign_in_email_path(**sign_in_primary_binding_params),
                 method: "patch",
@@ -356,21 +368,27 @@ module Auth
             existing_email = find_email_with_timing_protection(normalized_address)
 
             if existing_email&.user&.sign_in_allowed?
+              otp_code = AuthEmailSignInOtpIssuer.call(
+                ceremony: admitted_auth_ceremony_session, contact: existing_email, destination: normalized_address,
+              )
               SignAppInEmailAuthenticationState.store_existing!(session, existing_email)
-
-              otp_code = admitted_auth_ceremony_session.issue_email_otp!(
-                contact: existing_email, destination: normalized_address,
-              )
               return :ok if otp_code.nil?
-              return :cooldown if otp_request_rate_limited?(existing_email)
 
-              OtpAdapter.for(surface: :app, channel: :email).deliver(
-                record: existing_email,
-                otp_code: otp_code,
-                purpose: :sign_in,
-                auth_ceremony_session_ref: admitted_auth_ceremony_session.id.to_s,
-                auth_email_otp_generation: admitted_auth_ceremony_session.email_otp_context.fetch("generation"),
-              )
+              generation = admitted_auth_ceremony_session.email_otp_context.fetch("generation")
+              adapter = OtpAdapter.for(surface: :app, channel: :email)
+              begin
+                adapter.deliver(
+                  record: existing_email,
+                  otp_code: otp_code,
+                  purpose: :sign_in,
+                  auth_ceremony_session_ref: admitted_auth_ceremony_session.id.to_s,
+                  auth_email_otp_generation: generation,
+                )
+              rescue ActiveJob::EnqueueError, ActiveRecord::ConnectionNotEstablished, ActiveRecord::ConnectionFailed,
+                     ActiveRecord::ConnectionTimeoutError, PG::ConnectionBad => e
+                Rails.logger.error(JitLogEvent.format("auth.email_otp.delivery_failed", error_class: e.class.name))
+                return :delivery_failed
+              end
             else
               # Dummy work to simulate OTP generation for timing attack protection
               admitted_auth_ceremony_session.issue_email_otp!(contact: nil, destination: normalized_address)
@@ -379,6 +397,8 @@ module Auth
             end
 
             :ok
+          rescue AuthEmailSignInOtpIssuer::Cooldown
+            :cooldown
           ensure
             ensure_min_elapsed(started, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
@@ -509,12 +529,6 @@ module Auth
             permitted.fetch(:client_email, {}).presence || permitted.fetch(:user_email, {}).presence || {}
           rescue ActionController::ParameterMissing
             {}
-          end
-
-          def otp_request_rate_limited?(user_email)
-            return false unless user_email.otp_cooldown_active?
-
-            true
           end
 
           def sign_in_email_cooldown_active?(normalized_address)

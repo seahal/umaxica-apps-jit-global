@@ -1,0 +1,6 @@
+# WU-7 com creation and refresh separation
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Staged, unstaged and untracked changes affected the result.
+- The com write boundary previously created a new preference by calling the shared refresh-token creation method, which branched around refresh generation for com. It now creates the com parent, default children and creation audit inside the existing com setting/Chronicle transaction boundary. The shared refresh creation path is restricted to non-com preferences; obsolete com branches in refresh lifecycle checks were removed. A static guard checks that the com write boundary does not call the old refresh creation methods.
+- Before the change, the selected com creation and app/org refresh recovery cases passed: 7 runs, 114 assertions. After the change, the broader com writes, initialization, consent, Web Push, app/org refresh recovery, issuance guard and commit-failure selection passed: 137 runs, 1,927 assertions, zero failures, errors or skips. RuboCop found one test line-length offense, corrected after the run.
+- No migration or full suite was run in this slice. The full-suite result in `2026-10-30-wu7-full-suite-recheck-W8C4.md` predates this change, and repository-wide schema drift remains unresolved.

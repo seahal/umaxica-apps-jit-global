@@ -16,7 +16,7 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
   test "raises for wrong cycle class in issue!" do
     session = {}
     locator = SignUpCycleLocator.new(session, surface: :app)
-    wrong_cycle = VisitorSignUpFlow.new
+    wrong_cycle = Object.new
 
     assert_raises(ArgumentError, match: "unsupported sign-up cycle") do
       locator.issue!(wrong_cycle)

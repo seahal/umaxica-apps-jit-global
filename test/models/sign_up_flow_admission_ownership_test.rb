@@ -7,7 +7,6 @@ class SignUpFlowAdmissionOwnershipTest < ActiveSupport::TestCase
     @contexts = {}
     [
       [:app, "client", ClientSignUpFlow, ClientAuthAdmissionBinding, ClientAuthCeremonySession],
-      [:com, "visitor", VisitorSignUpFlow, VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
     ].each do |surface, realm, flow_class, binding_class, ceremony_class|
       @contexts[surface] =
         2.times.map do
@@ -43,16 +42,12 @@ class SignUpFlowAdmissionOwnershipTest < ActiveSupport::TestCase
     end
   end
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     test "#{surface} completed registration keeps its retention and principal when its Flow is collected" do
       own = @contexts.fetch(surface).first
       flow_class = own.fetch(:flow_class)
       principal =
-        if surface == :app
-          Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, security_mode_id: ClientSecurityMode::NORMAL)
-        else
-          Visitor.create!(status_id: VisitorStatus::ACTIVE, security_mode_id: VisitorSecurityMode::NORMAL)
-        end
+        Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, security_mode_id: ClientSecurityMode::NORMAL)
       principal_before = principal.attributes
       now = flow_class.database_now
       flow = flow_class.create!(
@@ -140,7 +135,7 @@ class SignUpFlowAdmissionOwnershipTest < ActiveSupport::TestCase
         end
         assert_equal before, flow.reload.attributes
       end
-      foreign_class = (surface == :app) ? VisitorSignUpFlow : ClientSignUpFlow
+      foreign_class = OperatorSignUpFlow
       assert_raises(ArgumentError) { SignUpCycleLocator.new({}, surface: surface, cycle_class: foreign_class) }
     end
 

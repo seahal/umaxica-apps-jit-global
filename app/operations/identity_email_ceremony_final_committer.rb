@@ -21,16 +21,6 @@ class IdentityEmailCeremonyFinalCommitter
       audit_subject: :actor,
       binding: true,
     },
-    "com" => {
-      outbox_class: VisitorContactAuditOutbox,
-      actor_type: :visitor,
-      record_class: VisitorEmail,
-      owner_key: :visitor_id,
-      status_key: :visitor_email_status_id,
-      unverified_status: VisitorEmailStatus::UNVERIFIED,
-      verified_status: VisitorEmailStatus::VERIFIED,
-      binding: true,
-    },
     "org" => {
       actor_type: :operator,
       record_class: OperatorEmail,
@@ -63,11 +53,15 @@ class IdentityEmailCeremonyFinalCommitter
     validate_actor_binding!
     return reconcile_committed_result! if transaction.consumed?
 
-    validate_transaction_state!
-    validate_candidate_before_consumption!
-    consumption = IdentityEmailCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
-    commit_candidate!
-    Commit.new(transaction: consumption.transaction, result: consumption.result, email: email)
+    actor.with_lock do
+      raise IdentityEmailCeremonyContract::Error, "Contact owner is unavailable" unless actor.active?
+
+      validate_transaction_state!
+      validate_candidate_before_consumption!
+      consumption = IdentityEmailCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
+      commit_candidate!
+      Commit.new(transaction: consumption.transaction, result: consumption.result, email: email)
+    end
   end
 
   private
@@ -229,7 +223,7 @@ class IdentityEmailCeremonyFinalCommitter
     candidate_ref = result["email_candidate_ref"].to_s
     raise IdentityEmailCeremonyContract::Error, "email candidate is required" if candidate_ref.blank?
 
-    scope = config.fetch(:record_class).where(config.fetch(:owner_key) => actor.id)
+    scope = config.fetch(:record_class).where(config.fetch(:owner_key) => actor.id).lock
     if config.fetch(:record_class).column_names.include?("public_id")
       scope.find_by!(public_id: candidate_ref)
     else

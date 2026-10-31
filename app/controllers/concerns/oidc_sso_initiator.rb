@@ -235,13 +235,10 @@ module OidcSsoInitiator
   def oidc_redirect_surface
     case self.class.name.to_s
     when /\ASign::App::/ then "sign_app"
-    when /\ASign::Com::/ then "sign_com"
     when /\ASign::Org::/ then "sign_org"
     when /\ACore::App::/ then "core_app"
-    when /\ACore::Com::/ then "core_com"
     when /\ACore::Org::/ then "core_org"
     when /\ABase::App::/ then "base_app"
-    when /\ABase::Com::/ then "base_com"
     when /\ABase::Org::/ then "base_org"
     when /\APalm::App::/ then "palm_app"
     else

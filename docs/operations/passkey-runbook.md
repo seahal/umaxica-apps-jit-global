@@ -32,18 +32,27 @@
 
 ## Limits and Constraints
 
-- Each actor may have at most four passkeys (`MAX_PASSKEYS_PER_*`).
-- Registration for a `com` Visitor requires a recovery identity through
-  `RecoveryIdentityRequiredValidator`.
+- App Clients and org Operators may each have at most ten passkeys through the registration
+  operation (`MAX_PASSKEYS_PER_*`). Direct database inserts are not yet protected by the planned
+  slot constraint.
 - Successful registration tops up recovery passcodes. Newly issued codes are delivered through a
   one-time reveal URL.
 
 ## Audit Coverage
 
-- `app` records `ClientChronicleEvent::PASSKEY_REGISTERED`; `org` records
-  `OperatorChronicleEvent::PASSKEY_REGISTERED`.
-- `com` has no registration audit because its chronicle foundation is incomplete. This is a known
-  remaining gap to close when Visitor chronicles are introduced.
+`PasskeyRegistrationOperation` requires audit data and writes the registration and the matching
+principal-side outbox event in one transaction. Invalid or missing audit data prevents registration.
+The event must describe a registration and identify the owning actor when an actor reference is supplied.
+
+Passkey audit delivery scans pending app and org outbox events in bounded pages through the
+highest pending ID observed for each source at the start of its scan. A failed event remains
+unacknowledged and is reported; delivery continues to later pages and the job then raises so the
+failed event can be retried. Events added beyond the scan boundary wait for a later run.
+Delivery refuses metadata that replaces the source's surface, Passkey reference or actor reference;
+the event remains unacknowledged for investigation while later events are attempted.
+
+- App and org registration outbox events use `passkey.registered.signup` or
+  `passkey.registered.settings`. The com authentication surface has been retired.
 
 ## Failure Handling
 
@@ -52,7 +61,7 @@
 - UV failures such as `UserVerificationRequiredError` or the `uv_rejected` risk event may indicate
   that the authenticator cannot perform UV. Do not grandfather or infer UV capability for an
   existing credential.
-- APP and COM users may use Email OTP sign-in as the supported fallback. Email OTP is a Umaxica
+- APP users may use Email OTP sign-in as the supported fallback. Email OTP is a Umaxica
   product exception and does not achieve NIST AAL2.
 - ORG users may use Secret Credential or Microsoft Entra ID sign-in. Before enforcing the migration
   in production, identify operators whose only sign-in path is a passkey without `uv_verified_at`;

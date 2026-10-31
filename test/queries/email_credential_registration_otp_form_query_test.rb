@@ -3,20 +3,13 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpFormQueryTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} Email registration form reads only its original Root browser and bounded ceremony" do
       actor, token, email =
         if surface == "app"
           owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_emails.create!(
-            raw_address: "registration-query-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
-          )
-          [owner, root, candidate]
-        elsif surface == "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_emails.create!(
             raw_address: "registration-query-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
           )
           [owner, root, candidate]

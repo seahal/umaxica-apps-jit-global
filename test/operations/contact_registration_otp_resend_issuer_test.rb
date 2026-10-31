@@ -5,11 +5,11 @@ require "minitest/mock"
 
 # Boolean snapshots keep credentials, destinations and binding references out of failure output.
 class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(email telephone).each do |channel|
       scenarios = %i(success candidate_attempts candidate_locked shared_budget foreign_browser foreign_root
-                     foreign_owner foreign_candidate foreign_flow verified revoked device_revoked expires_before
-                     expires_at expires_after maximum_uuid_generation source_fault)
+                     foreign_owner foreign_candidate foreign_flow verified revoked device_revoked rebound_device
+                     expires_before expires_at expires_after maximum_uuid_generation source_fault)
       scenarios += %i(cooldown_before cooldown_at cooldown_after) if channel == :email
       scenarios.each do |scenario|
         test "#{surface} #{channel} resend #{scenario} retains the original challenge authority and budgets" do
@@ -20,14 +20,10 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
               [Client, ClientToken, ClientEmail, :user_id, ClientEmailCeremonyTransaction]
             when [:app, :telephone]
               [Client, ClientToken, ClientTelephone, :user_id, ClientTelephoneCeremonyTransaction]
-            when [:com, :email]
-              [Visitor, VisitorToken, VisitorEmail, :visitor_id, VisitorEmailCeremonyTransaction]
-            when [:com, :telephone]
-              [Visitor, VisitorToken, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction]
             end
           actor = owner_model.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
-            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+            status_id: ClientStatus::ACTIVE,
           )
           token = root_model.create!(:authentication_epoch => 0, owner_key => actor.id, :discard_at => 1.day.from_now)
           token.rotate_refresh_token!
@@ -106,7 +102,7 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
             arguments[:actor] =
               owner_model.create!(
                 security_mode_id: SecurityModeConfigurable::NORMAL,
-                status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+                status_id: ClientStatus::ACTIVE,
               )
           when :foreign_candidate
             other_destination =
@@ -144,6 +140,13 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
           supplied_ticket_facts = arguments.fetch(:transaction).reload.attributes
           root_facts = token.reload.attributes
           owner_facts = actor.reload.attributes
+          if scenario == :rebound_device
+            replacement = ClientToken.create!(authentication_epoch: 0, user: actor)
+            new_device = replacement.device_session_record!
+            ClientToken.find(token.id).update!(device_session_id: new_device.id)
+            new_device.update!(current_refresh_token_id: token.id)
+            root_facts = ClientToken.find(token.id).attributes
+          end
           issued_at = contact.otp_last_sent_at
           decision_time = issued_at + 61.seconds
           if %i(expires_before expires_at expires_after).include?(scenario)

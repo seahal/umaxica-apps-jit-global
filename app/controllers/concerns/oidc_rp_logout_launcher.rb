@@ -206,7 +206,6 @@ module OidcRpLogoutLauncher
   def oidc_rp_logout_session_class_for(resource_type)
     case resource_type.to_s
     when "operator" then OpOrgGrant
-    when "visitor" then OpComGrant
     when "client" then OpAppGrant
     else raise ArgumentError, "unsupported RP Session resource type"
     end
@@ -215,7 +214,6 @@ module OidcRpLogoutLauncher
   def oidc_rp_logout_session_relation_for(resource_type)
     case resource_type.to_s
     when "operator" then OpOrgGrant.includes(operator_device_session: :staff)
-    when "visitor" then OpComGrant.includes(visitor_device_session: :visitor)
     when "client" then OpAppGrant.includes(client_device_session: :user)
     else raise ArgumentError, "unsupported RP Session resource type"
     end
@@ -224,7 +222,6 @@ module OidcRpLogoutLauncher
   def oidc_rp_logout_connection_for(resource_type)
     case resource_type.to_s
     when "operator" then OpBaseOrgRecord
-    when "visitor" then OpBaseComRecord
     else OpBaseAppRecord
     end
   end
@@ -283,7 +280,6 @@ module OidcRpLogoutLauncher
 
     case session_record
     when OpOrgGrant then session_record.staff
-    when OpComGrant then session_record.visitor
     else session_record.user
     end
   end
@@ -359,6 +355,8 @@ module OidcRpLogoutLauncher
   end
 
   def render_oidc_rp_logout_unavailable
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "auth/shared/sign_outs/unavailable", status: :unprocessable_content
   end
 

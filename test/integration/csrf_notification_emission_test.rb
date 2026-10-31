@@ -174,14 +174,11 @@ class CsrfNotificationEmissionTest < ActionDispatch::IntegrationTest
   end
 
   def with_forgery_protection
-    previous_base = ActionController::Base.allow_forgery_protection
-    previous_auth_app = Auth::App::ApplicationController.allow_forgery_protection
+    previous = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    Auth::App::ApplicationController.allow_forgery_protection = true
     yield
   ensure
-    ActionController::Base.allow_forgery_protection = previous_base
-    Auth::App::ApplicationController.allow_forgery_protection = previous_auth_app
+    ActionController::Base.allow_forgery_protection = previous
   end
 end
 

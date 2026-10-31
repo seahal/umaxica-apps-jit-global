@@ -46,7 +46,8 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@redocly/cli": "^2.71.2",
+    "@herb-tools/linter": "^0.11.1",
+    "@redocly/cli": "^2.72.1",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
@@ -54,7 +55,7 @@
     "@vitest/browser-playwright": "5.0.5",
     "@vitest/coverage-v8": "5.0.5",
     "jsdom": "^30.1.3",
-    "knip": "^6.43.0",
+    "knip": "^6.44.0",
     "lefthook": "2.2.2",
     "linkinator": "^8.1.0",
     "oxc-transform-react": "^0.155.0",

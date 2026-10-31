@@ -10,7 +10,6 @@ class AuthPreferencesBaseControllerTest < ActiveSupport::TestCase
   test "preference bases use surface application controllers and ActorSupport" do
     [
       Auth::App::PreferencesBaseController,
-      Auth::Com::PreferencesBaseController,
       Auth::Org::PreferencesBaseController,
     ].each do |controller|
       assert_equal controller.module_parent::ApplicationController, controller.superclass
@@ -21,14 +20,12 @@ class AuthPreferencesBaseControllerTest < ActiveSupport::TestCase
 
   test "open preference bases keep their surface layouts" do
     assert_equal "auth/app/application", Auth::App::PreferencesBaseController._layout
-    assert_equal "auth/com/application", Auth::Com::PreferencesBaseController._layout
     assert_equal "auth/org/application", Auth::Org::PreferencesBaseController._layout
   end
 
   test "preference bases authorize writes after actor resolution" do
     [
       Auth::App::PreferencesBaseController,
-      Auth::Com::PreferencesBaseController,
       Auth::Org::PreferencesBaseController,
     ].each do |controller|
       before_filters = controller._process_action_callbacks.select { |callback| callback.kind == :before }.map(&:filter)

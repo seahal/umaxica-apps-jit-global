@@ -4,9 +4,8 @@
 require "test_helper"
 
 # The rendered theme/language value must come from the expected authority for
-# the caller's state: the token-side preference for an anonymous visitor, and
-# the same token-side preference (now adopted/synced with the resource mirror)
-# once signed in. Both reads should agree on the value the user actually set.
+# the caller's state: the anonymous token snapshot for a visitor, and the
+# option-backed actor preference after an authenticated write.
 class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
   setup do
     https!
@@ -19,7 +18,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     patch base_app_preference_theme_url(ri: "jp"),
-          params: { preference_theme: { option_id: "dr" } }
+          params: { preference_theme: { option_id: AppPreferenceThemeOption::DARK.to_s } }
 
     assert_response :redirect
 
@@ -42,7 +41,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     assert_select "html[lang=?]", "ja"
   end
 
-  test "a conflicting language cookie does not override an explicit saved language" do
+  test "a regional request overlay wins over the saved language for that request" do
     # An anonymous session that explicitly chose English on the language screen.
     get edit_base_app_preference_language_url(ri: "jp")
     patch base_app_preference_language_url(ri: "jp"),
@@ -55,10 +54,10 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     get edit_base_app_preference_theme_url(ri: "jp")
 
     assert_response :success
-    assert_select "html[lang=?]", "en"
+    assert_select "html[lang=?]", "ja"
   end
 
-  test "signed-in theme read reflects the same token-side value after adoption" do
+  test "signed-in theme read reflects the explicitly saved actor value" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -104,7 +103,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     headers = { "Cookie" => rp_cookie }
 
     patch base_app_preference_theme_url(ri: "jp"), headers: headers, as: :json,
-                                                   params: { preference_theme: { option_id: "dr" } }
+                                                   params: { preference_theme: { option_id: AppPreferenceThemeOption::DARK.to_s } }
 
     assert_response :ok
     assert_equal "dr", response.parsed_body.dig("preference", "ct"),
@@ -119,7 +118,8 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     assert_equal "dr", response.parsed_body["theme"],
                  "signed-in read must reflect the value written through the same session"
 
-    assert_equal "dr", user.reload.user_preference.theme,
-                 "resource mirror (DB canonical for the signed-in user) must match the token-side write"
+    actor_preference = ClientPreference.includes(:client_preference_theme).find_by!(client_id: user.id)
+
+    assert_equal ClientPreferenceThemeOption::DARK, actor_preference.client_preference_theme.option_id
   end
 end

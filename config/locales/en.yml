@@ -711,6 +711,7 @@ en:
         issuance: Secret issuance
       client_sign_up_flow:
         auth_admission_binding: Admission binding
+        cleanup_status: Cleanup status reference
       client_telephone:
         number: Telephone number
         number_digest: Telephone number digest
@@ -718,9 +719,6 @@ en:
         otp_private_key: OTP private key
       client_telephone_ceremony_transaction:
         result_jti: Result JTI
-      com_enforcement_appeal:
-        reason_code: Appeal reason
-        statement: Appeal statement
       company:
         title: Title
       enterprise:
@@ -730,13 +728,6 @@ en:
       individual_assignment:
         assigned_at: Assigned at
       op_app_client_activation:
-        actor_ref: Changed by
-        audit_ref: Audit reference
-        changed_at: Changed at
-        client_id: Client ID
-        enabled: Enabled
-        source_manifest_digest: Source manifest digest
-      op_com_client_activation:
         actor_ref: Changed by
         audit_ref: Audit reference
         changed_at: Changed at
@@ -805,43 +796,6 @@ en:
         created_at: Created
         last_otp_at: Last used
         title: Name
-      visitor:
-        security_mode: Security mode
-      visitor_contact_audit_outbox:
-        acknowledged_at: Acknowledged at
-        actor_ref: Actor reference
-        contact_kind: Contact kind
-        contact_ref: Contact reference
-        event_name: Event
-        event_uuid: Event UUID
-        occurred_at: Occurred at
-        operation_ref: Operation reference
-        owner_ref: Owner reference
-      visitor_email:
-        address: Email address
-        address_digest: Email address digest
-        otp_counter: OTP counter
-        otp_private_key: OTP private key
-      visitor_identity:
-        source_record_id: Source record ID
-      visitor_passkey:
-        description: "Description"
-        sign_count: "Sign count"
-      visitor_secret_credential:
-        name: "Name"
-      visitor_sign_up_flow:
-        auth_admission_binding: Admission binding
-      visitor_step_up_session:
-        visitor_token_id: Visitor token ID
-      visitor_telephone:
-        number: Telephone number
-        number_digest: Telephone number digest
-        otp_counter: OTP counter
-        otp_private_key: OTP private key
-      visitor_token:
-        discard_at: Lapses at
-        purge_eligible_at: Purge at
-        refresh_expires_at: Refresh expires at
     errors:
       messages:
         birthdate_before_today: must be before today
@@ -1088,8 +1042,6 @@ en:
     user_secret_credential_kind: Secret credential kind
     user_token_id: User token ID
     visible_by_default: Visible by default
-    visitor: Visitor
-    visitor_token_id: Visitor token ID
     vocabulary_public_id_snapshot: Vocabulary public ID snapshot
     webauthn_id: WebAuthn ID
   auth:
@@ -1124,16 +1076,6 @@ en:
         emails:
           update:
             page_title: Email verification
-    com:
-      dashboards:
-        show:
-          description: Sign com signed-in landing.
-      settings:
-        activity:
-          events:
-            logged_in: Logged in
-            login_success: Login success
-            unknown: Unknown event (%{event_id})
     org:
       dashboards:
         show:
@@ -1643,16 +1585,10 @@ en:
           clients: App clients
           description: Account support for the app and com realms.
           enforcement_app: App enforcement cases
-          enforcement_com: Com enforcement cases
           title: Support
-          visitors: Com visitors
         values:
           bootstrap: Bootstrap procedure
           none: None
-        visitors:
-          empty: No visitors match.
-          show_title: Com visitor %{public_id}
-          title: Com visitors
       avatars:
         moniker_validation:
           blank: Name can't be blank.
@@ -1891,6 +1827,7 @@ en:
             medium: Medium
             none: None
           title: Activity history
+          unavailable: Activity history is temporarily unavailable. Please try again later.
           unknown_device: Unknown device
           unknown_location: Location unavailable
         links:
@@ -2708,18 +2645,6 @@ en:
               sign_up: UMAXICA - Verify your email address
             title: Verify your email address
             verify_link: Verify email
-      com:
-        otp_mailer:
-          create:
-            expiration_note: This code will expire in 10 minutes.
-            ignore_instruction: If you did not request this, please ignore this email.
-            instruction: 'Please use the following verification code to continue:'
-            subject: Your verification code
-            subjects:
-              sign_in: UMAXICA - Confirm your sign-in
-              sign_up: UMAXICA - Verify your email address
-            title: Verify your email address
-            verify_link: Verify email
       org:
         otp_mailer:
           create:
@@ -2749,8 +2674,6 @@ en:
     identity_audit_event_format_invalid: Invalid event ID format. Only uppercase letters and underscores are allowed.
   models:
     user:
-      recovery_identity_required: To register a passkey or secret_credential, please register and verify at least one email address or phone number first.
-    visitor:
       recovery_identity_required: To register a passkey or secret_credential, please register and verify at least one email address or phone number first.
   news:
     app:
@@ -2922,7 +2845,10 @@ en:
   preferences:
     title: Preferences
   privacy_erasure:
-    forbidden: Privacy erasure requests are available only during withdrawal procedures.
+    existing_requests: You can still view the status of an existing request.
+    forbidden: Privacy erasure requests cannot be submitted here at this time.
+    unavailable_action: Unavailable
+    withdrawal_separate: You can continue the withdrawal process separately.
   pwa:
     offline:
       description: Unable to connect to the server. Check your internet connection and try again.
@@ -3236,6 +3162,7 @@ en:
           edit:
             code_label: "Verification code"
             code_placeholder: "Enter the 6-digit code"
+            delivery_unavailable: "We could not confirm delivery. You can resend the code or go back to stop verification."
             delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
             description: "Almost done. Enter the 6-digit verification code sent to your email address."
             page_title: "Enter verification code"
@@ -3347,8 +3274,6 @@ en:
       registration:
         cancelled_retry_later: Registration cancelled. Please wait a while before registering again.
         checkpoint:
-          age_restricted: This sign-up method cannot create an account. Please try again after your 13th birthday.
-          age_restricted_retry: You can return to sign up and try again later.
           show:
             birthdate:
               description: Enter your birthdate to continue registration.
@@ -3775,214 +3700,6 @@ en:
           title: Set up verification methods
         success:
           complete: Verification completed.
-    com:
-      authentication:
-        email:
-          create:
-            cooldown: Please wait and try again.
-            invalid_format: "Invalid email address format."
-          edit:
-            code_label: "Verification code"
-            code_placeholder: "Enter the 6-digit code"
-            delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
-            description: "Almost done. Enter the 6-digit verification code sent to your email address."
-            page_title: "Enter verification code"
-            return_page: "Back"
-            submit: Register with Email
-          new:
-            page_title: Sign in with email
-            you_have_already_logged_in: You are already signed in.
-          update:
-            invalid_code: "Invalid verification code."
-        new:
-          back: Prefer a different method?
-          description: Select the method that fits your current session.
-          links:
-            email: Email
-            passkey: Passkey
-            registration: Need an account?
-            secret_credential: Secret
-          page_title: Choose how to sign in
-        passkey:
-          new:
-            description: Use your device's security features for a faster and safer login.
-            page_title: Sign in with a passkey
-            pii_label: Email or telephone
-            pii_placeholder: user@example.com or +81 90 1234 5678
-            submit: Sign in using passkey
-      in:
-        bulletins:
-          forbidden: You are not authorized to access this page.
-          show:
-            actions:
-              continue: Continue
-              update: Update
-            body: Please enable MFA. Important terms have changed. Do you accept?
-            title: Bulletin
-          timeout: The checkpoint timed out.
-          welcome:
-            body: Your account has been created. Thank you for using the service.
-            title: Welcome
-        checkpoints:
-          show:
-            title: Sign-in check
-        mfa:
-          description: "Choose an authentication method."
-          methods:
-            passkey: Authenticate with passkey
-          no_methods_available: "No authentication methods are available. Contact support."
-          passkey:
-            authenticate: "Authenticate with a passkey."
-            back: "Back to authentication methods."
-            description: "Authenticate with a registered passkey."
-            title: "Passkey verification"
-          title: "Additional authentication is required."
-      preferences:
-        footer:
-          dashboard: DASHBOARD
-          home: HOME
-          preference: PREFERENCES
-          settings: SETTINGS
-      registration:
-        cancelled_retry_later: Registration cancelled. Please wait a while before registering again.
-        checkpoint:
-          age_restricted: This sign-up method cannot create an account. Please try again after your 16th birthday.
-          show:
-            birthdate:
-              description: Enter your birthdate to continue registration.
-              label: Birthdate
-              submit: Continue
-              title: Confirm your birthdate
-            complete: Registration requirements are complete.
-            page_title: Complete registration
-            passkey:
-              action: Register passkey
-              description: Add a passkey before completing registration.
-              title: Register a passkey
-            social:
-              cancel_if_wrong: Cancel if this is not what you intended.
-              confirm_label: I understand that this creates a new Umaxica Identity.
-              create_identity: A new Umaxica Identity will be created.
-              no_merge: It cannot be merged into an existing account later.
-              unregistered: This %{provider} account is not registered.
-        email:
-          create:
-            contact_held: You can't start a registration with this email address right now. Please try again later.
-            address_required: Please enter an email address.
-            otp_resend_too_soon: Please wait before requesting another code.
-            turnstile_validation_failed: Security verification failed. Please try again.
-            verification_code_sent: Verification code has been sent to your email address.
-          edit:
-            session_expired: Your session has expired. Please start over.
-          new:
-            error_summary: Please check your input.
-            link_to_sign_in: "Sign in?"
-            page_title: Sign up with email
-          update:
-            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
-            code_required: Verification code is required.
-            invalid_code: Invalid verification code.
-        new:
-          links:
-            registration: Need an account?
-            sign_in: Sign in
-          methods:
-            email:
-              cta: Sign up with email
-            telephone:
-              cta: Sign up with telephone
-          page_description: Select how you would like to begin using %{product}.
-          page_title: Registration
-          social:
-            disclaimer: We will never post or share anything without your permission.
-        session_missing: Your registration session has expired. Please start again.
-        telephone:
-          create:
-            contact_held: You can't start a registration with this phone number right now. Please try again later.
-            turnstile_validation_failed: Security verification failed. Please try again.
-            verification_code_sent: Verification code has been sent via SMS.
-          edit:
-            code_label: "Verification code"
-            code_placeholder: "Enter the 6-digit code"
-            delivery_help: "If it doesn't arrive within a minute, check the phone number and SMS settings, then try again."
-            page_title: "Enter verification code"
-            session_expired: Your session has expired. Please start over.
-            submit: "Submit"
-          new:
-            link_to_other_methods: "Use another sign-up method?"
-            link_to_sign_in: "Sign in?"
-            page_title: "Sign up with a phone number"
-          success: Telephone number verified.
-          update:
-            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
-            code_required: Verification code is required.
-            invalid_code: Invalid verification code.
-            passkey_required: Phone verified. Please register a passkey to continue.
-            success: Telephone number verified.
-      settings:
-        birthdate:
-          show:
-            birthdate_label: Birthdate
-            change_unavailable: Contact support if this value needs to be changed.
-            description: This birthdate is used for age-gated features.
-            not_set: Not set
-            page_title: Birthdate
-        email:
-          destroy:
-            last_method: You must keep at least one login or recovery method.
-            success: Email address deleted.
-          edit:
-            always_on: Important account notifications
-            always_on_description: Security and account-critical messages are always sent.
-            notifiable_description: Receive product updates and operational notifications.
-            notifiable_label: Notification emails
-            promotional_description: Receive campaigns, offers, and event announcements.
-            promotional_label: Promotional emails
-            save: Save email settings
-            title: Email Address Settings
-          update:
-            failure: Email settings could not be updated.
-            success: Email settings updated.
-        passkeys:
-          new:
-            description_label: Passkey name
-            description_placeholder: e.g., MacBook Pro
-            submit: Register Passkey
-        show:
-          account_settings: Account Settings
-          logout: Logout
-          mfa: Multi-Factor Authentication
-          others: Others
-          page_title: Settings
-          security_settings: Security Settings
-          withdrawal: Withdrawal
-      verification:
-        edit:
-          authenticate_with_passkey: Authenticate with Passkey
-          back: Back
-          code_label: Verification Code
-          code_placeholder: 6 digits
-          description: Use your passkey to verify your identity.
-          email_delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
-          email_description: Please enter the code for identity verification.
-          submit: Confirm
-          title: Verification
-        errors:
-          incorrect_code: "The verification code is incorrect."
-        index:
-          title: Verification Sessions
-        new:
-          description: Verify your identity before continuing.
-          methods:
-            email_otp: Email (One-time code)
-            passkey: Passkey
-          title: Verification
-        setup:
-          description: Please register a passkey or an email address before continuing.
-          methods:
-            email: Register email
-            passkey: Register passkey
-          title: Set up verification methods
     common:
       birthdate_parts:
         day: DD
@@ -4606,6 +4323,7 @@ en:
   ui_presentation:
     body_json: Enter the document as JSON.
     confirmation_required: Check the confirmation above to enable this action.
+    display_preferences_description: Choose your display preferences.
     information: Information
     navigation:
       authentication: Authentication
@@ -4697,45 +4415,6 @@ en:
               capacity_still_full: Session capacity is still full. Revoke another session to continue.
               invalid_or_expired: This sign-in limitation link is invalid or expired.
               revoke_failed: The selected session could not be revoked.
-        up:
-          emails:
-            edit:
-              submit: Verify
-            new:
-              confirm_policy_label: I agree to the terms of service
-          telephones:
-            edit:
-              submit: Verify
-            new:
-              confirm_policy_label: I agree to the terms of service
-              confirm_using_mfa_label: I confirm MFA usage
-        verifications:
-          show:
-            no_methods: Please register an email, passkey, or TOTP.
-      com:
-        settings:
-          emails:
-            index:
-              empty: No email addresses registered.
-              unverified: Unverified
-              verified: Verified
-          telephones:
-            index:
-              actions: Actions
-              empty: No phone numbers registered.
-              unverified: Unverified
-              verified: Verified
-            registrations:
-              edit:
-                description: Please enter the verification code sent via SMS.
-                heading: Enter verification code
-                page_title: Enter verification code
-              new:
-                description: Add a new phone number to make your account management more secure.
-                help_text: A verification code will be sent to the entered phone number via SMS.
-        shared:
-          sign_out:
-            confirm_description: Once you log out, you will need to log in again.
         up:
           emails:
             edit:

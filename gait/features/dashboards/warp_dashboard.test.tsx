@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import WarpDashboard, { type WarpDashboardProps } from "@/features/dashboards/WarpDashboard";
 import WarpAppDashboardsShow from "@/pages/warp/app/dashboards/show";
-import WarpComDashboardsShow from "@/pages/warp/com/dashboards/show";
 import WarpOrgDashboardsShow from "@/pages/warp/org/dashboards/show";
 
 const props: WarpDashboardProps = {
@@ -59,7 +58,6 @@ describe("WarpDashboard", () => {
 describe("Warp dashboard pages", () => {
   it.each([
     ["warp/app", WarpAppDashboardsShow],
-    ["warp/com", WarpComDashboardsShow],
     ["warp/org", WarpOrgDashboardsShow],
   ])("%s renders the shared dashboard", (_surface, Page) => {
     expect(Page).toBe(WarpDashboard);

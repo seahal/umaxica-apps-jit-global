@@ -8,24 +8,19 @@ require "minitest/mock"
 class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(success primary_freshness_elapsed missing_parent foreign_parent foreign_owner foreign_root foreign_browser
        expired_parent canceled_parent canceled_then_restarted_parent
        revoked_root changed_policy foreign_return_target wrong_scope_target empty_return_target unknown_scope
        source_fault contact_receipt_fault bootstrap_receipt_fault).each do |scenario|
       test "#{surface} first email bootstrap #{scenario} retains original registration authority without freshness" do
         owner_model, token_model, contact_model, policy_model, auth_model, audit_model, owner_key =
-          if surface == :app
-            [Client, ClientToken, ClientEmail, ClientEmailPolicy, ClientAuthCeremonySession,
-             ClientContactAuditOutbox, :user_id,]
-          else
-            [Visitor, VisitorToken, VisitorEmail, VisitorEmailPolicy, VisitorAuthCeremonySession,
-             VisitorContactAuditOutbox, :visitor_id,]
-          end
+          [Client, ClientToken, ClientEmail, ClientEmailPolicy, ClientAuthCeremonySession,
+           ClientContactAuditOutbox, :user_id,]
         actor = owner_model.create!(
           security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-          status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+          status_id: ClientStatus::ACTIVE,
         )
         token = token_model.create!(
           :authentication_epoch => 0,
@@ -85,7 +80,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
         ), :success?
         requirement = policy_model.new(contact, user: actor).credential_registration_requirement(token:)
         actor_context = ActorValuesContext.empty.with(
-          subject: actor, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+          subject: actor, actor_type: :client, tld: surface, surface: :base,
         )
 
         assert_not_predicate StepUpResolver.call(token:, requirement:, now: token_model.database_now), :satisfied?
@@ -107,7 +102,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           foreign_actor = owner_model.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
             id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+            status_id: ClientStatus::ACTIVE,
           )
           foreign_token = token_model.create!(
             :authentication_epoch => 0,
@@ -134,7 +129,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
         when :foreign_owner
           arguments[:actor] = owner_model.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
-            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+            status_id: ClientStatus::ACTIVE,
           )
         when :foreign_browser
           arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)

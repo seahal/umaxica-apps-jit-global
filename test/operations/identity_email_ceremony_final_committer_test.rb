@@ -147,6 +147,43 @@ class IdentityEmailCeremonyFinalCommitterTest < ActiveSupport::TestCase
     end
   end
 
+  test "a withdrawn owner is rejected before its Email ceremony result is consumed" do
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE, withdrawn_at: 1.minute.ago,
+    )
+    contact = ClientEmail.create!(user_id: actor.id, address: "inactive-owner@example.test", confirm_policy: "1")
+    now = ClientEmailCeremonyTransaction.database_now
+    parent = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: "inactive-owner-browser", operation: "registration",
+      email_candidate_ref: contact.public_id, normalized_email_digest: contact.address_digest, now: now,
+    )
+    result_token = IdentityEmailCeremonyResult.issue(
+      { surface: "app",
+        actor_ref: actor.public_id,
+        session_ref: parent.session_ref,
+        transaction_id: parent.transaction_id,
+        grant_jti: parent.grant_jti,
+        result_jti: SecureRandom.uuid,
+        operation: parent.operation,
+        verified_at: now.to_i,
+        challenge_id: SecureRandom.uuid,
+        expires_at: parent.expires_at.to_i,
+        email_candidate_ref: contact.public_id,
+        normalized_email_digest: contact.address_digest, },
+      issuer_id: IdentityEmailCeremonyContract.sign_issuer_id("app"), now: now,
+    )
+
+    assert_raises(IdentityEmailCeremonyContract::Error) do
+      IdentityEmailCeremonyFinalCommitter.call!(
+        result_token: result_token,
+        actor_context: ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base),
+        actor: actor, session_ref: parent.session_ref, surface: "app", now: now,
+      )
+    end
+    assert_not parent.reload.consumed?
+    assert_equal ClientEmailStatus::UNVERIFIED, contact.reload.user_email_status_id
+  end
+
   test "commits through the locked record and writes the app Source audit" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     contact = ClientEmail.create!(user_id: actor.id, address: "locked-audit@example.test", confirm_policy: "1")
@@ -253,6 +290,14 @@ class IdentityEmailCeremonyFinalCommitterTest < ActiveSupport::TestCase
       @id = id
       @public_id = public_id
       @status_id = status_id
+    end
+
+    def with_lock
+      yield
+    end
+
+    def active?
+      true
     end
 
     def blank?

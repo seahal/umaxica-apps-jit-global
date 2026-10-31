@@ -6,28 +6,33 @@ class TelephoneSignUpOtpIssuer
 
     def call(flow:, telephone:, session_nonce:)
       owner, transaction_model, pending_status = components(flow, telephone)
-      flow.with_lock do
-        unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-            session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
-          next refused(:session_mismatch)
-        end
+      owner.with_lock do
+        telephone.with_lock do
+          issued =
+            flow.with_lock do
+              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
+                  flow.nonce_matches?(session_nonce)
+                next refused(:session_mismatch)
+              end
 
-        now = flow.class.database_now
-        if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
-          next refused(:inactive_flow)
-        end
-        unless flow.pending_contact_type == "telephone" && flow.pending_contact_id == telephone.id &&
-            flow.principal_id == owner.id
-          next refused(:binding_mismatch)
-        end
+              now = flow.class.database_now
+              if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
+                next refused(:inactive_flow)
+              end
+              unless flow.pending_contact_type == "telephone" && flow.pending_contact_id == telephone.id &&
+                  flow.principal_id == owner.id
+                next refused(:binding_mismatch)
+              end
+              unless owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
+                  owner.accessible?(owner.class.database_now)
+                next refused(:inactive_candidate)
+              end
 
-        owner.with_lock do
-          unless owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
-              owner.accessible?(owner.class.database_now)
-            next refused(:inactive_candidate)
-          end
-
-          telephone.with_lock { issue_locked(flow, telephone, owner, transaction_model) }
+              issue_locked(flow, telephone, owner, transaction_model)
+            end
+          telephone.update!(otp_last_sent_at: telephone.class.database_now) if issued.success?
+          issued
         end
       end
 
@@ -41,10 +46,6 @@ class TelephoneSignUpOtpIssuer
         raise ArgumentError, "APP signup requires its own Telephone" unless telephone.is_a?(ClientTelephone)
 
         [Client.find(telephone.user_id), ClientTelephoneCeremonyTransaction, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-      when VisitorSignUpFlow
-        raise ArgumentError, "COM signup requires its own Telephone" unless telephone.is_a?(VisitorTelephone)
-
-        [Visitor.find(telephone.visitor_id), VisitorTelephoneCeremonyTransaction, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Telephone signup realm"
       end
     end
@@ -70,20 +71,19 @@ class TelephoneSignUpOtpIssuer
         return refused(:rate_limited)
       end
 
-      issue_bound_transaction(flow, telephone, owner, transaction_model, now)
+      issue_bound_transaction(flow, telephone, owner, transaction_model)
     end
 
     def current_owner?(telephone, owner)
       current_owner_id =
         case telephone
         when ClientTelephone then telephone.user_id
-        when VisitorTelephone then telephone.visitor_id
         else raise ArgumentError, "unsupported Telephone signup candidate"
         end
       current_owner_id == owner.id
     end
 
-    def issue_bound_transaction(flow, telephone, owner, transaction_model, now)
+    def issue_bound_transaction(flow, telephone, owner, transaction_model)
       session_ref = Digest::SHA256.hexdigest(JSON.generate(["telephone_sign_up", flow.public_id, flow.nonce_digest]))
       binding = {
         operation: "sign_up",
@@ -93,8 +93,9 @@ class TelephoneSignUpOtpIssuer
         normalized_number_digest: telephone.number_digest,
       }
       transactions = transaction_model.where(binding.except(:normalized_number_digest))
+      existing = transactions.exists?
       transaction =
-        transactions.exists? ? transactions.sole :
+        existing ? transactions.lock.sole :
                create_transaction_with_generated_reference!(
                  transaction_model: transaction_model, binding: binding, expires_at: flow.expires_at,
                )
@@ -105,13 +106,17 @@ class TelephoneSignUpOtpIssuer
           transaction.expires_at == flow.expires_at
         return refused(:binding_mismatch)
       end
+      if existing && !transaction.telephone_otp_deliverable?(
+        generation: transaction.otp_generation, at: transaction_model.database_now,
+      )
+        return refused(:closed_challenge)
+      end
 
-      issue_transaction(transaction, telephone, now)
+      issue_transaction(transaction)
     end
 
-    def issue_transaction(transaction, telephone, now)
+    def issue_transaction(transaction)
       code = transaction.issue_telephone_otp!(purpose: "sign_up")
-      telephone.update!(otp_last_sent_at: now)
       TelephoneSignUpOtpIssueResult.new(status: :issued, transaction: transaction, code: code)
     end
 

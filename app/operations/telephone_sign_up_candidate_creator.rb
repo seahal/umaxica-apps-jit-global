@@ -14,12 +14,6 @@ class TelephoneSignUpCandidateCreator
         end
 
         telephone_model = ClientTelephone
-      when VisitorTelephone
-        if telephone.visitor_id || telephone.visitor
-          raise ArgumentError, "Telephone signup cannot reuse an existing owner"
-        end
-
-        telephone_model = VisitorTelephone
       else raise ArgumentError, "unsupported Telephone signup candidate"
       end
 
@@ -44,12 +38,6 @@ class TelephoneSignUpCandidateCreator
       when ClientTelephone
         telephone.user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP, security_mode_id: ClientSecurityMode::NORMAL)
         telephone.user_telephone_status_id = ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-      when VisitorTelephone
-        telephone.visitor = Visitor.create!(
-          status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-          security_mode_id: VisitorSecurityMode::NORMAL, visibility_id: VisitorVisibility::VISITOR,
-        )
-        telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
       else raise ArgumentError, "unsupported Telephone signup candidate"
       end
       telephone.save!

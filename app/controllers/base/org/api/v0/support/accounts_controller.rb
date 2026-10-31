@@ -6,10 +6,10 @@ module Base
     module Api
       module V0
         module Support
-          # Org Support owner for app Client / com Visitor administration (R5-WU12, approved
-          # pattern). The org operator's signed caller is verified here; the existing target-specific
-          # Support policies and Enforcement case policy decide; session revocation keeps its audit,
-          # Step-Up and AccountSessionRevocation semantics. No cross-TLD user login is involved.
+          # Org Support owner for app Client administration (R5-WU12, approved pattern). The org
+          # operator's signed caller is verified here; the existing target-specific Support policy and
+          # Enforcement case policy decide; session revocation keeps its audit, Step-Up and
+          # AccountSessionRevocation semantics. No cross-TLD user login is involved.
           class AccountsController < ActionController::API
             include ::DefaultNoStore
 
@@ -26,7 +26,6 @@ module Base
             STEP_UP_SCOPE = "support_session_revoke"
             REALMS = {
               "app" => [Client, SupportClientPolicy, AppEnforcementCase],
-              "com" => [Visitor, SupportVisitorPolicy, ComEnforcementCase],
             }.freeze
 
             authorize :user, through: :avatar_actor

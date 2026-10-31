@@ -9,6 +9,7 @@ module Auth
         include ::AuthCeremonyAdmission
 
         AUTHENTICATION_MODE = :guest
+        sign_entry_classification! :sign_up
 
         helper Auth::Org::SignUpsHelper
         declare_authentication_mode! :guest, no_redirect: true
@@ -33,7 +34,6 @@ module Auth
           {
             title: t("sign.org.ups.new.heading"),
             description: t("sign.org.ups.new.description"),
-            suspended_notice: nil,
             recruit: {
               prompt: t("sign.org.ups.new.recruit_prompt"),
               label: t("sign.org.ups.new.recruit_link_text"),

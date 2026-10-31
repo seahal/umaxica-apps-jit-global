@@ -23,28 +23,29 @@ class RetentionPurgeJob < ApplicationJob
   # ON DELETE RESTRICT, so a parent token cannot silently delete a child.
   # Child-before-parent ordering remains explicit for retention readability and
   # for any independently cascading relations that are added under review.
+  # Com preferences need the lifecycle-specific audit and hold checks; expiry alone does not
+  # authorize deleting either the preference or its Chronicle history.
   RETAINABLE_MODELS = %w(
-    AppPreferenceChronicle ComPreferenceChronicle OrgPreferenceChronicle
+    AppPreferenceChronicle OrgPreferenceChronicle
     ClientChronicle OperatorChronicle
-    ClientSessionLimitResolutionTransaction VisitorSessionLimitResolutionTransaction
-    OperatorSessionLimitResolutionTransaction
-    ClientSignInFlow VisitorSignInFlow OperatorSignInFlow
-    ClientWithdrawalFlow VisitorWithdrawalFlow
-    ClientProcessorErasureNotification VisitorProcessorErasureNotification
-    ClientPrivacyRequest VisitorPrivacyRequest
-    ClientRetentionHold VisitorRetentionHold
-    ClientSignUpFlow VisitorSignUpFlow OperatorSignUpFlow
-    ClientSecretCredential VisitorSecretCredential OperatorSecretCredential
+    ClientSessionLimitResolutionTransaction OperatorSessionLimitResolutionTransaction
+    ClientSignInFlow OperatorSignInFlow
+    ClientWithdrawalFlow
+    ClientProcessorErasureNotification
+    ClientPrivacyRequest
+    ClientRetentionHold
+    ClientSignUpFlow OperatorSignUpFlow
+    ClientSecretCredential OperatorSecretCredential
     Avatar Member OperatorWorkspaceAccount
-    AppPreference OrgPreference ComPreference
-    ClientEmail VisitorEmail ClientTelephone VisitorTelephone
-    ClientPasskey VisitorPasskey
-    ClientToken OperatorToken VisitorToken
-    ClientVerification OperatorVerification VisitorVerification
-    ClientStepUpSession OperatorStepUpSession VisitorStepUpSession
+    AppPreference OrgPreference
+    ClientEmail ClientTelephone
+    ClientPasskey
+    ClientToken OperatorToken
+    ClientVerification OperatorVerification
+    ClientStepUpSession OperatorStepUpSession
     AreaOccurrence ClientOccurrence VisitorOccurrence OperatorOccurrence ZipOccurrence
     DomainOccurrence IpOccurrence EmailOccurrence JwtOccurrence TelephoneOccurrence
-    Client Visitor Operator
+    Client Operator
   ).filter_map(&:safe_constantize).freeze
 
   # Operational kill switch, not a retention rule: the flag exists so an
@@ -56,7 +57,7 @@ class RetentionPurgeJob < ApplicationJob
   # schedule (config/recurring.yml, every 15 minutes) as the retry mechanism;
   # raising would only requeue work that is deliberately paused.
   FEATURE_NAME = :retention_purge_suspended
-  SIGN_UP_REPORT_SURFACES = %i(app com).freeze
+  SIGN_UP_REPORT_SURFACES = %i(app).freeze
 
   def perform(batch_size: DEFAULT_BATCH_SIZE)
     limit = normalized_batch_size(batch_size)
@@ -132,7 +133,7 @@ class RetentionPurgeJob < ApplicationJob
     return if klass == ClientSecretCredential
     return if purge_special_retained_model(klass, now: now, batch_size: batch_size)
     return unless klass.column_names.include?("purge_eligible_at")
-    return purge_root_tokens(klass, now: now, batch_size: batch_size) if [VisitorToken, OperatorToken].include?(klass)
+    return purge_root_tokens(klass, now: now, batch_size: batch_size) if klass == OperatorToken
 
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size).delete_all
   end
@@ -140,7 +141,7 @@ class RetentionPurgeJob < ApplicationJob
   # Authority-stop records referencing a root go first (D-172 S-2); a root whose stop still has an
   # undelivered participant stays until the next run.
   def purge_root_tokens(klass, now:, batch_size:)
-    realm = { VisitorToken => "com", OperatorToken => "org" }.fetch(klass)
+    realm = { OperatorToken => "org" }.fetch(klass)
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
       ids = batch.pluck(:id)
       held = OpAuthorityStopPurger.release_roots!(realm:, root_ids: ids)
@@ -149,28 +150,25 @@ class RetentionPurgeJob < ApplicationJob
   end
 
   def purge_special_retained_model(klass, now:, batch_size:)
-    if [ClientEmail, VisitorEmail].include?(klass)
+    if klass == ClientEmail
       purge_email_identifiers(klass, now: now, batch_size: batch_size)
-    elsif [ClientTelephone, VisitorTelephone].include?(klass)
+    elsif klass == ClientTelephone
       purge_telephone_identifiers(klass, now: now, batch_size: batch_size)
     elsif klass == Avatar
       purge_avatars(now: now, batch_size: batch_size)
-    elsif [Client, Visitor].include?(klass)
+    elsif klass == Client
       anonymize_accounts(klass, now: now, batch_size: batch_size)
     elsif klass == Operator
       purge_operators(now: now, batch_size: batch_size)
-    elsif [ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow].include?(klass)
+    elsif [ClientSignInFlow, OperatorSignInFlow].include?(klass)
       purge_sign_in_flows(klass, now: now, batch_size: batch_size)
     elsif klass == ClientSignUpFlow
       purge_client_authentication_flows(klass, now: now, batch_size: batch_size)
-    elsif klass == VisitorSignUpFlow
-      purge_visitor_sign_up_flows(klass, now: now, batch_size: batch_size)
     elsif klass == ClientToken
       purge_client_tokens(klass, now: now, batch_size: batch_size)
-    elsif [ClientPasskey, VisitorPasskey].include?(klass)
+    elsif klass == ClientPasskey
       purge_passkeys(klass, now: now, batch_size: batch_size)
-    elsif [ClientSessionLimitResolutionTransaction, VisitorSessionLimitResolutionTransaction,
-           OperatorSessionLimitResolutionTransaction,].include?(klass)
+    elsif [ClientSessionLimitResolutionTransaction, OperatorSessionLimitResolutionTransaction].include?(klass)
       purge_session_limit_resolutions(klass, now: now, batch_size: batch_size)
     else
       return false
@@ -232,20 +230,6 @@ class RetentionPurgeJob < ApplicationJob
     end
   end
 
-  def purge_visitor_sign_up_flows(klass, now:, batch_size:)
-    completed_status_id = klass.status_id_for("COMPLETED")
-    completed_cleanup_status_id = klass.cleanup_status_id_for(:completed)
-    cleanup_required_status_ids = SignUpArtifactCleanup.cleanup_status_ids(klass) - [completed_status_id]
-    eligible_scope = klass.where(purge_eligible_at: ..now)
-    completed_scope = eligible_scope.where(status_id: completed_status_id)
-    cleaned_terminal_scope = eligible_scope.where(
-      status_id: cleanup_required_status_ids,
-      cleanup_status_id: completed_cleanup_status_id,
-    )
-
-    completed_scope.or(cleaned_terminal_scope).in_batches(of: batch_size).delete_all
-  end
-
   def purge_client_tokens(klass, now:, batch_size:)
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
       batch.to_a.each do |token|
@@ -275,8 +259,6 @@ class RetentionPurgeJob < ApplicationJob
     owner_class, owner_key, signup_flow_class, surface =
       if klass == ClientPasskey
         [Client, :user_id, ClientSignUpFlow, "app"]
-      elsif klass == VisitorPasskey
-        [Visitor, :visitor_id, VisitorSignUpFlow, "com"]
       else
         raise ArgumentError, "unsupported passkey class: #{klass.name}"
       end
@@ -401,7 +383,6 @@ class RetentionPurgeJob < ApplicationJob
     flow_class =
       case klass.name
       when "ClientSessionLimitResolutionTransaction" then ClientSignInFlow
-      when "VisitorSessionLimitResolutionTransaction" then VisitorSignInFlow
       when "OperatorSessionLimitResolutionTransaction" then OperatorSignInFlow
       else
         raise FlowConfigurationError, "unsupported session-limit resolution class: #{klass.name}"
@@ -459,7 +440,6 @@ class RetentionPurgeJob < ApplicationJob
   def enforcement_case_class_for(actor)
     case actor
     when Client then AppEnforcementCase
-    when Visitor then ComEnforcementCase
     when Operator then OrgEnforcementCase
     end
   end
@@ -507,7 +487,6 @@ class RetentionPurgeJob < ApplicationJob
     emails, telephones =
       case actor
       when Client then [actor.client_emails, actor.client_telephones]
-      when Visitor then [actor.visitor_emails, actor.visitor_telephones]
       else raise ArgumentError, "unsupported identifier retirement actor"
       end
     emails.where(purge_eligible_at: ..emails.klass.database_now).order(:id).find_each do |email|
@@ -531,7 +510,6 @@ class RetentionPurgeJob < ApplicationJob
   def active_retention_hold_for(actor, now:)
     case actor
     when Client then actor.client_retention_holds.active_at(now).first
-    when Visitor then actor.visitor_retention_holds.active_at(now).first
     end
   end
 
@@ -565,7 +543,6 @@ class RetentionPurgeJob < ApplicationJob
   def privacy_requests_for(actor)
     case actor
     when Client then actor.client_privacy_requests
-    when Visitor then actor.visitor_privacy_requests
     else
       raise ArgumentError, "unsupported retention actor: #{actor.class.name}"
     end

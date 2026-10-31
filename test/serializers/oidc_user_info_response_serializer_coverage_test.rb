@@ -20,15 +20,15 @@ class OidcUserInfoResponseSerializerCoverageTest < ActiveSupport::TestCase
   end
 
   test "build omits profile claims when the resource does not expose them" do
-    resource = Struct.new(:public_id).new("visitor-1")
+    resource = Struct.new(:public_id).new("client-1")
 
     claims = OidcUserInfoResponseSerializer.build(
       resource: resource,
-      payload: { "acr" => "acr", "scope" => "openid domain:visitor" },
+      payload: { "acr" => "acr", "scope" => "openid domain:client" },
     )
 
     assert_equal "acr", claims[:acr]
-    assert_equal OidcSubject.for(resource, resource_type: "visitor"), claims[:sub]
+    assert_equal OidcSubject.for(resource, resource_type: "client"), claims[:sub]
     assert_not claims.key?(:name)
     assert_not claims.key?(:email)
     assert_not claims.key?(:email_verified)

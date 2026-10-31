@@ -6,6 +6,14 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   include ActiveJob::TestHelper
 
+  test "retired corporate and unsupported receipt surfaces are rejected" do
+    ["com", "org", "", nil].each do |surface|
+      assert_raises(ArgumentError) do
+        ProcessorErasureNotificationReceiptConsumer.call(surface: surface, public_id: "missing", raw_receipt: {})
+      end
+    end
+  end
+
   class FakeAdapter
     attr_reader :receipts
 

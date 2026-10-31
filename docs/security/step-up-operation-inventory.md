@@ -32,6 +32,7 @@ grant step-up freshness.
 | app | Client / own identity | Passkey creation, update, removal | Base/Auth identity and passkey controllers, `settings_passkey` | Bootstrap for the first credential; step-up for existing credentials | Registration and ordinary step-up remain separate | Registration entry is available only through configured bootstrap rules; no credential is silently selected |
 | app | Client / own identity | TOTP creation and removal | Base/Auth TOTP controllers, `settings_totp` | Bootstrap for first TOTP; step-up for later changes | TOTP enrollment does not grant step-up freshness | Only active app TOTP is offered and permanent credential lock is respected |
 | app | Client / own identity | Email and telephone change or removal | Base identity controllers, `settings_email` / `settings_telephone` | Step-up and contact verification as applicable | Contact evidence remains bound to actor, candidate, flow and browser | Delivery or verification failure is a real refusal; old binding remains effective |
+
 | app | Client / own sessions | Revoke another session or all sessions | Base revocation controller, `session_revoke_all` | Step-up | The protected mutation rechecks current session and target ownership | No session mutation occurs without a current step-up |
 | app | Client / own account | Withdrawal | Base withdrawal controller, `withdrawal` | Step-up and existing Action Policy | Current account/resource policy is re-evaluated immediately before commit | Refuse; no partial withdrawal state is created |
 | app | Client / own avatar | Avatar ownership transfer request, accept, cancel | Base avatar transfer controller, `avatar_transfer_*` | Step-up per transition | Each transition has its own scope and resource binding | Refuse the transition; do not reuse another transition's proof |
@@ -54,6 +55,17 @@ credential. Evidence from an expired event, another scope, a replaced session, o
 authenticator cannot authorize the mutation. The fifteen-minute deadline is exclusive. First-key
 bootstrap remains a separate ceremony, and replay of an already consumed registration returns the
 existing credential without creating another one.
+
+For an app Email preference edit, the signed return path identifies an Email owned by the current
+actor. The Step-Up transaction and the preference mutation both bind `resource_ref` to that Email's
+public identifier. Unbound evidence and evidence for another Email do not authorize the edit.
+Email registration and removal have their own existing requirements; this statement does not claim
+that their separate target-binding work is complete.
+
+The Base app TOTP detail page requires Step-Up bound to the owned TOTP credential before rename
+or removal. Its signed return path is checked against the current actor before the target enters
+the Step-Up transaction. A successful rename consumes that evidence and returns to the TOTP list.
+This does not establish the separate credential-removal writer's complete audit or race contract.
 
 ## Scope and destination catalog
 

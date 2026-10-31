@@ -4,6 +4,8 @@
 require "test_helper"
 
 class StandardCsrfInvariantTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   test "application and library code leave Rails request acceptance and CSRF exception handling unchanged" do
     offenders =
       Rails.root.glob("{app,lib}/**/*.rb").filter_map do |path|

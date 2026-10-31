@@ -6,8 +6,6 @@ class StepUpTransactionReferenceUniquenessTest < ActiveSupport::TestCase
   CELLS = [
     [Client, ClientStatus::ACTIVE, ClientVisibility::USER, ClientToken, :user, ClientStepUpSession, :user_token,
      ClientStepUpCeremonyTransaction,],
-    [Visitor, VisitorStatus::ACTIVE, VisitorVisibility::VISITOR, VisitorToken, :visitor,
-     VisitorStepUpSession, :visitor_token, VisitorStepUpCeremonyTransaction,],
     [Operator, OperatorStatus::ACTIVE, OperatorVisibility::STAFF, OperatorToken, :staff,
      OperatorStepUpSession, :staff_token, OperatorStepUpCeremonyTransaction,],
   ].freeze

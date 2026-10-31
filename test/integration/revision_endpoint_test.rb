@@ -18,7 +18,6 @@ class RevisionEndpointTest < ActionDispatch::IntegrationTest
 
   SURFACES = [
     { host: ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost"), realm: "auth", surface: "app" },
-    { host: ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost"), realm: "auth", surface: "com" },
     { host: ENV.fetch("PRIVATE_AUTH_STAFF_URL", "sign.org.localhost"), realm: "auth", surface: "org" },
     { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), realm: "base", surface: "app" },
     { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), realm: "base", surface: "com" },
@@ -27,7 +26,6 @@ class RevisionEndpointTest < ActionDispatch::IntegrationTest
     { host: ENV.fetch("PRIVATE_BASE_NETWORK_URL", "base.net.localhost"), realm: "base", surface: "net" },
     { host: ENV.fetch("PRIVATE_BASE_DEVELOPER_URL", "base.dev.localhost"), realm: "base", surface: "dev" },
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"), realm: "core", surface: "app" },
-    { host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"), realm: "core", surface: "com" },
     { host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"), realm: "core", surface: "org" },
     { host: ENV.fetch("PRIVATE_CORE_NETWORK_URL", "core.net.localhost"), realm: "core", surface: "net" },
     { host: ENV.fetch("PRIVATE_CORE_DEVELOPER_URL", "core.dev.localhost"), realm: "core", surface: "dev" },

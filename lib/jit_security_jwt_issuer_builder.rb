@@ -119,7 +119,7 @@ module JitSecurityJwtIssuerBuilder
       merged[kid] = KeyRecord.new(
         kid: kid,
         private_key: private_key,
-        public_key: private_key,
+        public_key: import_public_key(derived_jwk),
         public_jwk: derived_jwk,
         state: state,
       )

@@ -12,6 +12,9 @@ class EmailReentryOtpVerificationCommitter
       email.with_lock do
         now = email.class.database_now
         next false if email.locked?(now: now)
+        next false if email.is_a?(ClientEmail) &&
+          !(email.binding_effective? && email.accessible?(now) &&
+            ClientEmail::EDITABLE_SUBSCRIPTION_PREFERENCE_STATUS_IDS.include?(email.user_email_status_id))
 
         transaction = transaction_model.find_by(transaction_id: transaction_ref)
         next false unless transaction
@@ -52,7 +55,6 @@ class EmailReentryOtpVerificationCommitter
     def components(email)
       case email
       when ClientEmail then [:app, ClientEmailCeremonyTransaction]
-      when VisitorEmail then [:com, VisitorEmailCeremonyTransaction]
       when OperatorEmail then [:org, OperatorEmailCeremonyTransaction]
       else raise ArgumentError, "unsupported reentry email identifier"
       end
@@ -61,7 +63,6 @@ class EmailReentryOtpVerificationCommitter
     def owner_reference(email)
       case email
       when ClientEmail then Client.find(email.user_id).public_id
-      when VisitorEmail then Visitor.find(email.visitor_id).public_id
       when OperatorEmail then Operator.find(email.staff_id).public_id
       else raise ArgumentError, "unsupported reentry email identifier"
       end

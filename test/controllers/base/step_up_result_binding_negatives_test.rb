@@ -5,7 +5,7 @@ require "test_helper"
 # Synthetic recorded evidence isolates result application from WebAuthn verification. The
 # admission, opaque result, current requirement and finalization are all real production APIs.
 class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     {
       actor_ref: "another-actor",
       session_binding: "another-session",
@@ -27,13 +27,6 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
             )
             [actor, ClientToken.create!(authentication_epoch: 0, user: actor),
              actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
-          when "com"
-            actor = Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL,
-              id: SecureRandom.random_number(1 << 60), status_id: VisitorStatus::ACTIVE,
-            )
-            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor),
-             actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
           when "org"
             actor = Operator.create!(
               security_mode_id: SecurityModeConfigurable::ADVANCED,

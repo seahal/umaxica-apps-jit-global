@@ -88,10 +88,7 @@ module SignUpSwitchTestSupport
       end
     receiver.host!(target.host)
     receiver.https!
-    navigational_path = target.path.start_with?("/oidc/") || target.path.start_with?("/sign/oidc/") ||
-      target.path.start_with?("/ceremony_bindings/")
-    headers = navigational_path ? sign_up_navigation_headers : {}
-    receiver.get(target.request_uri, headers: headers)
+    receiver.get(target.request_uri, headers: sign_up_navigation_headers)
     receiver
   end
 

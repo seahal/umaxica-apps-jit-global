@@ -17,8 +17,6 @@ class TelephoneCredentialRegistrationOtpResendIssuer
       case [actor, token, telephone, transaction]
       in [Client, ClientToken, ClientTelephone, ClientTelephoneCeremonyTransaction]
         ["app", ClientTelephoneStatus::UNVERIFIED]
-      in [Visitor, VisitorToken, VisitorTelephone, VisitorTelephoneCeremonyTransaction]
-        ["com", VisitorTelephoneStatus::UNVERIFIED]
       in [Operator, OperatorToken, OperatorTelephone, OperatorTelephoneCeremonyTransaction]
         ["org", OperatorTelephoneStatus::UNVERIFIED]
       else raise ArgumentError, "unsupported Telephone registration resend realm"
@@ -70,7 +68,7 @@ class TelephoneCredentialRegistrationOtpResendIssuer
   def source_current?(now)
     available =
       case telephone
-      when ClientTelephone, VisitorTelephone
+      when ClientTelephone
         telephone.accessible?(now) && !telephone.binding_finalized_at && !telephone.binding_released?
       when OperatorTelephone then telephone.staff_telephone_status_id == pending_status
       end
@@ -83,9 +81,6 @@ class TelephoneCredentialRegistrationOtpResendIssuer
     when Client
       token.user_id == owner_id && token_device_session.user_id == owner_id && telephone.user_id == owner_id &&
         telephone.user_telephone_status_id == pending_status
-    when Visitor
-      token.visitor_id == owner_id && token_device_session.visitor_id == owner_id &&
-        telephone.visitor_id == owner_id && telephone.visitor_telephone_status_id == pending_status
     when Operator
       token.staff_id == owner_id && token_device_session.staff_id == owner_id && telephone.staff_id == owner_id &&
         telephone.staff_telephone_status_id == pending_status
@@ -94,13 +89,13 @@ class TelephoneCredentialRegistrationOtpResendIssuer
 
   def root_current?(now)
     token.active_status?(now) && token_device_session.usable? &&
-      token_device_session.current_refresh_token_id == token.id
+      token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
   def ticket_current?(expected, now)
     candidate =
       case telephone
-      when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
+      when ClientTelephone, OperatorTelephone then telephone.public_id
       end
     transaction.surface == surface && transaction.actor_ref == actor.public_id && transaction.session_ref == expected &&
       transaction.operation == "registration" && transaction.purpose == "credential_registration" &&

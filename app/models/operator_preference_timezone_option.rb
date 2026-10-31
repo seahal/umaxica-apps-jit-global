@@ -31,11 +31,6 @@ class OperatorPreferenceTimezoneOption < OrgPrincipalRecord
     PACIFIC_HONOLULU,
   ].freeze
 
-  has_many :staff_preference_timezones,
-           class_name: "OperatorPreferenceTimezone",
-           foreign_key: :option_id,
-           inverse_of: :option,
-           dependent: :restrict_with_error
   has_many :operator_preference_timezones,
            class_name: "OperatorPreferenceTimezone",
            foreign_key: :option_id,

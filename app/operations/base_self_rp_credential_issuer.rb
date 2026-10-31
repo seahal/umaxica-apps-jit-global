@@ -116,7 +116,6 @@ class BaseSelfRpCredentialIssuer
     def resource_type_for(rp_session)
       case rp_session
       when OpAppGrant then "client"
-      when OpComGrant then "visitor"
       when OpOrgGrant then "operator"
       else raise CredentialUnavailable, "unsupported Base self-RP Session"
       end
@@ -130,7 +129,6 @@ class BaseSelfRpCredentialIssuer
     def resource_matches?(root_token, resource)
       case root_token
       when ClientToken then root_token.user_id == resource.id && resource.is_a?(Client)
-      when VisitorToken then root_token.visitor_id == resource.id && resource.is_a?(Visitor)
       when OperatorToken then root_token.staff_id == resource.id && resource.is_a?(Operator)
       else false
       end

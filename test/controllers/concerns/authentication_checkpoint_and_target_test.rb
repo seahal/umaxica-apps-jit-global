@@ -49,14 +49,9 @@ class AuthenticationCheckpointAndTargetTest < ActiveSupport::TestCase
     def auth_org_sign_in_check_path(**attrs) = "/org/sign/in/check?#{attrs.to_query}"
   end
 
-  class ComHarness < BaseHarness
-    def auth_com_sign_in_check_path(**attrs) = "/com/sign/in/check?#{attrs.to_query}"
-  end
-
   test "the checkpoint path follows whichever surface's route helper the controller carries" do
     assert_equal "/sign/in/check", BaseHarness.new.invoke(:sign_in_checkpoint_path)
     assert_includes OrgHarness.new.invoke(:sign_in_checkpoint_path), "/org/sign/in/check"
-    assert_includes ComHarness.new.invoke(:sign_in_checkpoint_path), "/com/sign/in/check"
   end
 
   test "the checkpoint path carries the region and a present path target" do

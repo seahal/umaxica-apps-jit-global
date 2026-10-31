@@ -19,11 +19,16 @@ module Base
 
             AUTHENTICATION_MODE = :open
 
-            declare_authentication_mode! :open
+            rescue_from PreferenceBase::ResolutionError, with: :render_preference_dependency_failure
 
-            skip_before_action :set_preferences_cookie, raise: false
-            skip_before_action :set_current_actor, raise: false
+            skip_before_action :set_preferences_cookie
             skip_before_action :set_color_theme, raise: false
+
+            private
+
+            def render_preference_dependency_failure
+              render_problem(:service_unavailable)
+            end
           end
         end
       end

@@ -26,6 +26,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     get edit_warp_org_sign_out_url(ri: "jp"), headers: session_headers(operator, token)
 
     assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
     assert_equal "warp/org/sign/outs/edit", inertia_component
     assert_equal warp_org_sign_out_path, URI.parse(inertia_props.dig("form", "action")).path
     assert_predicate token.reload, :currently_usable?
@@ -57,26 +58,77 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal auth_refresh_generation, token.refresh_token_generation
   end
 
-  test "a write that creates the browser preference synchronizes the operator preference mirror" do
+  test "sign out retry after a missing ID Token hint retains the session and uses origin-only referrer" do
+    operator = operators(:one)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    authenticate_rp!(operator, token)
+    @rp_session.logout_hint.destroy!
+
+    post warp_org_sign_out_url(ri: "jp")
+
+    assert_response :unprocessable_content
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_equal "warp/org/sign/outs/unavailable", inertia_component
+    assert_equal warp_org_sign_out_path, URI.parse(inertia_props.dig("retry", "action")).path
+    assert_predicate @rp_session.reload, :active?
+    assert_predicate token.reload, :currently_usable?
+  end
+
+  test "sign out retry requires CSRF proof and accepts the same-origin form token" do
+    operator = operators(:one)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    authenticate_rp!(operator, token)
+    @rp_session.logout_hint.destroy!
+    previous_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+
+    get edit_warp_org_sign_out_url(ri: "jp")
+    assert_response :success
+    csrf_token = css_select('meta[name="csrf-token"]').first["content"]
+    headers = { "Origin" => "http://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    post warp_org_sign_out_url(ri: "jp"), headers: headers
+    assert_response :unprocessable_content
+    assert_predicate @rp_session.reload, :active?
+
+    post warp_org_sign_out_url(ri: "jp"), params: { authenticity_token: csrf_token }, headers: headers
+    assert_response :unprocessable_content
+    assert_equal "warp/org/sign/outs/unavailable", inertia_component
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_predicate @rp_session.reload, :active?
+
+    retry_token = css_select('meta[name="csrf-token"]').first["content"]
+    post warp_org_sign_out_url(ri: "jp"), params: { authenticity_token: retry_token }, headers: {
+      "Origin" => "https://attacker.example", "Sec-Fetch-Site" => "cross-site",
+    }
+    assert_response :unprocessable_content
+    assert_not_includes response.body, "warp/org/sign/outs/unavailable"
+    assert_predicate @rp_session.reload, :active?
+
+    post warp_org_sign_out_url(ri: "jp"), params: { authenticity_token: retry_token }, headers: headers
+    assert_response :unprocessable_content
+    assert_equal "warp/org/sign/outs/unavailable", inertia_component
+    assert_predicate @rp_session.reload, :active?
+  ensure
+    ActionController::Base.allow_forgery_protection = previous_forgery_protection
+  end
+
+  test "sign-out launch does not issue a Visa Preference generation before logout commits" do
     operator = operators(:sample_staff)
     token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
     authenticate_rp!(operator, token)
-    mirror = -> { OrgZenithRecord.connected_to(role: :writing) { OperatorPreference.find_by(staff_id: operator.id) } }
-
-    assert_nil mirror.call
-
     post warp_org_sign_out_url(ri: "jp")
 
     assert_response :see_other
-    assert_predicate cookies[PreferenceCookieName.refresh(surface: :org)], :present?
-    assert_not_nil mirror.call
+    assert_nil cookies[PreferenceCookieName.anonymous_jwt]
   end
 
   test "get sign out without a one-shot notice is not found" do
     get warp_org_sign_out_url(ri: "jp")
 
     assert_response :not_found
+    assert_equal "no-referrer", response.headers["Referrer-Policy"]
   end
 
   private

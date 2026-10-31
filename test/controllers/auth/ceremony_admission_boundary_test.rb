@@ -4,18 +4,63 @@
 require "test_helper"
 
 class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
-  %w(app com org).each do |surface|
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
+  test "APP and ORG admission attachment requires a top-level navigation" do
+    [
+      ["app", "PUBLIC_AUTH_SERVICE_URL", ClientAuthAdmissionBinding, ClientAuthCeremonySession],
+      ["org", "PUBLIC_AUTH_STAFF_URL", OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
+    ].each do |surface, host_env, binding_model, session_model|
+      issuance = OidcTestEntry.issue!(
+        surface:, intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      binding = binding_model.find_by!(entry_ref: issuance.reference)
+      before = binding.attributes
+      count = session_model.count
+      browser = open_session
+      browser.host!(ENV.fetch(host_env))
+      browser.https!
+      path = "/ceremony_bindings"
+      params = { entry_ref: issuance.reference, ri: "jp" }
+      [
+        {}, { "Sec-Fetch-Mode" => "navigate" }, { "Sec-Fetch-Dest" => "document" },
+        { "Sec-Fetch-Mode" => "cors", "Sec-Fetch-Dest" => "document" },
+        { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "empty" },
+        { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "iframe" },
+      ].each do |headers|
+        browser.get(path, params:, headers:)
+
+        assert_equal 400, browser.response.status
+        assert_equal before, binding.reload.attributes
+        assert_equal count, session_model.count
+        assert_not browser.response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
+      end
+      browser.head(path, params:, headers: NAVIGATION_HEADERS)
+
+      assert_equal 400, browser.response.status
+      assert_equal before, binding.reload.attributes
+      assert_equal count, session_model.count
+      assert_not browser.response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
+      browser.get(path, params:, headers: NAVIGATION_HEADERS)
+
+      assert_equal 303, browser.response.status
+      assert_predicate binding.reload, :attached?
+      assert_equal count + 1, session_model.count
+    end
+  end
+
+  %w(app org).each do |surface|
     test "#{surface} cancel-and-start refuses the old admitted tab without changing replacement authority" do
       protection = ActionController::Base.allow_forgery_protection
       ActionController::Base.allow_forgery_protection = true
+      verification_controller = (surface == "app") ? Auth::App::VerificationsController : Auth::Org::VerificationsController
+      verification_protection = verification_controller.allow_forgery_protection
+      verification_controller.allow_forgery_protection = true
       actor, token, host =
         case surface
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
@@ -34,11 +79,11 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       browser = open_session
       browser.https!
       browser.host!(host)
-      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS }
       attach_auth_ceremony_entry!("/verification", reference: first.reference, params: { ri: "jp" }, browser:)
       # The independent Base HTTP matrix covers confirmation; isolate cancellation after real Auth redemption.
       binding.reload.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
-      browser.get("/verification", params: { entry_ref: first.reference, ri: "jp" })
+      browser.get("/verification", params: { entry_ref: first.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
       browser.get("/verification", params: { ri: "jp" })
@@ -71,7 +116,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       session_model =
         case surface
         when "app" then ClientStepUpSession
-        when "com" then VisitorStepUpSession
         when "org" then OperatorStepUpSession
         end
       replacement_session = session_model.find_by!(
@@ -96,11 +140,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_nil token.reload.last_step_up_at
       assert_not_predicate admitted.reload, :active?
     ensure
+      verification_controller.allow_forgery_protection = verification_protection if verification_controller
       ActionController::Base.allow_forgery_protection = protection
     end
   end
 
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} revoked Base device prevents confirmed verification redemption without rotating Auth continuity" do
       protection = ActionController::Base.allow_forgery_protection
       ActionController::Base.allow_forgery_protection = true
@@ -109,9 +154,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
@@ -140,7 +182,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       original_cookie = browser.cookies[cookie_name]
       token.device_session.revoke!
-      browser.get("/verification", params: { entry_ref: issuance.reference, ri: "jp" })
+      browser.get("/verification", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal [400, nil, before, original_cookie],
                    [browser.response.status, browser.response.location,
@@ -163,12 +205,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     [
       ["app", ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), auth_app_sign_up_email_path(ri: "jp"),
        ClientEmail, Client, :client_email, { raw_address: "unadmitted-#{SecureRandom.hex(6)}@example.com" },],
-      ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), auth_com_sign_up_email_path(ri: "jp"),
-       VisitorEmail, Visitor, :visitor_email, { raw_address: "unadmitted-#{SecureRandom.hex(6)}@example.com" },],
       ["app", ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), auth_app_sign_up_telephone_path(ri: "jp"),
        ClientTelephone, Client, :client_telephone, { raw_number: "+819012345678", confirm_using_mfa: "1" },],
-      ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), auth_com_sign_up_telephone_path(ri: "jp"),
-       VisitorTelephone, Visitor, :visitor_telephone, { raw_number: "+819012345678", confirm_using_mfa: "1" },],
     ].each do |surface, host, path, contact_model, actor_model, contact_key, input|
       browser = open_session
       browser.host!(host)
@@ -180,7 +218,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       3.times do
         break unless browser.response.redirect?
 
-        browser.get(browser.response.location)
+        browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
       end
 
       assert_equal 200, browser.response.status
@@ -211,15 +249,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   test "each realm verification entry admits full reauthentication through its exact persisted purpose" do
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       actor, token, host =
         case surface
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
@@ -245,7 +280,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal [true, nil], [binding.reload.auth_ceremony_session_id.present?, token.reload.last_step_up_at]
       # Public model confirmation isolates Auth purpose selection; separate HTTP tests cover the Base receiver.
       binding.reload.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
-      browser.get("/verification", params: { entry_ref: issuance.reference, ri: "jp" })
+      browser.get("/verification", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal [303, "reauthentication_handoff", "pending", nil],
                    [browser.response.status,
@@ -255,16 +290,14 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       assert_equal 200, browser.response.status
       csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
-      if surface != "org"
-        contact_model = (surface == "app") ? ClientEmail : VisitorEmail
-        actor_model = (surface == "app") ? Client : Visitor
-        contact_key = (surface == "app") ? :client_email : :visitor_email
+      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS }
+      if surface == "app"
         admitted_id = binding.admitted_auth_ceremony_session_id
-        assert_no_difference [-> { contact_model.count }, -> { actor_model.count }] do
+        assert_no_difference [-> { ClientEmail.count }, -> { Client.count }] do
           browser.post(
             "/sign/up/email", params: {
-              contact_key => { raw_address: "wrong-purpose-#{SecureRandom.hex(6)}@example.test", confirm_policy: "1" },
+              :client_email => { raw_address: "wrong-purpose-#{SecureRandom.hex(6)}@example.test",
+                                 confirm_policy: "1", },
               :authenticity_token => csrf,
               "cf-turnstile-response" => "test",
               :ri => "jp",
@@ -282,7 +315,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       session_model =
         case surface
         when "app" then ClientStepUpSession
-        when "com" then VisitorStepUpSession
         when "org" then OperatorStepUpSession
         end
       ceremony = session_model.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
@@ -320,11 +352,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   test "a sign-in binding cannot render a Step-Up admission form in any realm" do
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       host =
         case surface
         when "app" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-        when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         end
       issuance = OidcTestEntry.issue!(
@@ -334,7 +365,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       browser = open_session
       browser.host!(host)
       browser.https!
-      browser.get("/verification", params: { entry_ref: issuance.reference, ri: "jp" })
+      browser.get("/verification", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal [400, nil, nil],
                    [browser.response.status, browser.response.location, binding.reload.auth_ceremony_session_id]
@@ -348,11 +379,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   test "duplicate malformed and proof-injected entry references never attach continuity in any realm" do
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       host =
         case surface
         when "app" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-        when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         end
       issuance = OidcTestEntry.issue!(
@@ -362,8 +392,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       browser = open_session
       browser.host!(host)
       browser.https!
-      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
-      browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS }
+      browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal [303, "/ceremony_bindings", nil],
                    [browser.response.status, URI.parse(browser.response.location).path,
@@ -417,11 +447,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   test "post-consumption Ticket write failure rolls back rotation and permits explicit restart in every realm" do
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       host =
         case surface
         when "app" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-        when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         end
       first = OidcTestEntry.issue!(
@@ -440,7 +469,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal ["#{cookie_name}=#{Rack::Utils.escape(raw_sid)}"], installed
-      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS }
       count = continuity.class.count
       failing_write =
         lambda do |_name, _started, _finished, _identity, payload|
@@ -500,7 +529,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     [
       ["app", ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), ClientAuthAdmissionBinding, ClientAuthCeremonySession],
-      ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
       ["org", ENV.fetch("PUBLIC_AUTH_STAFF_URL"), OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
     ].each do |surface, host, binding_model, session_model|
       original = OidcTestEntry.issue!(
@@ -523,7 +551,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal ["#{cookie_name}=#{Rack::Utils.escape(raw_sid)}"], installed
-      browser.get("/sign/in", params: { entry_ref: incoming.reference, ri: "jp" })
+      browser.get("/sign/in", params: { entry_ref: incoming.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal [303, "/ceremony_bindings"],
                    [browser.response.status, URI.parse(browser.response.location).path]
@@ -537,7 +565,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         browser.get(
           "/ceremony_bindings",
           params: { :entry_ref => incoming.reference, :ri => "jp", field => "injected" },
-          headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+          headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS },
         )
 
         assert_equal [400, nil, before, nil, raw_sid],
@@ -548,7 +576,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       browser.get(
         "/ceremony_bindings", params: { entry_ref: incoming.reference, ri: "jp" },
-                              headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+                              headers: {
+                                "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS,
+                              },
       )
 
       assert_equal 303, browser.response.status, surface
@@ -613,7 +643,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
   [
     ["app", "PUBLIC_AUTH_SERVICE_URL", ClientAuthAdmissionBinding, ClientAuthCeremonySession],
-    ["com", "PUBLIC_AUTH_CORPORATE_URL", VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
     ["org", "PUBLIC_AUTH_STAFF_URL", OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
   ].each do |surface, host_key, binding_model, session_model|
     [-1, 0, 1].each do |microseconds|
@@ -627,7 +656,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         browser = open_session
         browser.https!
         browser.host!(host)
-        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
         assert_equal 303, browser.response.status
         binding = binding_model.find_by!(entry_ref: issuance.reference)
@@ -635,7 +664,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         decision_time = deadline + Rational(microseconds, 1_000_000)
         before = session_model.count
         binding_model.stub(:database_now, decision_time) do
-          browser.get(browser.response.location)
+          browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
         end
 
         if microseconds.negative?
@@ -671,10 +700,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         browser = open_session
         browser.https!
         browser.host!(host)
-        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
         assert_equal 303, browser.response.status
-        headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+        headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS }
         browser.get(browser.response.location, headers:)
 
         assert_equal 303, browser.response.status
@@ -721,8 +750,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   [
     ["app", "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", "core-app-jp", "client",
      ClientAuthAdmissionBinding,],
-    ["com", "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", "core-com-jp", "visitor",
-     VisitorAuthAdmissionBinding,],
     ["org", "PUBLIC_BASE_STAFF_URL", "PUBLIC_AUTH_STAFF_URL", "core-org-jp", "operator",
      OperatorAuthAdmissionBinding,],
   ].each do |surface, base_key, auth_key, client_id, realm, binding_model|
@@ -750,10 +777,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal 303, browser.response.status
       binding = binding_model.order(:id).last
       browser.host!(auth_host)
-      browser.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+      browser.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
-      browser.get(browser.response.location)
+      browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
       confirmation_url = browser.response.location
@@ -802,12 +829,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
        "core-app-jp", "client", ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding, "sign_in", "/sign/in",],
       ["app", ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
        "core-app-jp", "client", ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding, "sign_up", "/sign/in",],
-      ["com", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-       "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction,
-       VisitorAuthAdmissionBinding, "sign_in", "/sign/in",],
-      ["com", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-       "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction,
-       VisitorAuthAdmissionBinding, "sign_up", "/sign/in",],
       ["org", ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
        "core-org-jp", "operator", OperatorOidcAuthorizationTransaction, OperatorAuthAdmissionBinding,
        "sign_in", "/sign/in",],
@@ -844,10 +865,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       end
 
       owner.host!(auth_host)
-      owner.get(entry_path, params: { entry_ref: owner_binding.entry_ref, ri: "jp" })
+      owner.get(entry_path, params: { entry_ref: owner_binding.entry_ref, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, owner.response.status, surface
-      owner.get(owner.response.location)
+      owner.get(owner.response.location, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, owner.response.status, surface
       confirmation_url = owner.response.location
@@ -862,10 +883,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_nil owner_binding.reload.base_confirmed_at
       assert_nil owner_binding.redeemed_at
       assert_includes foreign.response.headers.fetch("Cache-Control"), "no-store"
+      assert_equal "no-referrer", foreign.response.headers["Referrer-Policy"], surface
       owner.host!(visa_host)
       owner.get(confirmation_url)
 
       assert_equal 200, owner.response.status, surface
+      assert_equal "strict-origin", owner.response.headers["Referrer-Policy"], surface
       assert_nil owner_binding.reload.base_confirmed_at, "the original browser's GET is also read-only"
       owner.get(
         confirmation_url,
@@ -881,7 +904,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       assert_equal [auth_host, entry_path], [URI.parse(entry_url).host, URI.parse(entry_url).path]
       foreign.host!(auth_host)
-      foreign.get(entry_url)
+      foreign.get(entry_url, headers: NAVIGATION_HEADERS)
 
       assert_equal [400, nil, nil],
                    [foreign.response.status, foreign.response.location, owner_binding.reload.redeemed_at],
@@ -892,7 +915,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       unavailable_store = Valkey::AuthState::OpaqueAdmissionStore.new
       unavailable_store.stub(:consume_reference!, ->(**) { raise Umaxica::Valkey::Unavailable, "unavailable" }) do
         Valkey::AuthState::OpaqueAdmissionStore.stub(:new, unavailable_store) do
-          owner.get(entry_url, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" })
+          owner.get(
+            entry_url,
+            headers: { "Origin" => "https://#{auth_host}",
+                       "Sec-Fetch-Site" => "same-origin",
+                       **NAVIGATION_HEADERS, },
+          )
         end
       end
 
@@ -905,7 +933,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
           cookie: owner.cookies["__Host-auth_sid"] || owner.cookies["auth_sid"], },
         "backend unavailability preserves continuity and grants no admission in #{surface}",
       )
-      owner.get(entry_url, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" })
+      owner.get(
+        entry_url,
+        headers: { "Origin" => "https://#{auth_host}",
+                   "Sec-Fetch-Site" => "same-origin",
+                   **NAVIGATION_HEADERS, },
+      )
 
       assert_equal 303, owner.response.status, surface
       assert_equal [true, true, false],
@@ -919,7 +952,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       admitted_cookie = owner.cookies["__Host-auth_sid"] || owner.cookies["auth_sid"]
       admitted_id = owner_binding.admitted_auth_ceremony_session_id
       session_count = continuity.class.count
-      owner.get(entry_url, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" })
+      owner.get(
+        entry_url,
+        headers: { "Origin" => "https://#{auth_host}",
+                   "Sec-Fetch-Site" => "same-origin",
+                   **NAVIGATION_HEADERS, },
+      )
 
       assert_equal [303, admitted_id, admitted_cookie, session_count],
                    [owner.response.status, owner_binding.reload.admitted_auth_ceremony_session_id,
@@ -929,7 +967,12 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       _restored_cookie = owner.cookies.merge(
         "#{cookie_name}=#{Rack::Utils.escape(original_cookie)}", URI.parse("https://#{auth_host}/"),
       )
-      owner.get(entry_url, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" })
+      owner.get(
+        entry_url,
+        headers: { "Origin" => "https://#{auth_host}",
+                   "Sec-Fetch-Site" => "same-origin",
+                   **NAVIGATION_HEADERS, },
+      )
 
       assert_equal [400, nil, admitted_id, original_cookie, session_count, false],
                    [owner.response.status, owner.response.location,
@@ -950,13 +993,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       sign_in: :auth_app_sign_in_url,
     },
     {
-      name: "com",
-      host_env: "PUBLIC_AUTH_CORPORATE_URL",
-      client_id: "core-com-jp",
-      realm: "visitor",
-      sign_in: :auth_com_sign_in_url,
-    },
-    {
       name: "org",
       host_env: "PUBLIC_AUTH_STAFF_URL",
       client_id: "core-org-jp",
@@ -972,7 +1008,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       token_count = ClientToken.count
       open_session do |browser|
         browser.host!(host)
-        browser.get(public_send(surface.fetch(:sign_in), ri: "jp"), headers: { "Host" => host })
+        browser.get(public_send(surface.fetch(:sign_in), ri: "jp"), headers: { "Host" => host, **NAVIGATION_HEADERS })
 
         assert_equal 400, browser.response.status, surface.fetch(:name)
         assert_equal I18n.t("errors.messages.invalid_request"), browser.response.body, surface.fetch(:name)
@@ -985,10 +1021,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
   test "valid app admission stores the transaction challenge" do
     assert_valid_auth_admission!("app")
-  end
-
-  test "valid com admission stores the transaction challenge" do
-    assert_valid_auth_admission!("com")
   end
 
   test "valid org admission stores the transaction challenge" do
@@ -1047,10 +1079,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       "/sign/in", reference: issuance.reference, params: { ri: "jp" }, browser: first,
     )
     binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    first.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+    first.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, first.response.status, first.response.location
-    first.get(first.response.location)
+    first.get(first.response.location, headers: NAVIGATION_HEADERS)
 
     assert_equal 200, first.response.status
     assert_predicate binding.reload, :redeemed?
@@ -1061,7 +1093,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     second.https!
     bindings_before_replay = binding.class.count
     assert_no_difference -> { binding.class.count } do
-      second.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      second.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
     end
 
     assert_equal 400, second.response.status
@@ -1095,7 +1127,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     session_count = ClientAuthCeremonySession.count
 
     # Design D preserves the entry GET as a relay; the unrelated path cannot attach or redeem it.
-    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: handoff.reference }
+    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: handoff.reference }, headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_equal "/ceremony_bindings", URI.parse(response.location).path
@@ -1170,10 +1202,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                 fv5043 = fv5039
                 {
                   ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
-                  ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                   ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
                   ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
-                  ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
                   ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                 }.fetch(fv5043)
               end
@@ -1345,7 +1375,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     assert_not_predicate binding, :redeemed?
 
     binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get(entry_path, params: { entry_ref: reference, ri: "jp" }, headers: { "Host" => host })
+    get(entry_path, params: { entry_ref: reference, ri: "jp" }, headers: { "Host" => host, **NAVIGATION_HEADERS })
 
     assert_response :see_other
     follow_redirect!
@@ -1395,7 +1425,6 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   def auth_ceremony_record_for(surface)
     model = {
       "app" => ClientAuthCeremonySession,
-      "com" => VisitorAuthCeremonySession,
       "org" => OperatorAuthCeremonySession,
     }.fetch(surface)
     raw_sid = cookies[AuthCeremonySidCookie::COOKIE_BASENAME].presence ||

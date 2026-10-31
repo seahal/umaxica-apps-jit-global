@@ -123,8 +123,6 @@ module AuthCeremonySession
     def connection_owner
       if self <= OpBaseAppRecord
         OpBaseAppRecord
-      elsif self <= OpBaseComRecord
-        OpBaseComRecord
       elsif self <= OpBaseOrgRecord
         OpBaseOrgRecord
       else

@@ -8,18 +8,19 @@ class EmailSignUpOtpVerificationCommitter
       owner, transaction_model, pending_status, surface = components(flow, email)
       reset_snapshot = nil
       verification =
-        flow.with_lock do
-          unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-              session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
-            next result(:session_mismatch, email)
-          end
-          unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
-              code.match?(/\A[0-9]{6}\z/)
-            next result(:invalid_code, email)
-          end
+        owner.with_lock do
+          email.with_lock do
+            flow.with_lock do
+              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
+                  flow.nonce_matches?(session_nonce)
+                next result(:session_mismatch, email)
+              end
+              unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
+                  code.match?(/\A[0-9]{6}\z/)
+                next result(:invalid_code, email)
+              end
 
-          owner.with_lock do
-            email.with_lock do
               now = flow.class.database_now
               if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
                 next result(:inactive_flow, email)
@@ -52,10 +53,6 @@ class EmailSignUpOtpVerificationCommitter
         raise ArgumentError, "APP signup requires its own Email" unless email.is_a?(ClientEmail)
 
         [Client.find(email.user_id), ClientEmailCeremonyTransaction, ClientStatus::UNVERIFIED_WITH_SIGN_UP, :app]
-      when VisitorSignUpFlow
-        raise ArgumentError, "COM signup requires its own Email" unless email.is_a?(VisitorEmail)
-
-        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::UNVERIFIED_WITH_SIGN_UP, :com]
       else raise ArgumentError, "unsupported Email signup realm"
       end
     end
@@ -64,7 +61,6 @@ class EmailSignUpOtpVerificationCommitter
       owner_id =
         case email
         when ClientEmail then email.user_id
-        when VisitorEmail then email.visitor_id
         else raise ArgumentError, "unsupported Email signup candidate"
         end
       flow.principal_id == owner.id && flow.pending_contact_type == "email" &&
@@ -84,7 +80,9 @@ class EmailSignUpOtpVerificationCommitter
       )
       return result(:missing_challenge, email) unless transactions.exists?
 
-      transaction = transactions.sole
+      transaction = transactions.lock.sole
+      return result(:missing_challenge, email) unless transaction.expires_at == flow.expires_at
+
       binding = {
         purpose: "sign_up",
         actor_ref: owner.public_id,
@@ -146,16 +144,18 @@ class EmailSignUpOtpVerificationCommitter
     end
 
     def reset_consumed_attempts(flow, email, owner, transaction_model, pending_status, code, snapshot)
-      flow.with_lock do
-        owner.with_lock do
-          email.with_lock do
+      owner.with_lock do
+        email.with_lock do
+          flow.with_lock do
             next result(:inactive_candidate, email) unless admission_current?(flow, email, owner, pending_status)
 
             session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
             transaction = transaction_model.where(
               operation: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
               email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
-            ).sole
+            ).lock.sole
+            next result(:result_expired, email) unless transaction.expires_at == flow.expires_at
+
             unless transaction.email_otp_verified_evidence?(
               code: code, purpose: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
               operation: "sign_up", candidate_ref: email.public_id,

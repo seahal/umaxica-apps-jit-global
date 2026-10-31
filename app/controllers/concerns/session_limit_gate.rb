@@ -162,7 +162,6 @@ module SessionLimitGate
   def resolution_model_for_gate(gate)
     case gate["actor_type"].to_s
     when "Client" then ClientSessionLimitResolutionTransaction
-    when "Visitor" then VisitorSessionLimitResolutionTransaction
     when "Operator" then OperatorSessionLimitResolutionTransaction
     else
       raise FlowConfigurationError, "unsupported session-limit gate actor type"

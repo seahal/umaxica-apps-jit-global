@@ -1,0 +1,65 @@
+servers:
+  - url: https://www.umaxica.com
+    description: Base public host for the com surface.
+get:
+  summary: Current Web Push preference
+  description: Returns disabled when there is no active preference and matching browser binding.
+  operationId: getPreferencesWebPush
+  tags: [Preferences]
+  security: []
+  responses:
+    "200":
+      description: Current Web Push preference.
+      content:
+        application/json:
+          schema: &webPushResponse
+            type: object
+            required: [web_push]
+            properties:
+              web_push:
+                type: string
+                enum: [disabled, enabled]
+    "400":
+      description: Ambiguous duplicate preference cookies were rejected without a response body.
+    "406":
+      $ref: "../../shared/components.yml#/responses/NotAcceptable"
+    "429":
+      $ref: "../../shared/components.yml#/responses/RateLimited"
+patch:
+  summary: Update Web Push preference
+  operationId: patchPreferencesWebPush
+  tags: [Preferences]
+  security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema: *webPushResponse
+  responses:
+    "200":
+      description: Updated Web Push preference.
+      content:
+        application/json:
+          schema: *webPushResponse
+    "400":
+      description: Malformed JSON or ambiguous duplicate preference cookies.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "../../shared/components.yml#/schemas/Problem"
+    "403":
+      description: CSRF verification failed or the browser binding did not match.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "../../shared/components.yml#/schemas/Problem"
+    "406":
+      $ref: "../../shared/components.yml#/responses/NotAcceptable"
+    "415":
+      $ref: "../../shared/components.yml#/responses/UnsupportedMediaType"
+    "422":
+      $ref: "../../shared/components.yml#/responses/ValidationFailed"
+    "429":
+      $ref: "../../shared/components.yml#/responses/RateLimited"
+    "503":
+      $ref: "../../shared/components.yml#/responses/Problem"

@@ -23,7 +23,7 @@
 #  fk_user_preference_regions_on_preference_id  (preference_id => client_preferences.id)
 #
 class ClientPreferenceRegion < AppPrincipalRecord
-  belongs_to :preference, class_name: "ClientPreference", inverse_of: :user_preference_region
+  belongs_to :preference, class_name: "ClientPreference", inverse_of: :client_preference_region
   belongs_to :option,
              class_name: "ClientPreferenceRegionOption",
              inverse_of: :client_preference_regions

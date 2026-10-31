@@ -72,7 +72,7 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
     end
   end
 
-  test "non-owner wrong account and com surface are denied" do
+  test "non-owner and wrong account are denied" do
     wrong_group = AvatarGroup.create!(
       account_surface: "app", account_public_id: "other-account", name: "Other", state: "active",
     )
@@ -85,13 +85,7 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
     assert_not GroupAvatarMembershipPolicy.new(membership, user: @user).create?
     assert_not GroupAvatarMembershipPolicy.new(
       new_membership(avatar: @bootstrap.avatar),
-      user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL),
-    ).create?
-
-    Actor.install_context!(tld: :com)
-
-    assert_not GroupAvatarMembershipPolicy.new(
-      new_membership(avatar: @bootstrap.avatar), user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL),
+      user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED),
     ).create?
   end
 

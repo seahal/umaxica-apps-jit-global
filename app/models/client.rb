@@ -264,8 +264,8 @@ class Client < AppPrincipalRecord
   has_one :core_app_client_bridge,
           dependent: :destroy,
           inverse_of: :client
-  has_one :user_preference, class_name: "ClientPreference", foreign_key: :user_id, dependent: :destroy,
-                            inverse_of: :user
+  has_one :client_preference, class_name: "ClientPreference", foreign_key: :client_id, dependent: :destroy,
+                            inverse_of: :client
   # Cross-database (avatar DB). Join rows are purged explicitly via
   # RetentionCrossDatabaseChildPurge, not by an implicit cross-DB cascade.
   has_many :avatar_assignments, foreign_key: :user_id, inverse_of: :user # rubocop:disable Rails/HasManyOrHasOneDependent

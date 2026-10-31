@@ -23,7 +23,6 @@ class OperatorEmailPolicyTest < ActiveSupport::TestCase
 
   def test_index_denies_other_actor_types
     assert_not OperatorEmailPolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
-    assert_not OperatorEmailPolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
   end
 
   def test_show
@@ -60,7 +59,6 @@ class OperatorEmailPolicyTest < ActiveSupport::TestCase
 
   def test_create_denies_other_actor_types
     assert_not OperatorEmailPolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).create?
-    assert_not OperatorEmailPolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).create?
   end
 
   # update?/destroy? require ownership of the specific record (record.staff_id == operator.id).

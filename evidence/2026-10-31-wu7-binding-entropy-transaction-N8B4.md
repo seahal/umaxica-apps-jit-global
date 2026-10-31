@@ -1,0 +1,7 @@
+# WU-7 binding generation transaction
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Staged, unstaged and untracked changes affected the result.
+- Before the change, consent and Web Push minted a new binding before entering the setting transaction. An injected `IOError` from the binding entropy source escaped the consent request; the new nontransactional test initially errored before any assertions.
+- Both paths now mint a required new binding inside the locked setting transaction before storing its digest. The write boundary treats entropy I/O and operating-system errors as dependency failures, rolling back the setting and enclosing Chronicle transactions. The nontransactional test observes the setting transaction open at the injected failure and checks both endpoints return 503 without new parents, audit records, JWT cookies or binding cookies.
+- Before the change, selected existing binding and consent cases passed: 16 runs, 147 assertions. After the change the consent, Web Push, write journey, commit-failure and concurrency selection passed: 77 runs, 1,068 assertions, zero failures, errors or skips. After formatting, the entropy-failure test passed: 1 run, 18 assertions. RuboCop corrected the changed test; the Web Push line was manually wrapped.
+- The injection covers I/O failure at the binding generator, not every possible entropy or process failure. Full-suite comparison remains outstanding. No migration or non-test purge was performed.

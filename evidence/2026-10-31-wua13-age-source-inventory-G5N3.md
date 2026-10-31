@@ -1,0 +1,5 @@
+# Age-dependent feature source inventory
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had extensive uncommitted changes affecting this search.
+- Searched `app`, `config/routes`, and `config/locales` case-insensitively for adult-content, minimum-age, underage and age-restriction spellings, and separately searched application source for birthdate and age terms. The named adult-content preference data models remain; outside models, matches were a COM preference lifecycle purge, a comment saying the dormant gate is not copied, and signup-policy comments. `AgeEligibility.minimum_age_reached?` is defined but the inspected source search did not find a feature caller. Birthdate collection and identity display have application references.
+- This is a lexical source inventory, not proof that all age-dependent business requirements or external products are identified, nor that feature-specific protections are adequate. The WU-A13 pre-release inventory and any feature-specific authorization checks remain open.

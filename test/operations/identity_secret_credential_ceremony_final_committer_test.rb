@@ -31,9 +31,8 @@ class IdentitySecretCredentialCeremonyFinalCommitterTest < ActiveSupport::TestCa
     end
   end
 
-  test "com and org require a verified ceremony result before persisting a credential" do
+  test "org requires a verified ceremony result before persisting a credential" do
     [
-      ["com", visitors(:reserved_visitor), "synthetic-com-session", VisitorSecretCredential],
       ["org", operators(:one), operator_tokens(:one).public_id, OperatorSecretCredential],
     ].each do |surface, actor, session_ref, credential_class|
       before = credential_class.count

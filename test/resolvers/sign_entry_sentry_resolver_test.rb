@@ -26,7 +26,7 @@ class SignEntrySentryResolverTest < ActiveSupport::TestCase
   end
 
   test "false and unwritten availability are BLOCKED" do
-    %w(app com org).product(%w(sign_in sign_up)).each do |surface, flow|
+    %w(app org).product(%w(sign_in sign_up)).each do |surface, flow|
       state = SignEntrySentryResolver.call(
         surface:, flow:, flipper: StubFlipper.new({}),
       )
@@ -37,6 +37,12 @@ class SignEntrySentryResolverTest < ActiveSupport::TestCase
   end
 
   test "an unknown surface or flow is rejected" do
+    %w(sign_in sign_up).each do |flow|
+      assert_raises(ArgumentError) do
+        SignEntrySentryResolver.call(surface: "com", flow: flow, flipper: StubFlipper.new({}))
+      end
+    end
+
     assert_raises(ArgumentError) do
       SignEntrySentryResolver.call(surface: "net", flow: "sign_in", flipper: StubFlipper.new({}))
     end

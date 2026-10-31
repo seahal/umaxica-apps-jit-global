@@ -15,11 +15,9 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
     @previous_dry_run = ENV["DRY_RUN"]
     [
       ClientStatus, ClientVisibility, ClientMfaStatus,
-      VisitorStatus, VisitorVisibility, VisitorMfaStatus,
       OperatorStatus, OperatorVisibility, OperatorMfaStatus,
-      ClientIdentityState, VisitorIdentityState, OperatorIdentityState,
+      ClientIdentityState, OperatorIdentityState,
       PersonaMembershipKind, PersonaMembershipState,
-      IndividualMembershipKind, IndividualMembershipState,
       AgentMembershipKind, AgentMembershipState, HandleStatus,
     ].each { |klass| klass.ensure_defaults! if klass.respond_to?(:ensure_defaults!) }
     AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)

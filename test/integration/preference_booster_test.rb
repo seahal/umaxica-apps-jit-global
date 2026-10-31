@@ -19,7 +19,6 @@ class PreferenceBoosterTest < ActionDispatch::IntegrationTest
       render plain: {
         cookies: cookies.to_h,
         pref: @preferences&.id,
-        error: @preference_refresh_failed,
       }.to_json
     end
   end
@@ -40,7 +39,6 @@ class PreferenceBoosterTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal preference_count, AppPreference.count
-    assert_nil cookies[PreferenceCookieName.access(surface: :app)]
-    assert_nil cookies[PreferenceCookieName.refresh(surface: :app)]
+    assert_nil cookies[PreferenceCookieName.anonymous_jwt]
   end
 end

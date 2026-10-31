@@ -4,7 +4,7 @@
 require "test_helper"
 
 class WithdrawalLifecycleTest < ActiveSupport::TestCase
-  fixtures :clients, :visitors, :operators, :operator_statuses
+  fixtures :clients, :operators, :operator_statuses
 
   setup do
     @request = ActionDispatch::Request.new({})
@@ -246,26 +246,6 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     assert_predicate client.client_withdrawal_flows.recent_first.first, :withdrawal_recovered?
   end
 
-  test "recover! recovers a visitor" do
-    visitor = visitors(:reserved_visitor)
-    visitor.update_columns(
-      withdrawal_started_at: 2.days.ago,
-      deactivated_at: 2.days.ago,
-      discard_at: 2.days.ago,
-      purge_eligible_at: 29.days.from_now,
-    )
-    visitor.visitor_withdrawal_flows.create!(
-      status_id: VisitorWithdrawalFlowStatus::DISCARDED,
-      began_at: 2.days.ago,
-      discard_at: Float::INFINITY,
-    )
-
-    WithdrawalLifecycle.recover!(actor: visitor, request: @request)
-
-    assert_nil visitor.reload.withdrawal_started_at
-    assert_nil visitor.deactivated_at
-  end
-
   test "terminate! raises when actor is not early terminatable" do
     client = clients(:one)
 
@@ -304,62 +284,6 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     flow = client.client_withdrawal_flows.recent_first.first
 
     assert_predicate flow, :withdrawal_terminated?
-  end
-
-  test "start! creates a requested withdrawal flow for a visitor" do
-    visitor = visitors(:reserved_visitor)
-
-    WithdrawalLifecycle.start!(actor: visitor, current_session_public_id: @session_public_id, request: @request)
-
-    assert_equal 1, visitor.visitor_withdrawal_flows.count
-    assert_predicate visitor.visitor_withdrawal_flows.first, :withdrawal_requested?
-  end
-
-  test "suspend! deactivates a visitor" do
-    visitor = visitors(:reserved_visitor)
-    WithdrawalLifecycle.start!(actor: visitor, current_session_public_id: @session_public_id, request: @request)
-
-    AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
-      WithdrawalLifecycle.suspend!(actor: visitor, current_session_public_id: @session_public_id, request: @request)
-    end
-
-    assert_predicate visitor.reload, :suspended?
-    assert_predicate visitor.visitor_withdrawal_flows.recent_first.first, :withdrawal_discarded?
-  end
-
-  test "recover! raises when visitor recovery is not available" do
-    visitor = visitors(:reserved_visitor)
-
-    I18n.stub(:t, "recovery not available") do
-      assert_raises(Sign::WithdrawalRecoveryNotAvailableError) do
-        WithdrawalLifecycle.recover!(actor: visitor, request: @request)
-      end
-    end
-  end
-
-  test "terminate! terminates a suspended visitor" do
-    visitor = visitors(:reserved_visitor)
-    visitor.update_columns(
-      withdrawal_started_at: 10.days.ago,
-      deactivated_at: 10.days.ago,
-      discard_at: 10.days.ago,
-      purge_eligible_at: 21.days.from_now,
-      withdrawn_at: 10.days.ago,
-    )
-    visitor.visitor_withdrawal_flows.create!(
-      status_id: VisitorWithdrawalFlowStatus::DISCARDED,
-      began_at: 10.days.ago,
-      discard_at: Float::INFINITY,
-    )
-
-    AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
-      WithdrawalPersonalDataAnonymizer.stub(:call, ->(actor:) { actor }) do
-        WithdrawalLifecycle.terminate!(actor: visitor, request: @request)
-      end
-    end
-
-    assert_predicate visitor.reload, :terminated?
-    assert_predicate visitor.visitor_withdrawal_flows.recent_first.first, :withdrawal_terminated?
   end
 
   test "class methods delegate to instance methods" do

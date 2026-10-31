@@ -129,7 +129,6 @@ module RefreshTokenable
     def device_session_class
       case name
       when "ClientToken" then ClientDeviceSession
-      when "VisitorToken" then VisitorDeviceSession
       when "OperatorToken" then OperatorDeviceSession
       else
         raise FlowConfigurationError, "#{name} does not define a device-session owner"
@@ -211,10 +210,8 @@ module RefreshTokenable
     def copy_rotated_token_binding_attributes(attrs, previous_token)
       copy_attribute_if_present(attrs, previous_token, :user_token_binding_method_id)
       copy_attribute_if_present(attrs, previous_token, :staff_token_binding_method_id)
-      copy_attribute_if_present(attrs, previous_token, :visitor_token_binding_method_id)
       copy_attribute_if_present(attrs, previous_token, :user_token_dbsc_status_id)
       copy_attribute_if_present(attrs, previous_token, :staff_token_dbsc_status_id)
-      copy_attribute_if_present(attrs, previous_token, :visitor_token_dbsc_status_id)
     end
 
     def copy_attribute_if_present(attrs, previous_token, name)
@@ -251,21 +248,21 @@ module RefreshTokenable
       return :user_id if token.has_attribute?(:user_id)
       return :staff_id if token.has_attribute?(:staff_id)
 
-      :visitor_id
+      raise FlowConfigurationError, "#{token.class.name} does not define a token actor"
     end
 
     def token_status_key_from(token)
       return :user_token_status_id if token.has_attribute?(:user_token_status_id)
       return :staff_token_status_id if token.has_attribute?(:staff_token_status_id)
 
-      :visitor_token_status_id
+      raise FlowConfigurationError, "#{token.class.name} does not define a token status"
     end
 
     def token_kind_key_from(token)
       return :user_token_kind_id if token.has_attribute?(:user_token_kind_id)
       return :staff_token_kind_id if token.has_attribute?(:staff_token_kind_id)
 
-      :visitor_token_kind_id
+      raise FlowConfigurationError, "#{token.class.name} does not define a token kind"
     end
   end
 
@@ -284,7 +281,6 @@ module RefreshTokenable
   def actor_record
     case self
     when ClientToken then Client.find_by(id: user_id)
-    when VisitorToken then Visitor.find_by(id: visitor_id)
     when OperatorToken then Operator.find_by(id: staff_id)
     else
       raise FlowConfigurationError, "#{self.class.name} does not define an actor owner"
@@ -429,7 +425,6 @@ module RefreshTokenable
     case self.class.name
     when "ClientToken" then ClientDeviceSession
     when "OperatorToken" then OperatorDeviceSession
-    when "VisitorToken" then VisitorDeviceSession
     else
       raise FlowConfigurationError, "#{self.class.name} does not define a device-session owner"
     end
@@ -438,7 +433,6 @@ module RefreshTokenable
   def device_session_actor_key
     return :user_id if has_attribute?(:user_id)
     return :staff_id if has_attribute?(:staff_id)
-    return :visitor_id if has_attribute?(:visitor_id)
 
     raise FlowConfigurationError, "#{self.class.name} does not define a device-session actor"
   end

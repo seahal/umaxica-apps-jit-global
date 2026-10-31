@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="<%= get_language %>" data-theme="<%= theme_cookie_value %>" class="<%= theme_html_class %>" data-edition="com">
+<html lang="<%= get_language %>" data-theme="<%= theme_cookie_value(@color_theme || "sy") %>" class="<%= theme_html_class(@color_theme || "sy") %>" data-edition="com">
 <head>
   <meta charset="utf-8">
   <%# The document title stays a server responsibility: it is rendered into the initial HTML from

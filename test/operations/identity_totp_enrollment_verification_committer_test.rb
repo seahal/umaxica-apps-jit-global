@@ -7,6 +7,42 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   fixtures :clients, :client_statuses
 
+  test "revoked and superseded devices cannot verify enrollment or spend attempts" do
+    %i(revoked superseded).product(%i(valid invalid)).each do |invalidation, code_kind|
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
+      transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+        actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
+        required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
+      )
+      record = ClientStepUpSession.create!(
+        user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
+        step_up_ceremony_transaction_ref: transaction.transaction_id, discard_at: transaction.expires_at,
+      )
+      candidate = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
+      device = token.device_session_record!
+      if invalidation == :revoked
+        device.revoke!
+      else
+        replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+        device.update!(current_refresh_token_id: replacement.id)
+      end
+      now = ClientStepUpCeremonyTransaction.database_now
+      code = (code_kind == :valid) ? ROTP::TOTP.new(candidate.private_key).at(now.to_i) : "invalid"
+
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        assert_raises(IdentityTotpCeremonyContract::Error) do
+          IdentityTotpEnrollmentVerificationCommitter.call!(
+            actor: actor, token: token, transaction: transaction, candidate_ref: candidate.ref, code: code,
+          )
+        end
+      end
+      assert_equal "pending", transaction.reload.status
+      assert_equal 0, record.reload.attempt_count
+      assert_nil candidate.reload.last_otp_at
+    end
+  end
+
   test "first code accepts six digits and refuses five seven embedded letters and NUL" do
     %i(five six seven letter nul).each_with_index do |format, index|
       actor = Client.create!(

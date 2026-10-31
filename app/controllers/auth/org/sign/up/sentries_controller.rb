@@ -7,6 +7,7 @@ module Auth
       module Up
         class SentriesController < ::Auth::Org::ApplicationController
           AUTHENTICATION_MODE = :open
+          sign_entry_classification! :sign_up
           declare_authentication_mode! :open
 
           public

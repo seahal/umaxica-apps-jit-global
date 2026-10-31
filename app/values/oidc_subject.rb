@@ -5,13 +5,12 @@ module OidcSubject
   PREFIXES = {
     "client" => "cli",
     "operator" => "opr",
-    "visitor" => "vis",
   }.freeze
 
   module_function
 
   def for(resource, resource_type: nil)
-    normalized_type = normalize_resource_type(resource_type || infer_resource_type(resource))
+    normalized_type = normalize_resource_type(resource_type.nil? ? infer_resource_type(resource) : resource_type)
     raw_subject =
       if resource.respond_to?(:oidc_subject) && resource.oidc_subject.present?
         resource.oidc_subject
@@ -36,8 +35,8 @@ module OidcSubject
   def normalize_resource_type(resource_type)
     case resource_type.to_s
     when "operator", "staff" then "operator"
-    when "visitor", "customer" then "visitor"
-    else "client"
+    when "client" then "client"
+    else raise ArgumentError, "unsupported OIDC resource type"
     end
   end
 
@@ -48,8 +47,8 @@ module OidcSubject
   def infer_resource_type(resource)
     case resource
     when ::Operator then "operator"
-    when ::Visitor then "visitor"
-    else "client"
+    when ::Client then "client"
+    else raise ArgumentError, "unsupported OIDC resource"
     end
   end
 end

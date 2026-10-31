@@ -94,7 +94,6 @@ module SignUp
     def actor_class_matches?
       case ticket
       when ClientSignUpFlow then user.is_a?(Client)
-      when VisitorSignUpFlow then user.is_a?(Visitor)
       else false
       end
     end

@@ -84,18 +84,14 @@ module SignIn
       end
     end
 
-    test "default guardrail advances for visitor and operator without blocking items" do
-      [
-        [VisitorSignInFlow, create_visitor],
-        [OperatorSignInFlow, create_operator],
-      ].each do |cycle_class, actor|
-        cycle = create_cycle(actor, cycle_class: cycle_class)
+    test "default guardrail advances for operator without blocking items" do
+      actor = create_operator
+      cycle = create_cycle(actor, cycle_class: OperatorSignInFlow)
 
-        result = SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
+      result = SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
 
-        assert_predicate result, :cleared?
-        assert_predicate cycle.reload, :sign_in_checkpoint_pending?
-      end
+      assert_predicate result, :cleared?
+      assert_predicate cycle.reload, :sign_in_checkpoint_pending?
     end
 
     test "expired guardrail persists expiry and returns refusal after its outer transaction commits" do
@@ -123,10 +119,6 @@ module SignIn
         security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
         status_id: status_id,
       )
-    end
-
-    def create_visitor
-      Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
     end
 
     def create_operator

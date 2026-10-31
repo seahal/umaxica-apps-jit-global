@@ -58,20 +58,68 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
     end
   end
 
+  test "an unregistered participant rolls back the root and grant stop" do
+    unknown_grant = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: @root, client_device_session: @root.device_session,
+      device_session_id: @root.device_session_id, oidc_client_id: "unknown-app-client",
+      oidc_scope: "openid", oidc_jti: SecureRandom.uuid, last_used_at: Time.current,
+      refresh_token_expires_at: 1.day.from_now,
+    )
+
+    assert_no_difference ["OpAppAuthorityStop.count", "OpAppAuthorityStopRootTarget.count",
+                          "OpAppAuthorityStopGrantTarget.count", "OpAppAuthorityStopParticipant.count",] do
+      assert_raises(KeyError) do
+        OpAuthorityStopCommitter.stop_root(
+          root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
+          authority_evidence_ref: "test:unregistered-client",
+        )
+      end
+    end
+    assert_not_predicate @root.reload, :revoked?
+    (@grants + [unknown_grant]).each { |grant| assert_nil grant.reload.revoked_at }
+  end
+
+  test "an unregistered ORG participant rolls back the root and grant stop" do
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    root = OperatorToken.create!(authentication_epoch: 0, staff: operator)
+    grants =
+      ["core-org-jp", "unknown-org-client"].map do |client_id|
+        OpOrgGrant.create!(
+          authentication_epoch: 0, operator_token: root, oidc_client_id: client_id, oidc_scope: "openid",
+          oidc_jti: SecureRandom.uuid, last_used_at: Time.current, refresh_token_expires_at: 1.day.from_now,
+        )
+      end
+
+    assert_no_difference ["OpOrgAuthorityStop.count", "OpOrgAuthorityStopRootTarget.count",
+                          "OpOrgAuthorityStopGrantTarget.count", "OpOrgAuthorityStopParticipant.count",] do
+      assert_raises(KeyError) do
+        OpAuthorityStopCommitter.stop_root(
+          root: root, cause: "browser_logout", principal_public_id: operator.public_id,
+          authority_evidence_ref: "test:unregistered-client",
+        )
+      end
+    end
+    assert_not_predicate root.reload, :revoked?
+    grants.each { |grant| assert_nil grant.reload.revoked_at }
+  end
+
   test "a re-run of the same stop returns the stored stop and writes nothing again" do
     first = OpAuthorityStopCommitter.stop_root(
       root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
       authority_evidence_ref: "test",
     )
-    second = OpAuthorityStopCommitter.stop_root(
-      root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
-      authority_evidence_ref: "test",
-    )
+    second = nil
+    assert_no_difference ["OpAppAuthorityStop.count", "OpAppAuthorityStopParticipant.count"] do
+      second = OpAuthorityStopCommitter.stop_root(
+        root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
+        authority_evidence_ref: "test",
+      )
+    end
 
     assert_predicate second, :replayed?
     assert_equal first.stop.id, second.stop.id
-    assert_equal 1, OpAppAuthorityStop.count
-    assert_equal 2, OpAppAuthorityStopParticipant.count
+    assert_equal 1, OpAppAuthorityStop.where(id: first.stop.id).count
+    assert_equal 2, OpAppAuthorityStopParticipant.where(stop_id: first.stop.id).count
   end
 
   test "an already revoked root is not stopped again" do
@@ -79,13 +127,15 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
       root: @root, cause: "browser_logout", principal_public_id: @client.public_id,
       authority_evidence_ref: "test",
     )
-    other = OpAuthorityStopCommitter.stop_grant(
-      grant: @grants.first, cause: "token_revocation", principal_public_id: @client.public_id,
-      authority_evidence_ref: "test",
-    )
+    other = nil
+    assert_no_difference "OpAppAuthorityStop.count" do
+      other = OpAuthorityStopCommitter.stop_grant(
+        grant: @grants.first, cause: "token_revocation", principal_public_id: @client.public_id,
+        authority_evidence_ref: "test",
+      )
+    end
 
     assert_not_predicate other, :stopped?
-    assert_equal 1, OpAppAuthorityStop.count
   end
 
   test "a grant stop ends only that grant and keeps the root and sibling grants" do
@@ -123,6 +173,7 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
   end
 
   test "a stop without an established principal or evidence is refused before any write" do
+    stops_before = OpAppAuthorityStop.count
     assert_raises(OpAuthorityStopCommitter::Refused) do
       OpAuthorityStopCommitter.stop_root(
         root: @root, cause: "browser_logout", principal_public_id: "", authority_evidence_ref: "test",
@@ -146,10 +197,11 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
       )
     end
     assert_not_predicate @root.reload, :revoked?
-    assert_equal 0, OpAppAuthorityStop.count
+    assert_equal stops_before, OpAppAuthorityStop.count
   end
 
   test "cause and scope must match the accepted authority-stop matrix" do
+    stops_before = OpAppAuthorityStop.count
     assert_raises(ArgumentError) do
       OpAuthorityStopCommitter.stop_root(
         root: @root, cause: "refresh_reuse", principal_public_id: @client.public_id,
@@ -176,6 +228,6 @@ class OpAuthorityStopCommitterTest < ActiveSupport::TestCase
     end
 
     assert_not_predicate @root.reload, :revoked?
-    assert_equal 0, OpAppAuthorityStop.count
+    assert_equal stops_before, OpAppAuthorityStop.count
   end
 end

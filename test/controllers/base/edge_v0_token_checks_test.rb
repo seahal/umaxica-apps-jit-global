@@ -6,7 +6,7 @@ require "test_helper"
 # require "helpers/auth_helpers"
 
 class Base::EdgeV0TokenChecksTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :operators, :visitors
+  fixtures :clients, :operators
 
   SURFACES = [
     {
@@ -20,14 +20,6 @@ class Base::EdgeV0TokenChecksTest < ActionDispatch::IntegrationTest
       actor: ->(test_case) { test_case.operators(:one) },
       build_token: ->(test_case) { OperatorToken.create!(authentication_epoch: 0, staff: test_case.operators(:one)) },
       resource_type: "operator",
-    },
-    {
-      host: ENV.fetch("PUBLIC_VISA_CORPORATE_URL"),
-      actor: ->(test_case) { test_case.visitors(:reserved_visitor) },
-      build_token: ->(test_case) {
-        VisitorToken.create!(authentication_epoch: 0, visitor: test_case.visitors(:reserved_visitor))
-      },
-      resource_type: "visitor",
     },
   ].freeze
 

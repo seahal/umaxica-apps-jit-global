@@ -37,8 +37,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
       # surface layout, so its presence is carried by the shared chrome prop rather than by markup.
       assert_select "script[data-page='app'][type='application/json']", count: 1
       assert_not inertia_props.dig("chrome", "theme_controls", "hidden")
-      assert_nil cookies[PreferenceCookieName.access(surface: surface)]
-      assert_nil cookies[PreferenceCookieName.refresh(surface: surface)]
+      assert_nil cookies[PreferenceCookieName.anonymous_jwt]
     end
   end
 
@@ -176,8 +175,9 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base preference region edit disables the region already stored for every surface" do
+    https!
     SURFACES.each do |surface, config|
-      host = ENV.fetch(config.fetch(:host_env), config.fetch(:host_default))
+      host = ENV.fetch(config.fetch(:host_env))
       host! host
       region_option_class = PreferenceClassRegistry.option_class(surface.to_s.camelize, :region)
 
@@ -255,20 +255,21 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "base preference write updates app user preference" do
+  test "base preference write updates app client preference" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     patch base_app_preference_theme_url(host: host),
-          params: { preference_theme: { option_id: "dr" } },
+          params: { preference_theme: { option_id: ClientPreferenceThemeOption::DARK.to_s } },
           headers: session_headers(host, token, user),
           as: :json
 
     assert_response :ok
     assert_equal "dr", response.parsed_body.dig("preference", "ct")
-    assert_equal "dr", user.user_preference.reload.theme
+    actor_preference = user.client_preference
+    assert_equal ClientPreferenceThemeOption::DARK, actor_preference.client_preference_theme.option_id
   end
 
   test "base preference GET overlay does not overwrite signed in app preference" do
@@ -276,17 +277,22 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     host! host
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    user.user_preference.update!(language: "ja", timezone: "Asia/Tokyo", theme: "li")
+    set_client_preference_option!(user, :language, "ja")
+    set_client_preference_option!(user, :timezone, "Asia/Tokyo")
+    set_client_preference_option!(user, :theme, "light")
 
     get base_app_preference_url(host: host, ri: "jp", lx: "en", tz: "utc", ct: "dr"),
         headers: session_headers(host, token, user)
 
     assert_response :success
-    user.user_preference.reload
+    user.client_preference.reload
 
-    assert_equal "ja", user.user_preference.language
-    assert_equal "Asia/Tokyo", user.user_preference.timezone
-    assert_equal "li", user.user_preference.theme
+    assert_equal ClientPreferenceLanguageOption::JA,
+                 user.client_preference.client_preference_language.option_id
+    assert_equal ClientPreferenceTimezoneOption::ASIA_TOKYO,
+                 user.client_preference.client_preference_timezone.option_id
+    assert_equal ClientPreferenceThemeOption::LIGHT,
+                 user.client_preference.client_preference_theme.option_id
   end
 
   test "base preference ignores JS readable theme cookie as canonical input" do
@@ -294,14 +300,15 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     host! host
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    user.user_preference.update!(theme: "li")
-    cookies[PreferenceBase::THEME_COOKIE_KEY] = "dr"
+    set_client_preference_option!(user, :theme, "light")
+    cookies[PreferenceCookieName.anonymous_experience] = "{\"theme\":\"dark\"}"
 
     get base_app_preference_url(host: host, ri: "jp"),
         headers: session_headers(host, token, user)
 
     assert_response :success
-    assert_equal "li", user.user_preference.reload.theme
+    assert_equal ClientPreferenceThemeOption::LIGHT,
+                 user.client_preference.reload.client_preference_theme.option_id
   end
 
   test "base preference reset remains destructive and removes app user preference" do
@@ -309,17 +316,30 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     host! host
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    user.user_preference.update!(theme: "dr")
+    set_client_preference_option!(user, :theme, "dark")
 
     delete base_app_preference_customization_url(host: host),
            params: { confirm_reset: "1" },
            headers: session_headers(host, token, user)
 
     assert_redirected_to base_app_preference_url(host: host)
-    assert_nil user.reload.user_preference
+    assert_equal ClientPreferenceStatus::RETIRED,
+                 ClientPreference.find_by!(client_id: user.id).status_id
   end
 
   private
+
+  def set_client_preference_option!(client, field, option_name)
+    preference = ClientPreference.find_or_create_by!(client_id: client.id, status_id: ClientPreferenceStatus::ACTIVE) do |record|
+      record.explicit_fields = []
+    end
+    option_class = PreferenceClassRegistry.option_class("Client", field)
+    option = option_class.find_by!(name: option_name)
+    record_class = PreferenceClassRegistry.record_class("Client", field)
+    record = record_class.find_or_initialize_by(preference_id: preference.id)
+    record.update!(option_id: option.id)
+    preference.update!(explicit_fields: (preference.explicit_field_names + [field.to_s]).uniq)
+  end
 
   # The screen forms live in the Inertia page object, so the action a screen posts to is a prop
   # rather than a form element attribute.

@@ -7,6 +7,7 @@
 - [Session management](session-management.md)
 - [Authorization](authorization.md)
 - [Sign-out](sign-out.md)
+- [Preference lifecycle](preference-lifecycle.md)
 - [Browser RP surfaces](browser-rp.md)
 - [Jump handoff](jump-handoff.md)
 

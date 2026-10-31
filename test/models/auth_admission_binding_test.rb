@@ -7,7 +7,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   fixtures :client_tokens
 
   test "confirmation references require UUID version four at adjacent representable versions in every realm" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -27,7 +27,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "every realm database rejects invalid parent and partial admission proof writes" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -92,7 +92,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "each realm binding expiry uses a strict deadline at the nearest database microsecond" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -112,10 +112,9 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
     end
   end
 
-  test "each realm database refuses redemption without a Base confirmation" do
+  test "app and org databases refuse redemption without a Base confirmation" do
     [
       ["app", ClientAuthAdmissionBinding, ClientAuthCeremonySession],
-      ["com", VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
       ["org", OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
     ].each do |surface, binding_model, session_model|
       issuance = OidcTestEntry.issue!(
@@ -204,10 +203,9 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
     assert_not_predicate binding, :retired?
   end
 
-  test "distinct pending parents may attach the same active Auth continuity in every realm" do
+  test "distinct pending parents may attach the same active Auth continuity in app and org" do
     [
       ["app", ClientAuthAdmissionBinding, ClientAuthCeremonySession],
-      ["com", VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
       ["org", OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
     ].each do |surface, binding_model, session_model|
       browser_nonce = SecureRandom.urlsafe_base64(32)

@@ -3,39 +3,123 @@
 
 # Reference data (lookup / status tables) is normally owned by migrations, which insert the fixed
 # rows with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file
-# also replays fixed social Chronicle references after a schema-only load, because that database's
-# migration markers suppress the original data inserts. The remaining content is development/test
-# reference and sample data; production seeds only the social Chronicle references.
+# also replays fixed reference catalogs after a schema-only load, because migration markers
+# suppress the original data inserts. The remaining content is development/test sample data.
 
-ChronicleRecord.connected_to(role: :writing) do
-  ClientChronicleEvent.insert_missing_fixed_ids!(
-    [ClientChronicleEvent::SOCIAL_LINKED, ClientChronicleEvent::SOCIAL_UNLINKED],
+# A SQL structure load records the migration version without its reference rows.
+# Reuse the migration's fixed catalog on the Ticket writer after a schema-only load.
+require Rails.root.join("db/op_base_app_migrate/20261006160000_seed_app_sign_flow_reference_data").to_s
+require Rails.root.join("db/op_base_org_migrate/20261006160002_seed_org_sign_flow_reference_data").to_s
+SeedAppSignFlowReferenceData.seed_into(
+  OpBaseAppRecord.lease_connection,
+  tables: %i(client_sign_in_flow_states client_sign_up_flow_statuses client_sign_up_flow_cleanup_statuses),
+)
+SeedOrgSignFlowReferenceData.seed_into(
+  OpBaseOrgRecord.lease_connection,
+  tables: %i(operator_sign_in_flow_states operator_sign_up_flow_statuses),
+)
+
+[
+  [ClientTokenKind, ClientTokenStatus, ClientTokenBindingMethod, ClientTokenDbscStatus,
+   OperatorTokenKind, OperatorTokenStatus, OperatorTokenBindingMethod, OperatorTokenDbscStatus,],
+  [PersonaMembershipKind, PersonaMembershipState, PersonaMembershipRevokeReason,
+   AgentMembershipKind, AgentMembershipState, AgentMembershipRevokeReason,
+   OperatorEntraIdentityState, OrganizationEntraConnectionState,
+   ClientChronicleEvent, ClientChronicleLevel, OperatorChronicleEvent, OperatorChronicleLevel,],
+  [AvatarMembershipStatus, AvatarOwnershipStatus, AvatarPermission, AvatarRole, HandleStatus, HandleAssignmentStatus,
+   DepartmentStatus, DivisionStatus, OperatorWorkspaceAccountStatus, OrganizationStatus,],
+  [ComPreferenceStatus, ComPreferenceChronicleEvent, ComPreferenceChronicleLevel,
+   ComPreferenceLanguageOption, ComPreferenceRegionOption, ComPreferenceThemeOption, ComPreferenceTimezoneOption,
+   ComPreferenceCurrencyOption, ComPreferenceDateFormatOption, ComPreferenceDensityOption, ComPreferenceMotionOption,
+   ComPreferencePageSizeOption, ComPreferenceTimeFormatOption, ComPreferenceWebPushOption,],
+  [AppPreferenceLanguageOption, AppPreferenceRegionOption, AppPreferenceThemeOption, AppPreferenceTimezoneOption,
+   AppPreferenceCurrencyOption, AppPreferenceDateFormatOption, AppPreferenceDensityOption, AppPreferenceMotionOption,
+   AppPreferencePageSizeOption, AppPreferenceTimeFormatOption,],
+  [OrgPreferenceLanguageOption, OrgPreferenceRegionOption, OrgPreferenceThemeOption, OrgPreferenceTimezoneOption,
+   OrgPreferenceCurrencyOption, OrgPreferenceDateFormatOption, OrgPreferenceDensityOption, OrgPreferenceMotionOption,
+   OrgPreferencePageSizeOption, OrgPreferenceTimeFormatOption,],
+  [ClientPreferenceLanguageOption, ClientPreferenceRegionOption, ClientPreferenceThemeOption,
+   ClientPreferenceTimezoneOption, ClientPreferenceCurrencyOption, ClientPreferenceDateFormatOption,
+   ClientPreferenceDensityOption, ClientPreferenceMotionOption, ClientPreferencePageSizeOption,
+   ClientPreferenceTimeFormatOption,],
+  [OperatorPreferenceLanguageOption, OperatorPreferenceRegionOption, OperatorPreferenceThemeOption,
+   OperatorPreferenceTimezoneOption, OperatorPreferenceCurrencyOption, OperatorPreferenceDateFormatOption,
+   OperatorPreferenceDensityOption, OperatorPreferenceMotionOption, OperatorPreferencePageSizeOption,
+   OperatorPreferenceTimeFormatOption,],
+  [ClientStatus, ClientVisibility, ClientSecurityMode, ClientMfaStatus, ClientEmailStatus,
+   ClientTelephoneStatus, ClientPasskeyStatus, ClientTotpCredentialStatus, ClientIdentityState,
+   OperatorStatus, OperatorVisibility, OperatorSecurityMode, OperatorMfaStatus, OperatorEmailStatus,
+   OperatorTelephoneStatus, OperatorSecretCredentialKind, OperatorIdentityState,],
+].flatten.each do |model|
+  connection = model.lease_connection
+  table = connection.quote_table_name(model.table_name)
+  model::DEFAULTS.each do |id|
+    connection.execute("INSERT INTO #{table} (id) VALUES (#{connection.quote(id)}) ON CONFLICT (id) DO NOTHING")
+  end
+end
+
+member_status_connection = MemberStatus.lease_connection
+member_status_table = member_status_connection.quote_table_name(MemberStatus.table_name)
+MemberStatus::DEFAULTS.each do |id|
+  member_status_connection.execute(
+    "INSERT INTO #{member_status_table} (id, created_at, updated_at) " \
+    "VALUES (#{member_status_connection.quote(id)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING",
   )
-  ClientChronicleLevel.insert_missing_fixed_ids!([ClientChronicleLevel::NOTHING])
+end
+
+[
+  [OperatorPasskeyStatus, [OperatorPasskeyStatus::ACTIVE, OperatorPasskeyStatus::REVOKED]],
+  [OperatorSecretCredentialStatus,
+   [OperatorSecretCredentialStatus::ACTIVE, OperatorSecretCredentialStatus::DELETED,
+    OperatorSecretCredentialStatus::EXPIRED, OperatorSecretCredentialStatus::REVOKED,
+    OperatorSecretCredentialStatus::USED,],],
+].each do |model, ids|
+  connection = model.lease_connection
+  table = connection.quote_table_name(model.table_name)
+  ids.each do |id|
+    connection.execute("INSERT INTO #{table} (id) VALUES (#{connection.quote(id)}) ON CONFLICT (id) DO NOTHING")
+  end
+end
+
+require Rails.root.join(
+  "db/op_base_app_migrate/20261006140000_normalize_client_session_limit_resolution_transactions",
+).to_s
+require Rails.root.join(
+  "db/op_base_org_migrate/20261006140002_create_operator_session_limit_resolution_transactions",
+).to_s
+[
+  [OpBaseAppRecord, :client_session_limit_resolution_states, NormalizeClientSessionLimitResolutionTransactions::STATE_IDS],
+  [OpBaseOrgRecord, :operator_session_limit_resolution_states, CreateOperatorSessionLimitResolutionTransactions::STATE_IDS],
+].each do |record_class, table, ids|
+  connection = record_class.lease_connection
+  quoted_table = connection.quote_table_name(table)
+  ids.each do |id|
+    connection.execute(
+      "INSERT INTO #{quoted_table} (id, created_at, updated_at) " \
+      "VALUES (#{connection.quote(id)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING",
+    )
+  end
+end
+
+require Rails.root.join("db/op_base_app_migrate/20261025120000_create_op_authority_stops_op_base_app").to_s
+require Rails.root.join("db/op_base_org_migrate/20261025120000_create_op_authority_stops_op_base_org").to_s
+[
+  [OpBaseAppRecord, "app", CreateOpAuthorityStopsOpBaseApp],
+  [OpBaseOrgRecord, "org", CreateOpAuthorityStopsOpBaseOrg],
+].each do |record_class, realm, catalog|
+  connection = record_class.lease_connection
+  reference_sets = {
+    causes: catalog::CAUSES, scopes: catalog::SCOPES, participant_statuses: catalog::PARTICIPANT_STATUSES,
+  }
+  reference_sets.each do |suffix, ids|
+    table = connection.quote_table_name("op_#{realm}_authority_stop_#{suffix}")
+    ids.each_key do |id|
+      connection.execute("INSERT INTO #{table} (id) VALUES (#{connection.quote(id)}) ON CONFLICT (id) DO NOTHING")
+    end
+  end
 end
 
 return if Rails.env.production?
-
-# `schema_format: :sql` loads `structure.sql` for db:prepare, which carries schema only (no row
-# data). Migrations that seed fixed reference-table rows via raw INSERTs are marked "already run"
-# by structure.sql's schema_migrations rows, so their INSERT side effects never replay on a freshly
-# prepared database. Ensure the reference tables this file depends on are populated before use.
-[
-  ClientStatus, ClientVisibility, ClientMfaStatus,
-  ClientEmailStatus,
-  VisitorSecretCredentialKind, VisitorSecretCredentialStatus, VisitorPasskeyStatus,
-  OperatorStatus, OperatorVisibility, OperatorMfaStatus,
-  OperatorEmailStatus, OperatorSecretCredentialKind,
-].each(&:ensure_defaults!)
-# Security Mode rows (migration 20261023140001) are not replayed by a structure load either.
-[ClientSecurityMode, VisitorSecurityMode, OperatorSecurityMode].each do |model|
-  model.insert_all(model::DEFAULTS.map { |id| { id: id } }, unique_by: :id)
-end
-OperatorSecretCredentialStatus.insert_missing_fixed_ids!(
-  [OperatorSecretCredentialStatus::ACTIVE, OperatorSecretCredentialStatus::DELETED,
-   OperatorSecretCredentialStatus::EXPIRED, OperatorSecretCredentialStatus::REVOKED,
-   OperatorSecretCredentialStatus::USED,],
-)
 
 # Occurrence reference rows are owned by the occurrence database, not primary.
 # A structure.sql load marks data migrations as applied without replaying their

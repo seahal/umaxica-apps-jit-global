@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(ticket_rollback source_reset_fault newer_failure newer_failure_aba).each do |scenario|
       test "#{surface} fresh Telephone registration consumption preserves Source failures on #{scenario}" do
         actor, token, telephone =
@@ -13,13 +13,6 @@ class TelephoneCredentialRegistrationOtpVerificationCommitterTest < ActiveSuppor
             root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
             candidate = owner.client_telephones.create!(
               raw_number: "+12025550191", confirm_policy: true, otp_attempts_count: 2,
-            )
-            [owner, root, candidate]
-          when "com"
-            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-            candidate = owner.visitor_telephones.create!(
-              raw_number: "+12025550192", confirm_policy: true, otp_attempts_count: 2,
             )
             [owner, root, candidate]
           end
@@ -106,11 +99,6 @@ class TelephoneCredentialRegistrationOtpVerificationCommitterTest < ActiveSuppor
           owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_telephones.create!(raw_number: "+12025550193", confirm_policy: true)
-          [owner, root, candidate]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_telephones.create!(raw_number: "+12025550194", confirm_policy: true)
           [owner, root, candidate]
         end
       token.rotate_refresh_token!

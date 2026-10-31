@@ -23,6 +23,14 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
     assert_nil JumpRtReturnPolicy.normalize_origin("https://user:pass@www.umaxica.app")
   end
 
+  test "origins with a path query or fragment are rejected" do
+    ["https://auth.umaxica.app/", "https://auth.umaxica.app/path",
+     "https://auth.umaxica.app?x=1", "https://auth.umaxica.app#fragment",].each do |origin|
+      assert_nil JumpRtReturnPolicy.normalize_origin(origin), origin
+      assert_not JumpRtReturnPolicy.allowed_source?(destination_origin: "https://www.umaxica.app", source: origin)
+    end
+  end
+
   test "normalize_origin normalizes https origin" do
     result = JumpRtReturnPolicy.normalize_origin("https://www.umaxica.app")
 

@@ -30,8 +30,6 @@ module TelephoneContactBinding
         case self
         when ClientTelephone
           [:user_telephone_status_id, ClientTelephoneStatus::UNVERIFIED, ClientTelephoneStatus::VERIFIED]
-        when VisitorTelephone
-          [:visitor_telephone_status_id, VisitorTelephoneStatus::UNVERIFIED, VisitorTelephoneStatus::VERIFIED]
         else raise ArgumentError, "unsupported registration Contact"
         end
       raise ArgumentError, "registration candidate is not pending" unless self[key] == pending
@@ -61,7 +59,6 @@ module TelephoneContactBinding
     owner, status_column, suspended =
       case self
       when ClientTelephone then [Client.find(user_id), :user_telephone_status_id, ClientTelephoneStatus::SUSPENDED]
-      when VisitorTelephone then [Visitor.find(visitor_id), :visitor_telephone_status_id, VisitorTelephoneStatus::SUSPENDED]
       else raise ArgumentError, "unsupported withdrawal telephone"
       end
     owner.with_lock do
@@ -89,7 +86,6 @@ module TelephoneContactBinding
     owner =
       case [self, transaction]
       in [ClientTelephone, ClientTelephoneCeremonyTransaction] then Client.find(user_id)
-      in [VisitorTelephone, VisitorTelephoneCeremonyTransaction] then Visitor.find(visitor_id)
       else raise ArgumentError, "unsupported Telephone registration ceremony realm"
       end
     transaction.normalized_number_digest == number_digest && transaction.telephone_otp_verified_evidence?(

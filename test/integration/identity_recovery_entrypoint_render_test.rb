@@ -73,62 +73,6 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     end
   end
 
-  { unverified: VisitorEmailStatus::UNVERIFIED,
-    pending_signup: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-    verified_without_binding: VisitorEmailStatus::VERIFIED, }.each do |label, status|
-    test "com recovery refuses an unbound #{label} email without issuing authority" do
-      host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-      owner = Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-        birthdate: "2000-01-01",
-      )
-      VisitorEmailStatus.find_or_create_by!(id: status)
-      email = VisitorEmail.create!(
-        visitor: owner, address: "recovery-unbound-#{label}-com@example.test", confirm_policy: "1",
-        visitor_email_status_id: status,
-      )
-      enforcement_case = ComEnforcementCase.create!(
-        kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
-        release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
-        principal_public_id: owner.public_id, applied_by_operator_public_id: "recovery-negative-operator",
-      )
-      EnforcementCaseApplyOperation.call(
-        enforcement_case: enforcement_case,
-        actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
-      )
-      original_contact = email.attributes
-
-      assert_no_difference(
-        ["VisitorEnforcementRecoveryCeremony.count", "VisitorEmailCeremonyTransaction.count",
-         "VisitorToken.count", "VisitorSecretCredential.count",],
-      ) do
-        assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
-          post base_com_identity_recovery_session_path(ri: "jp"),
-               params: { recovery_reentry: { address: email.address } }
-        end
-
-        assert_response :success
-        post base_com_identity_recovery_session_path(ri: "jp"), params: { pass_code: "000000" }
-
-        assert_response :unprocessable_content
-      end
-
-      contact_unchanged = email.reload.attributes == original_contact
-
-      assert contact_unchanged, "Recovery must preserve the unbound candidate"
-      assert_equal "active", enforcement_case.reload.state
-      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-    end
-  end
-
-  test "com recovery session entry point renders" do
-    get "http://base.com.localhost/identity/recovery/session/new?ri=jp"
-
-    assert_response :success
-    assert_match "Account recovery", response.body
-  end
-
   test "app recovery session entry point renders" do
     get "http://base.app.localhost/identity/recovery/session/new?ri=jp"
 
@@ -145,13 +89,6 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     assert_match "/identity/recovery/session/new", response.location
   end
 
-  test "com recovery status page redirects to the entry point without a ceremony" do
-    get "http://base.com.localhost/identity/recovery?ri=jp"
-
-    assert_response :see_other
-    assert_match "/identity/recovery/session/new", response.location
-  end
-
   test "app recovery keeps an unknown email enumeration-resistant and rejects its OTP" do
     post "http://base.app.localhost/identity/recovery/session?ri=jp",
          params: { recovery_reentry: { address: "unknown-recovery@example.test" } }
@@ -160,19 +97,6 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     assert_match "Account recovery", response.body
 
     post "http://base.app.localhost/identity/recovery/session?ri=jp", params: { pass_code: "000000" }
-
-    assert_response :unprocessable_content
-    assert_match "Account recovery", response.body
-  end
-
-  test "com recovery keeps an unknown email enumeration-resistant and rejects its OTP" do
-    post "http://base.com.localhost/identity/recovery/session?ri=jp",
-         params: { recovery_reentry: { address: "unknown-recovery@example.test" } }
-
-    assert_response :success
-    assert_match "Account recovery", response.body
-
-    post "http://base.com.localhost/identity/recovery/session?ri=jp", params: { pass_code: "000000" }
 
     assert_response :unprocessable_content
     assert_match "Account recovery", response.body
@@ -192,48 +116,6 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
       )
       unknown_session.post(
         "http://base.app.localhost/identity/recovery/session?ri=jp",
-        params: { recovery_reentry: { address: "recovery-equivalence-unknown@example.test" } },
-      )
-    end
-
-    assert_equal registered_session.response.status, unknown_session.response.status
-    assert_equal 200, registered_session.response.status
-    assert_nil registered_session.response.headers["Location"]
-    assert_nil unknown_session.response.headers["Location"]
-    real_state = registered_session.request.session.fetch(:enforcement_recovery_reentry)
-    dummy_state = unknown_session.request.session.fetch(:enforcement_recovery_reentry)
-
-    assert_equal [false, true], [real_state.fetch("dummy"), dummy_state.fetch("dummy")]
-    assert_equal JSON.generate(real_state).bytesize, JSON.generate(dummy_state).bytesize
-    session_key = Rails.application.config.session_options.fetch(:key)
-
-    assert_equal Rack::Utils.unescape(registered_session.cookies[session_key]).bytesize,
-                 Rack::Utils.unescape(unknown_session.cookies[session_key]).bytesize
-    assert_operator Rack::Utils.unescape(registered_session.cookies[session_key]).bytesize, :<, 4096
-    assert_equal registered_session.response.headers["Content-Type"],
-                 unknown_session.response.headers["Content-Type"]
-    assert_equal registered_session.response.headers["Cache-Control"],
-                 unknown_session.response.headers["Cache-Control"]
-    assert_match "Account recovery", registered_session.response.body
-    assert_match "Account recovery", unknown_session.response.body
-    assert_match "Verification code", registered_session.response.body
-    assert_match "Verification code", unknown_session.response.body
-  end
-
-  test "com recovery start keeps registered and unknown email responses equivalent across sessions" do
-    visitor = create_visitor
-    email = create_verified_visitor_email(visitor, address: "recovery-equivalence-visitor@example.test")
-    activate_recovery_case(ComEnforcementCase, visitor)
-    registered_session = open_session
-    unknown_session = open_session
-
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      registered_session.post(
-        "http://base.com.localhost/identity/recovery/session?ri=jp",
-        params: { recovery_reentry: { address: email.address } },
-      )
-      unknown_session.post(
-        "http://base.com.localhost/identity/recovery/session?ri=jp",
         params: { recovery_reentry: { address: "recovery-equivalence-unknown@example.test" } },
       )
     end
@@ -300,6 +182,90 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
+  test "app recovery refuses to issue a ceremony if the Email binding ends after OTP verification" do
+    client = Client.create!(
+      status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
+    )
+    email = ClientEmail.create!(
+      user: client, address: "recovery-race-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    enforcement_case = AppEnforcementCase.create!(
+      kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
+    )
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case, actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    post "http://base.app.localhost/identity/recovery/session?ri=jp",
+         params: { recovery_reentry: { address: email.address } }
+
+    assert_response :success
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    verify = EmailReentryOtpVerificationCommitter.method(:call)
+    release_after_verification =
+      lambda do |**arguments|
+        result = verify.call(**arguments)
+        arguments.fetch(:email).release_binding! if result
+        result
+      end
+
+    EmailReentryOtpVerificationCommitter.stub(:call, release_after_verification) do
+      assert_no_difference "ClientEnforcementRecoveryCeremony.count" do
+        post "http://base.app.localhost/identity/recovery/session?ri=jp", params: { pass_code: pass_code }
+      end
+    end
+    assert_response :unprocessable_content
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
+  test "app recovery refuses to issue a ceremony if the security lock ends after OTP verification" do
+    client = Client.create!(
+      status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
+    )
+    email = ClientEmail.create!(
+      user: client, address: "recovery-race-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    enforcement_case = AppEnforcementCase.create!(
+      kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
+    )
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case, actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    post "http://base.app.localhost/identity/recovery/session?ri=jp",
+         params: { recovery_reentry: { address: email.address } }
+
+    assert_response :success
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    verify = EmailReentryOtpVerificationCommitter.method(:call)
+    release_after_verification =
+      lambda do |**arguments|
+        result = verify.call(**arguments)
+        EnforcementCaseEndOperation.call(enforcement_case: enforcement_case, reason: "revoked") if result
+        result
+      end
+
+    EmailReentryOtpVerificationCommitter.stub(:call, release_after_verification) do
+      assert_no_difference "ClientEnforcementRecoveryCeremony.count" do
+        post "http://base.app.localhost/identity/recovery/session?ri=jp", params: { pass_code: pass_code }
+      end
+    end
+    assert_response :unprocessable_content
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
   private
 
   def activate_recovery_case(case_class, subject)
@@ -328,24 +294,6 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     ClientEmail.create!(
       user: client, address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-    ).tap(&:finalize_binding!)
-  end
-
-  def create_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-  end
-
-  def create_verified_visitor_email(visitor, address:)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorEmail.create!(
-      visitor: visitor, address: address, confirm_policy: "1",
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
   end
 end

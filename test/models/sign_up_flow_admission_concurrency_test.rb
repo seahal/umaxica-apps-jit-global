@@ -10,7 +10,6 @@ class SignUpFlowAdmissionConcurrencyTest < ActiveSupport::TestCase
 
   [
     [:app, "client", ClientSignUpFlow, ClientAuthAdmissionBinding, ClientAuthCeremonySession],
-    [:com, "visitor", VisitorSignUpFlow, VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
   ].each do |surface, realm, flow_class, binding_class, ceremony_class|
     test "#{surface} simultaneous Flow inserts on separate connections claim one Admission slot" do
       client_id = "core-#{surface}-jp"

@@ -42,15 +42,6 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
     assert_equal ClientSignUpFlowStatus::COMPLETED, ticket.reload.status_id
   end
 
-  test "com tickets reject social callback events" do
-    ticket = create_cycle(VisitorSignUpFlow, entry_method: "email")
-
-    result = SignUpStateMachine.call(ticket: ticket, event: :start_social_callback, actor_context: nil)
-
-    assert_equal :invalid_transition, result.status
-    assert_equal VisitorSignUpFlowStatus::STARTED, ticket.reload.status_id
-  end
-
   test "app social tickets can enter and complete callback for new identities" do
     ticket = create_cycle(ClientSignUpFlow, entry_method: "google")
 

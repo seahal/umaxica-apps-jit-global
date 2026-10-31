@@ -190,13 +190,7 @@ class SocialCeremonyTransactionableTest < ActiveSupport::TestCase
       Class.new(OpBaseOrgRecord) do
         include SocialCeremonyTransactionable
       end
-    com_transaction_class =
-      Class.new(OpBaseComRecord) do
-        include SocialCeremonyTransactionable
-      end
-
     assert_equal ActiveRecord::Base, generic_transaction_class.connection_owner
     assert_equal OpBaseOrgRecord, org_transaction_class.connection_owner
-    assert_equal OpBaseComRecord, com_transaction_class.connection_owner
   end
 end

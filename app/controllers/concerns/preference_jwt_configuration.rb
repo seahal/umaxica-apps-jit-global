@@ -26,6 +26,27 @@ module PreferenceJwtConfiguration
     ENV.fetch("PREFERENCE_JWT_ISSUER")
   end
 
+  def self.com_issuer
+    ENV.fetch("PREFERENCE_COM_JWT_REVOKED_KIDS")
+    record = JitSecurityJwtRegistry.issuer("preference_com")
+    unless record.issuer.present? && record.audiences == ["com"] && record.current_kid.present?
+      raise JitSecurityJwtRegistry::ConfigurationError, "com preference JWT issuer, audience or active key is missing"
+    end
+
+    record.issuer
+  end
+
+  def self.issuer_for(issuer_id)
+    case issuer_id
+    when "preference_com"
+      com_issuer
+    when "preference_app", "preference_org"
+      JitSecurityJwtRegistry.issuer(issuer_id).issuer
+    else
+      raise JitSecurityJwtRegistry::ConfigurationError, "unsupported preference issuer: #{issuer_id.inspect}"
+    end
+  end
+
   def self.client_id
     ENV.fetch("PREFERENCE_JWT_CLIENT_ID")
   end
@@ -52,6 +73,7 @@ module PreferenceJwtConfiguration
     SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!([issuer], label: "PREFERENCE_JWT_ISSUER")
     audiences
     client_id
+    com_issuer
     true
   end
 
@@ -118,9 +140,9 @@ module PreferenceJwtConfiguration
     JitSecurityJwtRegistry.parse_header(token)
   end
 
-  public_class_method :active_kid, :leeway_seconds, :issuer, :client_id, :audiences, :validate!,
-                      :audience_for, :host_scope_for, :private_key_for_active, :private_key_for,
-                      :public_key_for, :private_key, :public_key, :parse_header
+  public_class_method :active_kid, :leeway_seconds, :issuer, :com_issuer, :issuer_for, :client_id,
+                      :audiences, :validate!, :audience_for, :host_scope_for, :private_key_for_active,
+                      :private_key_for, :public_key_for, :private_key, :public_key, :parse_header
 
   def self.audiences_from_boot_config
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)

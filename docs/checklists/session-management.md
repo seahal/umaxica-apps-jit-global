@@ -10,7 +10,7 @@ Applies to session establishment, pending sign-in and revocation on every suppor
   RP connection times; refusal does not disclose account existence or the remaining interval.
 - SESSION-4: Issuance and revocation failures remain failures; database errors are not treated as
   absent sessions or successful revocations.
-- SESSION-5: On token and preference DBSC refresh endpoints, malformed Structured Field identifiers
+- SESSION-5: On authentication-token DBSC endpoints, malformed Structured Field identifiers
   and identifiers that do not match the current record cannot issue or replace a challenge or set
   a cookie. HTTP strings are decoded once and response values are serialized with escaping.
 - SESSION-6: DBSC operational logs retain no identifier, proof or challenge values, including

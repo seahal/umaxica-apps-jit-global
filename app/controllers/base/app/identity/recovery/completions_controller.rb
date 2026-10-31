@@ -14,8 +14,10 @@ module Base
           before_action :require_recovery_ceremony!
 
           def create
-            EnforcementCaseEndOperation.call(enforcement_case: recovery_case, reason: "verification_completed")
-            current_recovery_ceremony.consume!
+            EnforcementCaseEndOperation.call(
+              enforcement_case: recovery_case, reason: "verification_completed",
+              recovery_ceremony: current_recovery_ceremony,
+            )
             clear_recovery_ceremony_cookie!
             safe_redirect_to(
               auth_app_sign_in_path, fallback: new_base_app_identity_recovery_session_path,

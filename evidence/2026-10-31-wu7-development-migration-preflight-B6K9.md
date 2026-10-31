@@ -1,0 +1,7 @@
+# WU-7 development COM migration preflight
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contains uncommitted changes affecting this preflight.
+- The target reported database `development_com_setting_db` on `primary` (`10.89.0.3`, Podman). This is a local development target, not production or Neon. A read-only inventory found zero preference, cookie, browser-binding and Web Push rows; the only nonempty `com_*` tables were binding-method (3), DBSC-status (5) and status (2) reference rows. Thirteen COM migrations were pending. A point-in-time activity query found zero other connections to that database; this is not a lock preventing a later connection.
+- A PostgreSQL custom-format backup was created at `/tmp/wu7-development-com-setting-20261031.dump` (mode 0600, 106111 bytes, SHA-256 `f2980379b49e1c5ddc83fa7a21024fc23bb8cae0573473400eeeb8c32d7e422f`). Its table of contents was readable.
+- The backup was restored into a newly created local scratch database `wu7_dev_com_restore_7d5d06fcd8`. Counts matched for the preference, cookie, binding, Web Push, reference and migration tables checked; independently dumped schemas were equal after excluding PostgreSQL's random restrict markers. The scratch database and backup remain in place.
+- The owner approved WU-7 §4.3 destructive migrations and local rebuilding; the recorded approval excludes production/Neon and migrations added later. No target migration was applied during this preflight. The backup is of the setting database only and is not a coordinated Chronicle snapshot.

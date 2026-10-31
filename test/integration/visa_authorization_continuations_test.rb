@@ -8,7 +8,6 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
   test "every Visa continuation refuses missing browser navigation and malformed references" do
     {
       "visa.umaxica.app" => %w(result cancellation switch),
-      "visa.umaxica.com" => %w(result cancellation switch),
       "visa.umaxica.org" => %w(result cancellation),
     }.each do |host, continuations|
       host! host
@@ -47,7 +46,7 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
   end
 
   test "authorization bases deny access and expose no endpoint actions" do
-    [Visa::App::AuthorizationBaseController, Visa::Com::AuthorizationBaseController,
+    [Visa::App::AuthorizationBaseController,
      Visa::Org::AuthorizationBaseController,].each do |controller|
       assert_equal :deny_all, controller.authentication_mode_for(:show)
       assert_equal :deny_all, controller.authentication_mode_for(:create)
@@ -58,7 +57,6 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
   test "every continuation preserves the parameter byte limit below at and above its boundary" do
     {
       "visa.umaxica.app" => %w(result cancellation switch),
-      "visa.umaxica.com" => %w(result cancellation switch),
       "visa.umaxica.org" => %w(result cancellation),
     }.each do |host, continuations|
       host! host
@@ -78,7 +76,7 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
   end
 
   test "each realm preserves the total query byte limit below at and above its boundary" do
-    %w(visa.umaxica.app visa.umaxica.com visa.umaxica.org).each do |host|
+    %w(visa.umaxica.app visa.umaxica.org).each do |host|
       host! host
       [8191, 8192, 8193].each do |length|
         query = URI.encode_www_form(a: "a" * 2048, b: "b" * 2048, c: "c" * 2048, d: "d" * (length - 6155))
@@ -99,13 +97,12 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
 
   test "continuation endpoints expose only show while authorization endpoints retain create" do
     [Visa::App::Oidc::ResultsController, Visa::App::Oidc::CancellationsController,
-     Visa::App::Oidc::SwitchesController, Visa::Com::Oidc::ResultsController,
-     Visa::Com::Oidc::CancellationsController, Visa::Com::Oidc::SwitchesController,
+     Visa::App::Oidc::SwitchesController,
      Visa::Org::Oidc::ResultsController, Visa::Org::Oidc::CancellationsController,].each do |controller|
       assert_equal Set["show"], controller.action_methods
       assert_equal :open, controller.authentication_mode_for(:show)
     end
-    [Visa::App::Oauth::AuthorizationsController, Visa::Com::Oauth::AuthorizationsController,
+    [Visa::App::Oauth::AuthorizationsController,
      Visa::Org::Oauth::AuthorizationsController,].each do |controller|
       assert_equal Set["show", "create"], controller.action_methods
       assert_equal :open, controller.authentication_mode_for(:show)

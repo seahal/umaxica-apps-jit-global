@@ -46,6 +46,21 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     end
   end
 
+  test "each first-party RP accepts its registered logout URI for its own realm" do
+    AuthBoundaryAuthorityMap.first_party_rp_client_ids.each do |client_id|
+      client = OidcClientRegistry.find!(client_id)
+      client.post_logout_redirect_uris.each do |uri|
+        assert OidcClientRegistry.valid_post_logout_redirect_uri?(
+          client_id: client_id, uri: uri, resource_type: client.resource_type,
+        ), "#{client_id} rejects its registered logout URI"
+        other_realm = client.resource_type == "client" ? "operator" : "client"
+        assert_not OidcClientRegistry.valid_post_logout_redirect_uri?(
+          client_id: client_id, uri: uri, resource_type: other_realm,
+        ), "#{client_id} accepts its logout URI for another realm"
+      end
+    end
+  end
+
   test "find returns nil for unknown client" do
     client = OidcClientRegistry.find("unknown-client")
 

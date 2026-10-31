@@ -89,7 +89,6 @@ module RpSession
     resource_type =
       case token
       when ClientToken then "client"
-      when VisitorToken then "visitor"
       when OperatorToken then "operator"
       else raise ArgumentError, "unsupported RP parent token"
       end
@@ -219,7 +218,6 @@ module RpSession
     association_name, device_session_class =
       case self
       when OpAppGrant then [:client_device_session, ClientDeviceSession]
-      when OpComGrant then [:visitor_device_session, VisitorDeviceSession]
       when OpOrgGrant then [:operator_device_session, OperatorDeviceSession]
       else raise IssuanceRejected, "unsupported RP Session class"
       end
@@ -237,8 +235,6 @@ module RpSession
     case device_session
     when ClientDeviceSession
       ClientToken.find_by(id: current_token_id, device_session_id: device_session.id)
-    when VisitorDeviceSession
-      VisitorToken.find_by(id: current_token_id, device_session_id: device_session.id)
     when OperatorDeviceSession
       OperatorToken.find_by(id: current_token_id, device_session_id: device_session.id)
     else

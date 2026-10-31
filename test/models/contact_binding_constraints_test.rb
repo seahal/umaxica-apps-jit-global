@@ -5,9 +5,7 @@ require "test_helper"
 class ContactBindingConstraintsTest < ActiveSupport::TestCase
   [
     [ClientEmail, Client, :user_id, :address, :address_digest, "nonblank@example.test"],
-    [VisitorEmail, Visitor, :visitor_id, :address, :address_digest, "nonblank@example.test"],
     [ClientTelephone, Client, :user_id, :number, :number_digest, "+819012345671"],
-    [VisitorTelephone, Visitor, :visitor_id, :number, :number_digest, "+819012345671"],
   ].each do |model, owner_class, owner_key, destination_key, digest_key, destination|
     test "#{model.name} effective digest rejects nil empty and whitespace and accepts one nonblank character" do
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
@@ -42,12 +40,10 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
     end
   end
 
-  test "app and com contacts allow independent candidates but enforce effective digest and owner cardinality" do
+  test "app contacts allow independent candidates but enforce effective digest and owner cardinality" do
     [
       [ClientEmail, Client, :user_id, :address, "bindings@example.test"],
-      [VisitorEmail, Visitor, :visitor_id, :address, "bindings@example.test"],
       [ClientTelephone, Client, :user_id, :number, "+819012345678"],
-      [VisitorTelephone, Visitor, :visitor_id, :number, "+819012345678"],
     ].each do |model, owner_class, owner_key, destination_key, destination|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       other_owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
@@ -84,9 +80,7 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
   test "a pending binding cannot acquire a release fact without recognition in any Contact table" do
     [
       [ClientEmail, Client, :user_id, :address, "pending-release@example.test"],
-      [VisitorEmail, Visitor, :visitor_id, :address, "pending-release@example.test"],
       [ClientTelephone, Client, :user_id, :number, "+819012345680"],
-      [VisitorTelephone, Visitor, :visitor_id, :number, "+819012345680"],
     ].each do |model, owner_class, owner_key, destination_key, destination|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = model.create!(owner_key => owner.id, destination_key => destination, :confirm_policy => "1")
@@ -106,9 +100,7 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
   test "all contact tables preserve bound owner, digest and one-way release through direct database writes" do
     [
       [ClientEmail, Client, :user_id, :address, :address_digest, "immutable@example.test"],
-      [VisitorEmail, Visitor, :visitor_id, :address, :address_digest, "immutable@example.test"],
       [ClientTelephone, Client, :user_id, :number, :number_digest, "+819012345679"],
-      [VisitorTelephone, Visitor, :visitor_id, :number, :number_digest, "+819012345679"],
     ].each do |model, owner_class, owner_key, destination_key, digest_key, destination|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       other_owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))

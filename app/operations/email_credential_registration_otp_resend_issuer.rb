@@ -17,8 +17,6 @@ class EmailCredentialRegistrationOtpResendIssuer
       case [actor, token, email, transaction]
       in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction]
         ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
-      in [Visitor, VisitorToken, VisitorEmail, VisitorEmailCeremonyTransaction]
-        ["com", VisitorEmailStatus::UNVERIFIED, VisitorStepUpCeremonyTransaction]
       else raise ArgumentError, "unsupported Email registration resend realm"
       end
   end
@@ -91,9 +89,6 @@ class EmailCredentialRegistrationOtpResendIssuer
       when Client
         token.user_id == actor.id && token_device_session.user_id == actor.id && email.user_id == actor.id &&
         email.user_email_status_id == pending_status
-      when Visitor
-        token.visitor_id == actor.id && token_device_session.visitor_id == actor.id && email.visitor_id == actor.id &&
-        email.visitor_email_status_id == pending_status
       end
     owned_pending && actor.login_allowed? && actor.accessible?(now) && email.accessible?(now) &&
       !email.binding_finalized_at && !email.binding_released?
@@ -101,7 +96,7 @@ class EmailCredentialRegistrationOtpResendIssuer
 
   def root_current?(now)
     token.active_status?(now) && token_device_session.usable? &&
-      token_device_session.current_refresh_token_id == token.id
+      token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
   def token_device_session

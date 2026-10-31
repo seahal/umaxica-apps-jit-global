@@ -162,7 +162,6 @@ class OidcRefreshTokenIssuer
   def parent_device_session_association
     case resource_type
     when "client" then :client_device_session
-    when "visitor" then :visitor_device_session
     when "operator" then :operator_device_session
     else raise ArgumentError, "unsupported OIDC refresh resource type"
     end
@@ -172,7 +171,6 @@ class OidcRefreshTokenIssuer
     case resource_type
     when "client" then [OpBaseAppRecord, OpAppGrant]
     when "operator" then [OpBaseOrgRecord, OpOrgGrant]
-    when "visitor" then [OpBaseComRecord, OpComGrant]
     end
   end
 
@@ -219,7 +217,6 @@ class OidcRefreshTokenIssuer
     case parent
     when ClientToken then :user_id
     when OperatorToken then :staff_id
-    when VisitorToken then :visitor_id
     end
   end
 
@@ -227,7 +224,6 @@ class OidcRefreshTokenIssuer
     case parent
     when ClientToken then parent.user_id
     when OperatorToken then parent.staff_id
-    when VisitorToken then parent.visitor_id
     end
   end
 
@@ -247,8 +243,6 @@ class OidcRefreshTokenIssuer
       ClientOidcConnection.find_by(user_id: parent.user_id, client_id: usage.oidc_client_id)
     when OperatorToken
       OperatorOidcConnection.find_by(staff_id: parent.staff_id, client_id: usage.oidc_client_id)
-    when VisitorToken
-      VisitorOidcConnection.find_by(visitor_id: parent.visitor_id, client_id: usage.oidc_client_id)
     end
   end
 

@@ -22,7 +22,7 @@ class SecretCredentialTest < ActiveSupport::TestCase
     end
 
     def self.name
-      "VisitorSecretCredentialStatus"
+      "OperatorSecretCredentialStatus"
     end
   end
 

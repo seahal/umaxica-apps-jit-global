@@ -17,6 +17,7 @@ module Auth
         include AppSignUpEntryPage
 
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :parent_intent
 
         declare_authentication_mode! :open, only: :create
         before_action :require_social_link_step_up!, only: :create

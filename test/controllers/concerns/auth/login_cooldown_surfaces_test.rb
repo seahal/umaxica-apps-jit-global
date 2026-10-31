@@ -28,18 +28,6 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
       },
       token: ->(resource, attrs) { ClientToken.create!(authentication_epoch: 0, user: resource, **attrs) },
     },
-    com: {
-      controller: Base::Com::AuthorityController,
-      host: "PUBLIC_BASE_CORPORATE_URL",
-      token_class: VisitorToken,
-      resource: -> {
-        Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-          visibility_id: VisitorVisibility::VISITOR,
-        )
-      },
-      token: ->(resource, attrs) { VisitorToken.create!(authentication_epoch: 0, visitor_id: resource.id, **attrs) },
-    },
     org: {
       controller: Base::Org::AuthorityController,
       host: "PUBLIC_BASE_STAFF_URL",
@@ -210,8 +198,8 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
 
   private
 
-  # The previous session was signed out, so the one-session limit on com and org does not hide the
-  # cooldown decision under test.
+  # The previous session was signed out, so the one-session limit on the org
+  # surface does not hide the cooldown decision under test.
   def signed_out_token(config, resource, attrs)
     config[:token].call(resource, attrs).tap(&:revoke!)
   end
@@ -221,7 +209,7 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
   end
 
   def fk_for(config)
-    { ClientToken => :user_id, VisitorToken => :visitor_id, OperatorToken => :staff_id }.fetch(config[:token_class])
+    { ClientToken => :user_id, OperatorToken => :staff_id }.fetch(config[:token_class])
   end
 
   def latest_anchor(config, resource)

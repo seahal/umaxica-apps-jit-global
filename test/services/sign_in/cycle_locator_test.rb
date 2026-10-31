@@ -126,7 +126,7 @@ module SignIn
       cycle = create_client_cycle(nonce: "nonce")
       SignInCycleLocator.new(session, surface: :app).issue!(cycle, nonce: "nonce")
 
-      assert_nil SignInCycleLocator.new(session, surface: :com).current
+      assert_nil SignInCycleLocator.new(session, surface: :org).current
     end
 
     private

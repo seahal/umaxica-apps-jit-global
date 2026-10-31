@@ -9,8 +9,6 @@ class SignUpCurfewCleanupTest < ActiveJob::TestCase
   setup do
     ClientSignUpFlowStatus.ensure_defaults!
     ClientSignUpFlowCleanupStatus.ensure_defaults!
-    VisitorSignUpFlowStatus.ensure_defaults!
-    VisitorSignUpFlowCleanupStatus.ensure_defaults!
   end
 
   test "the Flow deadline is the Admission Binding curfew" do
@@ -40,24 +38,6 @@ class SignUpCurfewCleanupTest < ActiveJob::TestCase
     assert_equal ClientEmailStatus::DELETED, contact.reload.user_email_status_id
     assert_not_equal Float::INFINITY, owner.reload.discard_at
     assert_not SignUpContactHoldQuery.call(contact: ClientEmail.new(raw_address: contact.address).tap(&:validate))
-  end
-
-  test "one second after the curfew the COM registration is cleaned up and its contact is free" do
-    owner = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    contact = VisitorEmail.create!(
-      visitor: owner, raw_address: "curfew-after-com@example.com", confirm_policy: true,
-      visitor_email_status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    flow = create_flow(VisitorSignUpFlow, principal: owner, contact:)
-
-    run_expiry_at(flow.expires_at + 1.second)
-
-    assert_equal VisitorSignUpFlowStatus::EXPIRED, flow.reload.status_id
-    assert_equal VisitorEmailStatus::DELETED, contact.reload.visitor_email_status_id
-    assert_not SignUpContactHoldQuery.call(contact: VisitorEmail.new(raw_address: contact.address).tap(&:validate))
   end
 
   test "a registered identity behind an expired Flow is never touched" do
@@ -105,9 +85,7 @@ class SignUpCurfewCleanupTest < ActiveJob::TestCase
 
   def run_expiry_at(time)
     travel_to(time) do
-      ClientSignUpFlow.stub(:database_now, time) do
-        VisitorSignUpFlow.stub(:database_now, time) { SignUpExpiryJob.perform_now }
-      end
+      ClientSignUpFlow.stub(:database_now, time) { SignUpExpiryJob.perform_now }
     end
   end
 end

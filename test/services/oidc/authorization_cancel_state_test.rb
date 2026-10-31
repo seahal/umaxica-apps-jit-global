@@ -4,8 +4,8 @@ require "test_helper"
 
 class OidcAuthorizationCancelStateTest < ActiveSupport::TestCase
   test "A13-5: cancellation returns opaque state bytes and only the protocol fields" do
-    %w(client visitor operator).each do |resource_type|
-      realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(resource_type)
+    %w(client operator).each do |resource_type|
+      realm = { "client" => "app", "operator" => "org" }.fetch(resource_type)
       client = OidcClientRegistry.find!("core-#{realm}-jp")
       redirect_uri = client.redirect_uris_by_realm.fetch(resource_type).first
       ["state", "a+b/%&=日本"].each do |state|

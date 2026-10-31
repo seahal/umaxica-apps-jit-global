@@ -1,6 +1,6 @@
 // Client-side theme application.
 //
-// Rails renders `data-theme` and the theme class on <html> from the `ct` cookie so the first paint
+// Rails renders `data-theme` and the theme class on <html> so the first paint
 // already carries the visitor's theme. This module keeps that in sync afterwards: a new choice is
 // applied only after the server accepts it, the system setting is followed while the choice is
 // "system", and the stored preference remains the authority.
@@ -8,7 +8,7 @@
 // The wire format is the two-letter code the preference store uses; `Theme` is the name the UI
 // works in. Converting at the boundary keeps the codes out of the components.
 
-import { readCookie, watchCookie } from "@/lib/cookies";
+import { readCookie, readUniqueCookie, watchCookie } from "@/lib/cookies";
 import { readString } from "@/lib/payload";
 import { sameOriginEndpoint } from "@/lib/request";
 
@@ -29,6 +29,26 @@ const CODE_BY_THEME: Record<Theme, string> = {
   system: "sy",
 };
 
+const COM_EXPERIENCE_VALUES: Record<string, readonly string[]> = {
+  theme: ["light", "dark", "system"],
+  timezone: [
+    "Etc/UTC",
+    "Asia/Tokyo",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+  ],
+  currency: ["usd", "jpy"],
+  date_format: ["iso", "uk", "us"],
+  time_format: ["24", "12"],
+  motion: ["standard", "reduced"],
+  density: ["standard", "compact"],
+  page_size: ["10", "20", "50", "100", "infinity"],
+};
+
 export function themeFromCode(value: string | null | undefined): Theme {
   if (value === undefined || value === null || value.length === 0) {
     return "system";
@@ -40,26 +60,81 @@ export function codeFromTheme(theme: Theme): string {
   return CODE_BY_THEME[theme];
 }
 
-/** The stored theme, read from the `ct` cookie. */
+function comThemeFromExperience(value: string | null): Theme {
+  if (value === null || new URLSearchParams(window.location.search).has("ct")) {
+    return themeFromDocument();
+  }
+
+  try {
+    const payload: unknown = JSON.parse(value);
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      return themeFromDocument();
+    }
+    // The server emits compact JSON with ASCII option names. A round trip also rejects duplicate
+    // object keys, which JSON.parse would otherwise silently collapse.
+    if (
+      JSON.stringify(payload) !== value ||
+      Object.keys(payload).length !== Object.keys(COM_EXPERIENCE_VALUES).length
+    ) {
+      return themeFromDocument();
+    }
+    for (const [key, allowed] of Object.entries(COM_EXPERIENCE_VALUES)) {
+      const option = readString(payload, key);
+      if (option === undefined || !allowed.includes(option)) {
+        return themeFromDocument();
+      }
+    }
+    const theme = readString(payload, "theme");
+    return theme === "dark" || theme === "light" || theme === "system"
+      ? theme
+      : themeFromDocument();
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return themeFromDocument();
+    }
+    throw error;
+  }
+}
+
+/** The stored theme in the current surface's display cookie. */
 export async function readThemeCookie(): Promise<Theme> {
+  if (document.documentElement.dataset["edition"] === "com") {
+    return comThemeFromExperience(await readUniqueCookie("__Secure-experience"));
+  }
   return themeFromCode(await readCookie("ct"));
 }
 
 /**
- * Calls back with the theme whenever the `ct` cookie changes. Returns an unsubscribe function.
+ * Calls back when the current surface's theme projection changes. Returns an unsubscribe function.
  *
  * The theme preference screen saves through the server, so the cookie is what actually carries the
  * new choice back to the document - on every surface, under either navigation model, and whether
  * or not a navigation happens at all.
  */
 export function watchThemeCookie(listener: (theme: Theme) => void): () => void {
+  if (document.documentElement.dataset["edition"] === "com") {
+    let generation = 0;
+    const stop = watchCookie("__Secure-experience", () => {
+      const current = ++generation;
+      void readUniqueCookie("__Secure-experience").then((value) => {
+        if (current === generation) {
+          listener(comThemeFromExperience(value));
+        }
+        return undefined;
+      });
+    });
+    return () => {
+      generation++;
+      stop();
+    };
+  }
   return watchCookie("ct", (value) => listener(themeFromCode(value)));
 }
 
 /**
  * The theme the document is currently rendered in.
  *
- * Rails writes `data-theme` from the `ct` cookie and `applyTheme` keeps it in step, so this is the
+ * Rails writes `data-theme` and `applyTheme` keeps it in step, so this is the
  * same answer `readThemeCookie` gives - available synchronously, which the cookie no longer is.
  * It is what a React initial state and the system-theme watcher read, so neither has to wait for a
  * cookie read to render the theme the visitor is already looking at.

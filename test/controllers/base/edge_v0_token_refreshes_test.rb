@@ -5,20 +5,13 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :operators, :visitors
+  fixtures :clients, :operators
 
   SURFACES = [
     {
       host: Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host,
       build_token: ->(test_case) { ClientToken.create!(authentication_epoch: 0, user: test_case.clients(:one)) },
       resource: ->(test_case) { test_case.clients(:one) },
-    },
-    {
-      host: Rails.configuration.x.boot_config.fetch(:hosts).visa_corporate.host,
-      build_token: ->(test_case) {
-        VisitorToken.create!(authentication_epoch: 0, visitor: test_case.visitors(:reserved_visitor))
-      },
-      resource: ->(test_case) { test_case.visitors(:reserved_visitor) },
     },
     {
       host: Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host,
@@ -78,8 +71,6 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
       subject_id =
         if token_record.respond_to?(:user_id)
           token_record.user_id
-        elsif token_record.respond_to?(:visitor_id)
-          token_record.visitor_id
         else
           token_record.staff_id
         end

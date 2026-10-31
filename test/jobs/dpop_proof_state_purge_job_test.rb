@@ -8,14 +8,13 @@ class DpopProofStatePurgeJobTest < ActiveJob::TestCase
   setup do
     ClientDpopProofState.delete_all
     OperatorDpopProofState.delete_all
-    VisitorDpopProofState.delete_all
   end
 
   # Boundary: rows with expires_at strictly in the past are deleted; a row
   # expiring exactly at `now` or later is retained. Covers jti rows and nonce
   # rows (both live in the same table, distinguished only by which columns are
   # set) since the purge keys solely on expires_at.
-  test "deletes only expired rows across all three surfaces" do
+  test "deletes only expired rows across both surfaces" do
     now = Time.current
 
     expired_jti = ClientDpopProofState.create!(
@@ -35,8 +34,8 @@ class DpopProofStatePurgeJobTest < ActiveJob::TestCase
       jti: SecureRandom.uuid, jkt: "k", htm: "GET", htu: "http://example.com/o",
       seen_at: now - 10.minutes, expires_at: now - 1.second,
     )
-    visitor_active = VisitorDpopProofState.create!(
-      jti: SecureRandom.uuid, jkt: "k", htm: "GET", htu: "http://example.com/v",
+    operator_active = OperatorDpopProofState.create!(
+      jti: SecureRandom.uuid, jkt: "k", htm: "GET", htu: "http://example.com/o",
       seen_at: now, expires_at: now + 5.minutes,
     )
 
@@ -46,7 +45,7 @@ class DpopProofStatePurgeJobTest < ActiveJob::TestCase
     assert_not ClientDpopProofState.exists?(expired_nonce.id)
     assert ClientDpopProofState.exists?(active.id)
     assert_not OperatorDpopProofState.exists?(operator_expired.id)
-    assert VisitorDpopProofState.exists?(visitor_active.id)
+    assert OperatorDpopProofState.exists?(operator_active.id)
   end
 
   test "is a no-op when nothing is expired" do

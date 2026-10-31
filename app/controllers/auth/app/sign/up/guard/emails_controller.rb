@@ -8,6 +8,7 @@ module Auth
         module Guard
           class EmailsController < BaseController
             AUTHENTICATION_MODE = :open
+            sign_entry_classification! :sign_up
 
             private
 

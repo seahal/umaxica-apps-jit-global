@@ -107,7 +107,6 @@ class Avatar < AvatarRecord
   has_many :avatar_assignments, dependent: :destroy
   has_one :avatar_persona_binding, dependent: :destroy, inverse_of: :avatar
   has_one :avatar_agent_binding, dependent: :destroy, inverse_of: :avatar
-  has_one :avatar_individual_binding, dependent: :destroy, inverse_of: :avatar
 
   has_many :member_avatar_accesses, dependent: :destroy, inverse_of: :avatar
   has_many :member_avatar_visibilities, dependent: :destroy, inverse_of: :avatar

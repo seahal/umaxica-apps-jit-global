@@ -15,7 +15,81 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up",
       last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
+  end
+
+  test "a superseded device token cannot authorize Secret revocation" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    actor.client_passkeys.create!(
+      webauthn_id: "revocation-superseded-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    device = token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_raises(ClientSecretRevocationCommitter::Denied) do
+      ClientSecretRevocationCommitter.call!(
+        actor_context: context, token: token, credential: credential, purge_after: 1.day,
+      )
+    end
+    assert_nil credential.reload.revoked_at
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "a revoked device cannot authorize Secret revocation" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    actor.client_passkeys.create!(
+      webauthn_id: "revocation-device-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    token.device_session_record!.revoke!
+
+    assert_raises(ClientSecretRevocationCommitter::Denied) do
+      ClientSecretRevocationCommitter.call!(
+        actor_context: context, token: token, credential: credential, purge_after: 1.day,
+      )
+    end
+    assert_nil credential.reload.revoked_at
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "OP failure precedes Secret revocation and audit writes" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    actor.client_passkeys.create!(
+      webauthn_id: "revocation-order-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    observed_revoked_at = :not_observed
+    observed_events = nil
+    observer =
+      lambda do |_name, _start, _finish, _id, event|
+        next unless event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_tokens"/i)
+
+        observed_revoked_at = ClientSecretCredential.find(credential.id).revoked_at
+        observed_events = ClientSecretAuditOutbox.where(credential_ref: credential.public_id).count
+        raise TokenStatusManagement::StepUpEvidenceUnavailable, "injected OP consumption failure"
+      end
+
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      assert_raises(ClientSecretRevocationCommitter::Denied) do
+        ClientSecretRevocationCommitter.call!(
+          actor_context: context, token: token, credential: credential, purge_after: 1.day,
+        )
+      end
+    end
+
+    assert_nil observed_revoked_at
+    assert_equal 0, observed_events
+    assert_nil credential.reload.revoked_at
+    assert_predicate token.reload.last_step_up_at, :present?
   end
 
   test "scoped owner revokes the final Secret while a Passkey remains and preserves the current session" do
@@ -25,7 +99,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      established_authentication_method: "secret",
+      established_authentication_method: "secret", last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     actor.client_passkeys.create!(
       webauthn_id: "revocation-owner-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
@@ -73,6 +147,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
     )
     assert_no_difference("ClientSecretAuditOutbox.count") do
       ClientSecretRevocationCommitter.call!(
@@ -393,6 +468,14 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     [{ name: "" }, { password_digest: "" }].each do |invalid|
+      token.reload.update!(
+        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+        last_step_up_resource_ref: credential.public_id,
+      )
       Client.transaction(requires_new: true) do
         ClientSecretCredential.where(id: credential.id).update_all(invalid)
         assert_no_difference("ClientSecretAuditOutbox.count") do

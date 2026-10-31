@@ -80,8 +80,6 @@ describe("SignOutConfirmation interaction", () => {
     expect(cancellation.getAttribute("method")).toBe("post");
     expect(fields(cancellation)).toEqual({ authenticity_token: "csrf-value", _method: "delete" });
   });
-
-
 });
 
 describe("SignOutUnavailable interaction", () => {

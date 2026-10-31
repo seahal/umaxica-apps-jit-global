@@ -35,11 +35,6 @@ class DatabasePkTypeTest < ActiveSupport::TestCase
     assert_bigint_pk(ComPreference)
   end
 
-  test "guest schema tables use bigint primary keys" do
-    assert_bigint_pk(VisitorStatus)
-    assert_bigint_pk(VisitorSecretCredentialKind)
-  end
-
   test "chronicle schema tables use bigint primary keys" do
     assert_bigint_pk(OperatorChronicleEvent)
     assert_bigint_pk(ClientChronicleLevel)

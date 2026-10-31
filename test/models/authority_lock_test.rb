@@ -4,11 +4,10 @@
 require "test_helper"
 
 class AuthorityLockTest < ActiveSupport::TestCase
-  fixtures :clients, :visitors, :operators
+  fixtures :clients, :operators
 
   test "reuses an existing lock row for each surface" do
     assert_lock_reuse(ClientAuthorityLock, :client_id, clients(:one))
-    assert_lock_reuse(VisitorAuthorityLock, :visitor_id, visitors(:reserved_visitor))
     assert_lock_reuse(OperatorAuthorityLock, :operator_id, operators(:one))
   end
 

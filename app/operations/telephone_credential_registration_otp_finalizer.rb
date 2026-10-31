@@ -18,8 +18,6 @@ class TelephoneCredentialRegistrationOtpFinalizer
       case [actor, token, telephone, transaction]
       in [Client, ClientToken, ClientTelephone, ClientTelephoneCeremonyTransaction]
         ["app", ClientTelephonePolicy, ClientContactAuditOutbox]
-      in [Visitor, VisitorToken, VisitorTelephone, VisitorTelephoneCeremonyTransaction]
-        ["com", VisitorTelephonePolicy, VisitorContactAuditOutbox]
       else raise ArgumentError, "unsupported Telephone registration finalization realm"
       end
   end
@@ -106,24 +104,22 @@ class TelephoneCredentialRegistrationOtpFinalizer
     case actor
     when Client
       token.user_id == actor.id && token_device_session.user_id == actor.id && telephone.user_id == actor.id
-    when Visitor
-      token.visitor_id == actor.id && token_device_session.visitor_id == actor.id && telephone.visitor_id == actor.id
     end
   end
 
   def root_current?(now)
     token.active_status?(now) && token_device_session.usable? &&
-      token_device_session.current_refresh_token_id == token.id
+      token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
   def token_device_session
-    token.device_session_record!
+    @token_device_session ||= token.device_session_record!
   end
 
   def actor_context_matches?
     actor_context.is_a?(ActorValuesContext) && actor_context.subject == actor &&
       actor_context.tld.to_s == surface && actor_context.surface == :base &&
-      actor_context.actor_type == ((surface == "app") ? :client : :visitor)
+      actor_context.actor_type == :client
   end
 
   def current_policy_matches?
@@ -138,14 +134,9 @@ class TelephoneCredentialRegistrationOtpFinalizer
     credentials =
       case [actor, token.last_step_up_method]
       in [Client, "passkey"] then ClientPasskey.where(user_id: actor.id).active
-      in [Visitor, "passkey"] then VisitorPasskey.where(visitor_id: actor.id).active
       in [Client, "email_otp"]
         ClientEmail.where(user_id: actor.id).effective_binding.where(
           user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES,
-        )
-      in [Visitor, "email_otp"]
-        VisitorEmail.where(visitor_id: actor.id).effective_binding.where(
-          visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES,
         )
       in [Client, "totp"]
         ClientTotpCredential.where(
@@ -165,7 +156,6 @@ class TelephoneCredentialRegistrationOtpFinalizer
   def previous_bindings
     case actor
     when Client then ClientTelephone.where(user_id: actor.id).effective_binding.where.not(id: telephone.id)
-    when Visitor then VisitorTelephone.where(visitor_id: actor.id).effective_binding.where.not(id: telephone.id)
     end
   end
 

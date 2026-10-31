@@ -25,16 +25,50 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
     return null;
   }
 
-  return <CookieBannerPrompt controls={controls} />;
+  if (controls.endpoint_url === null) {
+    return (
+      <section
+        id="cookie-banner"
+        aria-labelledby="cookie-title"
+        className="border-t border-line bg-surface"
+      >
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3 p-4">
+          <h2
+            id="cookie-title"
+            className="text-sm font-semibold text-fg"
+          >
+            {controls.title}
+          </h2>
+          <ButtonLink
+            variant="secondary"
+            size="sm"
+            href={controls.settings_url}
+          >
+            {controls.open_settings}
+          </ButtonLink>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <CookieBannerPrompt
+      controls={controls}
+      endpointUrl={controls.endpoint_url}
+    />
+  );
 }
 
-function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
-  // Nothing is painted until something says the visitor has not answered. The consent buffer
-  // cookie is a projection of the same decision the endpoint below reports, and reading it through
-  // the Cookie Store API is asynchronous, so it can no longer seed the first render - starting
-  // hidden is what keeps a visitor who already answered from seeing the banner flash on every
-  // load, which is the flash that projection exists to prevent.
-  const [visible, setVisible] = useState(false);
+function CookieBannerPrompt({
+  controls,
+  endpointUrl,
+}: {
+  controls: ChromeCookieControls;
+  endpointUrl: string;
+}) {
+  // Com has no trusted consent buffer: show its prompt until the server confirms the binding.
+  // App and org retain their existing asynchronous buffer behavior until their transport changes.
+  const [visible, setVisible] = useState(controls.scope === "com");
   const [submitting, setSubmitting] = useState(false);
   // An answer given before the read returns wins, the same way a theme choice does: the visitor is
   // more current than the in-flight request, and re-raising a banner they just dismissed is worse
@@ -44,13 +78,10 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
   // two reads race - one local, one over the network - and without this a slow cookie read could
   // raise a banner the server had already said to hide.
   const reconciled = useRef(false);
-  const endpointUrl = controls.endpoint_url;
-
   useEffect(() => {
     let active = true;
 
-    // The projection only ever raises the banner. It cannot hide one, because a cookie recording
-    // consent is not itself proof the server still agrees; that is what the endpoint answers.
+    // The legacy app/org projection only raises the banner; the endpoint decides whether to hide it.
     const readConsentBuffer = async () => {
       const recorded = await hasRecordedCookieConsent();
 
@@ -84,13 +115,15 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
       }
     };
 
-    void readConsentBuffer();
+    if (controls.scope !== "com") {
+      void readConsentBuffer();
+    }
     void readConsent();
 
     return () => {
       active = false;
     };
-  }, [endpointUrl]);
+  }, [controls.scope, endpointUrl]);
 
   if (!visible) {
     return null;

@@ -357,6 +357,13 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     end
     verifier.verify
 
+    pending_actor = Client.find(signup.reload.principal_id)
+
+    assert_equal [ClientStatus::UNVERIFIED_WITH_SIGN_UP, false, false, 0],
+                 [pending_actor.status_id, pending_actor.sign_in_allowed?,
+                  ClientExternalIdentity.exists?(client_id: pending_actor.id),
+                  ClientToken.where(user_id: pending_actor.id).count,]
+
     assert_equal 302, auth.response.status
     fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     # F3/F4: Auth finalizes; Auth issues no Root.

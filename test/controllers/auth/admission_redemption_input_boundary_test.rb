@@ -3,7 +3,7 @@
 require "test_helper"
 
 class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     %w(missing_cookie foreign_cookie unconfirmed unattached).each do |attack|
       test "#{surface} redemption refuses #{attack} then resumes only its retained confirmed binding" do
         protection = ActionController::Base.allow_forgery_protection
@@ -17,7 +17,10 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
         browser = open_session
         browser.host!(host)
         browser.https!
-        headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+        headers = { "Origin" => "https://#{host}",
+                    "Sec-Fetch-Site" => "same-origin",
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document", }
         sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
 
         if attack == "unattached"
@@ -83,7 +86,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
 
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     %w(missing blank whitespace zero nul short long array object duplicate query_duplicate
        auth_sid sid auth_ceremony_session_id admitted_auth_ceremony_session_id base_token_id
        base_browser_digest confirmation_ref sign_in_flow_id authorization_transaction_id
@@ -102,7 +105,10 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
           "/sign/in", reference: issuance.reference, params: { ri: "jp" }, browser:,
         )
         binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-        headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+        headers = { "Origin" => "https://#{host}",
+                    "Sec-Fetch-Site" => "same-origin",
+                    "Sec-Fetch-Mode" => "navigate",
+                    "Sec-Fetch-Dest" => "document", }
         session_model = binding.class.auth_admission_session_class
         session_count = session_model.count
         sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -149,7 +155,6 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
   def auth_host_for_test(surface)
     {
       "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-      "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
       "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
     }.fetch(surface)
   end

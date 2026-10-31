@@ -37,6 +37,7 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
   end
 
   test "accepted event updates RP claims without rotating the root authority" do
+    authentication_event_at = 1.minute.ago
     root_snapshot = @root_token.attributes.slice(
       "last_used_at", "discard_at", "root_login_established_at", "refresh_token_generation",
     )
@@ -53,7 +54,7 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.stub(:call, response) do
         result = BaseSelfRpCredentialIssuer.call!(
           resource: @client, rp_session: @rp_session, raw_refresh_token: @refresh_token,
-          client_id: "base-app-ww", authentication_event_at: 1.minute.ago,
+          client_id: "base-app-ww", authentication_event_at: authentication_event_at,
           acr: "aal2", amr: ["otp"],
         )
 
@@ -63,7 +64,7 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
 
     assert_equal "aal2", @rp_session.reload.oidc_acr
     assert_equal ["otp"], JSON.parse(@rp_session.oidc_amr)
-    assert_equal 1.minute.ago.to_i, @rp_session.oidc_auth_time.to_i
+    assert_equal authentication_event_at.to_i, @rp_session.oidc_auth_time.to_i
     actual_root_snapshot =
       @root_token.reload.attributes.slice(*root_snapshot.keys).transform_values do |value|
         value.respond_to?(:to_time) ? value.to_time.to_i : value

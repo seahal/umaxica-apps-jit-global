@@ -91,7 +91,7 @@ class OidcRpLogoutEditReturnTest < ActionDispatch::IntegrationTest
       browser.cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = grant.issue_refresh_token!
 
       if scenario.fetch(:client_id) == "edit-org-ww"
-        [hosts.visa_service.host, hosts.visa_corporate.host].each do |wrong_op_host|
+        [hosts.visa_service.host].each do |wrong_op_host|
           [
             { accept: "text/html", status: 400 },
             { accept: "application/json", status: 400 },

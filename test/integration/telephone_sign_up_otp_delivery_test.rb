@@ -6,19 +6,18 @@ class TelephoneSignUpOtpDeliveryTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
   setup do
-    [ClientSignUpFlowStatus, VisitorSignUpFlowStatus,
-     ClientSignUpFlowCleanupStatus, VisitorSignUpFlowCleanupStatus,].each do |model|
+    [ClientSignUpFlowStatus,
+     ClientSignUpFlowCleanupStatus,].each do |model|
       model::DEFAULTS.each { |id| model.find_or_create_by!(id: id) }
     end
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(current reissued cancelled consumed expired browser_changed).each do |state|
       test "#{surface} queued Telephone signup authenticates #{state} proof immediately before SMS transport" do
         owner_model, telephone_model, flow_model, owner_key, status =
           case surface
           when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-          when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
           end
         owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         telephone = telephone_model.create!(

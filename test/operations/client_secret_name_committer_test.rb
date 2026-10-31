@@ -12,6 +12,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -45,6 +46,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -82,6 +84,148 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
     end
   end
 
+  test "unbound or another Secret's Step-Up cannot rename a credential" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    [nil, client_secret_credentials(:two).public_id].each do |resource_ref|
+      token.update!(last_step_up_resource_ref: resource_ref)
+      assert_raises(ClientSecretNameCommitter::Denied) do
+        ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "Wrong")
+      end
+      assert_equal "Fixture Secret 1", credential.reload.name
+      assert_predicate token.reload.last_step_up_at, :present?
+    end
+  end
+
+  test "a superseded device token cannot authorize a Secret rename" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    device = token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_raises(ClientSecretNameCommitter::Denied) do
+      ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "Denied")
+    end
+    assert_equal "Fixture Secret 1", credential.reload.name
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "a revoked device cannot authorize a Secret rename" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    token.device_session_record!.revoke!
+
+    assert_raises(ClientSecretNameCommitter::Denied) do
+      ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "Denied")
+    end
+    assert_equal "Fixture Secret 1", credential.reload.name
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "OP failure occurs before the Secret name and audit are written" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    observed_name = nil
+    observed_events = nil
+    failure =
+      lambda do |_name, _start, _finish, _id, event|
+        next unless event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_tokens"/i)
+
+        observed_name = ClientSecretCredential.find(credential.id).name
+        observed_events = ClientSecretAuditOutbox.where(
+          event_name: "secret.renamed",
+          credential_ref: credential.public_id,
+        ).count
+        raise TokenStatusManagement::StepUpEvidenceUnavailable, "injected OP consumption failure"
+      end
+
+    ActiveSupport::Notifications.subscribed(failure, "sql.active_record") do
+      assert_raises(ClientSecretNameCommitter::Denied) do
+        ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "New")
+      end
+    end
+
+    assert_equal "Fixture Secret 1", observed_name
+    assert_equal 0, observed_events
+    assert_equal "Fixture Secret 1", credential.reload.name
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "Zenith write failure spends the proof and leaves the name and audit unchanged" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    credential = client_secret_credentials(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    failed = false
+    observer =
+      lambda do |_name, _start, _finish, _id, event|
+        next unless event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_secret_credentials"/i)
+
+        failed = true
+        raise ActiveRecord::ConnectionNotEstablished, "injected Zenith write failure"
+      end
+
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      assert_raises(ClientSecretNameCommitter::DependencyFailure) do
+        ClientSecretNameCommitter.call!(actor_context: context, token: token, credential: credential, name: "New")
+      end
+    end
+
+    assert failed
+    assert_equal "Fixture Secret 1", credential.reload.name
+    assert_equal 0,
+                 ClientSecretAuditOutbox.where(event_name: "secret.renamed", credential_ref: credential.public_id).count
+    assert_nil token.reload.last_step_up_at
+  end
+
   test "source rollback discards both the name change and its outbox event" do
     actor = clients(:one)
     token = client_tokens(:one)
@@ -91,6 +235,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -120,6 +265,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -131,6 +277,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
         last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+        last_step_up_resource_ref: client_secret_credentials(:one).public_id,
       )
       assert_difference("ClientSecretAuditOutbox.count", 1) do
         ClientSecretNameCommitter.call!(
@@ -160,6 +307,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -201,6 +349,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
           last_step_up_user_verified: true,
           last_step_up_credential_ref: "test-step-up",
           last_step_up_full_reauthentication: false,
+          last_step_up_resource_ref: client_secret_credentials(:one).public_id,
         }.merge(mismatch),
       )
       assert_no_difference("ClientSecretAuditOutbox.count") do
@@ -224,6 +373,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     credential = client_secret_credentials(:one)
     original_digest = credential.password_digest
@@ -269,6 +419,7 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:two)

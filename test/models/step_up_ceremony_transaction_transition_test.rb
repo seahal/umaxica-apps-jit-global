@@ -7,7 +7,7 @@ require "test_helper"
 class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  [ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
+  [ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
     test "#{model.name} verification moves a pending step-up to verified and records its evidence" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "session", required_scope: "settings_passkey",

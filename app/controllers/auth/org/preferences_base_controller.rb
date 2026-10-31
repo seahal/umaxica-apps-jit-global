@@ -6,6 +6,9 @@ module Auth
     class PreferencesBaseController < ::Auth::Org::ApplicationController
       include ::SignAcmeAuthorityRedirect
 
+      # D-59: the preference transport API is not a Sign Entry.
+      sign_entry_classification! :excluded, reason: "preference transport API, not a sign entry"
+
       AUTHENTICATION_MODE = :open
 
       layout "auth/org/application"

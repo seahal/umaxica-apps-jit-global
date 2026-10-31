@@ -7,8 +7,8 @@ class GlobalRegionCanonicalizationTest < ActionDispatch::IntegrationTest
 
   test "Global browser roots canonicalize missing region on GET and HEAD" do
     %w(base.app.localhost base.com.localhost base.org.localhost
-       auth.app.localhost auth.com.localhost auth.org.localhost
-       visa.app.localhost visa.com.localhost visa.org.localhost
+       auth.app.localhost auth.org.localhost
+       visa.app.localhost visa.org.localhost
        tech.org.localhost edit.org.localhost).each do |host|
       host! host
       get "/", params: { lx: "en", ct: "dr", marker: "retained" }
@@ -33,8 +33,8 @@ class GlobalRegionCanonicalizationTest < ActionDispatch::IntegrationTest
 
   test "Base Auth and Visa roots normalize invalid region inputs and accept both regions" do
     %w(base.app.localhost base.com.localhost base.org.localhost
-       auth.app.localhost auth.com.localhost auth.org.localhost
-       visa.app.localhost visa.com.localhost visa.org.localhost).each do |host|
+       auth.app.localhost auth.org.localhost
+       visa.app.localhost visa.org.localhost).each do |host|
       host! host
       ["", "xx", "j", "jpp", "0", ["jp"], { value: "jp" }].each do |invalid|
         get "/", params: { ri: invalid }
@@ -52,7 +52,7 @@ class GlobalRegionCanonicalizationTest < ActionDispatch::IntegrationTest
   end
 
   test "Visa protocol metadata does not canonicalize missing region" do
-    %w(visa.app.localhost visa.com.localhost visa.org.localhost).each do |host|
+    %w(visa.app.localhost visa.org.localhost).each do |host|
       host! host
       get "/.well-known/openid-configuration"
 

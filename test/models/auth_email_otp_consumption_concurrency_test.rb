@@ -8,20 +8,14 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
 
   setup do
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
-    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} concurrent Auth email verification consumes once and returns one retained receipt" do
       owner_model, contact_association, contact_status, auth_model, _, ticket_owner =
-        if surface == "app"
-          [Client, :client_emails, { user_email_status_id: ClientEmailStatus::VERIFIED },
-           ClientAuthCeremonySession, ClientAuthAdmissionBinding, OpBaseAppRecord,]
-        else
-          [Visitor, :visitor_emails, { visitor_email_status_id: VisitorEmailStatus::VERIFIED },
-           VisitorAuthCeremonySession, VisitorAuthAdmissionBinding, OpBaseComRecord,]
-        end
-      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: next_owner_id(owner_model))
+        [Client, :client_emails, { user_email_status_id: ClientEmailStatus::VERIFIED },
+         ClientAuthCeremonySession, ClientAuthAdmissionBinding, OpBaseAppRecord,]
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1_000_000_000)
       contact = owner.public_send(contact_association).create!(
         address: "auth-consume-#{SecureRandom.hex(12)}@example.test", confirm_policy: "1", **contact_status,
       ).tap(&:finalize_binding!)
@@ -68,13 +62,5 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
       contact&.class&.where(id: contact.id)&.delete_all if contact
       owner_model&.where(id: owner&.id)&.delete_all if owner
     end
-  end
-
-  private
-
-  def next_owner_id(owner_model)
-    return unless owner_model == Visitor
-
-    1_000_000_000_000 + SecureRandom.random_number(1_000_000_000)
   end
 end

@@ -12,11 +12,9 @@
 class AppPreferenceStatus < AppSettingRecord
   include ReferenceRecord
 
-  # Fixed IDs - do not modify these values
-  NOTHING = 0
-  DELETED = 1
-  LEGACY_NOTHING = 2
-  DEFAULTS = [NOTHING, DELETED, LEGACY_NOTHING].freeze
+  ACTIVE = 0
+  RETIRED = 1
+  DEFAULTS = [ACTIVE, RETIRED].freeze
 
   has_many :app_preferences,
            class_name: "AppPreference",

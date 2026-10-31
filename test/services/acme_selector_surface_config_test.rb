@@ -5,8 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AcmeSelectorSurfaceConfigTest < ActiveSupport::TestCase
-  test "CONFIGS contains three surfaces" do
-    assert_equal %i(app com org), AcmeSelectorSurfaceConfig::CONFIGS.keys.sort
+  test "CONFIGS contains two surfaces" do
+    assert_equal %i(app org), AcmeSelectorSurfaceConfig::CONFIGS.keys.sort
   end
 
   test "app config has correct attributes" do
@@ -29,29 +29,6 @@ class AcmeSelectorSurfaceConfigTest < ActiveSupport::TestCase
     assert_equal :required, config.avatar_mode
     assert config.provision_default_avatar
     assert_equal "Persona01", config.account_title
-    assert_equal "Org01", config.collective_title
-  end
-
-  test "com config has correct attributes" do
-    config = AcmeSelectorSurfaceConfig::CONFIGS[:com]
-
-    assert_equal :com, config.surface
-    assert_equal Visitor, config.principal_class
-    assert_equal VisitorToken, config.token_class
-    assert_equal VisitorAccount, config.rp_account_class
-    assert_equal :visitor_id, config.rp_account_foreign_key
-    assert_equal VisitorIdentity, config.identity_class
-    assert_equal VisitorIdentityState, config.identity_state_class
-    assert_equal Individual, config.account_class
-    assert_equal IndividualAssignment, config.account_assignment_class
-    assert_equal :individual_id, config.account_assignment_account_key
-    assert_equal :visitor_identity_id, config.account_assignment_identity_key
-    assert_equal Company, config.collective_class
-    assert_equal CompanyUnit, config.unit_class
-    assert_equal IndividualMembership, config.membership_class
-    assert_equal :none, config.avatar_mode
-    assert_not config.provision_default_avatar
-    assert_equal "Indiv01", config.account_title
     assert_equal "Org01", config.collective_title
   end
 

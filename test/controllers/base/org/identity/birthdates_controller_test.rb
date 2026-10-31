@@ -159,5 +159,39 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
     assert_equal "1990-01-02", inertia_props.fetch("birthdate")
   end
 
+  test "standby session cannot view the step-up protected birthdate" do
+    host! @host
+    @operator.update!(birthdate: "1990-01-02")
+    headers = as_staff_headers(@operator, host: @host)
+    token = OperatorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    token.update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
+    token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
+    client = OidcClientRegistry.find!("base-org-ww")
+    now = OpOrgGrant.database_now
+    rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0, operator_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
+      refresh_token_expires_at: now + 1.hour,
+    )
+    access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator", session_public_id: token.public_id,
+                 base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                 expires_at: now + 1.hour, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
+                 audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: client.client_id,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
+
+    assert_no_difference("OperatorStepUpCeremonyTransaction.count") do
+      get base_org_identity_birthdate_url(ri: "jp", host: @host)
+    end
+
+    assert_response :forbidden
+    assert_equal I18n.t("auth.step_up.emergency_unavailable"), response.body
+    assert_not_includes response.body, "1990-01-02"
+    assert_equal AuthenticationContextValue::STANDBY_KEY, token.reload.authentication_context
+  end
+
   private
 end

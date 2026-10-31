@@ -6,7 +6,7 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
   # Each test creates its authoritative transaction through the public model API.
   self.fixture_table_names = []
 
-  [ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
+  [ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
     %w(bootstrap credential_registration).each do |purpose|
       test "#{model.name} #{purpose} evidence cannot become ordinary step-up evidence" do
         transaction = model.create_transaction!(
@@ -105,11 +105,11 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
   end
 
   test "Email OTP cannot assert phishing resistance or AAL1" do
-    transaction = VisitorStepUpCeremonyTransaction.create_transaction!(
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
       required_aal: "none", step_up_required: true, user_verification_required: false,
       full_reauthentication_required: false, phishing_resistant_required: false,
-      audience: "step_up:com", token_binding: "session", require_session_binding: true,
+      audience: "step_up:app", token_binding: "session", require_session_binding: true,
       allowed_methods: ["email_otp"],
     )
 
@@ -118,14 +118,14 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
         transaction.record_verification!(
           method: "email_otp", aal: aal, phishing_resistant: resistant, user_verified: false,
           verified_credential_ref: "key",
-          verified_at: VisitorStepUpCeremonyTransaction.database_now,
+          verified_at: ClientStepUpCeremonyTransaction.database_now,
         )
       end
     end
     transaction.record_verification!(
       method: "email_otp", aal: "none", phishing_resistant: false, user_verified: false,
       verified_credential_ref: "key",
-      verified_at: VisitorStepUpCeremonyTransaction.database_now,
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
     )
 
     assert_equal "none", transaction.reload.aal

@@ -26,12 +26,11 @@ module AuthenticationDeviceBinding
     case resource_type
     when "client" then ClientDeviceSession
     when "operator" then OperatorDeviceSession
-    when "visitor" then VisitorDeviceSession
     end
   end
 
   def ensure_device_session_for!(resource, token_record, dpop_jkt: nil)
-    return unless [ClientToken, VisitorToken, OperatorToken].any? { |token_class| token_record.is_a?(token_class) }
+    return unless [ClientToken, OperatorToken].any? { |token_class| token_record.is_a?(token_class) }
 
     existing_device_session = token_record.device_session_record
     return existing_device_session if existing_device_session
@@ -63,7 +62,6 @@ module AuthenticationDeviceBinding
   def device_session_actor_key
     case resource_type
     when "operator" then :staff_id
-    when "visitor" then :visitor_id
     else :user_id
     end
   end

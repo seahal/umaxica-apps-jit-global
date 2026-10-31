@@ -5,7 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class StepUpScopeCatalogTest < ActiveSupport::TestCase
-  [StepUpScopeCatalog::APP, StepUpScopeCatalog::COM, StepUpScopeCatalog::ORG].each_with_index do |catalog, index|
+  [StepUpScopeCatalog::APP, StepUpScopeCatalog::ORG].each_with_index do |catalog, index|
     test "surface #{index} operation path prefixes require a segment boundary" do
       paths = {
         "session_revoke_all" => %w(/sign/settings/sessions /settings/sessions /sessions /identity/sessions),
@@ -32,7 +32,6 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
   test "actor-specific registration and lifecycle path prefixes require a segment boundary" do
     {
       StepUpScopeCatalog::APP.fetch("settings_totp") => "/identity/totps",
-      StepUpScopeCatalog::COM.fetch("settings_secret_credential") => "/identity/secrets",
       StepUpScopeCatalog::ORG.fetch("operator_lifecycle") => "/settings/operator_lifecycle_requests",
     }.each do |pattern, root|
       assert_match pattern, root
@@ -42,16 +41,14 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
       assert_no_match pattern, "#{root}_extra"
     end
     assert_no_match StepUpScopeCatalog::ORG.fetch("settings_secret_credential"), "/settings/secrets-extra"
-    assert_no_match StepUpScopeCatalog::COM.fetch("settings_secret_credential"), "/settings/secret_credentials-extra"
   end
 
   test "settings mfa uses the mfa challenge path on every surface" do
     path = "/identity/mfa/challenge"
 
     assert_match StepUpScopeCatalog::APP.fetch("settings_mfa"), path
-    assert_match StepUpScopeCatalog::COM.fetch("settings_mfa"), path
     assert_match StepUpScopeCatalog::ORG.fetch("settings_mfa"), path
-    [StepUpScopeCatalog::APP, StepUpScopeCatalog::COM, StepUpScopeCatalog::ORG].each do |catalog|
+    [StepUpScopeCatalog::APP, StepUpScopeCatalog::ORG].each do |catalog|
       assert_match catalog.fetch("settings_mfa"), "#{path}?ri=jp"
       assert_no_match catalog.fetch("settings_mfa"), "#{path}-extra"
       assert_no_match catalog.fetch("settings_mfa"), "#{path}/extra"
@@ -78,8 +75,6 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
 
     assert_not StepUpScopeCatalog::ORG.key?("social_link")
     assert_not StepUpScopeCatalog::ORG.key?("social_unlink")
-    assert_not StepUpScopeCatalog::COM.key?("social_link")
-    assert_not StepUpScopeCatalog::COM.key?("social_unlink")
   end
 
   test "social unlink scope matches only provider settings pages" do
@@ -95,10 +90,9 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
 
   test "settings birthdate scope only matches the birthdate path" do
     app_pattern = StepUpScopeCatalog::APP.fetch("settings_birthdate")
-    com_pattern = StepUpScopeCatalog::COM.fetch("settings_birthdate")
     org_pattern = StepUpScopeCatalog::ORG.fetch("settings_birthdate")
 
-    [app_pattern, com_pattern, org_pattern].each do |pattern|
+    [app_pattern, org_pattern].each do |pattern|
       assert_match pattern, "/settings/birthdate"
       assert_match pattern, "/settings/birthdate?ri=jp"
       assert_no_match pattern, "/settings/birthdate_extra"
@@ -106,37 +100,28 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     end
   end
 
-  test "generic identity secret scope remains only on com and org" do
+  test "generic identity secret scope remains only on org" do
     app_pattern = StepUpScopeCatalog::APP.fetch("settings_secret_credential")
-    com_pattern = StepUpScopeCatalog::COM.fetch("settings_secret_credential")
     org_pattern = StepUpScopeCatalog::ORG.fetch("settings_secret_credential")
 
     assert_no_match app_pattern, "/identity/secrets"
-    assert_match com_pattern, "/identity/secrets"
     assert_match org_pattern, "/identity/secrets"
   end
 
-  # Support revocation has its own scope, separate from the operator's own session revocation, and
-  # only for the app and com targets. The org enforcement realm has no catalogued scope.
+  # Support revocation has its own scope, separate from the operator's own session revocation.
   test "org support revocation and enforcement scopes cover only their confirmation screens" do
     own_sessions = StepUpScopeCatalog::ORG.fetch("session_revoke_all")
     support = StepUpScopeCatalog::ORG.fetch("support_session_revoke")
 
     assert_no_match own_sessions, "/support/clients/0123456789ABCDEF/revocations/new"
     assert_match support, "/support/clients/0123456789ABCDEF/revocations/new"
-    assert_match support, "/support/visitors/0123456789ABCDEF/revocations/new?ri=jp"
     assert_no_match support, "/support/operators/0123456789ABCDEF/revocations/new"
     assert_no_match support, "/support/clients/0123456789ABCDEF/revocations/new/extra"
-    assert_match StepUpScopeCatalog::ORG.fetch("enforcement_case_approve"),
-                 "/support/com/enforcement_cases/abc/approval/new"
-    assert_no_match StepUpScopeCatalog::ORG.fetch("enforcement_case_approve"),
-                    "/support/org/enforcement_cases/abc/approval/new"
     assert_match StepUpScopeCatalog::ORG.fetch("operator_capability"), "/iam/grants/new"
     assert_not StepUpScopeCatalog::APP.key?("support_session_revoke")
-    assert_not StepUpScopeCatalog::COM.key?("enforcement_case_apply")
   end
 
-  test "Avatar transfer Step-Up scopes are operation-specific and absent from com" do
+  test "Avatar transfer Step-Up scopes are operation-specific" do
     request_path = "/avatar_ownership_transfers?ri=jp"
     accept_path = "/avatar_ownership_transfers/transfer-123/accept?ri=jp"
     cancel_path = "/avatar_ownership_transfers/transfer-123/cancel?ri=jp"
@@ -144,7 +129,6 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     %w(avatar_transfer_request avatar_transfer_accept avatar_transfer_cancel).each do |scope|
       assert StepUpScopeCatalog::APP.key?(scope)
       assert StepUpScopeCatalog::ORG.key?(scope)
-      assert_not StepUpScopeCatalog::COM.key?(scope)
     end
     assert_match StepUpScopeCatalog::APP.fetch("avatar_transfer_request"), request_path
     assert_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_accept"), accept_path

@@ -6,7 +6,6 @@ require "test_helper"
 class AdministrativeAccessLockableTest < ActiveSupport::TestCase
   test "defaults access state to enabled" do
     assert_predicate Client.new(security_mode_id: SecurityModeConfigurable::NORMAL), :access_enabled?
-    assert_predicate Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL), :access_enabled?
     assert_predicate Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED), :access_enabled?
   end
 

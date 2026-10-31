@@ -9,7 +9,6 @@ require "test_helper"
 class OidcAuthorizationTransactionPurgerTest < ActiveSupport::TestCase
   SURFACES = {
     "app" => { model: ClientOidcAuthorizationTransaction, client_id: "core-app-jp", realm: "client" },
-    "com" => { model: VisitorOidcAuthorizationTransaction, client_id: "core-com-jp", realm: "visitor" },
     "org" => { model: OperatorOidcAuthorizationTransaction, client_id: "core-org-jp", realm: "operator" },
   }.freeze
 

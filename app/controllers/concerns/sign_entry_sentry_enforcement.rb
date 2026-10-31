@@ -11,6 +11,8 @@ module SignEntrySentryEnforcement
   def enforce_sign_entry_sentry!
     flow = sign_entry_sentry_flow_for_request
     return unless flow
+    return if flow == "sign_in" && auth_ceremony_surface == "org" && self.class.sign_entry_standby_only? &&
+      SignEntryClassification::STANDBY_ONLY_CONTROLLERS.include?(self.class.name)
 
     refuse_sign_entry_sentry!(flow:, enforcement_point: "auth_request") unless
       SignEntrySentryResolver.call(surface: auth_ceremony_surface, flow:).allowed?
@@ -29,47 +31,50 @@ module SignEntrySentryEnforcement
   end
 
   def sign_entry_sentry_flow_for_request
-    path = controller_path.to_s
-    if path.match?(%r{\Aauth/(?:app|com|org)/sign/(?:in|up)(?:/|\z)})
-      return nil if path.include?("/emergency/")
-
-      return path.match?(%r{/sign/up(?:/|\z)}) ? "sign_up" : "sign_in"
+    # D-59: the static declaration is the only classification source. An undeclared reachable
+    # action fails loudly instead of being guessed from its path or silently treated as excluded;
+    # the static guard keeps the reachable set equal to the declared set.
+    classification = resolved_sign_entry_classification
+    if classification.nil?
+      raise SignEntryClassification::UndeclaredClassificationError,
+            "#{self.class.name}##{action_name} reached the Sign Entry Sentry without a declaration"
     end
+    return nil if classification == :excluded
+    return sign_entry_intent_from_verified_parent if classification == :parent_intent
 
-    # Provider callbacks and provider request-phase controllers do not have a
-    # sign/in or sign/up path.  Their Auth ceremony binding remains the source
-    # of effective intent, so a callback cannot bypass a flag flip.
-    return unless path.match?(%r{\Aauth/(?:app|org)/(?:omniauth|social)/})
+    classification.to_s
+  end
+
+  # The parent_intent classification resolves its flow from the verified parent only: an admitted
+  # ceremony's persisted intent. Request parameters never decide it (two.md section 3.5).
+  def sign_entry_intent_from_verified_parent
     return "sign_up" if auth_ceremony_matches_intent?("sign_up")
     return "sign_in" if auth_ceremony_matches_intent?("sign_in")
 
     nil
-  rescue ArgumentError, ActiveRecord::RecordNotFound
-    nil
   end
 
   def sign_entry_sentry_flow_for_binding(binding)
-    if binding.purpose == "authentication_handoff"
+    if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
       transaction_record =
         case auth_ceremony_surface
-        when "app" then ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
-        when "com" then VisitorOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
-        when "org" then OperatorOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+        when "app"
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+          end
+        when "org"
+          OpBaseOrgRecord.connected_to(role: :writing) do
+            OperatorOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+          end
         else raise ArgumentError, "unsupported Auth ceremony surface"
         end
-      transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-        surface: auth_ceremony_surface,
-        transaction_id: transaction_record.transaction_id,
-      )
       return AuthEntryIntentResolver.call(
-        prompt: transaction.oidc_prompt,
+        prompt: transaction_record.oidc_prompt,
         entry_intent: binding.entry_intent,
       )
     end
 
-    binding.entry_intent.to_s.presence
-  rescue ActiveRecord::RecordNotFound, ArgumentError
-    nil
+    raise ArgumentError, "unsupported Sign Entry Sentry binding purpose"
   end
 
   def refuse_sign_entry_sentry!(flow:, enforcement_point:)

@@ -108,12 +108,13 @@ are unchanged. See the [Core request boundary](../docs/security/core-browser-req
 
 ## Preference
 
-A refused preference credential on an HTML GET or HEAD, or on a declared sign-in/sign-up entry, is
-detached: its cookies are deleted and the request renders from clean display defaults. JSON callers
-and other writes keep the `401` contract. Detaching never creates, rotates, extends, or adopts a
-preference, never writes the public option cookies, and never copies the old row's settings into a
-new credential. The next explicit write bootstraps a fresh row through the existing creation
-protocol, so a stream of random invalid cookies cannot create one row per GET.
+A refused Preference JWT on GET or HEAD renders from defaults without creating, rotating, extending,
+or repairing a row. Base and Visa may delete their own invalid shared cookies in the response;
+read-only hosts issue or delete no shared cookies. JSON writes retain their existing refusal
+response. A write with a refused or missing JWT never changes the named old row; it creates a new
+row from submitted explicit values and applies no values from the refused credential, or returns
+503 if it cannot create and issue that row. A correctly signed JWT with an older `jti` remains
+displayable until `exp`, but is refused for writes, which use the same new-row rule.
 
 ## Concurrency
 

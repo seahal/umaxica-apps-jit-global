@@ -4,7 +4,7 @@ require "test_helper"
 
 # Fact comparisons must not disclose readable identifiers or lookup digests.
 class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
-  %w(app com).each do |realm|
+  %w(app).each do |realm|
     %w(email telephone).each do |channel|
       test "#{realm} #{channel} emergency rotation retains finalized ownership while replacing its lookup digest" do
         model, owner_attributes, identifier_attributes, digest_column, key_name =
@@ -15,24 +15,12 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
             ) },
              { raw_address: "active-rotation-#{SecureRandom.hex(8)}@example.test" },
              :address_digest, "APP_EMAIL_ADDRESS_HMAC_KEY",]
-          when ["com", "email"]
-            [VisitorEmail, { visitor: Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-            ) },
-             { raw_address: "active-rotation-#{SecureRandom.hex(8)}@example.test" },
-             :address_digest, "COM_EMAIL_ADDRESS_HMAC_KEY",]
           when ["app", "telephone"]
             [ClientTelephone, { user: Client.create!(
               security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
             ) },
              { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
              :number_digest, "APP_TELEPHONE_NUMBER_HMAC_KEY",]
-          when ["com", "telephone"]
-            [VisitorTelephone, { visitor: Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-            ) },
-             { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
-             :number_digest, "COM_TELEPHONE_NUMBER_HMAC_KEY",]
           end
         record = model.create!(owner_attributes.merge(identifier_attributes).merge(confirm_policy: true))
         record.finalize_binding!
@@ -58,7 +46,7 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
           ) ==
             record.attributes.except(digest_column.to_s, "updated_at")
         }
-        audit_model = (realm == "app") ? ClientIdentifierRotationAudit : VisitorIdentifierRotationAudit
+        audit_model = ClientIdentifierRotationAudit
         audit = audit_model.find_by!(channel: channel, record_id: record.id)
 
         assert_equal model.lease_connection.raw_connection.user, audit.actor_role
@@ -72,11 +60,10 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
     end
   end
 
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     %w(email telephone).each do |channel|
       test "#{realm} #{channel} emergency rotation changes only its explicitly selected identifier model" do
         client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-        visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
         operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
         records = [
           ["app", "email", ClientEmail.create!(
@@ -86,13 +73,6 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
             user: client, raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
             confirm_policy: true, confirm_using_mfa: true,
           ), :number_digest, :user_telephones_updated,],
-          ["com", "email", VisitorEmail.create!(
-            visitor:, raw_address: "rotation-com-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-          ), :address_digest, :visitor_emails_updated,],
-          ["com", "telephone", VisitorTelephone.create!(
-            visitor:, raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-            confirm_policy: true, confirm_using_mfa: true,
-          ), :number_digest, :visitor_telephones_updated,],
           ["org", "email", OperatorEmail.create!(
             staff: operator, raw_address: "rotation-org-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
           ), :address_digest, :staff_emails_updated,],
@@ -110,7 +90,6 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
         database =
           case realm
           when "app" then AppZenithRecord
-          when "com" then ComZenithRecord
           when "org" then OrgZenithRecord
           end
         result = IdentifierHmacEmergencyRotation.new(
@@ -152,15 +131,15 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
     end
   end
 
-  test "missing realm or channel refuses construction instead of selecting all six models" do
+  test "missing realm or channel refuses construction instead of selecting all models" do
     assert_raises(ArgumentError) { IdentifierHmacEmergencyRotation.new }
-    assert_raises(ArgumentError) { IdentifierHmacEmergencyRotation.new(realm: "com") }
+    assert_raises(ArgumentError) { IdentifierHmacEmergencyRotation.new(realm: "app") }
     assert_raises(ArgumentError) { IdentifierHmacEmergencyRotation.new(channel: "telephone") }
     assert_raises(ArgumentError) { IdentifierHmacEmergencyRotation.new(targets: []) }
   end
 
   test "nil empty unknown NUL and non scalar realms refuse construction" do
-    [nil, "", " ", "unknown", "com\0", 0, false, [], {}].each do |realm|
+    [nil, "", " ", "unknown", "app\0", 0, false, [], {}].each do |realm|
       assert_raises(ArgumentError) do
         IdentifierHmacEmergencyRotation.new(
           realm: realm, channel: "telephone", maintenance_connection: AppZenithRecord.lease_connection.raw_connection,
@@ -173,7 +152,7 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
     [nil, "", " ", "unknown", "telephone\0", 0, false, [], {}].each do |channel|
       assert_raises(ArgumentError) do
         IdentifierHmacEmergencyRotation.new(
-          realm: "com", channel: channel, maintenance_connection: ComZenithRecord.lease_connection.raw_connection,
+          realm: "app", channel: channel, maintenance_connection: AppZenithRecord.lease_connection.raw_connection,
         )
       end
     end
@@ -188,10 +167,10 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
     end
   end
 
-  test "a COM maintenance connection cannot select APP identifiers" do
+  test "an ORG maintenance connection cannot select APP identifiers" do
     assert_raises(ArgumentError) do
       IdentifierHmacEmergencyRotation.new(
-        realm: "app", channel: "email", maintenance_connection: ComZenithRecord.lease_connection.raw_connection,
+        realm: "app", channel: "email", maintenance_connection: OrgZenithRecord.lease_connection.raw_connection,
       )
     end
   end

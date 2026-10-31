@@ -20,6 +20,7 @@ module Auth
           include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_up
 
           before_action :require_sign_up_ceremony_admission!
           declare_authentication_mode! :guest, status: :unauthorized,
@@ -136,10 +137,14 @@ module Auth
 
               session[:user_telephone_registration] = result.session_payload
               bind_sign_up_flow_to_telephone!(@user_telephone)
-              issued = TelephoneSignUpOtpDeliveryIssuer.call(
-                flow: current_sign_up_flow, telephone: @user_telephone,
-                session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
-              )
+              begin
+                issued = TelephoneSignUpOtpDeliveryIssuer.call(
+                  flow: current_sign_up_flow, telephone: @user_telephone,
+                  session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+                )
+              rescue ActiveJob::EnqueueError, TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable
+                return render_signup_telephone_delivery_unavailable
+              end
               unless issued.success?
                 render_sign_up_telephone_new(status: :unprocessable_content)
                 return
@@ -164,6 +169,12 @@ module Auth
           private
 
           def sign_up_surface = :app
+
+          def render_signup_telephone_delivery_unavailable
+            log_sign_signup_event("sign.signup.telephone.delivery.unavailable", step: "telephone_otp")
+            @otp_delivery_unavailable = true
+            render_sign_up_telephone_edit(status: :service_unavailable)
+          end
 
           # The registration form. `pt` travels in the generated action URL rather than as a prop,
           # so the signed target never becomes page data the browser holds separately.
@@ -230,7 +241,10 @@ module Auth
 
             {
               title: t("sign.app.registration.telephone.edit.page_title"),
-              description: t("sign.app.registration.telephone.create.verification_code_sent"),
+              description: t(
+                @otp_delivery_unavailable ? "errors.rate_limit.backend_unavailable" :
+                  "sign.app.registration.telephone.create.verification_code_sent",
+              ),
               action: auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
               scope: "client_telephone",
               code_label: t("sign.app.registration.telephone.edit.code_label"),

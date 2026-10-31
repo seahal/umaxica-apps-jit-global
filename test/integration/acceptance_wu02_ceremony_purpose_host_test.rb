@@ -10,8 +10,6 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
     realms = [
       ["app", "PUBLIC_BASE_SERVICE_URL", "core-app-jp", ClientOidcAuthorizationTransaction,
        ClientAuthAdmissionBinding, ClientAuthCeremonySession,],
-      ["com", "PUBLIC_BASE_CORPORATE_URL", "core-com-jp", VisitorOidcAuthorizationTransaction,
-       VisitorAuthAdmissionBinding, VisitorAuthCeremonySession,],
       ["org", "PUBLIC_BASE_STAFF_URL", "core-org-jp", OperatorOidcAuthorizationTransaction,
        OperatorAuthAdmissionBinding, OperatorAuthCeremonySession,],
     ]
@@ -62,8 +60,6 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
     realms = [
       ["app", "PUBLIC_VISA_SERVICE_URL", Client, ClientToken, ClientAuthAdmissionBinding,
        ClientAuthCeremonySession, "client", ClientStepUpCeremonyTransaction,],
-      ["com", "PUBLIC_VISA_CORPORATE_URL", Visitor, VisitorToken, VisitorAuthAdmissionBinding,
-       VisitorAuthCeremonySession, "visitor", VisitorStepUpCeremonyTransaction,],
       ["org", "PUBLIC_VISA_STAFF_URL", Operator, OperatorToken, OperatorAuthAdmissionBinding,
        OperatorAuthCeremonySession, "operator", OperatorStepUpCeremonyTransaction,],
     ]
@@ -74,7 +70,6 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
       actor_attributes[:status_id] =
         case surface
         when "app" then ClientStatus::ACTIVE
-        when "com" then VisitorStatus::ACTIVE
         when "org" then OperatorStatus::ACTIVE
         else raise ArgumentError, "unsupported surface: #{surface.inspect}"
         end if surface != "org"
@@ -82,7 +77,6 @@ class AcceptanceWu02CeremonyPurposeHostTest < ActionDispatch::IntegrationTest
       token =
         case surface
         when "app" then token_class.create!(authentication_epoch: 0, user: actor)
-        when "com" then token_class.create!(authentication_epoch: 0, visitor: actor)
         when "org" then token_class.create!(authentication_epoch: 0, staff: actor)
         else raise ArgumentError, "unsupported surface: #{surface.inspect}"
         end

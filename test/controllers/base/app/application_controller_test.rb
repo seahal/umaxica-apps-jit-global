@@ -12,7 +12,6 @@ module Base
 
         assert_includes controller.class, RateLimit
         assert_includes controller.class, ::PreferenceGlobal
-        assert_includes controller.class, ::PreferenceAdoption
         assert_includes controller.class, ::AuthorizationClient
         assert_includes controller.class, ::VerificationClient
         assert_includes controller.class, ActionPolicy::Controller

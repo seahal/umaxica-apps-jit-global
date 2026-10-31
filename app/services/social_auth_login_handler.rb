@@ -71,8 +71,15 @@ class SocialAuthLoginHandler
     if user.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
       raise SocialAuth::UnauthorizedError.new("errors.social_auth.pending_social_signup_invalid_state")
     end
+
     # L2: a registered subject cannot start a sign-up.
-    raise SocialAuth::ConflictError.new("errors.social_auth.identity_conflict") if sign_up_entry
+    if sign_up_entry
+      raise SocialAuth::ConflictError.new("errors.social_auth.identity_conflict") unless user.login_allowed?
+
+      raise SocialAuth::ConflictError.new(
+        "errors.social_auth.identity_conflict", verified_subject_reason: :already_registered_subject,
+      )
+    end
 
     # L3 (a linked Client that cannot sign in) is refused by the Sign In eligibility check itself.
 
@@ -100,7 +107,11 @@ class SocialAuthLoginHandler
   end
 
   def pending_social_signup
-    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") unless sign_up_entry
+    unless sign_up_entry
+      raise SocialAuth::UnauthorizedError.new(
+        "errors.social_auth.invalid_intent", verified_subject_reason: :unregistered_subject,
+      )
+    end
 
     Rails.logger.debug { "[SocialAuth] Unknown social identity requires signup confirmation" }
     {

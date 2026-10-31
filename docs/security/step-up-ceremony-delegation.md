@@ -15,6 +15,12 @@ credential and requirement on writers, then commits freshness, transaction consu
 continuity completion together on the actor-specific ticket connection. A result or redirect alone
 does not authorize a protected operation. The original mutation POST is never resubmitted.
 
+The successful Base result, cancellation, restart and conflict continuation pages use
+`strict-origin` in both the response header and HTML metadata. Their same-origin forms retain Rails
+CSRF and Origin checks; the policy permits the browser to send the origin without disclosing the
+continuation path or query. Other sign-in protocol continuations retain their own referrer policy.
+The Auth Step-Up result handoff form likewise uses `strict-origin` before its same-origin POST.
+
 ### First APP TOTP registration
 
 Base may issue `bootstrap` only when credential state permits first registration. Confirmed Email

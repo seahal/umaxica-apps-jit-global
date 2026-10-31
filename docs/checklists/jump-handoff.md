@@ -15,9 +15,12 @@ These are durable requirements, not current verification results.
   allowed and the other 149 are refused.
 - JUMP-4: Duplicate `rt`, `rt[]` and nested forms and duplicated single-value parameters are
   refused; query order and `%20` / `+` / `%2B` are compared without converting the URL to a Hash.
+  A return URL whose path starts with `//` is refused before it can become a protocol-relative
+  redirect.
 - JUMP-5: A returned token is refused for a bad signature, `alg`, `typ`, unknown or revoked `kid`,
   issuer, audience, `src`, times, and unknown, missing or wrongly typed claims. `rpl: "reuse"` is
-  kept; one-time semantics belong to the receiving flow.
+  kept; one-time semantics belong to the receiving flow. `src` is an origin without a path, query,
+  or fragment.
 - JUMP-6: A fetched Jump JWKS document over 64 KiB or with more than 10 keys is refused.
 
 Sources: [Jump handoff contract](../../adr/jump-directed-rails-handoff-contract.md),

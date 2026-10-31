@@ -65,7 +65,7 @@ class OidcAuthorizationCodeIssuer < ApplicationService
     default_ttl = Valkey::AuthState::AuthorizationCodeStore::CODE_TTL
     return default_ttl if authorization_transaction_ref.blank?
 
-    surface = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(resource_type)
+    surface = { "client" => "app", "operator" => "org" }.fetch(resource_type)
     transaction_model = OidcAuthorizationTransactionCoordinator.model_for(surface)
     transaction = transaction_model.find_by(transaction_id: authorization_transaction_ref)
     return default_ttl unless transaction
@@ -98,8 +98,6 @@ class OidcAuthorizationCodeIssuer < ApplicationService
     case resource
     when ::Operator
       session_token.respond_to?(:staff_id) && session_token.staff_id == resource.id
-    when ::Visitor
-      session_token.respond_to?(:visitor_id) && session_token.visitor_id == resource.id
     else
       session_token.respond_to?(:user_id) && session_token.user_id == resource.id
     end
@@ -108,7 +106,6 @@ class OidcAuthorizationCodeIssuer < ApplicationService
   def resource_type
     case resource
     when ::Operator then "operator"
-    when ::Visitor then "visitor"
     else "client"
     end
   end

@@ -16,7 +16,6 @@ afterEach(() => {
 describe("SignUpMethodChoice", () => {
   const props = {
     title: "登録",
-    suspended_notice: null as string | null,
     methods: [{ key: "email", label: "メールで登録", href: "/sign/up/email" }],
     social_providers: [
       { provider: "google", label: "Googleで登録", url: "/social/google" },
@@ -77,17 +76,11 @@ describe("SignUpMethodChoice", () => {
     expect(markup).toContain('href="/sign/in"');
   });
 
-  it("shows the suspension notice instead of any entry point", () => {
-    const markup = renderToStaticMarkup(
-      <SignUpMethodChoice
-        {...props}
-        suspended_notice="現在受け付けていません"
-      />,
-    );
+  it("renders no suspension notice: availability is a server-side sentry decision", () => {
+    const markup = renderToStaticMarkup(<SignUpMethodChoice {...props} />);
 
-    expect(markup).toContain("現在受け付けていません");
-    expect(markup).not.toContain('href="/sign/up/email"');
-    expect(markup).not.toContain("Sign in with Google");
+    expect(markup).not.toContain("sign-up-suspended");
+    expect(markup).toContain('href="/sign/up/email"');
   });
 });
 

@@ -22,10 +22,11 @@ module Email::App
       @public_id = params[:public_id]
       @verification_url = verification_url
 
-      mail(
+      message = mail(
         to: params[:email_address],
         subject: otp_subject,
       )
+      OtpSmtpDelivery.wrap!(message)
     end
 
     private
@@ -57,6 +58,10 @@ module Email::App
       return false unless email
 
       email.with_lock do
+        now = ClientEmail.database_now
+        next false unless email.binding_effective? && email.accessible?(now) &&
+          ClientEmail::EDITABLE_SUBSCRIPTION_PREFERENCE_STATUS_IDS.include?(email.user_email_status_id)
+
         digest = IdentifierBlindIndex.bidx_for_email(params[:email_address], realm: "app")
         next false unless transaction.email_candidate_ref == email.public_id &&
           transaction.actor_ref == email.user.public_id &&

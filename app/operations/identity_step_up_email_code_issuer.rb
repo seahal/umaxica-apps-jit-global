@@ -20,20 +20,17 @@ class IdentityStepUpEmailCodeIssuer
                   "email credential unavailable" unless actor.login_allowed? && credential_valid?(credential)
 
             transaction.class.connection_owner.connected_to(role: :writing) do
-              token.with_lock do
-                now = transaction.class.database_now
-                unless token.active_status? && token.public_id == transaction.session_ref &&
-                    transaction.actor_ref == actor.public_id &&
-                    (!credential.step_up_otp_locked_until || credential.step_up_otp_locked_until <= now) &&
-                    (!credential.step_up_otp_last_issued_at ||
-                      credential.step_up_otp_last_issued_at + RESEND_INTERVAL <= now)
-                  raise Unavailable, "email issuance unavailable"
-                end
+              device = token.device_session_record!
+              device.with_lock do
+                token.with_lock do
+                  now = transaction.class.database_now
+                  validate_issuance!(actor, credential, transaction, session_record, token, device, now)
 
-                generation = session_record.issue_bound_email_code!(
-                  transaction: transaction, credential_ref: credential.public_id, code: code,
-                )
-                credential.update!(step_up_otp_last_issued_at: now)
+                  generation = session_record.issue_bound_email_code!(
+                    transaction: transaction, credential_ref: credential.public_id, code: code,
+                  )
+                  credential.update!(step_up_otp_last_issued_at: now)
+                end
               end
             end
           end
@@ -53,6 +50,17 @@ class IdentityStepUpEmailCodeIssuer
 
     private
 
+    def validate_issuance!(actor, credential, transaction, record, token, device, now)
+      return if device.usable? && device.user_id == actor.id && token.device_session_id == device.id &&
+        device.current_refresh_token_id == token.id && token.user_id == actor.id &&
+        token.active_status?(now) && token.public_id == transaction.session_ref &&
+        transaction.actor_ref == actor.public_id && record.user_token_id == token.id &&
+        (!credential.step_up_otp_locked_until || credential.step_up_otp_locked_until <= now) &&
+        (!credential.step_up_otp_last_issued_at || credential.step_up_otp_last_issued_at + RESEND_INTERVAL <= now)
+
+      raise Unavailable, "email issuance unavailable"
+    end
+
     def binding_for(actor, credential, transaction, record)
       case actor
       when Client
@@ -63,14 +71,6 @@ class IdentityStepUpEmailCodeIssuer
         end
 
         [ClientToken.find(record.user_token_id), Notify::App::StepUpOtpNotifier]
-      when Visitor
-        unless credential.is_a?(VisitorEmail) && credential.visitor_id == actor.id &&
-            transaction.is_a?(VisitorStepUpCeremonyTransaction) && record.is_a?(VisitorStepUpSession) &&
-            VisitorToken.find(record.visitor_token_id).visitor_id == actor.id
-          raise Unavailable, "email ceremony binding mismatch"
-        end
-
-        [VisitorToken.find(record.visitor_token_id), Notify::Com::StepUpOtpNotifier]
       else
         raise Unavailable, "email step-up unsupported"
       end
@@ -81,10 +81,6 @@ class IdentityStepUpEmailCodeIssuer
       when ClientEmail
         credential.class.effective_binding.where(
           id: credential.id, user_email_status_id: [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
-        ).where("discard_at > clock_timestamp()").exists?
-      when VisitorEmail
-        credential.class.effective_binding.where(
-          id: credential.id, visitor_email_status_id: [VisitorEmailStatus::VERIFIED, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP],
         ).where("discard_at > clock_timestamp()").exists?
       end
     end

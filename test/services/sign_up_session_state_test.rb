@@ -15,12 +15,6 @@ class SignUpSessionStateTest < ActiveSupport::TestCase
     assert_instance_of SignUpSessionState, state
   end
 
-  test "for creates instance with com surface" do
-    state = SignUpSessionState.for({}, surface: :com)
-
-    assert_instance_of SignUpSessionState, state
-  end
-
   test "for raises for unsupported surface" do
     assert_raises(ArgumentError) do
       SignUpSessionState.for({}, surface: :org)
@@ -113,20 +107,6 @@ class SignUpSessionStateTest < ActiveSupport::TestCase
     assert_not_predicate state, :existing_email_skip_otp?
   end
 
-  test "age_restricted flag" do
-    state = SignUpSessionState.for({}, surface: :app)
-
-    assert_not_predicate state, :age_restricted?
-
-    state.age_restricted = true
-
-    assert_predicate state, :age_restricted?
-
-    state.age_restricted = false
-
-    assert_not_predicate state, :age_restricted?
-  end
-
   test "clear_email_flow! removes email keys" do
     session = {}
     state = SignUpSessionState.for(session, surface: :app)
@@ -163,21 +143,21 @@ class SignUpSessionStateTest < ActiveSupport::TestCase
     assert_equal({}, state.telephone_otp)
   end
 
-  test "com surface uses different keys" do
+  test "state writes only app surface keys" do
     session = {}
-    state = SignUpSessionState.for(session, surface: :com)
+    state = SignUpSessionState.for(session, surface: :app)
 
     state.cycle_payload = "payload"
 
-    assert_equal "payload", session[:com_sign_up_flow_locator]
+    assert_equal "payload", session[:app_sign_up_flow_locator]
 
-    state.sequence_id = "seq-com"
+    state.sequence_id = "seq-app"
 
-    assert_equal "seq-com", session[:auth_com_up_sequence_id]
+    assert_equal "seq-app", session[:auth_app_up_sequence_id]
 
     state.telephone_otp = { "phone" => "456" }
 
-    assert_equal({ "phone" => "456" }, session[:visitor_telephone_registration])
+    assert_equal({ "phone" => "456" }, session[:user_telephone_registration])
   end
 end
 
@@ -186,10 +166,8 @@ class SignUpSessionStateTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private

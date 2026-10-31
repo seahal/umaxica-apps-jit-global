@@ -29,11 +29,6 @@ class TelephoneSignUpOtpFormQuery
         raise ArgumentError, "APP signup requires its own Telephone" unless telephone.is_a?(ClientTelephone)
 
         [Client.find_by(id: telephone.user_id), ClientTelephoneCeremonyTransaction, telephone.user_telephone_status_id]
-      when VisitorSignUpFlow
-        raise ArgumentError, "COM signup requires its own Telephone" unless telephone.is_a?(VisitorTelephone)
-
-        [Visitor.find_by(id: telephone.visitor_id), VisitorTelephoneCeremonyTransaction,
-         telephone.visitor_telephone_status_id,]
       else raise ArgumentError, "unsupported Telephone signup realm"
       end
     end
@@ -42,7 +37,6 @@ class TelephoneSignUpOtpFormQuery
       expected_status =
         case telephone
         when ClientTelephone then ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-        when VisitorTelephone then VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
         else raise ArgumentError, "unsupported Telephone signup candidate"
         end
       now = flow.class.database_now

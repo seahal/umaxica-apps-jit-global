@@ -3,6 +3,48 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
+  %i(app org).product(
+    [[:never_sent, nil, :issued], [:before, 29, :rate_limited], [:at, 30, :issued], [:after, 31, :issued]],
+  ).each do |surface, (label, age, expected)|
+    test "#{surface} Telephone registration applies the #{label} cooldown boundary" do
+      if surface == :app
+        actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
+        telephone = actor.client_telephones.create!(
+          raw_number: "+12025550149", confirm_policy: true, confirm_using_mfa: true,
+        )
+      else
+        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+        token = OperatorToken.create!(authentication_epoch: 0, staff: actor, discard_at: 1.day.from_now)
+        telephone = actor.staff_telephones.create!(
+          raw_number: "+12025550149", confirm_policy: true, confirm_using_mfa: true,
+        )
+      end
+      token.rotate_refresh_token!
+      decision_time = telephone.class.database_now
+      previous_sent_at = age ? decision_time - age.seconds : -Float::INFINITY
+      telephone.update!(otp_last_sent_at: previous_sent_at)
+      transaction_model = (surface == :app) ? ClientTelephoneCeremonyTransaction : OperatorTelephoneCeremonyTransaction
+      previous_count = transaction_model.count
+      result =
+        telephone.class.stub(:database_now, decision_time) do
+          TelephoneCredentialRegistrationOtpIssuer.call(
+            actor: actor, token: token, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32),
+          )
+        end
+
+      assert_equal expected, result.status
+      assert_equal previous_count + ((expected == :issued) ? 1 : 0), transaction_model.count
+      if expected == :rate_limited
+        assert_equal previous_sent_at, telephone.reload.otp_last_sent_at
+        assert_nil result.code
+      else
+        assert_equal decision_time, telephone.reload.otp_last_sent_at
+        assert_predicate result.transaction, :present?
+      end
+    end
+  end
+
   test "app Telephone registration retries a transaction reference collision in a savepoint" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
@@ -93,22 +135,13 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
     assert_equal telephone.number_digest, issued.transaction.normalized_number_digest
   end
 
-  %w(app com).each do |surface|
-    test "#{surface} registration with default Root expiry retains finite ceremony and OTP deadlines" do
-      actor, token, telephone =
-        case surface
-        when "app"
-          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(authentication_epoch: 0, user: owner)
-          candidate = owner.client_telephones.create!(raw_number: "+12025550145", confirm_policy: true)
-          [owner, root, candidate]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner)
-          candidate = owner.visitor_telephones.create!(raw_number: "+12025550146", confirm_policy: true)
-          [owner, root, candidate]
-        end
+  %w(app).each do |surface|
+    test "app registration with default Root expiry retains finite ceremony and OTP deadlines" do
+      owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: owner)
+      telephone = owner.client_telephones.create!(raw_number: "+12025550145", confirm_policy: true)
       token.rotate_refresh_token!
+      actor = owner
 
       assert_kind_of Time, token.reload.discard_at
 
@@ -126,24 +159,14 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       assert_operator transaction.otp_expires_at, :>, transaction.created_at
     end
 
-    test "#{surface} registration issues Telephone ceremony proof without changing Source proof or failures" do
-      actor, token, telephone, transaction_model =
-        case surface
-        when "app"
-          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
-          candidate = owner.client_telephones.create!(
-            raw_number: "+12025550141", confirm_policy: true, otp_attempts_count: 2,
-          )
-          [owner, root, candidate, ClientTelephoneCeremonyTransaction]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_telephones.create!(
-            raw_number: "+12025550142", confirm_policy: true, otp_attempts_count: 2,
-          )
-          [owner, root, candidate, VisitorTelephoneCeremonyTransaction]
-        end
+    test "app registration issues Telephone ceremony proof without changing Source proof or failures" do
+      owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
+      telephone = owner.client_telephones.create!(
+        raw_number: "+12025550141", confirm_policy: true, otp_attempts_count: 2,
+      )
+      transaction_model = ClientTelephoneCeremonyTransaction
+      actor = owner
       token.rotate_refresh_token!
       original = telephone.attributes.slice(
         "otp_private_key", "otp_counter", "otp_expires_at", "credential_registration_otp_context",
@@ -174,25 +197,14 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       assert_nil issued.transaction.otp_consumed_at
     end
 
-    test "#{surface} registration rejects a foreign original browser without consuming Telephone proof" do
-      actor, token, telephone =
-        case surface
-        when "app"
-          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
-          candidate = owner.client_telephones.create!(
-            raw_number: "+12025550143", confirm_policy: true, otp_attempts_count: 2,
-          )
-          [owner, root, candidate]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_telephones.create!(
-            raw_number: "+12025550144", confirm_policy: true, otp_attempts_count: 2,
-          )
-          [owner, root, candidate]
-        end
+    test "app registration rejects a foreign original browser without consuming Telephone proof" do
+      owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
+      telephone = owner.client_telephones.create!(
+        raw_number: "+12025550143", confirm_policy: true, otp_attempts_count: 2,
+      )
       token.rotate_refresh_token!
+      actor = owner
       issued = TelephoneCredentialRegistrationOtpIssuer.call(
         actor: actor, token: token, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32),
       )

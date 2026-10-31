@@ -8,9 +8,6 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
     Auth::App::Sign::In::PasskeysController,
     Auth::App::Sign::In::Passkey::OptionsController,
     Auth::App::Sign::In::Passkey::VerificationsController,
-    Auth::Com::Sign::In::PasskeysController,
-    Auth::Com::Sign::In::Passkey::OptionsController,
-    Auth::Com::Sign::In::Passkey::VerificationsController,
     Auth::Org::Sign::In::PasskeysController,
     Auth::Org::Sign::In::Passkey::OptionsController,
     Auth::Org::Sign::In::Passkey::VerificationsController,
@@ -21,7 +18,7 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
   ].freeze
 
   test "Email authentication timing does not expose identifier-backed shared OTP policy" do
-    [Auth::App::Sign::In::EmailsController, Auth::Com::Sign::In::EmailsController,
+    [Auth::App::Sign::In::EmailsController,
      SignInOtpResender, EnforcementRecoveryCeremonyFlow, WithdrawalCeremonyReentry,].each do |boundary|
       assert_not_includes boundary.included_modules.map(&:name), "CommonOtp", boundary.name
     end
@@ -43,9 +40,6 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
       Auth::App::Sign::In::PasskeysController,
       Auth::App::Sign::In::Passkey::OptionsController,
       Auth::App::Sign::In::Passkey::VerificationsController,
-      Auth::Com::Sign::In::PasskeysController,
-      Auth::Com::Sign::In::Passkey::OptionsController,
-      Auth::Com::Sign::In::Passkey::VerificationsController,
       Auth::Org::Sign::In::PasskeysController,
       Auth::Org::Sign::In::Passkey::OptionsController,
       Auth::Org::Sign::In::Passkey::VerificationsController,

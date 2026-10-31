@@ -15,13 +15,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
       inbound: OpAppInboundEventReceipt,
     },
     {
-      realm: "com",
-      consumed_jti: OpComConsumedJti,
-      stop: OpComAuthorityStop,
-      participant: OpComAuthorityStopParticipant,
-      inbound: OpComInboundEventReceipt,
-    },
-    {
       realm: "org",
       consumed_jti: OpOrgConsumedJti,
       stop: OpOrgAuthorityStop,

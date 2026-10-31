@@ -16,7 +16,7 @@ module Base
           activities = activity_log.activities(activity_scope).limit(100)
           render inertia: "base/org/identity/activities/index", props: activities_page_props(activities)
         rescue ActiveRecord::ActiveRecordError
-          render inertia: "base/org/identity/activities/index", props: activities_page_props(OperatorChronicle.none)
+          render plain: t("base.shared.identity.activities.unavailable"), status: :service_unavailable
         end
 
         private

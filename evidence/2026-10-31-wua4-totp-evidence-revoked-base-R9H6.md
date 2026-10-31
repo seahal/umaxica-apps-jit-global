@@ -1,0 +1,7 @@
+# WU-A4 TOTP evidence-first revocation and Base finalization
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting implementation and tests.
+- The nontransactional device race file initially passed (2 runs, 12 assertions). The evidence-first case now also issues a result after revocation and calls the Base freshness committer. It receives `session_expired`; the parent remains verified, the Auth ceremony remains incomplete and the token receives no freshness.
+- Two intermediate runs raised `NameError` in the newly added cleanup because the ceremony variable was scoped inside a block. The test was corrected. Those failures left two synthetic Ticket session/token/device sets and their parent and ceremony rows; a later combined run produced 26 foreign-key errors when fixtures attempted to reset the token table. The two sets were identified by their specific session and token IDs and matching parent/session bindings, then removed from the local test database. Their source actors were already absent. No other rows were selected for cleanup.
+- After that cleanup and formatting, the race, TOTP verifier and freshness files passed with seed 991 (28 runs, 186 assertions, 0 failures, 0 errors, 0 skips). RuboCop corrected formatting in the changed test.
+- This covers the local evidence-first and revoked-device Base refusal; it does not establish an enclosing Ticket transaction, all owner/credential change races or deployed behavior.

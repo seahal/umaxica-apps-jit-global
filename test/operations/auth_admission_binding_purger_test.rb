@@ -5,7 +5,7 @@ require "test_helper"
 
 class AuthAdmissionBindingPurgerTest < ActiveSupport::TestCase
   test "retired binding remains until its parent deadline and retention boundary in every realm" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
@@ -31,7 +31,7 @@ class AuthAdmissionBindingPurgerTest < ActiveSupport::TestCase
   end
 
   test "expired parent retains its binding until attached Auth continuity reaches retention in every realm" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )

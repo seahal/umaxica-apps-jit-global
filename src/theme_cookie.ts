@@ -1,6 +1,6 @@
 // Applies the visitor's theme before first paint, for the surfaces that do not boot React.
 //
-// Rails already renders `data-theme` and the theme class on <html> from the `ct` cookie, so this
+// Rails already renders `data-theme` and the theme class on <html>, so this
 // only has to keep the document in step afterwards: while the choice is "system", whenever the
 // operating system setting changes, and whenever the cookie itself changes - which is what the
 // theme preference screen does, through the server.

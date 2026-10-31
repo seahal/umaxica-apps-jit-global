@@ -31,15 +31,6 @@ class SignUpRequirementRegistry
         social: true,
       ),
     },
-    com: {
-      "email" => Definition.new(surface: :com, entry_method: "email", requirements: %i(otp birthdate), social: false),
-      "telephone" => Definition.new(
-        surface: :com,
-        entry_method: "telephone",
-        requirements: %i(otp passkey birthdate),
-        social: false,
-      ),
-    },
   }.freeze
 
   attr_reader :definition
@@ -61,8 +52,6 @@ class SignUpRequirementRegistry
     case ticket
     when ClientSignUpFlow
       :app
-    when VisitorSignUpFlow
-      :com
     else
       raise ArgumentError, "unsupported sign-up ticket class: #{ticket.class.name}"
     end

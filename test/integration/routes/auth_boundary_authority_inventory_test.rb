@@ -13,13 +13,13 @@ class AuthBoundaryAuthorityInventoryTest < ActionDispatch::IntegrationTest
   AUTH_APP_HOST = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
   VISA_APP_HOST = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
 
-  test "authority map lists nine independent RPs and three separate Base self RPs without retired clients" do
-    assert_equal %w(base-app-ww base-com-ww base-org-ww), AuthBoundaryAuthorityMap.base_self_rp_client_ids
+  test "authority map lists nine independent RPs and two separate Base self RPs without retired clients" do
+    assert_equal %w(base-app-ww base-org-ww), AuthBoundaryAuthorityMap.base_self_rp_client_ids
     assert_equal %w(
-      core-app-jp core-com-jp core-org-jp warp-app-jp warp-com-jp warp-org-jp edit-org-ww palm-app-jp tech-org-ww
+      core-app-jp core-org-jp warp-app-jp warp-org-jp edit-org-ww palm-app-jp tech-org-ww
     ),
                  AuthBoundaryAuthorityMap.first_party_rp_client_ids - AuthBoundaryAuthorityMap.base_self_rp_client_ids
-    assert_equal 12, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
+    assert_equal 9, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
     AuthBoundaryAuthorityMap.retired_browser_paths.each do |path|
@@ -57,9 +57,9 @@ class AuthBoundaryAuthorityInventoryTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "three actor faces exist on the written map for Auth and Base" do
-    assert_equal %w(app com org), AuthBoundaryAuthorityMap::AUTH_CEREMONY_FACES
-    assert_equal %w(app com org), AuthBoundaryAuthorityMap::BASE_AUTHORITY_FACES
+  test "two actor faces exist on the written map for Auth and Base" do
+    assert_equal %w(app org), AuthBoundaryAuthorityMap::AUTH_CEREMONY_FACES
+    assert_equal %w(app org), AuthBoundaryAuthorityMap::BASE_AUTHORITY_FACES
     assert_equal "base", AuthBoundaryAuthorityMap.authority_surface
     assert_equal "auth", AuthBoundaryAuthorityMap.ceremony_surface
   end

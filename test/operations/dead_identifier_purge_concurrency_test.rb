@@ -6,7 +6,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     %w(email telephone).each do |channel|
       test "#{realm} #{channel} reuse racing with purge preserves live uniqueness and records dead history" do
         owner_model, model, history_model, owner_key, status_key, verified, owner_status =
@@ -17,12 +17,6 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
           when ["app", "telephone"]
             [Client, ClientTelephone, ClientTelephoneHistory, :user_id, :user_identity_telephone_status_id,
              ClientTelephoneStatus::VERIFIED, ClientStatus::ACTIVE,]
-          when ["com", "email"]
-            [Visitor, VisitorEmail, VisitorEmailHistory, :visitor_id, :visitor_email_status_id,
-             VisitorEmailStatus::VERIFIED, VisitorStatus::ACTIVE,]
-          when ["com", "telephone"]
-            [Visitor, VisitorTelephone, VisitorTelephoneHistory, :visitor_id, :visitor_telephone_status_id,
-             VisitorTelephoneStatus::VERIFIED, VisitorStatus::ACTIVE,]
           when ["org", "email"]
             [Operator, OperatorEmail, OperatorEmailHistory, :staff_id, :staff_identity_email_status_id,
              OperatorEmailStatus::VERIFIED, OperatorStatus::ACTIVE,]
@@ -125,7 +119,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     ["email", "telephone"].each do |channel|
       test "#{realm} #{channel} concurrent irreversible purge inserts exactly one history" do
         owner, model, history_model, owner_key =
@@ -135,12 +129,6 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
           when ["app", "telephone"]
             [create_test_owner(Client, status_id: ClientStatus::ACTIVE), ClientTelephone, ClientTelephoneHistory,
              :user_id,]
-          when ["com", "email"]
-            [create_test_owner(Visitor, status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorEmailHistory,
-             :visitor_id,]
-          when ["com", "telephone"]
-            [create_test_owner(Visitor, status_id: VisitorStatus::ACTIVE), VisitorTelephone, VisitorTelephoneHistory,
-             :visitor_id,]
           when ["org", "email"]
             [create_test_owner(Operator), OperatorEmail, OperatorEmailHistory, :staff_id]
           when ["org", "telephone"]

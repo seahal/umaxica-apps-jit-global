@@ -9,7 +9,6 @@ class AcceptanceWu29SentryToggleTest < ActionDispatch::IntegrationTest
 
   SURFACES = [
     ["app", "PUBLIC_AUTH_SERVICE_URL"],
-    ["com", "PUBLIC_AUTH_CORPORATE_URL"],
     ["org", "PUBLIC_AUTH_STAFF_URL"],
   ].freeze
 

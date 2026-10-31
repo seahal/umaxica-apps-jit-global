@@ -6,6 +6,8 @@ require "test_helper"
 # require "helpers/auth_helpers"
 
 class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   include OidcAuthorizationResponseHelper
 
   # Rate-limit counters are a NullStore by default in test so unrelated tests
@@ -48,12 +50,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "#{issuer}/.well-known/jwks.json", body["jwks_uri"]
   end
 
-  test "base com and org well-known discovery advertise surface-specific base issuers" do
-    get visa_com_well_known_openid_configuration_url(host: visa_host_for_test_surface(:com))
-
-    assert_response :ok
-    assert_equal OidcIssuer.for_resource_type("visitor"), response.parsed_body["issuer"]
-
+  test "base org well-known discovery advertises the surface-specific base issuer" do
     get visa_org_well_known_openid_configuration_url(host: visa_host_for_test_surface(:org))
 
     assert_response :ok
@@ -81,11 +78,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
   test "oidc issuer uses base hosts and signing namespaces" do
     assert_equal visa_host_for_test_surface(:app), OidcIssuer.host_for_resource_type("client")
-    assert_equal visa_host_for_test_surface(:com),
-                 OidcIssuer.host_for_resource_type("visitor")
     assert_equal visa_host_for_test_surface(:org), OidcIssuer.host_for_resource_type("operator")
     assert_equal "surface:VISA_APP", OidcIssuer.jwt_issuer_id_for_resource_type("client")
-    assert_equal "surface:VISA_COM", OidcIssuer.jwt_issuer_id_for_resource_type("visitor")
     assert_equal "surface:VISA_ORG", OidcIssuer.jwt_issuer_id_for_resource_type("operator")
   end
 
@@ -200,13 +194,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       "/.well-known/openid-configuration",
       :get,
       "visa/app/well_known/discoveries",
-      "show",
-    )
-    assert_recognizes_base_route(
-      visa_host_for_test_surface(:com),
-      "/.well-known/openid-configuration",
-      :get,
-      "visa/com/well_known/discoveries",
       "show",
     )
     assert_recognizes_base_route(
@@ -412,7 +399,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   # wrong type would hand one tenant's subject identifier to another.
   {
     "app" => [:visa_app_oauth_userinfo_url, :app, "client"],
-    "com" => [:visa_com_oauth_userinfo_url, :com, "visitor"],
     "org" => [:visa_org_oauth_userinfo_url, :org, "operator"],
   }.each do |surface, (helper, host_surface, resource_type)|
     test "base #{surface} userinfo serialises the authenticated principal for its own type" do
@@ -459,18 +445,13 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "base userinfo accepts GET and POST with a Bearer header on every realm" do
+  test "base userinfo accepts GET and POST with a Bearer header on the app and staff realms" do
     resource = Struct.new(:id, :public_id, :name, :email).new(1, "principal-1", "Sample Name", "sample@example.com")
     results = {
       "client" => AuthResult.new(
         success: true,
         resource: resource,
         payload: { "scope" => "openid profile email domain:client" },
-      ),
-      "visitor" => AuthResult.new(
-        success: true,
-        resource: resource,
-        payload: { "scope" => "openid profile email domain:visitor" },
       ),
       "operator" => AuthResult.new(
         success: true,
@@ -485,12 +466,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
       assert_response :ok
       assert_equal OidcSubject.for(resource, resource_type: "client"), response.parsed_body["sub"]
-
-      post visa_com_oauth_userinfo_url(host: visa_host_for_test_surface(:com)),
-           headers: { "Authorization" => "Bearer com-post" }
-
-      assert_response :ok
-      assert_equal OidcSubject.for(resource, resource_type: "visitor"), response.parsed_body["sub"]
 
       post visa_org_oauth_userinfo_url(host: visa_host_for_test_surface(:org)),
            headers: { "Authorization" => "Bearer org-post" }
@@ -553,16 +528,16 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                invalid
              },
     ) do
-      get visa_com_oauth_userinfo_url(host: visa_host_for_test_surface(:com)),
+      get visa_org_oauth_userinfo_url(host: visa_host_for_test_surface(:org)),
           headers: { "Authorization" => "Bearer wrong-realm" }
     end
 
     assert_response :unauthorized
     assert_equal 'Bearer error="invalid_token"', response.headers["WWW-Authenticate"]
-    assert_equal "visitor", calls.first.fetch(:resource_type)
+    assert_equal "operator", calls.first.fetch(:resource_type)
 
     OidcAccessTokenAuthenticator.stub(:call, ->(**) { insufficient }) do
-      get visa_org_oauth_userinfo_url(host: visa_host_for_test_surface(:org)),
+      get visa_app_oauth_userinfo_url(host: visa_host_for_test_surface(:app)),
           headers: { "Authorization" => "Bearer insufficient" }
     end
 
@@ -692,33 +667,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "client", captured[:expected_resource_type]
   end
 
-  test "base com revocation delegates with com host binding" do
-    captured = nil
-    result = RevocationResult.new(success: true)
-    host = visa_host_for_test_surface(:com)
-
-    OidcTokenRevoker.stub(
-      :call, ->(**kwargs) {
-               captured = kwargs
-               result
-             },
-    ) do
-      post visa_com_oauth_revocation_url(host: host),
-           params: {
-             token: "refresh",
-             client_id: "core-app-jp",
-             client_secret: "secret",
-             token_type_hint: "refresh_token",
-           }
-    end
-
-    assert_response :ok
-    assert_equal "refresh", captured[:token]
-    assert_equal "core-app-jp", captured[:client_id]
-    assert_equal host, captured[:host]
-    assert_equal "visitor", captured[:expected_resource_type]
-  end
-
   test "base org revocation delegates with operator realm binding" do
     captured = nil
     result = RevocationResult.new(success: true)
@@ -741,24 +689,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "operator", captured[:expected_resource_type]
-  end
-
-  test "base com revocation returns unauthorized when the revoker fails" do
-    result = RevocationResult.new(success: false, error: "invalid_client", error_description: "bad secret")
-    host = visa_host_for_test_surface(:com)
-
-    OidcTokenRevoker.stub(:call, ->(**) { result }) do
-      post visa_com_oauth_revocation_url(host: host),
-           params: {
-             token: "refresh",
-             client_id: "core-app-jp",
-             client_secret: "wrong",
-           }
-    end
-
-    assert_response :unauthorized
-    assert_equal "invalid_client", response.parsed_body.fetch("error")
-    assert_equal "bad secret", response.parsed_body.fetch("error_description")
   end
 
   test "sign revocation endpoint is retired" do
@@ -1235,89 +1165,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             end
           end,
         },
-        {
-          host: visa_host_for_test_surface(:com),
-          actor: create_visitor!,
-          token: ->(actor) do
-            ensure_visitor_token_reference_records!
-            VisitorToken.create!(
-              authentication_epoch: 0,
-              visitor: actor,
-              skip_session_limit_check: true,
-              visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-              visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-              visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-              visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-              authentication_event_at: Time.current,
-            )
-          end,
-          transaction_class: VisitorOidcAuthorizationTransaction,
-          resource_type: "visitor",
-          client_id: "core-com-jp",
-          header_builder: ->(actor, host:, session_public_id:) do
-            begin
-              rp_headers = as_visitor_headers(actor, host: host, session_public_id: session_public_id)
-              rp_host = rp_headers["Host"]
-              rp_route =
-                begin
-                  Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-                rescue ActionController::RoutingError
-                  nil
-                end
-              rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-              if %w(base warp core edit).include?(rp_family) && rp_surface == "com"
-                rp_client_id =
-                  case rp_family
-                  when "base" then "base-#{rp_surface}-ww"
-                  when "edit" then "edit-org-ww"
-                  when "tech" then "tech-org-ww"
-                  else "#{rp_family}-#{rp_surface}-jp"
-                  end
-                rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                rp_client = OidcClientRegistry.find!(rp_client_id)
-                rp_key = [rp_client.client_id, rp_token.public_id]
-                @base_browser_rp_credentials ||= {}
-                if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                    !(rp_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                    ))
-                  rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-                  rp_now = Time.current
-                  rp_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                    refresh_token_expires_at: rp_now + 10.minutes,
-                  )
-                  rp_access = AuthenticationTokenService.encode(
-                    rp_token.actor_record, host: rp_host, resource_type: "visitor",
-                                           session_public_id: rp_token.public_id,
-                                           base_session_public_id: rp_token.public_id,
-                                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                           subject: OidcSubject.for(
-                                             rp_token.actor_record,
-                                             resource_type: "visitor",
-                                           ), client_id: rp_client.client_id,
-                  )
-                  @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-                end
-                if @base_browser_rp_credentials[rp_key]
-                  rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-                  rp_cookie = [
-                    rp_headers.fetch("Cookie"),
-                    "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-                    "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-                  ].join("; ")
-                  rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-                end
-              end
-              rp_headers
-            end
-          end,
-        },
       ].each do |surface|
         host = surface.fetch(:host)
         actor = surface.fetch(:actor)
@@ -1325,7 +1172,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         headers = surface.fetch(:header_builder).call(actor, host: host, session_public_id: token.public_id)
         surface_key = {
           "client" => "app",
-          "visitor" => "com",
           "operator" => "org",
         }.fetch(surface.fetch(:resource_type))
         sentry_feature = FeatureFlags::REGISTRY.fetch(:"sign_in_available_#{surface_key}").name
@@ -1583,24 +1429,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "base com authorize prompt create starts sign-up with sign-up intent" do
-    host = visa_host_for_test_surface(:com)
-    host!(host)
-    https!
-    params = oidc_authorize_params(client_id: "core-com-jp", resource_type: "visitor").merge(prompt: "create")
-
-    get("/oauth/authorize", params: params)
-
-    assert_response :see_other
-    target = URI.parse(jump_rt_url_from_location(response.location))
-    entry_ref = Rack::Utils.parse_nested_query(target.query.to_s).fetch("entry_ref")
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(reference: entry_ref, surface: "com")
-
-    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), target.host
-    assert_equal "/sign/up/sentry", target.path
-    assert_equal "sign_up", VisitorOidcAuthorizationTransaction.find(binding.authorization_transaction_id).intent
-  end
-
   test "base org authorize rejects prompt create without starting a ceremony" do
     host = visa_host_for_test_surface(:org)
     host!(host)
@@ -1641,13 +1469,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           resource_type: "client",
           surface: "app",
           transaction_model: ClientOidcAuthorizationTransaction,
-        },
-        {
-          host: visa_host_for_test_surface(:com),
-          client_id: "core-com-jp",
-          resource_type: "visitor",
-          surface: "com",
-          transaction_model: VisitorOidcAuthorizationTransaction,
         },
         {
           host: visa_host_for_test_surface(:org),
@@ -1760,11 +1581,11 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     sign_in_entry = URI.parse(auth.response.location)
 
     assert_equal "/sign/in", sign_in_entry.path
-    auth.get(sign_in_entry.request_uri)
+    auth.get(sign_in_entry.request_uri, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, auth.response.status
     assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
-    auth.get(auth.response.location)
+    auth.get(auth.response.location, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, auth.response.status
     confirmation = URI.parse(auth.response.location)
@@ -1776,7 +1597,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     auth.host!(auth_host)
     auth_return = URI.parse(jump_rt_url_from_location(response.location))
-    auth.get(auth_return.request_uri)
+    auth.get(auth_return.request_uri, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, auth.response.status,
                  "Auth return #{auth.request.host}#{auth.request.fullpath} answered #{auth.response.status}"
@@ -1845,7 +1666,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "credential changes reject previously issued OIDC results on all Base surfaces without root issuance" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       reset!
       actor, model, tokens, owner_key, base_host, auth_host, client_id, realm =
         case surface
@@ -1854,11 +1675,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_125_000_000_000,
           ), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
            visa_host_for_test_surface(:app), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app-jp", "client",]
-        when :com
-          [Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_125_000_000_000,
-          ), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
-           visa_host_for_test_surface(:com), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com-jp", "visitor",]
         when :org
           [Operator.create!(
             security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_125_000_000_000,
@@ -1895,11 +1711,11 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       sign_in_entry = URI.parse(auth.response.location)
 
       assert_equal "/sign/in", sign_in_entry.path
-      auth.get(sign_in_entry.request_uri)
+      auth.get(sign_in_entry.request_uri, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, auth.response.status
       assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
-      auth.get(auth.response.location)
+      auth.get(auth.response.location, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, auth.response.status
       confirmation = URI.parse(auth.response.location)
@@ -1911,7 +1727,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       assert_response :see_other
       auth.host!(auth_host)
       auth_return = URI.parse(jump_rt_url_from_location(response.location))
-      auth.get(auth_return.request_uri)
+      auth.get(auth_return.request_uri, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, auth.response.status
       assert_predicate binding.reload, :redeemed?
@@ -1976,11 +1792,11 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     sign_in_entry = URI.parse(auth.response.location)
 
     assert_equal "/sign/in", sign_in_entry.path
-    auth.get(sign_in_entry.request_uri)
+    auth.get(sign_in_entry.request_uri, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, auth.response.status
     assert_equal "/ceremony_bindings", URI.parse(auth.response.location).path
-    auth.get(auth.response.location)
+    auth.get(auth.response.location, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, auth.response.status
     confirmation = URI.parse(auth.response.location)
@@ -1992,7 +1808,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     auth.host!(auth_host)
     auth_return = URI.parse(jump_rt_url_from_location(response.location))
-    auth.get(auth_return.request_uri)
+    auth.get(auth_return.request_uri, headers: NAVIGATION_HEADERS)
 
     assert_equal 303, auth.response.status
     assert_predicate binding.reload, :redeemed?
@@ -2076,16 +1892,6 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal controller_name, route.fetch(:controller)
     assert_equal action, route.fetch(:action)
   end
-
-  def create_visitor!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::NOTHING)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-  end
   private
 end
 
@@ -2099,10 +1905,8 @@ class BaseOauthOidcAuthorityTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private
@@ -2210,15 +2014,6 @@ class BaseOauthOidcAuthorityTest
     ClientPasskeyStatus.find_or_create_by!(id: ClientPasskeyStatus::ACTIVE)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
   def ensure_user_token_reference_records!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
@@ -2233,29 +2028,6 @@ class BaseOauthOidcAuthorityTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -2266,13 +2038,6 @@ class BaseOauthOidcAuthorityTest
   def satisfy_staff_verification(token, scope: nil)
     _verification, raw_token = OperatorVerification.issue_for_token!(token: token)
     cookies[OperatorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
     mark_token_step_up_satisfied_for_test(token, scope: scope)
     true
   end
@@ -2290,8 +2055,7 @@ class BaseOauthOidcAuthorityTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM VISA_APP VISA_ORG VISA_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG VISA_APP VISA_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

@@ -6,7 +6,6 @@ class CookieSettingsAuthorityTest < ActionDispatch::IntegrationTest
   test "warp cookie settings links use each surface base authority and preserve only preference queries" do
     [
       [ENV.fetch("PUBLIC_WARP_SERVICE_URL"), ENV.fetch("PUBLIC_BASE_SERVICE_URL")],
-      [ENV.fetch("PUBLIC_WARP_CORPORATE_URL"), ENV.fetch("PUBLIC_BASE_CORPORATE_URL")],
       [ENV.fetch("PUBLIC_WARP_STAFF_URL"), ENV.fetch("PUBLIC_BASE_STAFF_URL")],
     ].each do |source_host, base_host|
       host! source_host

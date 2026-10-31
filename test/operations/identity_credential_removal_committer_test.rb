@@ -5,15 +5,135 @@ require "test_helper"
 class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  test "unbound Step-Up cannot release a Telephone contact" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
+    )
+    telephone = ClientTelephone.create!(
+      user: actor, number: "+819012345684", confirm_policy: "1",
+      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+    )
+    telephone.finalize_binding!
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_telephone",
+      last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true, last_step_up_credential_ref: "evidence",
+      last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+
+    assert_not IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: telephone, current_session: token, actor_context: context,
+    )
+    assert_predicate telephone.reload, :binding_effective?
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "unbound Step-Up cannot release an Email contact" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
+    )
+    email = ClientEmail.create!(
+      user: actor, address: "release-unbound-#{SecureRandom.hex(6)}@example.com", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true, last_step_up_credential_ref: "evidence",
+      last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+
+    assert_not IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: email, current_session: token, actor_context: context,
+    )
+    assert_predicate email.reload, :binding_effective?
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "a Step-Up bound to another TOTP cannot authorize removal" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
+    )
+    first = actor.client_totp_credentials.create!(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    target = actor.client_totp_credentials.create!(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true, last_step_up_credential_ref: "evidence",
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: first.public_id,
+    )
+
+    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
+    assert_equal ClientTotpCredentialStatus::ACTIVE, target.reload.user_identity_totp_credential_status_id
+    assert_predicate token.reload.last_step_up_at, :present?
+    token.update!(last_step_up_resource_ref: nil)
+
+    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
+    assert_equal ClientTotpCredentialStatus::ACTIVE, target.reload.user_identity_totp_credential_status_id
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "a login-blocked owner cannot remove a TOTP with earlier Step-Up" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    passkey = actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
+    )
+    credential = actor.client_totp_credentials.create!(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "passkey",
+      last_step_up_credential_ref: passkey.public_id, last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: credential.public_id,
+    )
+    actor.reload.update!(status_id: ClientStatus::RESERVED)
+    step_up_at = token.last_step_up_at
+
+    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+    assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
+    assert_equal step_up_at, token.reload.last_step_up_at
+  end
+
+  test "a revoked device cannot authorize TOTP credential removal" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
+    )
+    credential = actor.client_totp_credentials.create!(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.device_session_record!.revoke!
+
+    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+    assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
+  end
+
   test "pending Contacts are refused without releasing ownership or invalidating Root freshness" do
     [
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app,
        { address: "pending-removal@example.test" },],
       [Client, ClientTelephone, ClientToken, ClientContactAuditOutbox, :user_id, :app, { number: "+819012345687" }],
-      [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com,
-       { address: "pending-removal@example.test" },],
-      [Visitor, VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com,
-       { number: "+819012345687" },],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface, attributes|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
@@ -22,7 +142,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       previous = token.attributes.slice("last_step_up_at", "last_step_up_scope", "discard_at")
       contact_before = contact.attributes
       context = ActorValuesContext.empty.with(
-        subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+        subject: owner, actor_type: :client, tld: surface, surface: :base,
       )
 
       assert_no_difference -> { outbox_class.where(contact_ref: contact.public_id).count } do
@@ -40,14 +160,11 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   test "Contact release and Source intent roll back together without resurrecting invalidated authority" do
     [
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app],
-      [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       attributes = { owner_key => owner.id, :address => "rollback-release@example.test", :confirm_policy => "1" }
       if surface == :app
         attributes[:user_email_status_id] = ClientEmailStatus::VERIFIED
-      else
-        attributes[:visitor_email_status_id] = VisitorEmailStatus::VERIFIED
       end
       contact = contact_class.create!(attributes)
       contact.finalize_binding!
@@ -56,16 +173,18 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           webauthn_id: SecureRandom.uuid, public_key: "fallback",
           uv_verified_at: Time.current,
         )
-      else
-        owner.visitor_passkeys.create!(
-          webauthn_id: SecureRandom.uuid, public_key: "fallback",
-          uv_verified_at: Time.current,
-        )
       end
       token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
-      token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_email")
+      token.update!(
+        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
+        last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+        last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
+        last_step_up_user_verified: true,
+        last_step_up_credential_ref: ClientPasskey.find_by!(user_id: owner.id).public_id,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: contact.public_id,
+      )
       context = ActorValuesContext.empty.with(
-        subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+        subject: owner, actor_type: :client, tld: surface, surface: :base,
       )
       contact_class.transaction(requires_new: true) do
         assert IdentityCredentialRemovalCommitter.call!(
@@ -93,7 +212,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     freshness = token.last_step_up_at
     valid = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
     [nil, ActorValuesContext.empty.with(tld: :app), valid.with(subject: foreign),
-     valid.with(actor_type: :visitor), valid.with(tld: :com),].each do |context|
+     valid.with(actor_type: :operator), valid.with(tld: :org),].each do |context|
       error =
         assert_raises(ArgumentError) do
           IdentityCredentialRemovalCommitter.call!(
@@ -107,12 +226,10 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     end
   end
 
-  test "Contact release records one Source intent and an exact terminal retry adds none in app and com" do
+  test "Contact release records one Source intent and an exact terminal retry adds none" do
     [
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, "email", :app],
       [Client, ClientTelephone, ClientToken, ClientContactAuditOutbox, :user_id, "telephone", :app],
-      [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, "email", :com],
-      [Visitor, VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_id, "telephone", :com],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, kind, surface|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       attributes = (kind == "email") ? { address: "release@example.test" } : { number: "+819012345686" }
@@ -120,8 +237,6 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       case contact
       when ClientEmail then contact.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       when ClientTelephone then contact.update!(user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED)
-      when VisitorEmail then contact.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
-      when VisitorTelephone then contact.update!(visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED)
       else raise ArgumentError, "unsupported test contact"
       end
       contact.finalize_binding!
@@ -130,15 +245,19 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           webauthn_id: SecureRandom.uuid, public_key: "fallback",
           uv_verified_at: Time.current,
         )
-      else
-        owner.visitor_passkeys.create!(
-          webauthn_id: SecureRandom.uuid, public_key: "fallback",
-          uv_verified_at: Time.current,
-        )
       end
       token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
+      token.update!(
+        last_step_up_at: ClientToken.database_now,
+        last_step_up_scope: (kind == "email") ? "settings_email" : "settings_telephone",
+        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: ClientPasskey.find_by!(user_id: owner.id).public_id,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: contact.public_id,
+      )
       context = ActorValuesContext.empty.with(
-        subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+        subject: owner, actor_type: :client, tld: surface, surface: :base,
       )
       assert_difference -> { outbox_class.where(contact_ref: contact.public_id).count }, 1 do
         assert IdentityCredentialRemovalCommitter.call!(
@@ -162,7 +281,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   end
 
   test "a temporarily locked Email refuses last Passkey removal without clearing authority" do
-    %i(app com).each do |surface|
+    %i(app).each do |surface|
       actor, token, passkey, email =
         if surface == :app
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_111_000_000_000)
@@ -176,18 +295,6 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             uv_verified_at: Time.current,
           )
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), passkey, email]
-        else
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_111_000_000_000)
-          email = actor.visitor_emails.create!(
-            address: "locked-com-#{SecureRandom.hex(8)}@example.com",
-            visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-            step_up_otp_locked_until: Visitor.database_now + 1.hour,
-          )
-          passkey = actor.visitor_passkeys.create!(
-            webauthn_id: SecureRandom.uuid, public_key: "last-key",
-            uv_verified_at: Time.current,
-          )
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), passkey, email]
         end
       token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
       event = token.last_step_up_at
@@ -203,7 +310,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   end
 
   test "an expired Passkey or Email fallback cannot authorize removal of the usable Passkey" do
-    %i(app com).each do |surface|
+    %i(app).each do |surface|
       %i(passkey email).each_with_index do |fallback_kind, index|
         actor, token, target, fallback =
           if surface == :app
@@ -225,23 +332,6 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
                 )
               end
             [actor, ClientToken.create!(authentication_epoch: 0, user: actor), target, fallback]
-          else
-            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_109_000_000_000 + index)
-            recovery = actor.visitor_emails.create!(
-              address: "expired-com-#{SecureRandom.hex(8)}@example.com",
-              visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-            )
-            target = actor.visitor_passkeys.create!(
-              webauthn_id: SecureRandom.uuid, public_key: "usable-key",
-              uv_verified_at: Time.current,
-            )
-            fallback =
-              (fallback_kind == :passkey) ? actor.visitor_passkeys.create!(
-                webauthn_id: SecureRandom.uuid,
-                public_key: "expired-key", uv_verified_at: Time.current,
-              ) : recovery
-            recovery.update!(discard_at: Visitor.database_now)
-            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), target, fallback]
           end
         fallback.update!(discard_at: actor.class.database_now)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
@@ -249,7 +339,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
 
         assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
         assert_equal event, token.reload.last_step_up_at
-        expected_status = (surface == :app) ? ClientPasskeyStatus::ACTIVE : VisitorPasskeyStatus::ACTIVE
+        expected_status = ClientPasskeyStatus::ACTIVE
 
         assert_equal expected_status, target.reload.status_id
         assert_predicate token, :currently_usable?
@@ -258,7 +348,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   end
 
   test "removal deletes passkeys or retains terminal non-passkey credentials while preserving root sessions" do
-    %i(app com org totp).each do |surface|
+    %i(app org totp).each do |surface|
       actor, token, credential, terminal_status =
         case surface
         when :app, :totp
@@ -283,17 +373,6 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             end
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), credential,
            (surface == :totp) ? ClientTotpCredentialStatus::DELETED : ClientPasskeyStatus::DELETED,]
-        when :com
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-          actor.visitor_emails.create!(
-            address: "removal-#{SecureRandom.hex(8)}@example.com",
-            visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          ).finalize_binding!
-          credential = actor.visitor_passkeys.create!(
-            webauthn_id: SecureRandom.uuid, public_key: "removed-key",
-            uv_verified_at: Time.current,
-          )
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), credential, VisitorPasskeyStatus::DELETED]
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           # D-132: two Passkeys stay after the removal.
@@ -310,23 +389,24 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         end
       evidence_ref =
         case credential
-        when ClientPasskey, VisitorPasskey then credential.public_id
+        when ClientPasskey then credential.public_id
         when OperatorPasskey then credential.external_id
         when ClientTotpCredential then actor.client_passkeys.active.first!.public_id
         else raise ArgumentError, "unsupported credential"
         end
       evidence_surface = (surface == :totp) ? :app : surface
       token.update!(
-        last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+        last_step_up_at: Time.current, last_step_up_scope: (surface == :totp) ? "settings_totp" : "settings_passkey",
+        last_step_up_method: "passkey",
         last_step_up_credential_ref: evidence_ref, last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{evidence_surface}",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
         last_step_up_full_reauthentication: false,
+        last_step_up_resource_ref: (surface == :totp) ? credential.public_id : evidence_ref,
       )
       transaction_model, ceremony_model =
         case actor
         when Client then [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession]
-        when Visitor then [VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession]
         when Operator then [OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession]
         end
       unfinished = transaction_model.create_transaction!(
@@ -344,12 +424,11 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
 
       assert removed, "surface=#{surface}"
 
-      if credential.is_a?(ClientPasskey) || credential.is_a?(VisitorPasskey) || credential.is_a?(OperatorPasskey)
+      if credential.is_a?(ClientPasskey) || credential.is_a?(OperatorPasskey)
         assert_raises(ActiveRecord::RecordNotFound) { credential.reload }
         outbox_class =
           case credential
           when ClientPasskey then ClientPasskeyAuditOutbox
-          when VisitorPasskey then VisitorPasskeyAuditOutbox
           when OperatorPasskey then OperatorPasskeyAuditOutbox
           end
 
@@ -420,7 +499,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       last_step_up_credential_ref: credential.external_id, last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_full_reauthentication: false,
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: credential.external_id,
     )
     timestamp = token.last_step_up_at
 

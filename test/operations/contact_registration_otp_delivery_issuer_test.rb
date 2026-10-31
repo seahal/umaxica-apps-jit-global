@@ -4,7 +4,52 @@ require "test_helper"
 
 # Boolean snapshots avoid exposing OTP, destination and root material on failure.
 class ContactRegistrationOtpDeliveryIssuerTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
+  test "registration delivery rejects a token rebound after its device was read" do
+    %i(email telephone).each do |channel|
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
+      token.rotate_refresh_token!
+      contact =
+        if channel == :email
+          actor.client_emails.create!(raw_address: "delivery-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1")
+        else
+          actor.client_telephones.create!(
+            raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
+            confirm_policy: "1", confirm_using_mfa: "1",
+          )
+        end
+      issuer, guard, source =
+        if channel == :email
+          [EmailCredentialRegistrationOtpIssuer, EmailCredentialRegistrationOtpDeliveryGuard, { email: contact }]
+        else
+          [TelephoneCredentialRegistrationOtpIssuer, TelephoneCredentialRegistrationOtpDeliveryGuard,
+           { telephone: contact },]
+        end
+      issued = issuer.call(actor: actor, token: token, browser_nonce: SecureRandom.urlsafe_base64(32), **source)
+      stale_token = ClientToken.find(token.id)
+      replacement = ClientToken.create!(authentication_epoch: 0, user: actor)
+      new_device = replacement.device_session_record!
+      ClientToken.find(token.id).update!(device_session_id: new_device.id)
+      new_device.update!(current_refresh_token_id: token.id)
+      lookup = ClientToken.method(:find_by)
+      find_stale =
+        lambda do |**arguments|
+          (arguments == { public_id: token.public_id }) ? stale_token : lookup.call(**arguments)
+        end
+      delivered = false
+      destination = (channel == :email) ? contact.address : contact.number
+
+      ClientToken.stub(:find_by, find_stale) do
+        assert_not guard.call(
+          transaction: issued.transaction, generation: issued.transaction.otp_generation,
+          destination: destination, code: issued.code, **source,
+        ) { delivered = true }
+      end
+      assert_not delivered
+    end
+  end
+
+  %w(app).each do |surface|
     %i(email telephone).each do |channel|
       %i(valid_code missing_code stale_generation superseded_generation wrong_destination wrong_code
          verified released revoked device_revoked flow_expired consumed missing_challenge
@@ -28,22 +73,6 @@ class ContactRegistrationOtpDeliveryIssuerTest < ActiveSupport::TestCase
                 end
               [owner, root, candidate, (channel == :email) ? ClientEmailCeremonyTransaction :
                 ClientTelephoneCeremonyTransaction,]
-            when "com"
-              owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-              root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-              candidate =
-                if channel == :email
-                  owner.visitor_emails.create!(
-                    raw_address: "delivery-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
-                  )
-                else
-                  owner.visitor_telephones.create!(
-                    raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-                    confirm_policy: "1", confirm_using_mfa: "1",
-                  )
-                end
-              [owner, root, candidate, (channel == :email) ? VisitorEmailCeremonyTransaction :
-                VisitorTelephoneCeremonyTransaction,]
             end
           token.rotate_refresh_token!
           nonce = SecureRandom.urlsafe_base64(32)
@@ -107,17 +136,8 @@ class ContactRegistrationOtpDeliveryIssuerTest < ActiveSupport::TestCase
                 actor.client_emails.create!(
                   raw_address: "foreign-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
                 )
-              when ["com", :email]
-                actor.visitor_emails.create!(
-                  raw_address: "foreign-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
-                )
               when ["app", :telephone]
                 actor.client_telephones.create!(
-                  raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-                  confirm_policy: "1", confirm_using_mfa: "1",
-                )
-              when ["com", :telephone]
-                actor.visitor_telephones.create!(
                   raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
                   confirm_policy: "1", confirm_using_mfa: "1",
                 )

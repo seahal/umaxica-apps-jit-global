@@ -7,6 +7,7 @@ class Auth::App::Verification::EmailsController < ::Auth::App::ApplicationContro
   include AuthStepUpCeremonyContext
 
   AUTHENTICATION_MODE = :open
+  sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
   declare_authentication_mode! :open
 
   NEW_COMPONENT = "auth/app/verification/emails/new"

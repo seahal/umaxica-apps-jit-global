@@ -3,13 +3,11 @@
 require "test_helper"
 
 class AcceptanceWu02IssuerConsistencyTest < ActiveSupport::TestCase
-  fixtures :clients, :visitors, :operators
+  fixtures :clients, :operators
 
   test "A02-4: discovery, ID Token, authorization response and Logout Token agree per realm" do
     realms = [
       ["client", "app", clients(:one), ClientToken, OpAppGrant, OpAppAuthorityStopParticipant, :user, :client_token],
-      ["visitor", "com", visitors(:reserved_visitor), VisitorToken, OpComGrant, OpComAuthorityStopParticipant,
-       :visitor, :visitor_token,],
       ["operator", "org", operators(:one), OperatorToken, OpOrgGrant, OpOrgAuthorityStopParticipant,
        :staff, :operator_token,],
     ]

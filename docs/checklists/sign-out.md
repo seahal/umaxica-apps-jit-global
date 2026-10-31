@@ -35,7 +35,9 @@ behavior, not evidence that a deployment has passed acceptance.
   `sid` tombstone and matching local grant revocation before answering success.
   HTTP 200 and 204 acknowledge delivery; other responses follow the retry or refusal policy.
   Discovery advertises session-aware back-channel logout, and the ID Token and Logout Token use the
-  grant public ID as `sid`.
+  grant public ID as `sid`. APP/ORG RP receivers reject a Logout Token whose expiry is not later
+  than its issuance time or whose lifetime exceeds five minutes; clock skew does not create a
+  validity interval for a token with no interval.
 - SIGNOUT-8: A rolled-back stop returns an error, retains Visa cookies and the pending request, and
   never redirects as success. An unknown commit returns 503 with the same state retained; a retry
   rechecks the same device. Once a stop is known committed, later presentation or redirect failure

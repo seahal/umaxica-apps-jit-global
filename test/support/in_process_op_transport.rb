@@ -78,8 +78,9 @@ module TestSupport
       )
 
       # WU-02: protocol endpoints live on Visa; the owner APIs (/api/v0/...) stay on the Base hosts.
+      # The corporate (visitor) identity surface is retired, so only account resource types remain.
       hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-      %w(client visitor operator).any? do |type|
+      %w(client operator).any? do |type|
         [URI.parse(OidcIssuer.for_resource_type(type)).host, hosts.base_for_resource_type(type).host].include?(uri.host)
       end
     rescue URI::InvalidURIError

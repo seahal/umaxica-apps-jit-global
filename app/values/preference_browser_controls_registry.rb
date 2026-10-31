@@ -16,7 +16,7 @@
 # Declaring a path here does not route it; the route contract tests hold each listed family's
 # routes to these paths.
 #
-# See adr/preference-browser-transport-family-capability.md.
+# See adr/preference-realm-jwt-and-host-bound-browser-binding.md.
 module PreferenceBrowserControlsRegistry
   Controls = Data.define(:theme_endpoint_path, :cookie_endpoint_path)
 
@@ -28,12 +28,14 @@ module PreferenceBrowserControlsRegistry
 
   MATRIX = {
     "base" => { "app" => API_V0, "com" => API_V0, "org" => API_V0 }.freeze,
-    "auth" => { "app" => API_V0, "com" => API_V0, "org" => API_V0 }.freeze,
-    "core" => { "app" => API_V0, "com" => API_V0, "org" => API_V0 }.freeze,
-    "warp" => { "app" => API_V0, "com" => API_V0, "org" => API_V0 }.freeze,
+    # Only Base owns browser Preference writes. Other families render verified display state but
+    # do not offer controls that would need a non-authoritative writer.
+    "auth" => { "app" => NONE, "org" => NONE }.freeze,
+    "core" => { "app" => NONE, "org" => NONE }.freeze,
+    "warp" => { "app" => NONE, "com" => NONE, "org" => NONE }.freeze,
     "palm" => { "app" => NONE }.freeze,
     "edit" => { "org" => NONE }.freeze,
-    "visa" => { "app" => NONE, "com" => NONE, "org" => NONE }.freeze,
+    "visa" => { "app" => NONE, "org" => NONE }.freeze,
   }.freeze
 
   module_function

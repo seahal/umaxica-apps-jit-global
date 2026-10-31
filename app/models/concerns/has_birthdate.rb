@@ -36,7 +36,7 @@ module HasBirthdate
     return nil unless bday
 
     age = date.year - bday.year
-    before_birthday = ([date.month, date.day] <=> [bday.month, bday.day]).negative?
+    before_birthday = date < bday.advance(years: age)
 
     before_birthday ? age - 1 : age
   end

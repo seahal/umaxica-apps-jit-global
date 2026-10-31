@@ -18,7 +18,7 @@ class SignInSelectorParticipant
   end
 
   def auto_commit_single!
-    unless cycle.is_a?(ClientSignInFlow) || cycle.is_a?(VisitorSignInFlow) || cycle.is_a?(OperatorSignInFlow)
+    unless cycle.is_a?(ClientSignInFlow) || cycle.is_a?(OperatorSignInFlow)
       raise InvalidCycle, "unsupported sign-in cycle"
     end
 
@@ -49,7 +49,6 @@ class SignInSelectorParticipant
   def actor_class_matches?
     case cycle
     when ClientSignInFlow then resolved_actor.is_a?(Client)
-    when VisitorSignInFlow then resolved_actor.is_a?(Visitor)
     when OperatorSignInFlow then resolved_actor.is_a?(Operator)
     else false
     end

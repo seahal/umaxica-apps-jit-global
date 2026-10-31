@@ -1,0 +1,8 @@
+# Secret reservation racing device revocation
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had extensive uncommitted changes affecting the check.
+- Added a nontransactional test using separate PostgreSQL backend connections. One worker locks the Client device, the other starts a manual Secret reservation, and the test observes the reservation connection waiting on a database lock before the first worker revokes the device and commits. The reservation then returns its device-unavailable refusal; no issuance or Secret audit outbox row for that operation exists.
+- The first probe's post-commit device assertion saw a stale result from the main thread's query cache. The assertion now reads with the query cache disabled; this was a test observation issue, not an established application defect. The final focused run passed (1 run, 9 assertions).
+- The concurrency and manual reservation issuer files passed together before formatting-only lint fixes (16 runs, 335 assertions). After formatting, the focused case passed again; RuboCop and scoped `git diff --check` passed.
+- This covers the revocation-first ordering for this one APP manual reservation path on the local test databases. It does not establish the opposite ordering, other writers, a network outage, or atomicity across databases. The full-suite record `2026-10-31-two-full-suite-after-corrections-N5R8.md` predates this test addition.
+- Strengthened the wait observation to check `pg_blocking_pids` for the specific revoker backend, rather than only a generic lock wait. The focused case again passed (1 run, 9 assertions) and RuboCop passed.

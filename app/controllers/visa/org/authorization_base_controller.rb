@@ -10,6 +10,14 @@ module Visa
       include ::OauthAuthorizeRequestSizeLimit
       include ::OidcAuthorizationResultPost
       include ::OidcAuthorizationRequestErrors
+      include ::PreferenceWriteBoundary
+
+      PREFERENCE_WRITE_CONTEXT = {
+        surface_key: "visa/org",
+        realm: "org",
+        preference_model: OrgPreference,
+        issuer_id: "preference_org",
+      }.freeze
 
       abstract!
 
@@ -23,6 +31,8 @@ module Visa
       private
 
       def oidc_result_surface = "org"
+
+      def preference_write_context = PREFERENCE_WRITE_CONTEXT
 
       def authorization_session_sufficient?
         return false unless logged_in?
@@ -46,11 +56,12 @@ module Visa
       def issue_authorization_code!(resource, params_hash: authorize_params, authentication_event_at: nil,
                                     session_token: current_session, auth_method: nil, acr: nil,
                                     authorization_transaction_ref: nil)
+        authentication_methods = Actor.authn.amr unless auth_method
         result = ::OidcAuthorizeCoordinator.call(
           params: params_hash,
           resource: resource,
           session_token: session_token,
-          auth_method: auth_method || Actor.authn.amr.first,
+          auth_method: auth_method || authentication_methods.first,
           acr: acr || Actor.authn.acr,
           authentication_event_at: authentication_event_at || current_authentication_event_at,
           authorization_transaction_ref: authorization_transaction_ref,
@@ -117,6 +128,12 @@ module Visa
           json: { error: "invalid_request", error_description: "login_failed" },
           status: :bad_request,
         ) unless finalization[:status] == :success
+
+        begin
+          write_preference!(operation: :sign_in, actor: resource, submitted: {})
+        rescue StandardError => e
+          log_visa_preference_write_failure(:sign_in, e)
+        end
 
         issue_authorization_code!(
           resource,

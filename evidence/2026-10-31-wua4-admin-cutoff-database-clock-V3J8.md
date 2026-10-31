@@ -1,0 +1,7 @@
+# Administrative access cutoff writer clock
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had substantial uncommitted changes affecting the implementation and tests.
+- A service test moved the application clock one hour behind the Client writer database. Before the change, the lock cutoff was behind the sampled database time: 1 run, 2 assertions, 1 failure. An earlier command accidentally selected the class line and ran 0 tests; the test-line command was then used.
+- Lock and unlock now sample `account.class.database_now` after obtaining the row lock and completing checks. The focused test covers both actions under the injected application clock skew; the separate contention test now samples its marker from the same writer database.
+- `PARALLEL_WORKERS=1 bin/rails test test/concurrency/administrative_access_lock_clock_test.rb test/services/administrative_access_lock_test.rb test/concurrency/operator_availability_serialization_test.rb test/models/concerns/administrative_access_lockable_test.rb test/operations/enforcement_case_apply_failure_test.rb test/operations/enforcement_case_apply_concurrency_test.rb test/operations/enforcement_case_end_missing_principal_test.rb test/operations/enforcement_case_apply_authority_test.rb`: 27 runs, 118 assertions, no failures, errors or skips. Scoped RuboCop passed after formatting fixes.
+- Token-issuer clock synchronization, Operator cutoff contention, actual token acceptance at the boundary, real OP delivery and the full suite were not verified.

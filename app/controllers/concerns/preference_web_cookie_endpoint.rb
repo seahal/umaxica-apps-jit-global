@@ -6,8 +6,6 @@ require "jwt"
 module PreferenceWebCookieEndpoint
   extend ActiveSupport::Concern
   include PreferenceBase
-  include PreferenceConsentedBuffer
-  include PreferenceResourceSync
 
   COOKIE_CONSENT_FIELDS = %w(consented functional performant targetable).freeze
 
@@ -16,62 +14,165 @@ module PreferenceWebCookieEndpoint
   def cookie_consent_state
     return @cookie_consent_state_override if @cookie_consent_state_override
 
-    payload = decoded_preference_payload
-    preferences = payload.is_a?(Hash) ? payload["preferences"] : nil
+    return anonymous_com_cookie_consent_state if anonymous_com_claim_shape?(preference_class)
+    return anonymous_realm_cookie_consent_state if %w(AppPreference OrgPreference).include?(preference_class.name)
 
-    if preferences.is_a?(Hash)
-      {
-        consented: ActiveModel::Type::Boolean.new.cast(preferences["consented"]),
-        functional: ActiveModel::Type::Boolean.new.cast(preferences["functional"]),
-        performant: ActiveModel::Type::Boolean.new.cast(preferences["performant"]),
-        targetable: ActiveModel::Type::Boolean.new.cast(preferences["targetable"]),
-      }
-    else
-      { consented: false, functional: false, performant: false, targetable: false }
+    raise PreferenceBase::ResolutionError, "unsupported Preference consent model"
+  end
+
+  def anonymous_com_cookie_consent_state
+    @com_consent_decision_available = false
+    payload = decoded_preference_payload
+    public_id = PreferenceToken.extract_public_id(payload)
+    empty = { consented: false, functional: false, performant: false, targetable: false }
+    return empty if public_id.blank?
+
+    preference_class.connection_class_for_self.connected_to(role: :reading) do
+      preference = preference_class.find_by(
+        public_id: public_id, status_id: ComPreferenceStatus::ACTIVE,
+      )
+      now = preference_class.database_now
+      if preference&.issuance_active_at?(now: now) && now.to_i < payload.fetch("exp")
+        cookie = ComPreferenceCookie.find_by(preference_id: preference.id)
+        if cookie
+          @com_consent_decision_available = ComPreferenceConsentReceipt.exists?(preference_id: preference.id) &&
+            browser_binding_matches?(cookie)
+          return readable_cookie_state(cookie)
+        end
+      end
     end
-  rescue StandardError => e
-    Rails.logger.warn("[PreferenceWebCookieEndpoint] cookie_consent_state fallback: #{e.class}")
-    { consented: false, functional: false, performant: false, targetable: false }
+    empty
   end
 
   def show_banner?
-    !cookie_consent_state.fetch(:consented)
-  end
+    state = cookie_consent_state
+    return !@com_consent_decision_available if anonymous_com_claim_shape?(preference_class)
+    return !@cookie_consent_decision_available if anonymous_preference_claim_shape?(preference_class)
 
-  def set_consented_buffer_cookie!
-    set_preference_consented_buffer!(
-      consented: extract_cookie_consented(decoded_preference_payload),
-      expires_at: refresh_token_expires_at || PreferenceBase::REFRESH_TOKEN_TTL.from_now,
-    )
-  end
-
-  def sync_consented_buffer_cookie_safely!
-    set_consented_buffer_cookie!
-  rescue StandardError => e
-    Rails.logger.warn("[PreferenceWebCookieEndpoint] buffer sync skipped: #{e.class}")
+    !state.fetch(:consented)
   end
 
   # `requested` is an already read consent decision (`cookie_consent_request`).
   def apply_cookie_consent_update!(requested)
-    ensure_preference_access_token_audience_for_write!
-
-    if decoded_preference_payload&.dig("public_id").blank?
-      apply_buffer_only_cookie_consent!(requested)
+    if anonymous_com_claim_shape?(preference_class)
+      persist_anonymous_com_cookie_consent!(requested)
+      return
+    end
+    if anonymous_preference_claim_shape?(preference_class)
+      persist_anonymous_realm_cookie_consent!(requested)
       return
     end
 
-    persist_cookie_consent!(requested)
+    raise PreferenceBase::ResolutionError, "unsupported Preference consent model"
   rescue StandardError => e
     Rails.logger.error("[PreferenceWebCookieEndpoint] consent update failed: #{e.class}")
     raise
   end
 
-  def apply_buffer_only_cookie_consent!(attrs)
-    set_preference_consented_buffer!(
-      consented: attrs.fetch(:consented),
-      expires_at: PreferenceBase::REFRESH_TOKEN_TTL.from_now,
+  def persist_anonymous_com_cookie_consent!(attrs)
+    raw_binding = cookies[PreferenceBrowserBinding::COOKIE_NAME]
+
+    issuance =
+      write_preference!(
+        operation: :save, actor: Actor.current,
+        submitted: attrs,
+      ) do |preference, decision_time, submitted|
+        raw_binding = PreferenceBrowserBinding.mint_value unless PreferenceBrowserBinding.valid_value?(raw_binding)
+        cookie = load_or_create_preference_cookie!(preference)
+        require_matching_existing_browser_binding!(cookie, raw_binding)
+        receipt = ComPreferenceConsentReceipt.find_or_initialize_by(preference_id: preference.id)
+        if receipt.new_record?
+          cookie.update!({ consented: false, functional: false, performant: false, targetable: false }.merge(submitted))
+        else
+          cookie.update!(submitted)
+        end
+        receipt.update!(version: SecureRandom.uuid, recorded_at: decision_time)
+        store_com_browser_binding!(preference.id, raw_binding)
+      end
+
+    write_browser_binding_cookie(raw_binding, expires_at: issuance.expires_at)
+    @cookie_consent_state_override = attrs.slice(:consented, :functional, :performant, :targetable)
+  end
+
+  def anonymous_realm_cookie_consent_state
+    @cookie_consent_decision_available = false
+    empty = { consented: false, functional: false, performant: false, targetable: false }
+
+    family, surface = controller_path.split("/", 3)
+    if %w(auth core warp).include?(family)
+      raise PreferenceBase::ResolutionError, "Preference consent reads belong to Base" unless
+        surface == preference_realm_name
+
+      return empty
+    end
+    raise PreferenceBase::ResolutionError, "unsupported Preference consent reader: #{family.inspect}" unless
+      family == "base" && surface == preference_realm_name
+
+    payload = decoded_preference_payload
+    public_id = PreferenceToken.extract_public_id(payload)
+    return empty if public_id.blank?
+
+    realm = preference_realm_name
+    prefix = realm.capitalize
+    preference_class.connection_class_for_self.connected_to(role: :reading) do
+      preference = preference_class.find_by(public_id:, status_id: preference_class::ACTIVE_STATUS_ID)
+      now = preference_class.database_now
+      return empty unless preference&.issuance_active_at?(now:) && now.to_i < payload.fetch("exp")
+
+      cookie = PreferenceClassRegistry.cookie_class(prefix).find_by(preference_id: preference.id)
+      return empty unless cookie
+
+      receipt_class = realm == "app" ? AppPreferenceConsentReceipt : OrgPreferenceConsentReceipt
+      binding_class = realm == "app" ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding
+      binding = binding_class.find_by(preference_id: preference.id)
+      @cookie_consent_decision_available = receipt_class.exists?(preference_id: preference.id) && binding &&
+        PreferenceBrowserBinding.matches?(cookies[PreferenceBrowserBinding::COOKIE_NAME], binding.digest)
+      return empty unless @cookie_consent_decision_available
+
+      readable_cookie_state(cookie)
+    end
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+    Rails.logger.error(
+      JitLogEvent.format("preference.consent.read_failed", realm:, error_class: e.class.name),
+    )
+    raise PreferenceBase::ResolutionError, "Preference consent state is unavailable"
+  end
+
+  def persist_anonymous_realm_cookie_consent!(attrs)
+    write_preference!(
+      operation: :save, actor: preference_write_actor,
+      submitted: attrs,
     )
     @cookie_consent_state_override = attrs.slice(:consented, :functional, :performant, :targetable)
+  end
+
+  def readable_realm_web_push
+    payload = decoded_preference_payload
+    public_id = PreferenceToken.extract_public_id(payload)
+    return "disabled" if public_id.blank?
+
+    realm = preference_realm_name
+    preference_class.connection_class_for_self.connected_to(role: :reading) do
+      preference = preference_class.find_by(public_id:, status_id: preference_class::ACTIVE_STATUS_ID)
+      now = preference_class.database_now
+      return "disabled" unless preference&.issuance_active_at?(now:) && now.to_i < payload.fetch("exp")
+
+      binding_class = realm == "app" ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding
+      binding = binding_class.find_by(preference_id: preference.id)
+      return "disabled" unless binding &&
+        PreferenceBrowserBinding.matches?(cookies[PreferenceBrowserBinding::COOKIE_NAME], binding.digest)
+
+      web_push_class = realm == "app" ? AppPreferenceWebPush : OrgPreferenceWebPush
+      option_class = realm == "app" ? AppPreferenceWebPushOption : OrgPreferenceWebPushOption
+      web_push = web_push_class.find_by(preference_id: preference.id)
+      option = option_class.find_by(id: web_push&.option_id)
+      option&.name || "disabled"
+    end
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+    Rails.logger.error(
+      JitLogEvent.format("preference.web_push.read_failed", realm:, error_class: e.class.name),
+    )
+    raise PreferenceBase::ResolutionError, "Preference Web Push state is unavailable"
   end
 
   # SSOT decode point.
@@ -83,15 +184,6 @@ module PreferenceWebCookieEndpoint
     nil
   end
 
-  def extract_cookie_consented(payload)
-    return false unless payload.is_a?(Hash)
-
-    preferences = payload["preferences"]
-    return false unless preferences.is_a?(Hash)
-
-    ActiveModel::Type::Boolean.new.cast(preferences["consented"])
-  end
-
   def decoded_preference_payload
     @decoded_preference_payload ||=
       begin
@@ -100,32 +192,8 @@ module PreferenceWebCookieEndpoint
       end
   end
 
-  def refresh_token_expires_at
-    public_id = decoded_preference_payload&.dig("public_id")
-    record = find_preference_by_public_id(public_id)
-    expires_at = record&.expires_at
-    return expires_at if expires_at.present? && !expires_at.is_a?(Float)
-
-    nil
-  rescue StandardError => e
-    Rails.logger.warn("[PreferenceWebCookieEndpoint] refresh expiry fallback: #{e.class}")
-    nil
-  end
-
-  def find_preference_by_public_id(public_id)
-    return nil if public_id.blank?
-
-    with_preference_connection(:reading) do
-      preference_class.find_by(public_id: public_id)
-    end
-  end
-
   def preference_class
     @preference_class ||= PreferenceClassRegistry.for_controller_path(controller_path)
-  end
-
-  def refresh_token_value
-    cookies[refresh_token_cookie_name]
   end
 
   # true or false for an accepted spelling, nil for anything else (including nil itself).
@@ -171,45 +239,11 @@ module PreferenceWebCookieEndpoint
 
   def default_cookie_consent_attrs(consented)
     {
-      consented: true,
+      consented: consented,
       functional: consented,
       performant: consented,
       targetable: consented,
     }
-  end
-
-  def persist_cookie_consent!(attrs)
-    public_id = decoded_preference_payload&.dig("public_id")
-    raise RuntimeError, "missing_preference_access_token" if public_id.blank?
-
-    with_preference_connection(:writing) do
-      preference_class.transaction do
-        preference = preference_class.lock.find_by(public_id: public_id)
-        raise ActiveRecord::RecordNotFound, "preference_not_found" if preference.blank?
-
-        @preferences = preference
-        cookie = load_or_create_preference_cookie!(preference)
-        attrs = attrs.dup
-        attrs[:consented_at] = attrs[:consented] ? (cookie.consented_at || Time.current) : nil
-
-        resource_pref = preference_write_resource_preference!
-        authorize_resource_preference_write!(resource_pref)
-        write_resource_preference_cookie!(resource_pref, attrs) if resource_pref
-
-        cookie.update!(attrs)
-
-        preference.reload
-        issue_access_token_from(preference)
-        raise RuntimeError, "failed_to_issue_preference_access_token" if @preference_payload.blank?
-
-        @cookie_consent_state_override = attrs.slice(:consented, :functional, :performant, :targetable)
-        set_preference_consented_buffer!(
-          consented: @cookie_consent_state_override.fetch(:consented),
-          expires_at: consented_buffer_expires_at(preference),
-        )
-        @decoded_preference_payload = nil
-      end
-    end
   end
 
   def load_or_create_preference_cookie!(preference)
@@ -227,10 +261,4 @@ module PreferenceWebCookieEndpoint
     relation.create!(default_attrs)
   end
 
-  def consented_buffer_expires_at(preference)
-    expires_at = preference&.expires_at
-    return expires_at if expires_at.present? && !expires_at.is_a?(Float)
-
-    PreferenceBase::REFRESH_TOKEN_TTL.from_now
-  end
 end

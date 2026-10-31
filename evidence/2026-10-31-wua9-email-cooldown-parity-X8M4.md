@@ -1,0 +1,12 @@
+# Email sign-in source-cooldown enumeration
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`.
+- The worktree contained uncommitted changes affecting this result.
+- An admitted real-address request with an active source cooldown returned 429 while an unknown address returned 302 to the code-entry page (1 run, 3 assertions, 1 failure). This was an account-existence distinction.
+- The source cooldown now suppresses dispatch while returning the same public continuation as an unknown address. A bounded application log records the suppression without an address or code. The independent per-browser same-address cooldown still returns 429 on the next request for either case.
+- `PARALLEL_WORKERS=1 bin/rails test test/integration/email_sign_in_enumeration_parity_test.rb test/controllers/auth/app/in/emails_controller_test.rb:640` passed: 5 runs, 103 assertions, 0 failures, 0 errors, 0 skips. The new public-boundary test compares status, destination and body on the first request and status/body/Retry-After on the repeated request, and asserts no queued delivery for the source-cooled and unknown addresses.
+- Scoped `git diff --check` passed. RuboCop on the controller and parity file still reports pre-existing assertion-layout and multiple-assertion offenses elsewhere in the parity file; the one new controller layout offense was corrected. Cross-browser global cooldown equivalence, timing distributions and the remaining XDB-14 failure matrix were not established.
+- A subsequent controller-only RuboCop run passed: 1 file, no offenses.
+- The parity assertion was then tightened from the redirect path to the full request URI including its query; the focused test passed: 1 run, 13 assertions, 0 failures and 0 errors. This case uses no preexisting `pt`; other signed-continuation variants remain unverified.
+- Superseding correction: the temporary implementation and its added regression test were subsequently removed from the worktree because the selected public response change was not presented for the explicit request/response-shape approval required by `generic/data-shape-design.mdc`. The reproduced 429/302 distinction remains in current code. The green results above describe the temporary implementation only, not the current worktree.
+- After reverting that temporary response change, the pre-existing parity suite and source-cooldown controller test passed: 4 runs, 90 assertions, 0 failures and 0 errors. Those existing tests do not compare an active source cooldown for a known address against an unknown address.

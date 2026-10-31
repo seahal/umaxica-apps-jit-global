@@ -171,32 +171,6 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
     end
   end
 
-  test "database rejects revoked avatar individual binding before assignment" do
-    handle = Handle.create!(
-      handle: "constraint-individual-revoke-#{SecureRandom.hex(4)}",
-      handle_status_id: HandleStatus::ACTIVE,
-      cooldown_until: Time.current,
-      is_system: false,
-    )
-    avatar = AvatarTestFactory.create!(
-      moniker: "Indiv Revoke",
-      active_handle: handle,
-      capability_id: AvatarCapability::NORMAL,
-    )
-    now = AvatarRecord.lease_connection.quote(Time.current)
-    assigned_at = AvatarRecord.lease_connection.quote(Time.utc(2026, 7, 3, 12, 0, 0))
-    revoked_at = AvatarRecord.lease_connection.quote(Time.utc(2026, 7, 3, 11, 0, 0))
-
-    assert_raises(ActiveRecord::StatementInvalid) do
-      AvatarRecord.lease_connection.execute(<<~SQL.squish)
-        INSERT INTO avatar_individual_bindings
-          (public_id, avatar_id, individual_id, assigned_at, revoked_at, created_at, updated_at)
-        VALUES
-          ('#{Nanoid.generate(size: 21)}', #{avatar.id}, 950001, #{assigned_at}, #{revoked_at}, #{now}, #{now})
-      SQL
-    end
-  end
-
   test "database rejects duplicate active avatar persona relation" do
     handle = Handle.create!(
       handle: "constraint-persona-unique-#{SecureRandom.hex(4)}",

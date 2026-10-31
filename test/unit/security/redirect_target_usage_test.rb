@@ -14,8 +14,6 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
   ALLOW_OTHER_HOST_ALLOWLIST = %w(
     app/controllers/auth/app/ceremony_bindings_controller.rb
     app/controllers/auth/app/verification/cancellations_controller.rb
-    app/controllers/auth/com/ceremony_bindings_controller.rb
-    app/controllers/auth/com/verification/cancellations_controller.rb
     app/controllers/auth/org/ceremony_bindings_controller.rb
     app/controllers/auth/org/verification/cancellations_controller.rb
     app/controllers/base/app/identity/totps_controller.rb

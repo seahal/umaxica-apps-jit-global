@@ -5,13 +5,12 @@
 # Enforcement Case model class for the realm segment in the route
 # (/support/{app,com,org}/enforcement_cases). A realm-scoped route can only
 # ever resolve to that realm's own Case class -- there is no code path by
-# which an app-scoped request can reach com or org data.
+# which an app-scoped request can reach org data.
 module EnforcementCaseRealmResolvable
   extend ActiveSupport::Concern
 
   CASE_CLASS_BY_REALM = {
     "app" => AppEnforcementCase,
-    "com" => ComEnforcementCase,
     "org" => OrgEnforcementCase,
   }.freeze
 

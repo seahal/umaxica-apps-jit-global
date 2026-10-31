@@ -10,7 +10,6 @@ class OidcTokenExchangeBoundaryTest < ActiveSupport::TestCase
 
     assert_no_match(/ClientToken\.create!?/, source)
     assert_no_match(/OperatorToken\.create!?/, source)
-    assert_no_match(/VisitorToken\.create!?/, source)
     assert_no_match(/create_login_token_record/, source)
     assert_no_match(/\blog_in\b/, source)
   end

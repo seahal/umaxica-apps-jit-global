@@ -413,11 +413,16 @@ Preference decisions:
 - `adr/org-actor-operator-naming.md`
 - `adr/preference-setting-configurator-url-boundaries.md` — superseded where it assigns preference
   authority outside `acme/www`; retained for historical URL-boundary context.
-- `adr/preference-relogin-reconciliation-record-recency.md`
+- `adr/preference-relogin-reconciliation-record-recency.md` — superseded by the one-directional
+  sign-in application decision; retained for history.
+- `adr/preference-sign-in-application-is-one-directional.md`
+- `adr/preference-visa-writer-boundary.md` — Visa applies the actor's explicit display snapshot
+  after sign-in commits and rebuilds anonymous state after logout commits; Preference failures do
+  not change authentication outcomes.
 - `adr/preference-extended-option-reference-tables.md`
-- `adr/preference-browser-transport-family-capability.md` — theme and cookie controls are a
-  family-and-surface capability with a server-declared, same-origin endpoint; Base, Auth, Core, and
-  Warp serve one host-local `/api/v0/preferences` contract, and Auth serves it only as UX transport.
+- `adr/preference-browser-transport-family-capability.md` — historical host-local endpoint and
+  family-capability decision; its control matrix and credential lifecycle are superseded.
+- `adr/preference-realm-jwt-and-host-bound-browser-binding.md`
 
 Current hierarchy / collective decisions:
 

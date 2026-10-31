@@ -4,7 +4,6 @@
 class IdentityTelephoneCeremonyReplayStore
   MODEL_BY_SURFACE = {
     "app" => ClientTelephoneCeremonyTransaction,
-    "com" => VisitorTelephoneCeremonyTransaction,
     "org" => OperatorTelephoneCeremonyTransaction,
   }.freeze
 

@@ -23,18 +23,6 @@ class RpCellBinding
       connection: "rp_palm_app", client_id: "palm-app-jp", realm: "app", region: "jp",
       record_prefix: "RpPalmApp",
     ),
-    "rp_base_com" => Cell.new(
-      connection: "rp_base_com", client_id: "base-com-ww", realm: "com", region: "ww",
-      record_prefix: "RpBaseCom",
-    ),
-    "rp_core_com" => Cell.new(
-      connection: "rp_core_com", client_id: "core-com-jp", realm: "com", region: "jp",
-      record_prefix: "RpCoreCom",
-    ),
-    "rp_warp_com" => Cell.new(
-      connection: "rp_warp_com", client_id: "warp-com-jp", realm: "com", region: "jp",
-      record_prefix: "RpWarpCom",
-    ),
     "rp_base_org" => Cell.new(
       connection: "rp_base_org", client_id: "base-org-ww", realm: "org", region: "ww",
       record_prefix: "RpBaseOrg",

@@ -1,0 +1,6 @@
+# Current RP logout contract and WU-A8 gap
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained extensive uncommitted changes affecting the check.
+- Ran the current `OidcRpLogoutRegisteredRpMatrixTest` case named `each first-party RP clears local credentials without stopping its grant and redirects with its stored hint`: 1 run, 198 assertions, no failures, errors or skips. The test explicitly fails if the logout attempts an outbound OP request and asserts that the OP grant remains active pending Visa confirmation.
+- `OidcRpLogoutLauncher` locally revokes the RP-cell session before clearing cookies and redirecting, but the inspected launcher has no RFC 7009 request. Its shared rescue renders an unavailable page with HTTP 422 for `ActiveRecord::ActiveRecordError` as well as other failures. `two.md` §6.5 calls for registered-client revocation and 503 if local revocation cannot commit.
+- The passing test demonstrates the current local contract, not the requested WU-A8 behavior. It uses a stub to rule out network calls and does not perform external communication. No logout code or external system was changed; RP/withdrawal prerequisites, authenticated revocation, failure bounds and local-DB failure injection remain open.

@@ -14,9 +14,7 @@ module Security
 
       setup do
         ensure_user_token_reference_records!
-        ensure_visitor_token_reference_records!
         @app_host = visa_host_for_test_surface(:app)
-        @com_host = visa_host_for_test_surface(:com)
       end
 
       test "active client refresh token is refreshable" do
@@ -60,40 +58,7 @@ module Security
         assert_predicate token.reload, :expired?
       end
 
-      test "finalized withdrawn visitor is not resolved as a normal current resource" do
-        resource = create_visitor
-        token = create_visitor_token(resource)
-        raw_refresh = token.rotate_refresh_token!
-        resource.update_columns(
-          withdrawal_started_at: 3.hours.ago,
-          withdrawn_at: 30.minutes.ago,
-        )
 
-        post visa_com_edge_v0_token_refresh_url(host: @com_host),
-             headers: refresh_headers(raw_refresh)
-
-        assert_response :unauthorized
-        assert_equal "invalid_refresh_token", response.parsed_body["error_code"]
-      end
-
-      test "suspended visitor refresh token is rejected with withdrawal required and revokes token family" do
-        resource = create_visitor
-        token = create_visitor_token(resource)
-        raw_refresh = token.rotate_refresh_token!
-        resource.update!(
-          withdrawal_started_at: 2.hours.ago,
-          deactivated_at: 1.hour.ago,
-          discard_at: 1.day.from_now,
-          purge_eligible_at: 31.days.from_now,
-        )
-
-        post visa_com_edge_v0_token_refresh_url(host: @com_host),
-             headers: refresh_headers(raw_refresh)
-
-        assert_response :forbidden
-        assert_equal "withdrawal_required", response.parsed_body["error_code"]
-        assert_predicate token.reload, :expired?
-      end
 
       private
 
@@ -107,16 +72,6 @@ module Security
         )
       end
 
-      def create_visitor
-        ensure_visitor_reference_records!
-        Visitor.create!(
-          status_id: VisitorStatus::NOTHING,
-          visibility_id: VisitorVisibility::VISITOR,
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-        )
-      end
-
       def create_client_token(resource)
         ClientToken.create!(
           authentication_epoch: 0,
@@ -125,18 +80,6 @@ module Security
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
           user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-          discard_at: 1.day.from_now,
-        )
-      end
-
-      def create_visitor_token(resource)
-        VisitorToken.create!(
-          authentication_epoch: 0,
-          visitor: resource,
-          visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-          visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-          visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-          visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
           discard_at: 1.day.from_now,
         )
       end
@@ -188,13 +131,10 @@ class Security::Invariants::WithdrawnResourceRefreshInvariantTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -226,13 +166,6 @@ class Security::Invariants::WithdrawnResourceRefreshInvariantTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -254,23 +187,6 @@ class Security::Invariants::WithdrawnResourceRefreshInvariantTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -285,17 +201,9 @@ class Security::Invariants::WithdrawnResourceRefreshInvariantTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -482,31 +390,6 @@ class Security::Invariants::WithdrawnResourceRefreshInvariantTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
@@ -520,8 +403,7 @@ class Security::Invariants::WithdrawnResourceRefreshInvariantTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

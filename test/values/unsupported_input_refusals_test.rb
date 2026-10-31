@@ -36,20 +36,11 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
   end
 
   test "quota policies refuse a principal from another surface" do
-    account_policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
-    organization_policy = Acme::OrganizationQuotaPolicy.new(surface: :com, principal: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL))
+    account_policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED))
+    organization_policy = Acme::OrganizationQuotaPolicy.new(surface: :org, principal: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL))
 
     assert_raises(ArgumentError) { account_policy.current_count }
     assert_raises(ArgumentError) { organization_policy.current_count }
-  end
-
-  test "a sign-up surface with no minimum age is refused rather than treated as unrestricted" do
-    assert_predicate SignUpEligibilityPolicy.minimum_age(surface: :app), :positive?
-    assert_predicate SignUpEligibilityPolicy.minimum_age(surface: :com), :positive?
-
-    error = assert_raises(ArgumentError) { SignUpEligibilityPolicy.minimum_age(surface: :org) }
-
-    assert_match(/unsupported sign-up eligibility surface/, error.message)
   end
 
   # A decision has to carry when it was observed, because staleness is what

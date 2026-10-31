@@ -193,16 +193,4 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     assert_not transaction.valid?
     assert_includes transaction.errors.details[:evp_outcome], { error: "is unsupported" }
   end
-
-  test "new secret credential fields reject unsupported values" do
-    credential = VisitorSecretCredential.new(
-      secret_kind: "unsupported",
-      usage_policy: "unsupported",
-      safe_prefix: "prefix",
-    )
-
-    assert_not credential.valid?
-    assert_includes credential.errors.details[:secret_kind], { error: "is invalid" }
-    assert_includes credential.errors.details[:usage_policy], { error: "is invalid" }
-  end
 end

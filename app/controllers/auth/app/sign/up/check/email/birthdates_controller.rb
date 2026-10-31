@@ -13,6 +13,7 @@ module Auth
               include AppSignUpCheckpointPage
 
               AUTHENTICATION_MODE = :open
+              sign_entry_classification! :sign_up
 
               def show
                 return unless load_gate_context!(gate_for_show)

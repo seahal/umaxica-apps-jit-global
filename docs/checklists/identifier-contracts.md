@@ -428,6 +428,11 @@ triggers for additional tables.
   supported NanoID-21 or legacy UUID-v4 transaction form and rejects malformed, missing, stale,
   wrong-flow, wrong-purpose, wrong-surface or cross-purpose references without a silent lookup
   fallback. A transaction reference cannot be used as a generation, grant or result identity.
+- APP Email and Telephone sign-up issuers refuse an existing transaction whose expiry differs
+  from its parent Flow expiry, without rotating the OTP or changing the contact cooldown.
+  Delivery and verification also refuse that mismatch, including an existing verified receipt.
+  Issuance refuses a changed destination for the same candidate and Flow rather than creating a
+  second transaction for that binding, and locks the existing transaction before checking it.
 - When a newly generated transaction collides, only the concrete table's named single-column
   `transaction_id` unique B-tree collision may be retried. Each retry uses a fresh reference inside
   a savepoint and the finite shared collision budget. Caller-supplied IDs, unrelated validation or

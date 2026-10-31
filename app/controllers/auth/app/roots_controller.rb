@@ -6,6 +6,9 @@ module Auth
     class RootsController < ::Auth::App::ApplicationController
       include ::SurfaceInertiaPage
 
+      # D-59: the landing page routes to the sign entry; it is not itself the entry ceremony.
+      sign_entry_classification! :excluded, reason: "landing page that routes to the sign entry"
+
       AUTHENTICATION_MODE = :open
 
       def index

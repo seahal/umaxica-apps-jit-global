@@ -31,7 +31,7 @@ require "test_helper"
 class AppPreferenceCookieTest < ActiveSupport::TestCase
   setup do
     AppPreferenceStatus.ensure_defaults!
-    @preference = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING)
+    @preference = AppPreference.create!(status_id: AppPreferenceStatus::ACTIVE)
   end
 
   %i(targetable performant functional).each do |flag|

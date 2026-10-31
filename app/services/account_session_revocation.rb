@@ -4,7 +4,7 @@
 class AccountSessionRevocation < ApplicationService
   Result = Data.define(:event, :revoked_count)
 
-  SUPPORTED_ACCOUNT_CLASSES = [Client, Visitor, Operator].freeze
+  SUPPORTED_ACCOUNT_CLASSES = [Client, Operator].freeze
   EVENT_TYPE_BY_OPERATION = {
     emergency_revoke: AccountAccessEvent::EVENT_TYPE_EMERGENCY_SESSION_REVOKE,
     purge: AccountAccessEvent::EVENT_TYPE_SESSION_PURGE,

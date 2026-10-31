@@ -60,17 +60,17 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
     assert_not OrganizationMembershipPolicy.new(membership, user: operator).destroy?
   end
 
-  test "visitor cannot manage app enterprise memberships" do
+  test "operator cannot manage app enterprise memberships" do
     client = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
     )
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
     )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
 
-    assert_not OrganizationMembershipPolicy.new(bootstrap.collective, user: visitor).index?
+    assert_not OrganizationMembershipPolicy.new(bootstrap.collective, user: operator).index?
   end
 end

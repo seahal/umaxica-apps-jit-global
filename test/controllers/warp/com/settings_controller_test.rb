@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 class Warp::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -17,21 +16,35 @@ class Warp::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "warp/com/settings/show", inertia_component
     assert_equal "Settings", inertia_props.fetch("heading")
-    assert_match(/Warp com control-plane settings/, inertia_props.fetch("description"))
+    assert_equal I18n.t("ui_presentation.display_preferences_description"), inertia_props.fetch("description")
   end
 
-  test "show links back to the surface's own screens and to nothing else" do
+  test "offers only the root and the Base com preference entry" do
     host! @host
 
     get warp_com_settings_path(ri: "jp")
 
-    assert_equal(
-      [
-        ["Root", warp_com_dashboard_path(ri: "jp")],
-        ["Sign out", new_warp_com_sign_out_path(ri: "jp")],
-      ],
-      inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
-    )
+    links = inertia_props.fetch("links")
+
+    assert_equal ["Root", I18n.t("ui_presentation.navigation.preferences")], links.pluck("label")
+    assert_equal warp_com_root_path(ri: "jp"), links.first.fetch("href")
+
+    preference = URI.parse(links.last.fetch("href"))
+
+    assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), preference.host
+    assert_equal "/preference", preference.path
+    assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(preference.query))
+  end
+
+  test "describes display preferences in the selected language" do
+    host! @host
+    %w(en ja).each do |locale|
+      get warp_com_settings_path(ri: "jp", lx: locale)
+
+      assert_response :success
+      assert_equal I18n.t("ui_presentation.display_preferences_description", locale: locale),
+                   inertia_props.fetch("description")
+    end
   end
 
   # The page is reachable from the anonymous landing, so it must not require a session.
@@ -41,5 +54,16 @@ class Warp::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
     get warp_com_settings_path(ri: "jp")
 
     assert_response :success
+  end
+
+  test "show ignores credentials and offers no sign-out destination" do
+    host! @host
+
+    get warp_com_settings_url(ri: "jp"), headers: {
+      "Cookie" => "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=injected-access-token",
+    }
+
+    assert_response :success
+    assert_not_includes inertia_props.fetch("links").pluck("label"), "Sign out"
   end
 end

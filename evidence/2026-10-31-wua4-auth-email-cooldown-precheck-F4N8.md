@@ -1,0 +1,7 @@
+# Auth Email Source cooldown before issuance
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; uncommitted worktree changes affected the result.
+- A public APP sign-in request with an active Source Email cooldown previously returned the existing 429 after creating an Auth OTP generation. A strengthened HTTP test reproduced the unexpected change before the fix (1 run, 7 assertions, 1 failure).
+- Initial real-contact issuance now checks the Source cooldown under the Client and Email locks, rechecks ownership, and only then calls the existing Auth issuer. Cooldown returns the existing 429 before storing Email authentication state or issuing a generation. The dummy path and the existing resend limiter were not changed.
+- A nontransactional two-connection test committed a Source cooldown while issuance waited on the owner, verified that the OP parent was still lockable, and observed cooldown refusal without a challenge change. `PARALLEL_WORKERS=1 bin/rails test test/controllers/auth/app/in/emails_controller_test.rb test/concurrency/auth_email_otp_owner_lock_test.rb test/models/auth_email_otp_challenge_test.rb test/mailers/email/auth_email_otp_delivery_binding_test.rb` passed: 89 runs, 749 assertions, no failures or errors. Scoped RuboCop passed.
+- This covers initial APP real-contact issuance. It does not establish all cooldown races, a complete anti-enumeration analysis, real email delivery, or the full §12.2 commit/failure matrix.

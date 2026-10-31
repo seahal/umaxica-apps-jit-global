@@ -27,15 +27,16 @@ class WithdrawalLifecycle
   end
 
   def start!
-    now = Time.current
-
     actor.class.transaction do
       actor.lock!
+      now = actor.class.database_now
       ensure_withdrawal_flow_requested!(now: now)
+      actor.class.current_transaction.after_commit do
+        notify("requested")
+        record_occurrence!("withdrawal.requested")
+      end
     end
 
-    notify("requested")
-    record_occurrence!("withdrawal.requested")
     actor
   end
 
@@ -75,15 +76,8 @@ class WithdrawalLifecycle
                            end,
       )
       stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_suspend")
+      schedule_suspension_side_effects!(stop_event)
     end
-    # The OP applies the stop only after the Zenith commit (one.md section 7.5).
-    OpIdentityEventInvalidator.deliver(event: stop_event)
-
-    notify(
-      "suspended", deactivated_at: actor.deactivated_at, discard_at: actor.discard_at,
-                   purge_eligible_at: actor.purge_eligible_at,
-    )
-    record_occurrence!("withdrawal.deactivated")
     actor
   end
 
@@ -107,16 +101,16 @@ class WithdrawalLifecycle
         purge_eligible_at: Float::INFINITY,
         withdrawn_at: nil,
       )
+      actor.class.current_transaction.after_commit do
+        notify("recovered")
+        record_occurrence!("withdrawal.recovered")
+      end
     end
 
-    notify("recovered")
-    record_occurrence!("withdrawal.recovered")
     actor
   end
 
   def terminate!
-    stop_event = nil
-
     actor.class.transaction do
       actor.lock!
       # The deadline and all deletion guards must be checked while holding the same lock as the
@@ -133,17 +127,36 @@ class WithdrawalLifecycle
         actor.save!(validate: false)
       end
       stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_terminate")
+      schedule_termination_side_effects!(stop_event)
     end
-    OpIdentityEventInvalidator.deliver(event: stop_event)
-
-    notify("terminated", terminated_at: actor.try(:terminated_at))
-    record_occurrence!("withdrawal.terminated")
     actor
   end
 
   private
 
   attr_reader :actor, :current_session_public_id, :request
+
+  def schedule_suspension_side_effects!(stop_event)
+    payload = {
+      deactivated_at: actor.deactivated_at,
+      discard_at: actor.discard_at,
+      purge_eligible_at: actor.purge_eligible_at,
+    }
+    actor.class.current_transaction.after_commit do
+      OpIdentityEventInvalidator.deliver(event: stop_event)
+      notify("suspended", payload)
+      record_occurrence!("withdrawal.deactivated")
+    end
+  end
+
+  def schedule_termination_side_effects!(stop_event)
+    terminated_at = actor.try(:terminated_at)
+    actor.class.current_transaction.after_commit do
+      OpIdentityEventInvalidator.deliver(event: stop_event)
+      notify("terminated", terminated_at: terminated_at)
+      record_occurrence!("withdrawal.terminated")
+    end
+  end
 
   def ensure_withdrawal_flow_requested!(now:)
     cycle = active_withdrawal_flow || create_withdrawal_flow!(status: "REQUESTED", now: now)
@@ -218,7 +231,6 @@ class WithdrawalLifecycle
   def withdrawal_flow_class
     case actor.class.name
     when "Client" then ClientWithdrawalFlow
-    when "Visitor" then VisitorWithdrawalFlow
     else
       raise Sign::InvalidWithdrawalStateError, actor.class.name
     end
@@ -227,7 +239,6 @@ class WithdrawalLifecycle
   def withdrawal_flow_association
     case actor.class.name
     when "Client" then :client_withdrawal_flows
-    when "Visitor" then :visitor_withdrawal_flows
     else
       raise Sign::InvalidWithdrawalStateError, actor.class.name
     end
@@ -236,7 +247,6 @@ class WithdrawalLifecycle
   def withdrawal_flow_actor_key
     case actor.class.name
     when "Client" then :client
-    when "Visitor" then :visitor
     else
       raise Sign::InvalidWithdrawalStateError, actor.class.name
     end
@@ -266,7 +276,6 @@ class WithdrawalLifecycle
   def privacy_requests
     case actor
     when Client then actor.client_privacy_requests
-    when Visitor then actor.visitor_privacy_requests
     else
       raise Sign::InvalidWithdrawalStateError, actor.class.name
     end
@@ -279,7 +288,6 @@ class WithdrawalLifecycle
   def active_retention_hold?
     case actor
     when Client then actor.client_retention_holds.active_at(actor.class.database_now).exists?
-    when Visitor then actor.visitor_retention_holds.active_at(actor.class.database_now).exists?
     else
       raise Sign::InvalidWithdrawalStateError, actor.class.name
     end
@@ -290,9 +298,6 @@ class WithdrawalLifecycle
     when Client
       AppEnforcementCase.principal_effect_blocking?(actor.public_id, :withdrawal_purge_blocked) ||
         AppEnforcementCase.principal_effect_blocking?(actor.public_id, :principal_hard_delete_blocked)
-    when Visitor
-      ComEnforcementCase.principal_effect_blocking?(actor.public_id, :withdrawal_purge_blocked) ||
-        ComEnforcementCase.principal_effect_blocking?(actor.public_id, :principal_hard_delete_blocked)
     else
       raise Sign::InvalidWithdrawalStateError, actor.class.name
     end
@@ -301,7 +306,10 @@ class WithdrawalLifecycle
   def cancel_received_privacy_requests!
     privacy_requests.received.find_each do |privacy_request|
       privacy_request.cancel_from_recovery!
-      record_occurrence!("privacy_erasure.cancelled", privacy_request_public_id: privacy_request.public_id)
+      privacy_request_public_id = privacy_request.public_id
+      actor.class.current_transaction.after_commit do
+        record_occurrence!("privacy_erasure.cancelled", privacy_request_public_id: privacy_request_public_id)
+      end
     end
   end
 
@@ -326,10 +334,10 @@ class WithdrawalLifecycle
   end
 
   def actor_event_prefix
-    actor.is_a?(Visitor) ? "visitor" : "user"
+    "user"
   end
 
   def actor_id_key
-    actor.is_a?(Visitor) ? :visitor_id : :user_id
+    :user_id
   end
 end

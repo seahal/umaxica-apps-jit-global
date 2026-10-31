@@ -1,0 +1,6 @@
+# WU-7 cookie header size limit
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Staged, unstaged and untracked changes affected the result.
+- A local test-environment measurement with a deliberately long issuer showed a 3,060-byte valid JWT and a 3,181-byte serialized `Set-Cookie` header. Before the fix, a public theme write using a long issuer committed a new preference instead of rejecting the oversized cookie.
+- The com issuer now serializes the JWT, language and experience cookie headers with their actual attributes before setting commit, rejects any header over 3,072 bytes, and queues no cookies on that failure. An integration test exercises the closest reachable header sizes below, at or below, and above the boundary; Base64url does not produce every adjacent length. The overflow and boundary selection passed after formatting: 2 runs, 15 assertions, zero failures, errors or skips.
+- The broader JWT, app/org legacy size contract, com write and initialization, and commit-failure selection passed before test formatting: 104 runs, 1,475 assertions, zero failures, errors or skips. RuboCop corrected the new test formatting. The full suite was not re-run in this slice. No migration or non-test purge was performed.

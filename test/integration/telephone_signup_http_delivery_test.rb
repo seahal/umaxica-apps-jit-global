@@ -7,16 +7,12 @@ class TelephoneSignupHttpDeliveryTest < ActionDispatch::IntegrationTest
 
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   [
     [:app, "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", "BASE_APP", ClientSignUpFlow,
      ClientTelephone, ClientToken, :client_telephone, :user_id,],
-    [:com, "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", "BASE_COM", VisitorSignUpFlow,
-     VisitorTelephone, VisitorToken, :visitor_telephone, :visitor_id,],
   ].each do |surface, base_key, auth_key, _issuer_name, flow_class, contact_class, token_class, scope, owner_key|
     %w(current cancelled expired reissued).each do |state|
       test "#{surface} actual Telephone signup queues encrypted code and refuses #{state} stale transport" do
@@ -111,7 +107,7 @@ class TelephoneSignupHttpDeliveryTest < ActionDispatch::IntegrationTest
         assert_equal flow_class::STATUS_MODEL::CONTACT_PENDING, flow.reload.status_id
         assert_nil contact.binding_finalized_at
         assert_equal 0, token_class.where(owner_key => owner_id).count
-        transaction_model = (surface == :app) ? ClientTelephoneCeremonyTransaction : VisitorTelephoneCeremonyTransaction
+        transaction_model = ClientTelephoneCeremonyTransaction
         transaction = transaction_model.find_by!(telephone_candidate_ref: contact.public_id)
 
         assert_instance_of transaction_model, transaction

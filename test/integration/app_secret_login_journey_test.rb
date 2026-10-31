@@ -567,6 +567,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       issuance = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
       )
+      token.reload.update!(last_step_up_resource_ref: issuance.public_id)
       ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
       issuance.reload.update!(encrypted_payload: payload)
       base = open_session
@@ -744,13 +745,16 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
 
     assert_equal 1, issuance.planned_count
     assert_nil issuance.confirmed_at
-    candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     post base_app_secret_issuance_presentation_path(issuance.public_id, ri: "jp"),
          params: { authenticity_token: csrf }, headers: headers
 
     assert_response :success
+    candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
+
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
-    assert_equal "no-referrer", response.headers["Referrer-Policy"]
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_equal "strict-origin", response.parsed_body.at_css('meta[name="referrer"]')["content"]
     assert_nil response.headers["X-Inertia"]
     raw = response.parsed_body.at_css("[data-secret-value] code").text
 

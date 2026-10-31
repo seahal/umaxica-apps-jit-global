@@ -5,8 +5,8 @@ require "minitest/autorun"
 
 class ExplicitContextAccessorsTest < ActiveSupport::TestCase
   def test_context_accessors_remain_private_zero_argument_methods_on_consumers_and_subclasses
-    controller = Auth::Com::ApplicationController.new
-    child = Class.new(Auth::Com::ApplicationController).new
+    controller = Base::Com::ApplicationController.new
+    child = Class.new(Base::Com::ApplicationController).new
 
     RequestContextContract.public_keys.each do |key|
       name = :"request_context_#{key}"

@@ -42,6 +42,21 @@ module Base
 
       private
 
+      def step_up_requirement(scope:, **options)
+        if scope == "settings_passkey"
+          return_to = resolve_step_up_pt(params[:pt])
+          path = URI.parse(return_to).path if return_to.present?
+          match = %r{\A/identity/passkeys/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\z}
+            .match(path.to_s)
+          if match
+            credential = current_operator.staff_passkeys.active.find_by!(external_id: match[1])
+            return super(scope: scope, **options.merge(resource_ref: credential.external_id))
+          end
+        end
+
+        super
+      end
+
       def redirect_to_bootstrap_choice
         return if reject_step_up_for_authentication_context!
 

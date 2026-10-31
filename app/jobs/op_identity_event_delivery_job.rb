@@ -6,8 +6,7 @@
 class OpIdentityEventDeliveryJob < ApplicationJob
   queue_as :default
 
-  EVENT_CLASSES = %w(AppIdentityAuthenticationEvent ComIdentityAuthenticationEvent
-                     OrgIdentityAuthenticationEvent).freeze
+  EVENT_CLASSES = %w(AppIdentityAuthenticationEvent OrgIdentityAuthenticationEvent).freeze
 
   retry_on ActiveRecord::ActiveRecordError, wait: :polynomially_longer, attempts: 10
 

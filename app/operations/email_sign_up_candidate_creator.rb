@@ -15,14 +15,6 @@ class EmailSignUpCandidateCreator
 
             email.user_email_status_id = ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
             email.user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP, security_mode_id: ClientSecurityMode::NORMAL)
-          when VisitorEmail
-            raise ArgumentError, "Email signup cannot reuse an existing owner" if email.visitor_id || email.visitor
-
-            email.visitor_email_status_id = VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
-            email.visitor = Visitor.create!(
-              status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-              security_mode_id: VisitorSecurityMode::NORMAL, visibility_id: VisitorVisibility::VISITOR,
-            )
           else raise ArgumentError, "unsupported Email signup candidate realm"
           end
         email.save!

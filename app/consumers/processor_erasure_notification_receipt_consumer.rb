@@ -38,7 +38,6 @@ class ProcessorErasureNotificationReceiptConsumer
   def notification_class
     case surface.to_s
     when "app" then ClientProcessorErasureNotification
-    when "com" then VisitorProcessorErasureNotification
     else raise ArgumentError, "unsupported processor erasure surface: #{surface.inspect}"
     end
   end

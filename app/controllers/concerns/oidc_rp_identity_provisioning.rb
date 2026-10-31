@@ -88,8 +88,6 @@ module OidcRpIdentityProvisioning
     case binding
     when ClientOidcIdentityBinding
       binding.association(:client_identity).tap { |owner| owner.reset_scope }.scope.take!
-    when VisitorOidcIdentityBinding
-      binding.association(:visitor_identity).tap { |owner| owner.reset_scope }.scope.take!
     when OperatorOidcIdentityBinding
       binding.association(:operator_identity).tap { |owner| owner.reset_scope }.scope.take!
     else
@@ -144,7 +142,6 @@ module OidcRpIdentityProvisioning
 
   def binding_attributes(identity, claims)
     return { client_identity: identity, **claims } if rp_binding_class == ClientOidcIdentityBinding
-    return { visitor_identity: identity, **claims } if rp_binding_class == VisitorOidcIdentityBinding
     return { operator_identity: identity, **claims } if rp_binding_class == OperatorOidcIdentityBinding
 
     raise ActiveRecord::RecordNotFound, "OIDC identity binding class is not registered"
@@ -190,7 +187,6 @@ module OidcRpIdentityProvisioning
   def rp_actor_resource_type
     case rp_actor_class.name
     when "Operator" then "operator"
-    when "Visitor" then "visitor"
     else "client"
     end
   end

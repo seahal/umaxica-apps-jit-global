@@ -152,6 +152,72 @@ ALTER SEQUENCE public.org_preference_binding_methods_id_seq OWNED BY public.org_
 
 
 --
+-- Name: org_preference_browser_bindings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_preference_browser_bindings (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    digest character varying(64) NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT org_preference_browser_bindings_digest_format CHECK (((digest)::text ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: org_preference_browser_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_preference_browser_bindings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_preference_browser_bindings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_preference_browser_bindings_id_seq OWNED BY public.org_preference_browser_bindings.id;
+
+
+--
+-- Name: org_preference_consent_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_preference_consent_receipts (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    version uuid NOT NULL,
+    recorded_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: org_preference_consent_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_preference_consent_receipts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_preference_consent_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_preference_consent_receipts_id_seq OWNED BY public.org_preference_consent_receipts.id;
+
+
+--
 -- Name: org_preference_cookies; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -845,6 +911,67 @@ ALTER SEQUENCE public.org_preference_timezones_id_seq OWNED BY public.org_prefer
 
 
 --
+-- Name: org_preference_web_push_options; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_preference_web_push_options (
+    id bigint NOT NULL,
+    CONSTRAINT org_preference_web_push_options_closed CHECK ((id = ANY (ARRAY[(0)::bigint, (1)::bigint])))
+);
+
+
+--
+-- Name: org_preference_web_push_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_preference_web_push_options_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_preference_web_push_options_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_preference_web_push_options_id_seq OWNED BY public.org_preference_web_push_options.id;
+
+
+--
+-- Name: org_preference_web_pushes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_preference_web_pushes (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    option_id bigint NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: org_preference_web_pushes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_preference_web_pushes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_preference_web_pushes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_preference_web_pushes_id_seq OWNED BY public.org_preference_web_pushes.id;
+
+
+--
 -- Name: org_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -918,6 +1045,20 @@ ALTER TABLE ONLY public.org_preference_adult_content_gates ALTER COLUMN id SET D
 --
 
 ALTER TABLE ONLY public.org_preference_binding_methods ALTER COLUMN id SET DEFAULT nextval('public.org_preference_binding_methods_id_seq'::regclass);
+
+
+--
+-- Name: org_preference_browser_bindings id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_browser_bindings ALTER COLUMN id SET DEFAULT nextval('public.org_preference_browser_bindings_id_seq'::regclass);
+
+
+--
+-- Name: org_preference_consent_receipts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_consent_receipts ALTER COLUMN id SET DEFAULT nextval('public.org_preference_consent_receipts_id_seq'::regclass);
 
 
 --
@@ -1082,6 +1223,20 @@ ALTER TABLE ONLY public.org_preference_timezones ALTER COLUMN id SET DEFAULT nex
 
 
 --
+-- Name: org_preference_web_push_options id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_web_push_options ALTER COLUMN id SET DEFAULT nextval('public.org_preference_web_push_options_id_seq'::regclass);
+
+
+--
+-- Name: org_preference_web_pushes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_web_pushes ALTER COLUMN id SET DEFAULT nextval('public.org_preference_web_pushes_id_seq'::regclass);
+
+
+--
 -- Name: org_preferences id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1118,6 +1273,22 @@ ALTER TABLE ONLY public.org_preference_adult_content_gates
 
 ALTER TABLE ONLY public.org_preference_binding_methods
     ADD CONSTRAINT org_preference_binding_methods_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: org_preference_browser_bindings org_preference_browser_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_browser_bindings
+    ADD CONSTRAINT org_preference_browser_bindings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: org_preference_consent_receipts org_preference_consent_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_consent_receipts
+    ADD CONSTRAINT org_preference_consent_receipts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1305,6 +1476,22 @@ ALTER TABLE ONLY public.org_preference_timezones
 
 
 --
+-- Name: org_preference_web_push_options org_preference_web_push_options_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_web_push_options
+    ADD CONSTRAINT org_preference_web_push_options_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: org_preference_web_pushes org_preference_web_pushes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_web_pushes
+    ADD CONSTRAINT org_preference_web_pushes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: org_preferences org_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1332,6 +1519,20 @@ CREATE INDEX index_org_preference_adult_content_gates_on_option_id ON public.org
 --
 
 CREATE UNIQUE INDEX index_org_preference_adult_content_gates_on_preference_id ON public.org_preference_adult_content_gates USING btree (preference_id);
+
+
+--
+-- Name: index_org_preference_browser_bindings_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_org_preference_browser_bindings_on_preference_id ON public.org_preference_browser_bindings USING btree (preference_id);
+
+
+--
+-- Name: index_org_preference_consent_receipts_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_org_preference_consent_receipts_on_preference_id ON public.org_preference_consent_receipts USING btree (preference_id);
 
 
 --
@@ -1479,6 +1680,20 @@ CREATE INDEX index_org_preference_timezones_on_option_id ON public.org_preferenc
 --
 
 CREATE UNIQUE INDEX index_org_preference_timezones_on_preference_id ON public.org_preference_timezones USING btree (preference_id);
+
+
+--
+-- Name: index_org_preference_web_pushes_on_option_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_org_preference_web_pushes_on_option_id ON public.org_preference_web_pushes USING btree (option_id);
+
+
+--
+-- Name: index_org_preference_web_pushes_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_org_preference_web_pushes_on_preference_id ON public.org_preference_web_pushes USING btree (preference_id);
 
 
 --
@@ -1631,6 +1846,22 @@ ALTER TABLE ONLY public.org_preference_time_formats
 
 
 --
+-- Name: org_preference_browser_bindings fk_rails_33f7352fe4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_browser_bindings
+    ADD CONSTRAINT fk_rails_33f7352fe4 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+
+
+--
+-- Name: org_preference_web_pushes fk_rails_352cba3fb3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_web_pushes
+    ADD CONSTRAINT fk_rails_352cba3fb3 FOREIGN KEY (option_id) REFERENCES public.org_preference_web_push_options(id);
+
+
+--
 -- Name: org_preference_regions fk_rails_42f3316029; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1695,6 +1926,14 @@ ALTER TABLE ONLY public.org_preference_cookies
 
 
 --
+-- Name: org_preference_consent_receipts fk_rails_77bf0ac596; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_consent_receipts
+    ADD CONSTRAINT fk_rails_77bf0ac596 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+
+
+--
 -- Name: org_preference_timezones fk_rails_97d21cd824; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1724,6 +1963,14 @@ ALTER TABLE ONLY public.org_preference_densities
 
 ALTER TABLE ONLY public.org_preference_motions
     ADD CONSTRAINT fk_rails_ae96713d34 FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
+
+
+--
+-- Name: org_preference_web_pushes fk_rails_b42b307b7b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_preference_web_pushes
+    ADD CONSTRAINT fk_rails_b42b307b7b FOREIGN KEY (preference_id) REFERENCES public.org_preferences(id);
 
 
 --
@@ -1781,6 +2028,7 @@ ALTER TABLE ONLY public.org_preference_themes
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261031191206'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261013035720'),

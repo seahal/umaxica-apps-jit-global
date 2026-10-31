@@ -133,6 +133,23 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil ClientEmail.find(flow.pending_contact_id).binding_finalized_at
   end
 
+  test "signup does not carry an external return target to the email OTP step" do
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: {
+           :client_email => { raw_address: "redirect-boundary@example.com", confirm_policy: "1" },
+           :pt => "https://evil.example.test/steal",
+           "cf-turnstile-response" => "test",
+         },
+         headers: { "X-CSRF-Token" => "test-csrf-token", "Sec-Fetch-Site" => "same-origin" }
+
+    assert_response :redirect
+    location = URI.parse(response.location)
+
+    assert_includes [nil, ENV.fetch("PUBLIC_AUTH_SERVICE_URL")], location.host
+    assert_equal auth_app_sign_up_check_email_otp_path, location.path
+    assert_nil Rack::Utils.parse_query(location.query)["pt"]
+  end
+
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
@@ -275,6 +292,29 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     }
   end
 
+  test "signup email OTP rejects an unregistered verification result explicitly" do
+    email = start_sign_up_flow!("unknown-result@example.test")
+    target = URI.parse(response.location).request_uri
+    unexpected = EmailSignUpOtpVerificationResult.new(status: :unregistered_result, email: email)
+
+    EmailSignUpOtpVerificationCommitter.stub(:call, unexpected) do
+      assert_raises(ArgumentError) do
+        patch target, params: { client_email: { pass_code: "123456" }, "cf-turnstile-response": "test" },
+                      headers: default_headers
+      end
+    end
+  end
+
+  test "signup email OTP rejects an unregistered resend result explicitly" do
+    start_sign_up_flow!("unknown-resend@example.test")
+    target = URI.parse(response.location).request_uri
+    unexpected = EmailSignUpOtpIssueResult.new(status: :unregistered_result, transaction: nil, code: nil)
+
+    EmailSignUpOtpDeliveryIssuer.stub(:call, unexpected) do
+      assert_raises(ArgumentError) { post target, headers: default_headers }
+    end
+  end
+
   test "update accepts a valid otp submitted through client_email" do
     user_email = start_sign_up_flow!("client@example.com")
     otp_query = Rack::Utils.parse_query(URI.parse(response.location).query)
@@ -354,6 +394,84 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_not_equal first_flow.id, replacement_flow.id
     assert_not_equal first_email.id, replacement_flow.pending_contact_id
+  end
+
+  test "queue refusal retains the signup challenge and displays an unavailable response" do
+    refused_job = Object.new
+    refused_job.define_singleton_method(:perform_later) { |*_, **_| false }
+    OtpNotifierEmailDeliveryJob.stub(:set, refused_job) do
+      post auth_app_sign_up_email_url(ri: "jp"),
+           params: { :user_email => { raw_address: "queue-refusal@example.com", confirm_policy: "1" },
+                     "cf-turnstile-response" => "test", }, headers: default_headers
+    end
+
+    assert_response :service_unavailable
+    flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    email = ClientEmail.find(flow.pending_contact_id)
+    transaction = ClientEmailCeremonyTransaction.find_by!(email_candidate_ref: email.public_id)
+
+    assert_predicate transaction.otp_generation, :present?
+    assert_equal I18n.t("errors.rate_limit.backend_unavailable"), inertia_props.fetch("description")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+  end
+
+  test "resend at the expired signup email OTP deadline refuses without mutation or delivery" do
+    email = start_sign_up_flow!("expired-resend@example.test")
+    target = URI.parse(response.location).request_uri
+    flow = current_sign_up_flow(email)
+    transaction = ClientEmailCeremonyTransaction.find_by!(email_candidate_ref: email.public_id)
+    flow_facts = flow.attributes
+    email_facts = email.reload.attributes
+    transaction_facts = transaction.attributes
+    locator = session.fetch(:app_sign_up_flow_locator).to_h
+    decision_time = transaction.otp_expires_at
+
+    travel_to decision_time do
+      ClientEmail.stub(:database_now, decision_time) do
+        ClientEmailCeremonyTransaction.stub(:database_now, decision_time) do
+          ClientSignUpFlow.stub(:database_now, decision_time) do
+            assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+              post target, headers: default_headers
+            end
+          end
+        end
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_withheld("expired resend preserves Flow, candidate and proof") {
+      flow_facts == flow.reload.attributes && email_facts == email.reload.attributes &&
+        transaction_facts == transaction.reload.attributes
+    }
+    assert_withheld("expired resend preserves the browser binding") {
+      locator == session.fetch(:app_sign_up_flow_locator).to_h
+    }
+  end
+
+  test "resend queue refusal retains the replacement signup challenge" do
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :user_email => { raw_address: "resend-refusal@example.com", confirm_policy: "1" },
+                   "cf-turnstile-response" => "test", }, headers: default_headers
+
+    assert_response :redirect
+    target = URI.parse(response.location).request_uri
+    flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    email = ClientEmail.find(flow.pending_contact_id)
+    transaction = ClientEmailCeremonyTransaction.find_by!(email_candidate_ref: email.public_id)
+    old_generation = transaction.otp_generation
+    decision_time = email.otp_last_sent_at + EmailOtpPolicy::SEND_COOLDOWN + 1.second
+    refused_job = Object.new
+    refused_job.define_singleton_method(:perform_later) { |*_, **_| false }
+    travel_to decision_time do
+      ClientEmail.stub(:database_now, decision_time) do
+        OtpNotifierEmailDeliveryJob.stub(:set, refused_job) { post target, headers: default_headers }
+      end
+    end
+
+    assert_response :service_unavailable
+    assert_not_equal old_generation, transaction.reload.otp_generation
+    assert_equal I18n.t("errors.rate_limit.backend_unavailable"), inertia_props.fetch("description")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
   end
 
   test "create redirects to edit and allows edit page" do
@@ -1716,11 +1834,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert retained_facts, "replay must retain the original committed checkpoint and binding"
   end
 
-  test "leap-day under-thirteen signup halts without changing the Ticket clock" do
+  test "birthdate today and tomorrow are refused before yesterday completes signup" do
     post auth_app_sign_up_email_url(ri: "jp"),
          params: {
            user_email: {
-             raw_address: "email_under13_#{SecureRandom.hex(4)}@example.com",
+             raw_address: "email_one_day_#{SecureRandom.hex(4)}@example.com",
              confirm_policy: "1",
            },
            "cf-turnstile-response": "test",
@@ -1750,37 +1868,31 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
                                                  path_helper: :auth_app_sign_up_check_email_birthdate_url,
     )
 
-    travel_to Time.zone.local(2024, 2, 29, 12, 0, 0) do
-      get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
-
-      assert_response :success
-
+    today = Time.current.in_time_zone("Asia/Tokyo").to_date
+    [today, today + 1.day].each do |birthdate|
+      version = cycle.reload.checkpoint_version
       patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
-            params: {
-              requirement: "birthdate",
-              birthdate: "2011-03-01",
-              checkpoint_version: cycle.reload.checkpoint_version,
-            },
+            params: { requirement: "birthdate", birthdate: birthdate.iso8601, checkpoint_version: version },
             headers: default_headers
 
-      assert_response :success
-      assert_includes response.body, "この登録方法ではアカウントを作成できません"
-      assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
-
-      patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
-            params: {
-              requirement: "birthdate",
-              birthdate: "2000-01-01",
-              checkpoint_version: cycle.checkpoint_version,
-            },
-            headers: default_headers
-
-      # The age-restricted session state keeps blocking the retry instead of restarting sign-up.
-      assert_response :success
-      assert_includes response.body, "この登録方法ではアカウントを作成できません"
-      assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
+      assert_response :unprocessable_content
+      assert_equal version, cycle.reload.checkpoint_version
+      assert_not_equal ClientSignUpFlowStatus::HALTED, cycle.status_id
       assert_not cycle.requirement_cleared?(:birthdate)
     end
+
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
+          params: {
+            requirement: "birthdate",
+            birthdate: (today - 1.day).iso8601,
+            checkpoint_version: cycle.reload.checkpoint_version,
+          },
+          headers: default_headers
+
+    assert_response :redirect
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
+    assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
+    assert cycle.requirement_cleared?(:birthdate)
   end
 
   test "does not leave zero or null user_id in database" do
@@ -1914,6 +2026,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "create rejects signup for an email blocked by an in-force registration_blocked Identifier Effect, " \
        "sending no OTP" do
     operator = operators(:one)
+    principal = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     the_case = AppEnforcementCase.new(
       kind: "permanent_ban",
       duration_mode: "permanent",
@@ -1921,7 +2034,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       release_mode: "break_glass_only",
       effective_at: Time.current,
       reason_code: "abuse",
-      principal_public_id: "some_prior_client_public_id",
+      principal_public_id: principal.public_id,
       applied_by_operator_public_id: operator.public_id,
     )
     digest = EnforcementIdentifierDigest.for_email(realm: "app", value: "enforcement_blocked@example.com")
@@ -2022,7 +2135,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -2081,23 +2193,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -2112,17 +2207,9 @@ class Auth::App::Sign::Up::EmailsControllerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -2321,38 +2408,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

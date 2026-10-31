@@ -42,7 +42,6 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -55,13 +54,12 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
     get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
 
-    post auth_app_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_app_verification_cancellation_path(ri: "jp")
 
     assert_response :see_other
     destination = URI.parse(response.location)
@@ -80,86 +78,6 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     assert_predicate token, :currently_usable?
     assert_equal 1,
                  ClientStepUpCeremonyTransaction.where(session_ref: token.public_id, status: %w(pending verified)).count
-  end
-
-  test "com cancellation closes the admitted ceremony and returns to the Base dashboard" do
-    actor = create_verified_visitor_with_email(email_address: "cancel-com-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor, token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp passkey),
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ), return_to: base_com_identity_emails_path(ri: "jp"),
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    get auth_com_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
-
-    assert_response :see_other
-
-    post auth_com_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
-
-    assert_response :see_other
-    destination = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(destination.query)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), destination.host
-    assert_equal base_com_verification_cancellation_path, destination.path
-    assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
-    assert_predicate query.fetch("cancellation_ref"), :present?
-    assert_not query.key?("cancellation_handoff")
-    assert_not_includes response.location, "jump.umaxica.net"
-    assert_not_includes response.location, "/sign"
-    assert_equal "pending", issuance.transaction.reload.status
-    assert_nil issuance.transaction.canceled_at
-    assert_nil token.reload.last_step_up_at
-    assert_predicate token, :currently_usable?
-    assert_equal 1,
-                 VisitorStepUpCeremonyTransaction.where(
-                   session_ref: token.public_id,
-                   status: %w(
-                     pending verified
-                   ),
-                 ).count
   end
 
   test "org cancellation closes the admitted ceremony and returns to the Base dashboard" do
@@ -197,7 +115,6 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -210,13 +127,12 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    https!
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_org_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
 
-    post auth_org_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_org_verification_cancellation_path(ri: "jp")
 
     assert_response :see_other
     destination = URI.parse(response.location)
@@ -282,7 +198,6 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
           )
           admission_auth_host = {
             "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
             "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
           }.fetch(admission_issuance.transaction.surface)
           admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -295,12 +210,12 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
           admission_issuance
         end
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      https!
       get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
+      assert_response :see_other
       post auth_app_verification_cancellation_path(ri: "jp"),
-           params: { authenticity_token: csrf, return_to: posted_return_to, pt: posted_return_to },
+           params: { return_to: posted_return_to, pt: posted_return_to },
            headers: { "Referer" => "https://evil.example/referer" }
 
       assert_response :see_other
@@ -321,7 +236,6 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
   test "cancellation without an admitted ceremony is refused on every surface and changes nothing" do
     [
       ["PUBLIC_AUTH_SERVICE_URL", auth_app_verification_cancellation_path(ri: "jp")],
-      ["PUBLIC_AUTH_CORPORATE_URL", auth_com_verification_cancellation_path(ri: "jp")],
       ["PUBLIC_AUTH_STAFF_URL", auth_org_verification_cancellation_path(ri: "jp")],
     ].each do |host_key, path|
       host! ENV.fetch(host_key)
@@ -381,7 +295,6 @@ class Auth::VerificationCancellationsControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -419,13 +332,6 @@ class Auth::VerificationCancellationsControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -447,23 +353,6 @@ class Auth::VerificationCancellationsControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -478,17 +367,9 @@ class Auth::VerificationCancellationsControllerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -673,31 +554,6 @@ class Auth::VerificationCancellationsControllerTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

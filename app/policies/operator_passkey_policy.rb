@@ -53,7 +53,8 @@ class OperatorPasskeyPolicy < ApplicationPolicy
       phishing_resistant_required: false, user_verification_required: false,
       full_reauthentication_required: false, session_binding: token.public_id, token_binding: token.public_id,
       ttl: 15.minutes, purpose: "step_up", audience: "step_up:org", require_session_binding: true,
-      actor_ref: user.public_id, resource_ref: nil, tenant_ref: nil,
+      actor_ref: user.public_id, resource_ref: (record.is_a?(OperatorPasskey) ? record.external_id : nil),
+      tenant_ref: nil,
     )
   end
 

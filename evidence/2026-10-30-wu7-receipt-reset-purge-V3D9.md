@@ -1,0 +1,6 @@
+# WU-7 receipt reset and purge rollback
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- Extended the existing bound reset request tests to assert that the retired row's receipt remains unchanged, the new default row receives no receipt, and a signing failure preserves the old receipt. Extended the nontransactional PostgreSQL lock-timeout purge test to include a receipt and check it survives rollback after the job waits on a later child deletion. The test removes its synthetic data. Before the test run, no existing preference in the local test database met the purge cutoff.
+- Before the change, the request and purge rollback tests passed: 43 runs, 701 assertions. Afterward those files plus the lifecycle job test passed: 53 runs, 749 assertions, zero failures, errors or skips. RuboCop passed on the two changed test files.
+- Section S.1 says a false consent decision is distinguishable from an unanswered state by receipt presence. The current simple consent API represents an explicit refusal by setting the `consented` flag true and the optional category flags false; the tests above do not resolve whether that existing interpretation matches the specified boolean contract. Full-suite comparison, the JWT type discrepancy and WU-7 completion remain unverified. No migration was run in this slice.

@@ -11,10 +11,12 @@
 # the decision committed. Chronicle remains a separate database; this job does
 # not turn it into a transactional outbox.
 class EnforcementReconciliationJob < ApplicationJob
+  class PrincipalAccessLockNotEstablished < StandardError; end
+
   queue_as :retention
 
-  CASE_CLASSES = [AppEnforcementCase, ComEnforcementCase, OrgEnforcementCase].freeze
-  APPEAL_CLASSES = [AppEnforcementAppeal, ComEnforcementAppeal, OrgEnforcementAppeal].freeze
+  CASE_CLASSES = [AppEnforcementCase, OrgEnforcementCase].freeze
+  APPEAL_CLASSES = [AppEnforcementAppeal, OrgEnforcementAppeal].freeze
   APPEAL_AUDITABLE_STATES = %w(submitted approved rejected).freeze
 
   def perform(batch_size: 200)
@@ -39,20 +41,59 @@ class EnforcementReconciliationJob < ApplicationJob
   private
 
   def reconcile!(enforcement_case)
-    enforcement_case.revoke_method_sessions! if enforcement_case.sessions_revoked_at.blank?
-    # Decided once: writing the approval event below sets audited_at itself. The approval event
-    # names the approver; the reconciliation event was performed by this job, not an operator.
-    audit_pending = enforcement_case.audited_at.blank?
-    return unless audit_pending
+    retry_principal_access!(enforcement_case)
+    failure = nil
+    enforcement_case.with_lock do
+      next unless enforcement_case.state == "active" && enforcement_case.ended_at.nil?
 
-    if enforcement_case.approved_by_operator_public_id.present?
-      enforcement_case.write_audit_event_once!(
-        "approved", actor_operator_public_id: enforcement_case.approved_by_operator_public_id,
-      )
+      enforcement_case.revoke_method_sessions! if enforcement_case.sessions_revoked_at.blank?
+      effect = enforcement_case.principal_effect_record
+      if effect&.access_blocking?
+        principal = enforcement_case.class.principal_class.find_by!(public_id: enforcement_case.principal_public_id)
+        unless principal.admin_locked?
+          failure = PrincipalAccessLockNotEstablished.new
+          next
+        end
+      end
+
+      # Decided once: writing the approval event below sets audited_at itself. The approval event
+      # names the approver; the reconciliation event was performed by this job, not an operator.
+      audit_pending = enforcement_case.audited_at.blank?
+      next unless audit_pending
+
+      if enforcement_case.approved_by_operator_public_id.present?
+        enforcement_case.write_audit_event_once!(
+          "approved", actor_operator_public_id: enforcement_case.approved_by_operator_public_id,
+        )
+      end
+      enforcement_case.write_audit_event_once!("revocation_reconciled", actor_operator_public_id: nil)
     end
-    enforcement_case.write_audit_event_once!("revocation_reconciled", actor_operator_public_id: nil)
+    raise failure if failure
   rescue StandardError => e
     log_failure(enforcement_case.public_id, e)
+  end
+
+  # The actor lock precedes the Case lock; applying the same effect while holding the Case first
+  # would invert the order used by the apply operation and could deadlock.
+  def retry_principal_access!(enforcement_case)
+    effect = enforcement_case.principal_effect_record
+    return unless effect&.access_blocking?
+
+    principal = enforcement_case.class.principal_class.find_by!(public_id: enforcement_case.principal_public_id)
+    return if principal.admin_locked? && principal_access_recorded?(enforcement_case, principal)
+
+    EnforcementCaseApplyOperation.new(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    ).reconcile_principal_access!
+  end
+
+  def principal_access_recorded?(enforcement_case, principal)
+    ChronicleRecord.connected_to(role: :writing) do
+      AccountAccessEvent.where(account_type: principal.class.name, account_id: principal.id)
+        .where(event_type: [AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK, AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK_REAFFIRMED])
+        .exists?(["metadata @> ?::jsonb", { enforcement_case_public_id: enforcement_case.public_id }.to_json])
+    end
   end
 
   def reconcile_ended_case!(enforcement_case)

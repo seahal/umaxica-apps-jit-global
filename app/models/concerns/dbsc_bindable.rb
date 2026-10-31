@@ -14,7 +14,6 @@ module DbscBindable
       return :binding_method_id if attribute_names.include?("binding_method_id")
       return :user_token_binding_method_id if attribute_names.include?("user_token_binding_method_id")
       return :staff_token_binding_method_id if attribute_names.include?("staff_token_binding_method_id")
-      return :visitor_token_binding_method_id if attribute_names.include?("visitor_token_binding_method_id")
 
       raise NoMethodError, "No DBSC binding method attribute for #{name}"
     end
@@ -23,7 +22,6 @@ module DbscBindable
       return :dbsc_status_id if attribute_names.include?("dbsc_status_id")
       return :user_token_dbsc_status_id if attribute_names.include?("user_token_dbsc_status_id")
       return :staff_token_dbsc_status_id if attribute_names.include?("staff_token_dbsc_status_id")
-      return :visitor_token_dbsc_status_id if attribute_names.include?("visitor_token_dbsc_status_id")
 
       raise NoMethodError, "No DBSC status attribute for #{name}"
     end
@@ -38,23 +36,15 @@ module DbscBindable
 
     def dbsc_binding_method_classes
       {
-        "AppPreference" => AppPreferenceBindingMethod,
-        "ComPreference" => ComPreferenceBindingMethod,
-        "OrgPreference" => OrgPreferenceBindingMethod,
         "ClientToken" => ClientTokenBindingMethod,
         "OperatorToken" => OperatorTokenBindingMethod,
-        "VisitorToken" => VisitorTokenBindingMethod,
       }
     end
 
     def dbsc_status_classes
       {
-        "AppPreference" => AppPreferenceDbscStatus,
-        "ComPreference" => ComPreferenceDbscStatus,
-        "OrgPreference" => OrgPreferenceDbscStatus,
         "ClientToken" => ClientTokenDbscStatus,
         "OperatorToken" => OperatorTokenDbscStatus,
-        "VisitorToken" => VisitorTokenDbscStatus,
       }
     end
   end

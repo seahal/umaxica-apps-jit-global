@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Read-only inventory for unfinished APP/COM registrations that the scheduled cleanup cannot reach.
+# Read-only inventory for unfinished APP registrations that the scheduled cleanup cannot reach.
 class SignUpStuckRegistrationReportQuery
   class WritingRoleRefused < StandardError; end
 
@@ -27,27 +27,6 @@ class SignUpStuckRegistrationReportQuery
           owner_foreign_key: :user_id,
           status_column: :user_identity_telephone_status_id,
           status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-        },
-      ].freeze,
-    }.freeze,
-    com: {
-      flow: VisitorSignUpFlow,
-      actor: Visitor,
-      actor_status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-      contacts: [
-        {
-          type: "email",
-          model: VisitorEmail,
-          owner_foreign_key: :visitor_id,
-          status_column: :visitor_email_status_id,
-          status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-        },
-        {
-          type: "telephone",
-          model: VisitorTelephone,
-          owner_foreign_key: :visitor_id,
-          status_column: :visitor_telephone_status_id,
-          status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
         },
       ].freeze,
     }.freeze,

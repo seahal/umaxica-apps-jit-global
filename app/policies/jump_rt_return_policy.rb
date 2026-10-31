@@ -95,6 +95,7 @@ module JumpRtReturnPolicy
     return nil unless %w(http https).include?(uri.scheme)
     return nil if uri.host.blank?
     return nil if uri.userinfo.present?
+    return nil unless uri.path.empty? && uri.query.nil? && uri.fragment.nil?
 
     port = (uri.port && uri.port != default_port_for(uri.scheme)) ? ":#{uri.port}" : ""
     "#{uri.scheme.downcase}://#{uri.host.downcase}#{port}"

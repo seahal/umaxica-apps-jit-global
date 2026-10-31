@@ -12,17 +12,12 @@ class Actor
   #   Actor.preferences.language   # => "ja"
   #   Actor.preferences.timezone   # => "Asia/Tokyo"
   #   Actor.preferences.theme      # => "sy"
-  #   Actor.preferences.cookie.consented?  # => false
   #   Actor.preferences.null?      # => true only when no request context is bound
   class Preference
     attr_reader :language, :region, :timezone, :theme,
-                :currency, :date_format, :time_format, :motion, :density, :page_size
+                :currency, :date_format, :time_format, :motion, :density, :page_size, :web_push
 
-    # Field names (strings) the user set on purpose. Drives localization: an
-    # explicitly set field's saved value wins over dynamic region seeding (?ri),
-    # while an unset field stays eligible for seeding. See PreferenceExplicitFields.
-    attr_reader :explicit_fields
-
+    # The resolved Actor preference does not hydrate browser consent from Preference storage.
     Cookie =
       Data.define(:consented, :functional, :performant, :targetable, :consent_version, :consented_at) do
         def consented? = !!consented
@@ -63,8 +58,9 @@ class Actor
                    currency: DEFAULTS[:currency], date_format: DEFAULTS[:date_format],
                    time_format: DEFAULTS[:time_format], motion: DEFAULTS[:motion],
                    density: DEFAULTS[:density], page_size: DEFAULTS[:page_size],
-                   cookie: NULL_COOKIE, null: false, explicit_fields: [])
-      @explicit_fields = Array(explicit_fields).map(&:to_s).freeze
+                   cookie: NULL_COOKIE, web_push: "disabled", null: false)
+      raise ArgumentError, "invalid web push state" unless %w(enabled disabled).include?(web_push)
+
       @language = language.freeze
       @region = region.freeze
       @timezone = timezone.freeze
@@ -76,6 +72,7 @@ class Actor
       @density = density.freeze
       @page_size = page_size.freeze
       @cookie = cookie
+      @web_push = web_push.freeze
       @null = null
       freeze
     end
@@ -86,15 +83,6 @@ class Actor
 
     def null?
       @null
-    end
-
-    # True when the user explicitly chose this field (vs an auto-seeded default).
-    def explicit?(field)
-      @explicit_fields.include?(field.to_s)
-    end
-
-    def language_explicit?
-      explicit?(:language)
     end
 
     def ==(other)
@@ -109,9 +97,9 @@ class Actor
         motion == other.motion &&
         density == other.density &&
         page_size == other.page_size &&
+        web_push == other.web_push &&
         cookie == other.cookie &&
-        null? == other.null? &&
-        explicit_fields == other.explicit_fields
+        null? == other.null?
     end
 
     alias eql? ==
@@ -119,7 +107,7 @@ class Actor
     def hash
       [
         self.class, language, region, timezone, theme, currency, date_format, time_format,
-        motion, density, page_size, cookie, null?, explicit_fields,
+        motion, density, page_size, web_push, cookie, null?,
       ].hash
     end
 
@@ -164,6 +152,12 @@ class Actor
     end
 
     def with_cookie(cookie)
+      with_browser_state(cookie: cookie, web_push: @web_push)
+    end
+
+    public
+
+    def with_browser_state(cookie:, web_push:)
       self.class.new(
         language: @language,
         region: @region,
@@ -176,8 +170,8 @@ class Actor
         density: @density,
         page_size: @page_size,
         cookie: self.class.cookie_from(cookie),
+        web_push: web_push,
         null: @null,
-        explicit_fields: @explicit_fields,
       )
     end
 
@@ -185,28 +179,34 @@ class Actor
     # All values are safe defaults; no DB access occurs.
     NULL = new(null: true).freeze
 
-    # Build Preference from JWT prf claim hash
-    # @param prf_claim [Hash] the prf claim from JWT payload with lx, ri, tz, ct and extended keys
+    # Build the request-local runtime value from a verified realm snapshot or its URL overlay.
+    # The compact keys are generated internally from the verified snapshot; old token shapes are
+    # rejected before this value object receives them.
     # @param cookie [Cookie] optional cookie consent data
     # @return [Preference] the constructed preference, or NULL if claim is invalid
-    def self.from_jwt(prf_claim, cookie: NULL_COOKIE)
-      return NULL unless prf_claim.is_a?(Hash)
+    def self.from_jwt(preference_snapshot, cookie: NULL_COOKIE)
+      return NULL unless preference_snapshot.is_a?(Hash)
 
+      theme = hash_value(preference_snapshot, "theme", :theme, "ct", :ct) || DEFAULTS[:theme]
       new(
-        language: prf_claim["lx"] || DEFAULTS[:language],
-        region: prf_claim["ri"] || DEFAULTS[:region],
-        timezone: prf_claim["tz"] || DEFAULTS[:timezone],
-        theme: prf_claim["ct"] || DEFAULTS[:theme],
-        currency: hash_value(prf_claim, "cu", :cu, "currency", :currency) || DEFAULTS[:currency],
-        date_format: hash_value(prf_claim, "df", :df, "date_format", :date_format) || DEFAULTS[:date_format],
-        time_format: hash_value(prf_claim, "tf", :tf, "time_format", :time_format) || DEFAULTS[:time_format],
-        motion: hash_value(prf_claim, "mo", :mo, "motion", :motion) || DEFAULTS[:motion],
-        density: hash_value(prf_claim, "dn", :dn, "density", :density) || DEFAULTS[:density],
-        page_size: hash_value(prf_claim, "ps", :ps, "page_size", :page_size) ||
-          DEFAULTS[:page_size],
+        language: hash_value(preference_snapshot, "language", :language, "lx", :lx) || DEFAULTS[:language],
+        region: hash_value(preference_snapshot, "region", :region, "ri", :ri) || DEFAULTS[:region],
+        timezone: hash_value(preference_snapshot, "timezone", :timezone, "tz", :tz) || DEFAULTS[:timezone],
+        theme: theme_from_snapshot(theme),
+        currency: hash_value(preference_snapshot, "currency", :currency, "cu", :cu) || DEFAULTS[:currency],
+        date_format: hash_value(preference_snapshot, "date_format", :date_format, "df", :df) ||
+          DEFAULTS[:date_format],
+        time_format: hash_value(preference_snapshot, "time_format", :time_format, "tf", :tf) ||
+          DEFAULTS[:time_format],
+        motion: hash_value(preference_snapshot, "motion", :motion, "mo", :mo) || DEFAULTS[:motion],
+        density: hash_value(preference_snapshot, "density", :density, "dn", :dn) || DEFAULTS[:density],
+        page_size: hash_value(preference_snapshot, "page_size", :page_size, "ps", :ps) || DEFAULTS[:page_size],
         cookie: cookie,
-        explicit_fields: hash_value(prf_claim, "explicit", :explicit) || [],
       )
+    end
+
+    def self.theme_from_snapshot(value)
+      { "light" => "li", "dark" => "dr", "system" => "sy" }.fetch(value.to_s, value)
     end
 
     def self.hash_value(hash, *keys)
@@ -215,6 +215,7 @@ class Actor
     end
 
     private_class_method :hash_value
+    private_class_method :theme_from_snapshot
 
     def self.cookie_from(value)
       case value

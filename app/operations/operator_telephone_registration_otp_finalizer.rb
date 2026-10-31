@@ -82,7 +82,7 @@ class OperatorTelephoneRegistrationOtpFinalizer
 
   def root_current?
     token.active_status?(OperatorTelephoneCeremonyTransaction.database_now) && token_device_session.usable? &&
-      token_device_session.current_refresh_token_id == token.id
+      token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
   def current_policy?

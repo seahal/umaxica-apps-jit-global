@@ -15,6 +15,7 @@ module BaseStepUpCompletion
     validate_completion_browser!(
       transaction:, surface: self.class.base_admission_surface_name, actor: Actor.subject, token: current_session_token,
     )
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/shared/result_continuation", layout: false,
                                               locals: { action_url: request.path,
                                                         result_ref: params[:result_ref],
@@ -101,7 +102,6 @@ module BaseStepUpCompletion
     catalog =
       case transaction.surface
       when "app" then StepUpScopeCatalog::APP
-      when "com" then StepUpScopeCatalog::COM
       when "org" then StepUpScopeCatalog::ORG
       else raise ArgumentError, "unsupported step-up surface: #{transaction.surface.inspect}"
       end

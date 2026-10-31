@@ -32,29 +32,12 @@ class SignUpContractsTest < ActiveSupport::TestCase
     assert_predicate SignUpRequirementRegistry.for_entry(surface: :app, entry_method: "apple"), :social?
   end
 
-  test "requirement registry rejects com social entry methods" do
-    assert_equal %i(otp birthdate),
-                 SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "email").requirements
-    assert_equal(
-      %i(otp passkey birthdate),
-      SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "telephone").requirements,
-    )
-    assert_not SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "telephone").requirement?(:passcode)
-
-    assert_raises(ArgumentError) { SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "google") }
-    assert_raises(ArgumentError) { SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "apple") }
-  end
-
   test "requirement registry rejects unknown surfaces" do
     assert_raises(ArgumentError) { SignUpRequirementRegistry.for_entry(surface: :org, entry_method: "email") }
   end
 
   test "requirement registry derives surface from ticket class" do
-    op_base_app = build_cycle(ClientSignUpFlow, entry_method: "google")
-    op_base_com = build_cycle(VisitorSignUpFlow, entry_method: "telephone")
-
-    assert_equal :app, SignUpRequirementRegistry.for_ticket(op_base_app).surface
-    assert_equal :com, SignUpRequirementRegistry.for_ticket(op_base_com).surface
+    assert_equal :app, SignUpRequirementRegistry.surface_for_ticket(ClientSignUpFlow.new)
   end
 
   test "policy context copies step and entry method from ticket" do

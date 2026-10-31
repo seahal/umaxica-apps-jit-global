@@ -15,7 +15,7 @@ class OidcOpAccessTokenVerifier
     iss aud exp nbf iat sub sid client_id jti scope authn_ctx
   ).freeze
   FORBIDDEN_CLAIMS = %w(scp typ act).freeze
-  RESOURCE_TYPE_BY_REALM = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
+  RESOURCE_TYPE_BY_REALM = { "app" => "client", "org" => "operator" }.freeze
   CLOCK_SKEW_LEEWAY_SECONDS = 30
 
   def initialize(access_token:, client_id:, realm:, issuer:, audience:, jwks_client:,

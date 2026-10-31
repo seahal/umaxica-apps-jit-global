@@ -23,8 +23,8 @@ class AuthenticationLogoutAllSessions
     new(...).call
   end
 
-  def initialize(resource: nil, user: nil, visitor: nil, operator: nil, rp_account: nil, reason: "logout_all")
-    @resource = resource || user || visitor || operator || rp_account
+  def initialize(resource: nil, user: nil, operator: nil, rp_account: nil, reason: "logout_all")
+    @resource = resource || user || operator || rp_account
     @reason = reason
   end
 
@@ -48,8 +48,6 @@ class AuthenticationLogoutAllSessions
     case resource&.class&.name
     when "Client"
       return ClientToken.where(user_id: resource.id).includes(:device_session)
-    when "Visitor"
-      return VisitorToken.where(visitor_id: resource.id).includes(:device_session)
     when "Operator"
       return OperatorToken.where(staff_id: resource.id).includes(:device_session)
     end

@@ -1,0 +1,7 @@
+# Passkey rename outer OP transaction follow-up
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contained substantial uncommitted changes affecting the checks.
+- The existing `test/operations/passkey_mutation_concurrency_test.rb` passed before the experiment: 3 runs, 22 assertions.
+- Two temporary APP nontransactional cases required refusal inside an outer OP transaction, respectively joined and using a savepoint. Both failed before the proposed guard (2 runs, 2 assertions, 2 failures): the expected `DependencyFailure` was not raised. The temporary cases and the proposed guard were removed after the experiment.
+- The proposed guard caused a combined run of `passkey_mutation_concurrency_test.rb`, `identity_passkey_name_committer_test.rb`, `passkey_mutation_authorization_test.rb` and `base_passkey_mutation_step_up_test.rb` to finish with 29 runs, 185 assertions, 5 failures and 4 errors. Existing transactional fixture boundaries caused refusal in cases expecting other outcomes. The fix is not complete; independently committed fixture setup and precise multi-database cleanup need implementation before retaining the guard.
+- The ORG outer transaction and HTTP refusal were not tested. The full suite was not rerun. Initial attempts to start Rails without the required COM JWT settings failed during initialization; the executed tests used explicit local COM issuer, audience and revoked-key-list settings.

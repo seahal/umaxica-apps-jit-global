@@ -15,15 +15,15 @@ Visa creates the OIDC admission for the routed surface. Base remains the browser
 OIDC request; Auth consumes the admission through `AuthCeremonyAdmission` and `AuthCeremonyContext`:
 
 - `app/controllers/visa/app/oauth/authorizations_controller.rb`
-- `app/controllers/visa/com/oauth/authorizations_controller.rb`
 - `app/controllers/visa/org/oauth/authorizations_controller.rb`
 - `app/controllers/concerns/auth_ceremony_admission.rb`
 - `app/services/base_auth_admission_coordinator.rb`
 
 The admission is bound to the surface, intent, browser context, ceremony session, and parent
 transaction. It is one-time and replay protected. A context-free Auth request and a mismatched or
-reused admission are refused. The Auth controllers for App, Com, and Org include this boundary
-before entering the surface-local Sign In, Sign Up, or verification state machine.
+reused admission are refused. The Auth controllers for App and Org include this boundary before
+entering the surface-local Sign In, Sign Up, or verification state machine. The corporate (`com`)
+host serves no credential ceremony and has no admission, so it has no row in this map.
 
 The following existing controls remain separate:
 
@@ -43,13 +43,11 @@ capacity gate is added.
 | Surface and flow                  | Entry or continuation boundary                                                                         | Expensive execution that needs a future second check                                                                           |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | App Sign In                       | `auth/app/sign/ins_controller.rb`, then surface-local email, passkey, secret, or challenge controllers | Password/secret verification, email OTP issue/verify, Passkey challenge/verification, TOTP/passcode work                       |
-| Com Sign In                       | `auth/com/sign/ins_controller.rb`, then email/passkey/challenge controllers                            | Email OTP issue/verify, Passkey challenge/verification, secret/passcode work                                                   |
 | Org Sign In and Standby           | `auth/org/sign/ins_controller.rb` and the normal/emergency Passkey controllers                         | Operator Passkey and secret credential verification; Standby continues to forbid Step-Up                                       |
 | App Sign Up                       | `auth/app/sign/ups_controller.rb`, email/telephone and social registration controllers                 | Turnstile/provider verification, OTP issue/verify, Passkey registration, secret credential hashing and finalization            |
-| Com Sign Up                       | `auth/com/sign/ups_controller.rb`, email/telephone registration controllers                            | Turnstile, OTP issue/verify, Passkey registration, secret credential hashing and finalization                                  |
 | Provider callback                 | App social callback controllers and registered OIDC callback paths                                     | Provider assertion validation, callback replay checks, and the subsequent Sign In/Sign Up finalizer                            |
 | Resume/direct POST                | Every continuation controller retains the admission, flow/ticket, CSRF, expiry, and owner checks       | A future execution gate must be repeated immediately before the expensive operation; hiding an entry button is insufficient    |
-| Completed App/Com Sign Up handoff | `finalize_sign_up_from_checkpoint!` enters canonical Sign In admission                                 | Sign In guardrails and Base session issuance remain authoritative; registration completion is not a capacity or session bypass |
+| Completed App Sign Up handoff     | `finalize_sign_up_from_checkpoint!` enters canonical Sign In admission                                 | Sign In guardrails and Base session issuance remain authoritative; registration completion is not a capacity or session bypass |
 
 This map is a boundary inventory, not a claim that every expensive operation already has an
 execution-capacity limiter. The current controls prevent unauthorised or stale flow entry, but do

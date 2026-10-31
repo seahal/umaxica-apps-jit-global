@@ -17,12 +17,6 @@ class PrincipalZenithConsolidationTest < ActiveSupport::TestCase
       principal_path: "db/org_principal_reserved_migrate",
       combined_paths: %w(db/org_principals_migrate db/org_zenith_migrate),
     },
-    com: {
-      principal: "com_principal",
-      zenith: "com_zenith",
-      principal_path: "db/com_principal_reserved_migrate",
-      combined_paths: %w(db/com_principals_migrate db/com_zenith_migrate),
-    },
   }.freeze
 
   # After the principal/zenith consolidation there is no standalone principal

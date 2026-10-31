@@ -330,26 +330,22 @@ describe("email registration interaction", () => {
 });
 
 describe("privacy erasure interaction", () => {
-  it("posts the jurisdiction", () => {
+  it("does not submit an unavailable erasure request", () => {
     mount(
       <PrivacyErasureNew
         title="Early personal data erasure"
-        notices={["It is separate from withdrawal."]}
+        notices={["Requests cannot be submitted here at this time."]}
         form={{
           action: "/identity/privacy/erasure",
           jurisdiction: "unknown",
-          submit_label: "Request early erasure",
+          submit_label: "Unavailable",
         }}
       />,
     );
-    submitForm();
-
-    expect(post).toHaveBeenCalledWith(
-      "/identity/privacy/erasure",
-      { jurisdiction: "unknown" },
-      expect.anything(),
-    );
-    fireVisitCallbacks(post);
+    expect(present(container.querySelector("button"), "unavailable button").disabled).toBe(true);
+    expect(container.querySelector("form")).toBeNull();
+    clickButton("Unavailable");
+    expect(post).not.toHaveBeenCalled();
   });
 });
 

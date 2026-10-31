@@ -170,6 +170,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
           f0_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
+    fx0_token.reload.update!(last_step_up_resource_ref: email.public_id)
     delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
            headers: http_headers_7
 
@@ -325,6 +326,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
           f1_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
+    fx1_token.reload.update!(last_step_up_resource_ref: telephone.public_id)
     delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
            headers: http_headers_6
 
@@ -491,6 +493,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
           f2_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
+    fx2_token.reload.update!(last_step_up_resource_ref: passkey.public_id)
     delete base_app_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
            headers: http_headers_5
 
@@ -532,6 +535,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         BaseSelectorAuthority.prepare(surface: :app, principal: fx3_client, session: fx3_token)
         satisfy_user_verification(fx3_token)
         mark_token_step_up_satisfied_for_test(fx3_token, scope: fx3_scope)
+        fx3_token.update!(last_step_up_resource_ref: totp.public_id)
         begin
           f3_cookie_pairs =
             begin
@@ -659,7 +663,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     delete base_app_identity_totp_url(totp.public_id, ri: "jp", host: @base_host),
            headers: http_headers_4
 
-    assert_redirected_to base_app_identity_totps_url(ri: "jp", host: @base_host)
+    assert_response :unprocessable_content
     assert_equal ClientTotpCredentialStatus::ACTIVE, totp.reload.user_identity_totp_credential_status_id
   end
 
@@ -698,6 +702,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         BaseSelectorAuthority.prepare(surface: :app, principal: fx4_client, session: fx4_token)
         satisfy_user_verification(fx4_token)
         mark_token_step_up_satisfied_for_test(fx4_token, scope: fx4_scope)
+        fx4_token.update!(last_step_up_resource_ref: totp.public_id)
         begin
           f4_cookie_pairs =
             begin
@@ -977,6 +982,13 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
           f5_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
+    fx5_token.reload.update!(last_step_up_resource_ref: email.public_id)
+    IdentityCredentialRemovalCommitter.stub(:call!, false) do
+      delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host), headers: http_headers_2
+
+      assert_response :unprocessable_content
+      assert_predicate email.reload, :binding_effective?
+    end
     delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
            headers: http_headers_2
 
@@ -1132,6 +1144,13 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
           f6_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
+    fx6_token.reload.update!(last_step_up_resource_ref: telephone.public_id)
+    IdentityCredentialRemovalCommitter.stub(:call!, false) do
+      delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host), headers: http_headers_1
+
+      assert_response :unprocessable_content
+      assert_predicate telephone.reload, :binding_effective?
+    end
     delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
            headers: http_headers_1
 
@@ -1287,6 +1306,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
           f7_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
+    fx7_token.reload.update!(last_step_up_resource_ref: passkey.public_id)
     delete base_app_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
            headers: http_headers_0
 
@@ -1398,13 +1418,10 @@ class Auth::App::CredentialRemovalConstraintsTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -1436,13 +1453,6 @@ class Auth::App::CredentialRemovalConstraintsTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -1464,23 +1474,6 @@ class Auth::App::CredentialRemovalConstraintsTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -1491,13 +1484,6 @@ class Auth::App::CredentialRemovalConstraintsTest
   def satisfy_staff_verification(token, scope: nil)
     _verification, raw_token = OperatorVerification.issue_for_token!(token: token)
     cookies[OperatorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
     mark_token_step_up_satisfied_for_test(token, scope: scope)
     true
   end
@@ -1544,7 +1530,6 @@ class Auth::App::CredentialRemovalConstraintsTest
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -1730,31 +1715,6 @@ class Auth::App::CredentialRemovalConstraintsTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token, "Sec-Fetch-Site" => "same-origin")
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def load_jump_rt_env!

@@ -96,7 +96,6 @@ module SignIn
     def actor_class_matches?
       case record
       when ClientSignInFlow then user.is_a?(Client)
-      when VisitorSignInFlow then user.is_a?(Visitor)
       when OperatorSignInFlow then user.is_a?(Operator)
       else false
       end

@@ -198,6 +198,7 @@ module BasePreferenceScreenPage
   # --- cookie ------------------------------------------------------------------------------------
 
   def preference_cookie_page_props
+    consent_state = preference_cookie_screen_state
     {
       screen: "cookie",
       title: t(preference_acme_i18n_key(:preference, :cookie, :edit, :h1)),
@@ -216,13 +217,17 @@ module BasePreferenceScreenPage
           {
             key: field.to_s,
             label: t(preference_acme_i18n_key(:preference, :cookie, :edit, label_key)),
-            value: @preference_cookie.public_send(field) ? true : false,
+            value: consent_state.fetch(field),
           }
         end,
         submit_label: t(preference_acme_i18n_key(:preferences, :update_settings)),
         submitting_label: t(preference_acme_i18n_key(:preferences, :submitting)),
       },
     }
+  end
+
+  def preference_cookie_screen_state
+    readable_cookie_state(@preference_cookie)
   end
 
   # --- customizations (reset) --------------------------------------------------------------------
@@ -245,7 +250,7 @@ module BasePreferenceScreenPage
         method: "delete",
         field: "confirm_reset",
         label: t(preference_acme_i18n_key(:preference, :resets, :confirm)),
-        value: @preference&.confirm_reset == "1",
+        value: @preference_confirmation == "1",
         submit_label: t(preference_acme_i18n_key(:preference, :resets, :button)),
         submitting_label: t(preference_acme_i18n_key(:preferences, :submitting)),
       },

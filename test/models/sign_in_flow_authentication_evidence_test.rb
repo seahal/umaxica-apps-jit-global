@@ -6,7 +6,6 @@ class SignInFlowAuthenticationEvidenceTest < ActiveSupport::TestCase
   test "only primary and MFA pending flows can record authentication evidence on each surface" do
     [
       [ClientSignInFlow, Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_117_000_000_000)],
-      [VisitorSignInFlow, Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_117_000_000_000)],
       [OperatorSignInFlow,
        Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_117_000_000_000),],
     ].each do |model, actor|

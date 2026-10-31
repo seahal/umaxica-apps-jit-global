@@ -94,13 +94,17 @@ class IdentitySocialCeremonyCandidateStore
   public :fetch_consumed!
 
   def consume!(ref)
-    record = IdentitySocialCeremonyCandidate.new(ref: ref.to_s).consume!(
-      now: IdentitySocialCeremonyCandidate.database_now,
-      error_class: IdentitySocialCeremonyContract::Error,
-      not_found_message: "social auth candidate is not found",
-      expired_message: "social auth candidate is expired",
-    )
-    candidate_from(record)
+    IdentitySocialCeremonyCandidate.connection_owner.connected_to(role: :writing) do
+      IdentitySocialCeremonyCandidate.transaction do
+        record = IdentitySocialCeremonyCandidate.new(ref: ref.to_s).consume!(
+          now: IdentitySocialCeremonyCandidate.database_now,
+          error_class: IdentitySocialCeremonyContract::Error,
+          not_found_message: "social auth candidate is not found",
+          expired_message: "social auth candidate is expired",
+        )
+        candidate_from(record)
+      end
+    end
   rescue KeyError, TypeError, ActiveRecord::SerializationTypeMismatch => e
     raise IdentitySocialCeremonyContract::Error, "social auth candidate is invalid: #{e.message}"
   end
@@ -117,6 +121,17 @@ class IdentitySocialCeremonyCandidateStore
   def candidate_from(record)
     raise IdentitySocialCeremonyContract::Error, "social auth candidate is invalid" unless record.valid?
 
+    callback_result = callback_result_from(record.auth_hash)
+    principal = callback_result.principal
+    expected_digest = digest_for(
+      record.surface, record.actor_ref, record.session_ref, record.transaction_id,
+      record.operation, record.provider, principal,
+    )
+    unless principal.provider == record.provider &&
+        ActiveSupport::SecurityUtils.secure_compare(record.digest, expected_digest)
+      raise IdentitySocialCeremonyContract::Error, "social auth candidate binding is invalid"
+    end
+
     Candidate.new(
       ref: record.ref,
       digest: record.digest,
@@ -126,7 +141,7 @@ class IdentitySocialCeremonyCandidateStore
       transaction_id: record.transaction_id,
       operation: record.operation,
       provider: record.provider,
-      callback_result: callback_result_from(record.auth_hash),
+      callback_result: callback_result,
       expires_at: record.expires_at,
     )
   end

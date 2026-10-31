@@ -232,11 +232,16 @@ HTTP 500 response.
 # 1. Stop Puma, Foreman, and docker compose.
 # 2. Reset the databases.
 bin/rails db:migrate:reset
-# 3. Restart the server. Startup pre-seeds all preference reference tables.
+# 3. Run the reference seed and restart the server.
+bin/rails db:seed
 ```
 
-`config/initializers/preference_reference_defaults.rb` seeds every preference reference table in
-`after_initialize`, so the first request after restart sees populated databases.
+`db/seeds.rb` replays fixed sign-flow, token, authority-stop, membership, Entra, Chronicle and
+active Preference option catalogs after a schema-only load. It also contains development sample
+data and feature-flag setup, so review its effects before running it on an existing development
+database. `config/initializers/preference_reference_defaults.rb` warms status, audit and applicable
+binding reference tables at startup; it does not seed every Preference option table. Some option
+writers also populate their fixed IDs on demand.
 
 ## Writing Table-Rename Migrations
 

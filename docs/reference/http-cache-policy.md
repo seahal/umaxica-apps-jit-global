@@ -87,9 +87,9 @@ Subclass counts are from the 2026-10-01 inventory and drift as controllers are a
 | `Auth::Org::ApplicationController`                     | Global     | 36         | `/`, `/sign/in`                                           |
 | `Auth::{App,Com,Org}::BareController`                  | Global     | 11 each    | `/health`, `/revision`, `/edge/v0/token/check`            |
 | `Auth::RedirectOnlyController`                         | Global     | 8          | `/iam`, `/billings`, `/accounts` (redirects)              |
-| `Base::App::ApplicationController`                     | Global     | 71         | `/`, `/configuration`, dashboard pages                    |
-| `Base::Com::ApplicationController`                     | Global     | 59         | `/`, `/configuration`                                     |
-| `Base::Org::ApplicationController`                     | Global     | 70         | `/`, `/iam`, `/support`                                   |
+| `Base::App::ApplicationController`                     | Global     | 71         | `/`, dashboard pages                                       |
+| `Base::Com::ApplicationController`                     | Global     | 59         | `/`, `/preference`                                        |
+| `Base::Org::ApplicationController`                     | Global     | 70         | `/`, `/iam`, `/support`, `/settings`                      |
 | `Base::{Dev,Net}::ApplicationController`               | Global     | 1 each     | `/`                                                       |
 | `Base::{App,Com,Org}::BareController`                  | Global     | 17–18      | `/health`, `/revision`, `/robots.txt`, `/edge/v0/token/*` |
 | `Base::{Dev,Net}::BareController`                      | Global     | 8 each     | `/health`, `/revision`                                    |

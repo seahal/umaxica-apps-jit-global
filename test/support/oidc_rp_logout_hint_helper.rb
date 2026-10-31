@@ -8,7 +8,6 @@ module OidcRpLogoutHintHelper
     hint_class =
       case grant
       when OpAppGrant then OpAppGrantLogoutHint
-      when OpComGrant then OpComGrantLogoutHint
       when OpOrgGrant then OpOrgGrantLogoutHint
       else raise ArgumentError, "unsupported RP grant: #{grant.class.name}"
       end

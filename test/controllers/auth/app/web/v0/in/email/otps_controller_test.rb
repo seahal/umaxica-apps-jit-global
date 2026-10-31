@@ -12,15 +12,123 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
 
   include ActiveJob::TestHelper
 
+  skip_transactional_tests_for_database :op_base_app
+  skip_transactional_tests_for_database :occurrence
+
   setup do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
+    @admissions = [admission]
+    @occurrence_bodies = []
     admit_auth_ceremony_entry!("/sign/in", reference: admission.reference, params: { ri: "jp" })
     @primary_sign_in_binding = nil
     ActionMailer::Base.deliveries.clear
+  end
+
+  teardown do
+    EmailOccurrence.where(body: @occurrence_bodies).delete_all if @occurrence_bodies.present?
+    @admissions&.each do |admission|
+      bindings = ClientAuthAdmissionBinding.where(authorization_transaction_id: admission.transaction.id)
+      session_ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
+      bindings.delete_all
+      ClientAuthCeremonySession.where(id: session_ids).delete_all
+      admission.transaction.delete
+    end
+  end
+
+  test "queue refusal reports unavailable and retains the newly issued generation" do
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    email = create_verified_contact(owner: owner, address: "resend-failure-#{SecureRandom.hex(8)}@example.test")
+    state = state_for(email.address)
+    ceremony = current_ceremony
+    old_generation = ceremony.reload.email_otp_context.fetch("generation")
+    clear_delivery_occurrences_for(email.address)
+    refused_job = Object.new
+    refused_job.define_singleton_method(:perform_later) { |*_, **_| false }
+
+    OtpNotifierEmailDeliveryJob.stub(:set, refused_job) do
+      post auth_app_web_v0_in_email_otp_path, params: { state: state }, headers: { "Host" => @host }, as: :json
+    end
+
+    assert_response :service_unavailable
+    assert_equal({ "resendable" => false, "retry_after" => 0 }, response.parsed_body)
+    assert_not_equal old_generation, ceremony.reload.email_otp_context.fetch("generation")
+    assert_empty ActionMailer::Base.deliveries
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+  end
+
+  test "occurrence database connection failure returns unavailable without changing the challenge" do
+    address = "resend-database-#{SecureRandom.hex(8)}@example.test"
+    state = state_for(address)
+    ceremony = current_ceremony
+    original = ceremony.reload.email_otp_context.deep_dup
+
+    EmailOccurrence.stub(:find_by, ->(**) { raise ActiveRecord::ConnectionNotEstablished }) do
+      post auth_app_web_v0_in_email_otp_path, params: { state: state }, headers: { "Host" => @host }, as: :json
+    end
+
+    assert_response :service_unavailable
+    assert_equal({ "resendable" => false, "retry_after" => 0 }, response.parsed_body)
+    unchanged = original == ceremony.reload.email_otp_context
+
+    assert unchanged, "connection failure before issuance must preserve the challenge"
+    assert_empty ActionMailer::Base.deliveries
+  end
+
+  [ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked].each do |failure_class|
+    test "occurrence #{failure_class.name} returns unavailable without changing the challenge" do
+      address = "resend-lock-failure-#{SecureRandom.hex(8)}@example.test"
+      state = state_for(address)
+      ceremony = current_ceremony
+      original = ceremony.reload.email_otp_context.deep_dup
+
+      Rails.error.stub(:report, ->(*, **) { }) do
+        EmailOccurrence.stub(:find_by, ->(**) { raise failure_class }) do
+          post auth_app_web_v0_in_email_otp_path, params: { state: state }, headers: { "Host" => @host }, as: :json
+        end
+      end
+
+      assert_response :service_unavailable
+      assert_equal({ "resendable" => false, "retry_after" => 0 }, response.parsed_body)
+      assert_withheld { original == ceremony.reload.email_otp_context }
+      assert_empty ActionMailer::Base.deliveries
+    end
+  end
+
+  test "unexpected database statement errors remain visible" do
+    state = state_for("resend-statement-#{SecureRandom.hex(8)}@example.test")
+
+    EmailOccurrence.stub(:find_by, ->(**) { raise ActiveRecord::StatementInvalid, "invalid statement" }) do
+      assert_raises(ActiveRecord::StatementInvalid) do
+        post auth_app_web_v0_in_email_otp_path, params: { state: state }, headers: { "Host" => @host }, as: :json
+      end
+    end
+  end
+
+  test "queue database connection failure returns unavailable and keeps the new generation" do
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    email = create_verified_contact(owner: owner, address: "resend-db-after-#{SecureRandom.hex(8)}@example.test")
+    state = state_for(email.address)
+    ceremony = current_ceremony
+    old_generation = ceremony.reload.email_otp_context.fetch("generation")
+    clear_delivery_occurrences_for(email.address)
+
+    OtpNotifierEmailDeliveryJob.stub(:set, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
+      post auth_app_web_v0_in_email_otp_path, params: { state: state }, headers: { "Host" => @host }, as: :json
+    end
+
+    assert_response :service_unavailable
+    assert_not_equal old_generation, ceremony.reload.email_otp_context.fetch("generation")
+    assert_empty ActionMailer::Base.deliveries
   end
 
   test "a released Contact cannot mint a new resend state from a stale code entry page" do
@@ -72,7 +180,9 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
   test "recent issued returns 429 with retry_after and header" do
     email = "retry_#{SecureRandom.hex(4)}@example.com"
     hmac = OccurrenceHmac.digest(kind: :email, body: email)
-    EmailOccurrence.where(body: hmac).delete_all
+
+    assert_not EmailOccurrence.exists?(body: hmac)
+    @occurrence_bodies << hmac
     EmailOccurrence.create!(
       body: hmac,
       status_id: EmailOccurrenceStatus::ACTIVE,
@@ -94,6 +204,10 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     address = "bound-resend-#{SecureRandom.hex(8)}@example.test"
+    candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+    assert_not EmailOccurrence.exists?(body: candidate_body)
+    @occurrence_bodies << candidate_body
     post(
       "/sign/in/email", params: {
         :user_email => { address: address },
@@ -114,6 +228,7 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
+    @admissions << admission
     admit_auth_ceremony_entry!("/sign/in", reference: admission.reference, params: { ri: "jp" }, browser: other)
 
     assert_equal 303, other.response.status
@@ -133,7 +248,9 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     user.client_emails.create!(address: email, user_email_status_id: ClientEmailStatus::VERIFIED).finalize_binding!
 
     hmac = OccurrenceHmac.digest(kind: :email, body: email)
-    EmailOccurrence.where(body: hmac).delete_all
+
+    assert_not EmailOccurrence.exists?(body: hmac)
+    @occurrence_bodies << hmac
     EmailOccurrence.create!(
       body: hmac,
       status_id: EmailOccurrenceStatus::ACTIVE,
@@ -165,6 +282,10 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     address = "released-resend-#{SecureRandom.hex(8)}@example.test"
+    candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+    assert_not EmailOccurrence.exists?(body: candidate_body)
+    @occurrence_bodies << candidate_body
     owner = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
       id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
@@ -235,9 +356,108 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     assert_predicate ceremony.verify_email_otp!(code: code), :success?
   end
 
+  test "a blocked sign-in sentry refuses the resender with no generation or delivery" do
+    Flipper.disable(FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    email_record = create_verified_contact(owner:, address: "blocked-resend-#{SecureRandom.hex(4)}@example.test")
+
+    ceremony = current_ceremony
+    ceremony.issue_email_otp!(contact: email_record, destination: email_record.address)
+    generation = ceremony.reload.email_otp_context.fetch("generation")
+    state = SignInOtpResendState.issue(
+      kind: :email, target: email_record.address, surface: :app,
+      browser_binding: ceremony.sid_digest, contact: email_record,
+    )
+    clear_delivery_occurrences_for(email_record.address)
+
+    assert_no_difference "EmailOccurrence.count" do
+      post(
+        auth_app_web_v0_in_email_otp_path,
+        params: { state: state }, headers: { "Host" => @host }, as: :json,
+      )
+    end
+
+    assert_response :service_unavailable
+    assert_equal "text/plain", response.media_type
+    assert_not response.parsed_body.is_a?(Hash)
+    assert_empty ActionMailer::Base.deliveries
+    assert_equal generation, ceremony.reload.email_otp_context.fetch("generation")
+  ensure
+    Flipper.enable(FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name)
+  end
+
+  test "refusing an expired resend leaves the ceremony generation and delivery untouched" do
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    email_record = create_verified_contact(owner:, address: "expired-resend-#{SecureRandom.hex(4)}@example.test")
+
+    ceremony = current_ceremony
+    ceremony.issue_email_otp!(contact: email_record, destination: email_record.address)
+    ceremony.reload
+    generation = ceremony.email_otp_context.fetch("generation")
+    revoked_before = ceremony.revoked_at
+    state = SignInOtpResendState.issue(
+      kind: :email, target: email_record.address, surface: :app,
+      browser_binding: ceremony.sid_digest, contact: email_record,
+    )
+    clear_delivery_occurrences_for(email_record.address)
+    expires_at = ceremony.reload.expires_at
+
+    # Boundary cases one second before, exactly at, and one second past expiry; the honour of
+    # `expires_at > now` is exercised through the real ceremony lookup rather than a stubbed row.
+    [expires_at - 1.second, expires_at, expires_at + 1.second].each do |decision_time|
+      ClientAuthCeremonySession.stub(:database_now, decision_time) do
+        post auth_app_web_v0_in_email_otp_path,
+             params: { state: state }, headers: { "Host" => @host }, as: :json
+      end
+
+      assert_not response.successful?, "expiry #{decision_time} must refuse"
+      assert_empty ActionMailer::Base.deliveries
+      ceremony.reload
+
+      assert_equal generation, ceremony.email_otp_context.fetch("generation"),
+                   "expiry #{decision_time} must not rotate the OTP generation"
+      if revoked_before.nil?
+        assert_nil ceremony.revoked_at, "expiry #{decision_time} must not revoke or consume the ceremony"
+      else
+        assert_equal revoked_before, ceremony.revoked_at,
+                     "expiry #{decision_time} must not revoke or consume the ceremony"
+      end
+    end
+  end
+
   private
 
+  def create_verified_contact(owner:, address:)
+    owner.client_emails.create!(
+      address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+  end
+
+  def current_ceremony
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
+  end
+
+  def clear_delivery_occurrences_for(address)
+    hmac = OccurrenceHmac.digest(kind: :email, body: address)
+
+    assert_not EmailOccurrence.exists?(body: hmac)
+    @occurrence_bodies << hmac
+    ActionMailer::Base.deliveries.clear
+  end
+
   def state_for(email)
+    body = OccurrenceHmac.digest(kind: :email, body: email)
+    unless @occurrence_bodies.include?(body)
+      assert_not EmailOccurrence.exists?(body: body)
+      @occurrence_bodies << body
+    end
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
     contact = ClientEmail.effective_binding.with_address(email).take

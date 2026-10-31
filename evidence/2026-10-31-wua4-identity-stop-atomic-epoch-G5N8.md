@@ -1,0 +1,7 @@
+# Identity-stop recorder atomic epoch and event
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Substantial uncommitted worktree changes affected the tested implementation.
+- Four non-transactional APP/ORG cases invoked the recorder without an outer actor lock. Before the change, event-insert failure left the actor epoch incremented, and two independent waiting workers both recorded cutoff 1: 4 runs, 6 assertions, 4 failures.
+- The recorder now acquires the actor row lock and writes the epoch and source event within its actor transaction, and raises if the epoch update reports failure. The same cases now preserve the original epoch on injected insertion failure and produce cutoffs 1 and 2 under PostgreSQL-observed contention.
+- `PARALLEL_WORKERS=1 bin/rails test test/concurrency/identity_authentication_stop_recorder_test.rb test/operations/op_identity_event_invalidator_test.rb test/jobs/op_identity_event_sweep_job_test.rb test/services/withdrawal_lifecycle_test.rb test/services/org_operator_lifecycle_execute_test.rb test/services/administrative_access_lock_test.rb`: 69 runs, 320 assertions, no failures, errors or skips. After formatting, the concurrency and invalidator files passed again: 27 runs, 140 assertions. Scoped RuboCop passed.
+- The recorder joins an existing caller transaction, so its caller still controls the outer commit. Real OP delivery, all possible callers, production data and the full suite were not verified.

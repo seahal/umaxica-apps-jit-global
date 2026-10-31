@@ -1,15 +1,15 @@
 # Stuck Sign-Up Registration Runbook
 
-This runbook covers stuck APP and COM registrations reported by
-`RetentionPurgeJob`. Reporting is read-only. A report never releases or changes a registration.
-ORG is not included because its operator acquisition schema has no equivalent unfinished status or
-sign-up cleanup attempt counter.
+This runbook covers stuck APP registrations reported by `RetentionPurgeJob`. Reporting is read-only.
+A report never releases or changes a registration. COM authentication and Visitor registration are
+retired. ORG is not included because its operator acquisition schema has no equivalent unfinished
+status or sign-up cleanup attempt counter.
 
 ## Find and Read a Report
 
 Search the deployed application logs for either structured event name:
 
-- `sign_up.stuck_registrations.reported` — the APP and COM queries completed. Each report group has
+- `sign_up.stuck_registrations.reported` — the APP query completed. Each report group has
   `surface`, `case`, `count` and `registrations`; each entry in `groups` lists public identifiers and
   `cleanup_attempts_count` where a Flow exists.
 - `sign_up.stuck_registrations.report_failed` — one or more surface queries failed. The event names

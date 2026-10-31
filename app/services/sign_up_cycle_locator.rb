@@ -4,15 +4,13 @@
 class SignUpCycleLocator
   class OwnershipMismatch < StandardError; end
 
-  BINDING_CLASSES = { app: ClientAuthAdmissionBinding, com: VisitorAuthAdmissionBinding }.freeze
+  BINDING_CLASSES = { app: ClientAuthAdmissionBinding }.freeze
   SESSION_KEYS = {
     app: :app_sign_up_flow_locator,
-    com: :com_sign_up_flow_locator,
   }.freeze
 
   CYCLE_CLASSES = {
     app: ClientSignUpFlow,
-    com: VisitorSignUpFlow,
   }.freeze
 
   NONCE_BYTES = 32

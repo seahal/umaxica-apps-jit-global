@@ -7,9 +7,7 @@
 # Database name: com_setting
 #
 #  id              :bigint           not null, primary key
-#  consent_version :uuid
 #  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
 #  functional      :boolean          default(FALSE), not null
 #  performant      :boolean          default(FALSE), not null
 #  targetable      :boolean          default(FALSE), not null

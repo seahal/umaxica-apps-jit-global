@@ -131,9 +131,8 @@ class AuthorityOwnerDirectBindingBackfillOperation
   def resource_identity(resource)
     case resource
     when ClientPersona then resource.association(:client_identity).tap { |owner| owner.reset_scope }.scope.take
-    when Individual then resource.association(:visitor_identity).tap { |owner| owner.reset_scope }.scope.take
     when Agent then resource.association(:operator_identity).tap { |owner| owner.reset_scope }.scope.take
-    when Enterprise, Company, Bureau then nil
+    when Enterprise, Bureau then nil
     else raise ArgumentError, "unsupported authority resource class"
     end
   end

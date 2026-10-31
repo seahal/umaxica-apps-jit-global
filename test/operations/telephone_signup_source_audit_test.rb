@@ -5,9 +5,7 @@ require "test_helper"
 class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   test "telephone signup rejects invalid audit attribution and rolls back Source facts with its intent" do
@@ -15,16 +13,13 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
       [Client, ClientTelephone, :user_id, :user_telephone_status_id,
        ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, ClientStatus::UNVERIFIED_WITH_SIGN_UP,
        SignAppUpTelephoneRegistrationFinalizer, ClientContactAuditOutbox, :app,],
-      [Visitor, VisitorTelephone, :visitor_id, :visitor_telephone_status_id,
-       VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-       SignComUpTelephoneRegistrationFinalizer, VisitorContactAuditOutbox, :com,],
     ].each do |principal, contact_type, owner_key, status_key, contact_status, owner_status, finalizer, outbox, surface|
       owner = principal.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: owner_status)
       contact = contact_type.create!(
         owner_key => owner.id, status_key => contact_status,
         :raw_number => "+819012345679", :confirm_policy => "1", :confirm_using_mfa => "1",
       )
-      flow_model = (surface == :app) ? ClientSignUpFlow : VisitorSignUpFlow
+      flow_model = ClientSignUpFlow
       nonce = "telephone-source-audit-browser"
       now = flow_model.database_now
       flow = flow_model.create!(
@@ -98,16 +93,14 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
   test "telephone signup refuses a suspended Identity under its Source owner lock" do
     [
       [Client, ClientTelephone, :user_id, SignAppUpTelephoneRegistrationFinalizer, ClientContactAuditOutbox, :app],
-      [Visitor, VisitorTelephone, :visitor_id, SignComUpTelephoneRegistrationFinalizer,
-       VisitorContactAuditOutbox, :com,],
     ].each do |principal, contact_type, owner_key, finalizer, outbox, surface|
-      owner_status = (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP
+      owner_status = ClientStatus::UNVERIFIED_WITH_SIGN_UP
       owner = principal.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: owner_status)
       contact = contact_type.create!(
         owner_key => owner.id,
         :raw_number => "+819012345674", :confirm_policy => "1", :confirm_using_mfa => "1",
       )
-      flow_model = (surface == :app) ? ClientSignUpFlow : VisitorSignUpFlow
+      flow_model = ClientSignUpFlow
       nonce = "suspended-telephone-source-browser"
       now = flow_model.database_now
       flow = flow_model.create!(
@@ -148,31 +141,20 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
     end
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(foreign_browser foreign_operation unconsumed_child uncleared_otp contact_pending expired_parent).each do |state|
       test "#{surface} Telephone signup finalization rejects #{state} durable authority" do
+        actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+        candidate = actor.client_telephones.create!(
+          raw_number: "+12025550191", confirm_policy: true,
+          user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
+        )
+        actor.client_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "finalization-authority", description: "Signup passkey",
+        )
         owner, telephone, flow_model, finalizer, outbox, pending_status =
-          case surface
-          when "app"
-            actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
-            candidate = actor.client_telephones.create!(
-              raw_number: "+12025550191", confirm_policy: true,
-              user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-            )
-            actor.client_passkeys.create!(
-              webauthn_id: SecureRandom.uuid, public_key: "finalization-authority", description: "Signup passkey",
-            )
-            [actor, candidate, ClientSignUpFlow, SignAppUpTelephoneRegistrationFinalizer,
-             ClientContactAuditOutbox, ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,]
-          when "com"
-            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP)
-            candidate = actor.visitor_telephones.create!(
-              raw_number: "+12025550192", confirm_policy: true,
-              visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-            )
-            [actor, candidate, VisitorSignUpFlow, SignComUpTelephoneRegistrationFinalizer,
-             VisitorContactAuditOutbox, VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,]
-          end
+          [actor, candidate, ClientSignUpFlow, SignAppUpTelephoneRegistrationFinalizer,
+           ClientContactAuditOutbox, ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,]
         nonce = "telephone-finalization-authority"
         now = flow_model.database_now
         flow = flow_model.create!(
@@ -210,11 +192,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
         end
 
         assert_nil telephone.reload.binding_finalized_at
-        actual_status =
-          case telephone
-          when ClientTelephone then telephone.user_telephone_status_id
-          when VisitorTelephone then telephone.visitor_telephone_status_id
-          end
+        actual_status = telephone.user_telephone_status_id
 
         assert_equal pending_status, actual_status
         assert_equal retained, telephone.attributes.slice(*retained.keys)

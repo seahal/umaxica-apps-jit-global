@@ -31,16 +31,6 @@ module SignSettingsSecretCredentialRegistration
                                          step_up_token:, step_up_requirement:, step_up_bootstrap:)
     params = { name: name, enabled: enabled }
     case surface.to_s
-    when "com"
-      VisitorSecretCredentialsCreate.call(
-        actor: actor,
-        visitor: actor,
-        params: params,
-        raw_secret_credential: raw_secret_credential,
-        step_up_token: step_up_token,
-        step_up_requirement: step_up_requirement,
-        step_up_bootstrap: step_up_bootstrap,
-      )
     when "org"
       OperatorSecretCredentialsCreate.call(
         actor: actor,

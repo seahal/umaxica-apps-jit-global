@@ -5,6 +5,53 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
+  test "operators who started withdrawal cannot satisfy the last available operator guard" do
+    target = operators(:one)
+    operator = operators(:two)
+    Operator.where.not(id: target.id).find_each { |other| other.update!(withdrawal_started_at: Time.current) }
+
+    result = OrgOperatorLifecycleExecute.call(
+      request: operator_lifecycle_requests(:approved_withdraw_one), actor: operator,
+    )
+
+    assert_not_predicate result, :success?
+    assert_match(/last active operator/, result.error.downcase)
+    assert_nil target.reload.deactivated_at
+  end
+
+  test "reserved operators cannot satisfy the last available operator guard" do
+    target = operators(:one)
+    operator = operators(:two)
+    Operator.where.not(id: target.id).find_each { |other| other.update!(status_id: OperatorStatus::RESERVED) }
+
+    result = OrgOperatorLifecycleExecute.call(
+      request: operator_lifecycle_requests(:approved_withdraw_one), actor: operator,
+    )
+
+    assert_not_predicate result, :success?
+    assert_match(/last active operator/, result.error.downcase)
+    assert_nil target.reload.deactivated_at
+  end
+
+  test "an administratively locked operator cannot satisfy the last enabled operator guard" do
+    target = operators(:one)
+    operator = operators(:two)
+    Operator.where.not(id: target.id).find_each do |other|
+      other.update!(
+        access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED,
+        admin_locked_at: Time.current, admin_locked_by_operator_id: operator.id,
+        admin_locked_reason_code: "security_incident",
+      )
+    end
+    request = operator_lifecycle_requests(:approved_withdraw_one)
+
+    result = OrgOperatorLifecycleExecute.call(request: request, actor: operator)
+
+    assert_not_predicate result, :success?
+    assert_match(/last active operator/, result.error.downcase)
+    assert_nil target.reload.deactivated_at
+  end
+
   test "executing an unknown action returns a failure" do
     request = operator_lifecycle_requests(:approved_withdraw_one)
     actor = operators(:two)

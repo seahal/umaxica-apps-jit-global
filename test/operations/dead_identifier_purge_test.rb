@@ -20,12 +20,11 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
     assert_equal clients(:one).id, email.reload.user_id
   end
 
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     test "#{realm} repeated dead email generates independently salted history rows without reserving the destination" do
       model, history_model, owner, owner_key =
         case realm
         when "app" then [ClientEmail, ClientEmailHistory, clients(:one), :user_id]
-        when "com" then [VisitorEmail, VisitorEmailHistory, visitors(:reserved_visitor), :visitor_id]
         when "org" then [OperatorEmail, OperatorEmailHistory, operators(:one), :staff_id]
         end
       owner.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at) if realm == "org"
@@ -51,7 +50,6 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
       model, history_model, owner, owner_key =
         case realm
         when "app" then [ClientTelephone, ClientTelephoneHistory, clients(:one), :user_id]
-        when "com" then [VisitorTelephone, VisitorTelephoneHistory, visitors(:reserved_visitor), :visitor_id]
         when "org" then [OperatorTelephone, OperatorTelephoneHistory, operators(:one), :staff_id]
         end
       owner.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at) if realm == "org"
@@ -88,13 +86,11 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
     end
   end
 
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     test "#{realm} email purge refuses an in-memory owner substitution without deleting Source" do
       model, history_model, owner, replacement_owner, owner_key =
         case realm
         when "app" then [ClientEmail, ClientEmailHistory, clients(:one), clients(:two), :user_id]
-        when "com" then [VisitorEmail, VisitorEmailHistory, visitors(:reserved_visitor),
-                         Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL), :visitor_id,]
         when "org" then [OperatorEmail, OperatorEmailHistory, operators(:one), operators(:two), :staff_id]
         end
       if realm == "org"
@@ -122,9 +118,6 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
       model, history_model, owner, replacement_owner, owner_key =
         case realm
         when "app" then [ClientTelephone, ClientTelephoneHistory, clients(:one), clients(:two), :user_id]
-        when "com"
-          [VisitorTelephone, VisitorTelephoneHistory, visitors(:reserved_visitor),
-           Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL), :visitor_id,]
         when "org" then [OperatorTelephone, OperatorTelephoneHistory, operators(:one), operators(:two), :staff_id]
         end
       if realm == "org"
@@ -229,10 +222,9 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
 
   [
     [ClientEmail, ClientEmailHistory, :user_id, :clients],
-    [VisitorEmail, VisitorEmailHistory, :visitor_id, :visitors],
   ].each do |model, history_model, owner_key, fixture_name|
     test "#{model.name} physical retention purge creates one dead history and permits future reuse" do
-      owner = (fixture_name == :clients) ? clients(:one) : visitors(:reserved_visitor)
+      owner = clients(:one)
       record = model.create!(
         owner_key => owner.id, :raw_address => "dead-email-#{SecureRandom.hex(5)}@example.com",
         :confirm_policy => true, :created_at => 3.days.ago, :discard_at => 2.days.ago, :purge_eligible_at => 1.day.ago,
@@ -255,7 +247,7 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} live and logically deleted retained email never creates dead history" do
-      owner = (fixture_name == :clients) ? clients(:one) : visitors(:reserved_visitor)
+      owner = clients(:one)
       record = model.create!(
         owner_key => owner.id, :raw_address => "live-email-#{SecureRandom.hex(5)}@example.com",
         :confirm_policy => true,
@@ -272,10 +264,9 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
 
   [
     [ClientTelephone, ClientTelephoneHistory, :user_id, :clients],
-    [VisitorTelephone, VisitorTelephoneHistory, :visitor_id, :visitors],
   ].each do |model, history_model, owner_key, fixture_name|
     test "#{model.name} physical retention purge creates dead telephone history without lookup material" do
-      owner = (fixture_name == :clients) ? clients(:one) : visitors(:reserved_visitor)
+      owner = clients(:one)
       record = model.create!(
         owner_key => owner.id, :raw_number => "+819012399901", :confirm_policy => true,
         :confirm_using_mfa => true, :created_at => 3.days.ago,

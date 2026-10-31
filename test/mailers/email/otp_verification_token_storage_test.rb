@@ -7,7 +7,7 @@ class OtpVerificationTokenStorageTest < ActiveSupport::TestCase
     ActionMailer::Base.deliveries.clear
   end
 
-  [Email::App::OtpMailer, Email::Com::OtpMailer, Email::Org::OtpMailer].each do |mailer|
+  [Email::App::OtpMailer, Email::Org::OtpMailer].each do |mailer|
     test "#{mailer.name} refuses plaintext-only legacy verification tokens before transport" do
       payload = {
         encrypted_hotp_token: OutboundSensitivePayload.encrypt_email_otp("123456"),

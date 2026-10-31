@@ -53,11 +53,8 @@ module SignUp
       assert_raises(SignUpCycleLocator::OwnershipMismatch) { current_for(locator, completed) }
     end
 
-    test "a locator of another surface refuses this surface's admission" do
-      cycle = create_cycle(nonce: "nonce")
-      locator = SignUpCycleLocator.new({}, surface: :com)
-
-      assert_raises(SignUpCycleLocator::OwnershipMismatch) { current_for(locator, cycle) }
+    test "a locator rejects the retired corporate surface" do
+      assert_raises(ArgumentError) { SignUpCycleLocator.new({}, surface: :com) }
     end
 
     private

@@ -88,19 +88,37 @@ module EnforcementRecoveryCeremonyFlow
     return render_invalid_recovery_otp(started_at) \
       unless recovery_subject_eligible?(subject) && recovery_email_verified?(email)
 
-    verified = EmailReentryOtpVerificationCommitter.call(
-      email: email, code: params[:pass_code], operation: "recovery",
-      transaction_ref: state["otp_transaction_ref"], session_ref: state["session_ref"],
-    )
-    unless verified
-      return render_invalid_recovery_otp(started_at)
-    end
+    ceremony = issue_recovery_after_otp!(email: email, subject: subject, state: state)
+    return render_invalid_recovery_otp(started_at) unless ceremony
 
     session.delete(REENTRY_SESSION_KEY)
     ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
-    ceremony = recovery_ceremony_class.issue!(subject: subject, request: request)
     write_recovery_ceremony_cookie!(ceremony)
     safe_redirect_to(recovery_status_path, fallback: recovery_entry_path, status: :see_other)
+  end
+
+  def issue_recovery_after_otp!(email:, subject:, state:)
+    subject.with_lock do
+      email.with_lock do
+        next unless recovery_subject_from_email(email)&.id == subject.id && email.binding_effective? &&
+          email.accessible?(email.class.database_now) && recovery_email_verified?(email)
+
+        cases = recovery_case_class.in_force.where(
+          principal_public_id: subject.public_id, kind: "security_lock", visibility: "visible",
+          release_mode: "verification_required",
+        ).order(:id).lock.to_a
+        next if cases.empty?
+
+        verified = EmailReentryOtpVerificationCommitter.call(
+          email: email, code: params[:pass_code], operation: "recovery",
+          transaction_ref: state["otp_transaction_ref"], session_ref: state["session_ref"],
+        )
+        next unless verified && email.reload.binding_effective? && email.accessible?(email.class.database_now) &&
+          recovery_email_verified?(email) && recovery_subject_eligible?(subject)
+
+        recovery_ceremony_class.issue!(subject: subject, request: request)
+      end
+    end
   end
 
   def render_invalid_recovery_otp(started_at)

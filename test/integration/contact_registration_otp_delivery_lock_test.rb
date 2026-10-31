@@ -15,12 +15,9 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
     client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_email_statuses client_telephone_statuses
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
-    visitor_statuses visitor_visibilities visitor_security_modes visitor_mfa_statuses
-    visitor_email_statuses visitor_telephone_statuses
-    visitor_token_statuses visitor_token_kinds visitor_token_binding_methods visitor_token_dbsc_statuses
   )
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(email telephone).each do |channel|
       test "#{surface} #{channel} delivery holds Source and Ticket locks through transport until release" do
         actor, token, contact, source_base, ticket_base, flow_model =
@@ -42,23 +39,6 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
               end
             [owner, root, candidate, AppZenithRecord, OpBaseAppRecord,
              (channel == :email) ? ClientEmailCeremonyTransaction : ClientTelephoneCeremonyTransaction,]
-          when :com
-            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-            candidate =
-              if channel == :email
-                owner.visitor_emails.create!(
-                  raw_address: "locks-#{SecureRandom.hex(8)}@example.test",
-                  confirm_policy: "1",
-                )
-              else
-                owner.visitor_telephones.create!(
-                  raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-                  confirm_policy: "1", confirm_using_mfa: "1",
-                )
-              end
-            [owner, root, candidate, ComZenithRecord, OpBaseComRecord,
-             (channel == :email) ? VisitorEmailCeremonyTransaction : VisitorTelephoneCeremonyTransaction,]
           end
         token.rotate_refresh_token!
         nonce = SecureRandom.urlsafe_base64(32)
@@ -77,7 +57,7 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
         destination = (channel == :email) ? contact.address : contact.number
         clear_enqueued_jobs
         if channel == :email
-          notifier = (surface == :app) ? Notify::App::OtpNotifier : Notify::Com::OtpNotifier
+          notifier = Notify::App::OtpNotifier
           notifier.issue(
             record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
             contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_generation: generation,

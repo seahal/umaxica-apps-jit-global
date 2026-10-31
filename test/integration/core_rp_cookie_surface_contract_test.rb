@@ -12,12 +12,6 @@ class CoreRpCookieSurfaceContractTest < ActionDispatch::IntegrationTest
       resource_fixture: [:clients, :one],
     },
     {
-      host: -> { ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost") },
-      client_id: "core-com-jp",
-      resource_type: "visitor",
-      resource_fixture: [:visitors, :reserved_visitor],
-    },
-    {
       host: -> { ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost") },
       client_id: "core-org-jp",
       resource_type: "operator",
@@ -35,7 +29,7 @@ class CoreRpCookieSurfaceContractTest < ActionDispatch::IntegrationTest
     Actor.clear if defined?(Actor)
   end
 
-  test "app com and org accept only their exact RP access credential" do
+  test "app and org accept only their exact RP access credential" do
     SURFACES.each do |surface|
       fixture_method, fixture_name = surface.fetch(:resource_fixture)
       resource = public_send(fixture_method, fixture_name)
@@ -69,12 +63,6 @@ class CoreRpCookieSurfaceContractTest < ActionDispatch::IntegrationTest
         user: resource, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
       ), OpAppGrant, :client_token,]
-    when "visitor"
-      [VisitorToken.find_by(visitor_id: resource.id) || VisitorToken.create!(
-        authentication_epoch: 0,
-        visitor: resource, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      ), OpComGrant, :visitor_token,]
     when "operator"
       [OperatorToken.find_by(staff_id: resource.id) || OperatorToken.create!(
         authentication_epoch: 0,

@@ -179,8 +179,6 @@ module OrgNormalSignInTransaction
   end
 
   def render_org_normal_sign_in_binding_refusal!
-    response.headers["Cache-Control"] = "private, no-store"
-    render plain: I18n.t("errors.messages.phase_violation_refused"), status: :conflict
-    false
+    render_sign_in_phase_refusal!
   end
 end

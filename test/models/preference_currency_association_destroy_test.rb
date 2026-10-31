@@ -11,11 +11,6 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
     client_member_observations client_member_revocations client_member_impersonations client_member_suspensions
     client_member_deletions owned_members client_bulletins rp_account authority_lock core_app_client_bridge
   ).freeze
-  VISITOR_DESTROY_ASSOCIATIONS = %i(
-    visitor_emails visitor_withdrawal_ceremonies visitor_telephones visitor_secret_credentials visitor_passkeys
-    visitor_tokens visitor_device_sessions authority_lock visitor_banners oidc_connections rp_account
-    core_com_visitor_bridge
-  ).freeze
   OPERATOR_DESTROY_ASSOCIATIONS = %i(
     staff_passkeys staff_tokens operator_device_sessions staff_secret_credentials oidc_connections staff_operators
     operator_workspace_accounts staff_bulletins staff_banners rp_account authority_lock core_org_operator_bridge
@@ -29,38 +24,24 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
 
   test "destroying client destroys currency preference child" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    preference = ClientPreference.create!(user: client)
+    preference = ClientPreference.create!(client: client)
     currency = ClientPreferenceCurrency.create!(preference: preference)
 
     # An Identity is physically erased only once it has lapsed and is purgeable.
     client.reload.update!(discard_at: client.created_at, purge_eligible_at: client.created_at)
-    client = Client.includes(*CLIENT_DESTROY_ASSOCIATIONS, :user_preference).find(client.id)
+    client = Client.includes(*CLIENT_DESTROY_ASSOCIATIONS, :client_preference).find(client.id)
     client.destroy!
 
     assert_not ClientPreference.exists?(preference.id)
     assert_not ClientPreferenceCurrency.exists?(currency.id)
   end
 
-  test "destroying visitor destroys currency preference child" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    preference = VisitorPreference.create!(visitor: visitor)
-    currency = VisitorPreferenceCurrency.create!(preference: preference)
-
-    # An Identity is physically erased only once it has lapsed and is purgeable.
-    visitor.reload.update!(discard_at: visitor.created_at, purge_eligible_at: visitor.created_at)
-    visitor = Visitor.includes(*VISITOR_DESTROY_ASSOCIATIONS, :visitor_preference).find(visitor.id)
-    visitor.destroy!
-
-    assert_not VisitorPreference.exists?(preference.id)
-    assert_not VisitorPreferenceCurrency.exists?(currency.id)
-  end
-
   test "destroying operator destroys currency preference child" do
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-    preference = OperatorPreference.create!(staff: operator)
+    preference = OperatorPreference.create!(operator: operator)
     currency = OperatorPreferenceCurrency.create!(preference: preference)
 
-    operator = Operator.includes(*OPERATOR_DESTROY_ASSOCIATIONS, :staff_preference).find(operator.id)
+    operator = Operator.includes(*OPERATOR_DESTROY_ASSOCIATIONS, :operator_preference).find(operator.id)
     operator.destroy!
 
     assert_not OperatorPreference.exists?(preference.id)
@@ -76,11 +57,6 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
 
       ClientMfaStatus,
       ClientPreferenceCurrencyOption,
-      VisitorStatus,
-      VisitorVisibility,
-
-      VisitorMfaStatus,
-      VisitorPreferenceCurrencyOption,
       OperatorStatus,
       OperatorVisibility,
 

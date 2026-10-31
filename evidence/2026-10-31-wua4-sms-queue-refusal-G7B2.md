@@ -1,0 +1,7 @@
+# SMS queue refusal
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; uncommitted worktree changes affected the result.
+- Active Job's `perform_later` returns `false` on an enqueue refusal. `OutboundSms.deliver_later` previously ignored that value, returned accepted and recorded `enqueued`; a focused failure/audit test failed before the change (1 run, 1 assertion, 1 failure).
+- A false enqueue result now raises `ActiveJob::EnqueueError`, follows the existing sanitized `enqueue_failed` audit path, and does not record `enqueued`. An APP Telephone signup resend with a stubbed queue refusal retained its new Ticket generation and updated Source cooldown while raising the error.
+- `PARALLEL_WORKERS=1 bin/rails test test/services/outbound_sms_audit_test.rb test/services/outbound/sms_test.rb test/jobs/outbound/sms_delivery_job_test.rb test/services/outbound_sms_suspension_test.rb test/operations/sign_up_otp_delivery_concurrency_test.rb test/operations/telephone_sign_up_otp_issuer_test.rb test/integration/telephone_sign_up_otp_delivery_test.rb` passed: 52 runs, 439 assertions, no failures or errors. Scoped RuboCop passed after whitespace correction.
+- Refusal was injected at the queue boundary; a real queue outage, ambiguous queue response and HTTP 503 response were not exercised. The Telephone signup delivery issuer still invokes enqueue inside a delivery guard, and this change does not close the initial signup atomic-progress requirement.

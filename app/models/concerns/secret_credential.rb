@@ -63,15 +63,6 @@ module SecretCredential
           "REVOKED" => OperatorSecretCredentialStatus::REVOKED,
           "USED" => OperatorSecretCredentialStatus::USED,
         }.fetch(status_key)
-      when "VisitorSecretCredentialStatus"
-        {
-          "ACTIVE" => VisitorSecretCredentialStatus::ACTIVE,
-          "EXPIRED" => VisitorSecretCredentialStatus::EXPIRED,
-          "REVOKED" => VisitorSecretCredentialStatus::REVOKED,
-          "USED" => VisitorSecretCredentialStatus::USED,
-          "DELETED" => VisitorSecretCredentialStatus::DELETED,
-          "NOTHING" => VisitorSecretCredentialStatus::NOTHING,
-        }.fetch(status_key)
       else
         raise KeyError,
               "Unknown identity secret_credential status class: #{identity_secret_credential_status_class.name}"

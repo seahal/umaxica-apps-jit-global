@@ -15,11 +15,6 @@ class OrganizationPolicy < ApplicationPolicy
 
       record.persona_memberships.active.joins(persona: :client_identity)
         .exists?(client_identities: { source_record_id: user.id })
-    when Company
-      return false unless user.is_a?(Visitor)
-
-      record.individual_memberships.active.joins(individual: :visitor_identity)
-        .exists?(visitor_identities: { source_record_id: user.id })
     when Bureau
       return false unless user.is_a?(Operator)
 

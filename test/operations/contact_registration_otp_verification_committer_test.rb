@@ -5,10 +5,10 @@ require "minitest/mock"
 
 # Boolean snapshots avoid disclosing OTP, proof and root material when an assertion fails.
 class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %i(email telephone).each do |channel|
       %i(success wrong_code foreign_browser foreign_owner foreign_root foreign_candidate foreign_ticket
-         released revoked destination_locked candidate_locked
+         released revoked rebound_device destination_locked candidate_locked
          challenge_before challenge_at challenge_after proof_before proof_at proof_after).each do |scenario|
         test "#{surface} #{channel} registration verification #{scenario} preserves its original authority" do
           budget_model = (channel == :email) ? EmailOtpVerificationFailureBudget : TelephoneOtpVerificationFailureBudget
@@ -30,22 +30,6 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
                 end
               [owner, root, candidate, (channel == :email) ? ClientEmailCeremonyTransaction :
                 ClientTelephoneCeremonyTransaction, ClientToken,]
-            when ["com", :email], ["com", :telephone]
-              owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-              root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-              candidate =
-                if channel == :email
-                  owner.visitor_emails.create!(
-                    raw_address: "verification-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
-                  )
-                else
-                  owner.visitor_telephones.create!(
-                    raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-                    confirm_policy: "1", confirm_using_mfa: "1",
-                  )
-                end
-              [owner, root, candidate, (channel == :email) ? VisitorEmailCeremonyTransaction :
-                VisitorTelephoneCeremonyTransaction, VisitorToken,]
             end
           token.rotate_refresh_token!
           nonce = SecureRandom.urlsafe_base64(32)
@@ -78,17 +62,15 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
             expected_status = :session_mismatch
           when :foreign_owner
             arguments[:actor] =
-              (surface == "app") ? Client.create!(
+              Client.create!(
                 security_mode_id: SecurityModeConfigurable::NORMAL,
                 status_id: ClientStatus::ACTIVE,
-              ) : Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+              )
           when :foreign_root
-            replacement =
-              (surface == "app") ? ClientToken.create!(
-                authentication_epoch: 0, user: actor,
-                discard_at: 1.day.from_now,
-              ) :
-                           VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
+            replacement = ClientToken.create!(
+              authentication_epoch: 0, user: actor,
+              discard_at: 1.day.from_now,
+            )
             replacement.rotate_refresh_token!
             arguments[:token] = replacement
             expected_status = :session_mismatch
@@ -101,18 +83,8 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
                   raw_address: "other-#{SecureRandom.hex(8)}@example.test",
                   confirm_policy: "1",
                 )
-              when ["com", :email]
-                actor.visitor_emails.create!(
-                  raw_address: "other-#{SecureRandom.hex(8)}@example.test",
-                  confirm_policy: "1",
-                )
               when ["app", :telephone]
                 actor.client_telephones.create!(
-                  raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-                  confirm_policy: "1", confirm_using_mfa: "1",
-                )
-              when ["com", :telephone]
-                actor.visitor_telephones.create!(
                   raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
                   confirm_policy: "1", confirm_using_mfa: "1",
                 )
@@ -158,6 +130,15 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
           root_facts = token.reload.attributes
           device_facts = token.device_session.reload.attributes
           owner_facts = actor.reload.attributes
+          if scenario == :rebound_device
+            replacement = ClientToken.create!(authentication_epoch: 0, user: actor)
+            new_device = replacement.device_session_record!
+            ClientToken.find(token.id).update!(device_session_id: new_device.id)
+            new_device.update!(current_refresh_token_id: token.id)
+            root_count = token_model.count
+            root_facts = ClientToken.find(token.id).attributes
+            device_facts = new_device.reload.attributes
+          end
           proof = nil
           if %i(proof_before proof_at proof_after).include?(scenario)
             verified = verifier.call(**arguments)

@@ -114,7 +114,8 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     cookies[sid_key] = raw_sid
     # Design D: the entry GET redeems the reference and redirects to the clean sign-in page.
-    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
+    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference },
+                                        headers: headers.merge("Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document")
 
     assert_response :see_other
     follow_redirect!(headers: headers)
@@ -159,7 +160,8 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     cookies[cookie_name] = raw_sid
     # Design D: the entry GET redeems the reference and redirects to the clean sign-in page.
-    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
+    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference },
+                                        headers: headers.merge("Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document")
 
     assert_response :see_other
     follow_redirect!(headers: headers)
@@ -252,7 +254,10 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     cookies[cookie_name] = raw_auth_sid
     # Design D: the entry GET redeems the reference and redirects to the clean sign-in page; there is
     # no form POST of the entry reference.
-    get(auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers)
+    get(
+      auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference },
+                                       headers: headers.merge("Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document"),
+    )
 
     assert_response :see_other
     follow_redirect!(headers: headers)

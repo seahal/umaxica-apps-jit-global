@@ -6,10 +6,10 @@ require_relative "../support/oidc_rp_logout_hint_helper"
 class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
   include OidcRpLogoutHintHelper
 
-  fixtures :clients, :visitors, :operators, :client_token_kinds, :visitor_token_kinds, :operator_token_kinds
+  fixtures :clients, :operators, :client_token_kinds, :operator_token_kinds
 
   INERTIA_COMPLETION_CLIENT_IDS = %w(
-    base-app-ww base-com-ww base-org-ww warp-app-jp warp-com-jp warp-org-jp
+    base-app-ww base-org-ww warp-app-jp warp-org-jp
   ).freeze
   CLEAR_SITE_DATA_COMPLETION_CLIENT_IDS = %w(edit-org-ww palm-app-jp).freeze
 
@@ -18,7 +18,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     expected_op_hosts = {
       "client" => hosts.visa_service.host,
-      "visitor" => hosts.visa_corporate.host,
       "operator" => hosts.visa_staff.host,
     }
 
@@ -34,7 +33,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       browser.https!
       install_rp_credentials!(browser, grant, actor, root_token, client, request_host, face.fetch(:actor))
       stop_class = { "client" => OpAppAuthorityStop,
-                     "visitor" => OpComAuthorityStop,
                      "operator" => OpOrgAuthorityStop, }.fetch(face.fetch(:actor))
       stops_before = stop_class.count
       OutboundHttp::Connection.stub(:build, ->(**) { flunk("RP logout must not call an OP endpoint") }) do
@@ -146,7 +144,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       new_root = new_roots[face.fetch(:actor)] ||=
         case face.fetch(:actor)
         when "client" then ClientToken.create!(authentication_epoch: 0, user: actor)
-        when "visitor" then VisitorToken.create!(authentication_epoch: 0, visitor: actor)
         when "operator" then OperatorToken.create!(authentication_epoch: 0, staff: actor)
         end
       new_grant = create_rp_grant(client, actor, new_root, face.fetch(:actor))
@@ -255,7 +252,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
 
   def create_actor_sessions
     client = clients(:one)
-    visitor = visitors(:reserved_visitor)
     operator = operators(:one)
 
     {
@@ -263,11 +259,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
         authentication_epoch: 0,
         user: client,
         user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      ),],
-      "visitor" => [visitor, VisitorToken.create!(
-        authentication_epoch: 0,
-        visitor: visitor,
-        visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       ),],
       "operator" => [operator, OperatorToken.create!(
         authentication_epoch: 0,
@@ -291,8 +282,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
     case actor_type
     when "client"
       OpAppGrant.create!(**attributes, client_token: root_token)
-    when "visitor"
-      OpComGrant.create!(**attributes, visitor_token: root_token)
     when "operator"
       OpOrgGrant.create!(**attributes, operator_token: root_token)
     else
@@ -331,7 +320,7 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       when "palm" then "palm_service"
       when "tech" then "tech_staff"
       else
-        role = { "app" => "service", "com" => "corporate", "org" => "staff" }.fetch(face)
+        role = { "app" => "service", "org" => "staff" }.fetch(face)
         "#{surface}_#{role}"
       end
 

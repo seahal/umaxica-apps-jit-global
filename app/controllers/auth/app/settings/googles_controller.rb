@@ -5,6 +5,9 @@ module Auth
   module App
     module Settings
       class GooglesController < ::Auth::App::ApplicationController
+        # D-59: the settings surface links a provider; it is not a Sign Entry.
+        sign_entry_classification! :excluded, reason: "signed-in settings surface, not a sign entry"
+
         include ::SurfaceInertiaPage
         include ::TurnstilePageProps
         include CloudflareTurnstile

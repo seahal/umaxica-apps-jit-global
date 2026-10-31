@@ -7,8 +7,6 @@ class IdentifierBlindIndexBackfill
     :user_telephones_updated,
     :staff_emails_updated,
     :staff_telephones_updated,
-    :visitor_emails_updated,
-    :visitor_telephones_updated,
   )
 
   public
@@ -19,8 +17,6 @@ class IdentifierBlindIndexBackfill
       user_telephones_updated: backfill_telephones(ClientTelephone),
       staff_emails_updated: backfill_emails(OperatorEmail),
       staff_telephones_updated: backfill_telephones(OperatorTelephone),
-      visitor_emails_updated: backfill_emails(VisitorEmail),
-      visitor_telephones_updated: backfill_telephones(VisitorTelephone),
     )
   end
 

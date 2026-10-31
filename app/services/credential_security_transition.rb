@@ -84,7 +84,6 @@ class CredentialSecurityTransition
     flow_model, ceremony_model, authorization_model =
       case actor
       when Client then [ClientSignInFlow, ClientAuthCeremonySession, ClientOidcAuthorizationTransaction]
-      when Visitor then [VisitorSignInFlow, VisitorAuthCeremonySession, VisitorOidcAuthorizationTransaction]
       when Operator then [OperatorSignInFlow, OperatorAuthCeremonySession, OperatorOidcAuthorizationTransaction]
       else raise ArgumentError, "unsupported credential transition actor"
       end
@@ -150,7 +149,6 @@ class CredentialSecurityTransition
   def current_session_matches_actor?
     case [actor, current_session]
     in [Client, ClientToken] then current_session.user_id == actor.id
-    in [Visitor, VisitorToken] then current_session.visitor_id == actor.id
     in [Operator, OperatorToken] then current_session.staff_id == actor.id
     else false
     end

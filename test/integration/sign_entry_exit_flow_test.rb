@@ -114,7 +114,7 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
 
     post auth_app_sign_cancellation_url(host: @auth_host, protocol: "https", ri: "jp")
 
-    assert_response :bad_request
+    assert_response :conflict
     assert_equal "pending", transaction.reload.status
   end
 
@@ -191,7 +191,7 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
 
     post auth_app_sign_switch_url(host: @auth_host, protocol: "https", ri: "jp"), params: { to: "sign_up" }
 
-    assert_response :bad_request
+    assert_response :conflict
     assert_not_predicate ceremony_session_for(transaction).reload, :cancelled?
     assert_equal "pending", transaction.reload.status
   end

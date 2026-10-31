@@ -118,20 +118,6 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  private
-
-  def stub_cookie(theme)
-    cookies[:root_theme] = theme
-  end
-
-  def assert_theme_cookie_for(theme, path:, expected: theme)
-    stub_cookie(theme)
-
-    get(path)
-
-    assert_response :success
-    assert_equal expected, cookies[PreferenceBase::THEME_COOKIE_KEY]
-  end
 end
 
 # DAMP auth header helpers for this test class.

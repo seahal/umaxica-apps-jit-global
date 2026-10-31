@@ -5,6 +5,12 @@ require "test_helper"
 class JumpRtReturnUrlValueTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  test "accepts a root-relative path and rejects a protocol-relative path" do
+    assert_predicate JumpRtReturnUrlValue.parse("https://www.umaxica.app/"), :present?
+    assert_predicate JumpRtReturnUrlValue.parse("https://www.umaxica.app/path"), :present?
+    assert_nil JumpRtReturnUrlValue.parse("https://www.umaxica.app//evil.example/path")
+  end
+
   test "keeps query pair order in the canonical url" do
     value = JumpRtReturnUrlValue.parse("https://www.umaxica.app/path?b=2&a=1")
 

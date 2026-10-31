@@ -10,7 +10,7 @@ class OpLogoutTokenIssuer
   TOKEN_TYPE = "logout+jwt"
   EVENT = "http://schemas.openid.net/event/backchannel-logout"
   LIFETIME = 2.minutes
-  RESOURCE_TYPES = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
+  RESOURCE_TYPES = { "app" => "client", "org" => "operator" }.freeze
 
   class << self
     public

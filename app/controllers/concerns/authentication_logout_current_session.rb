@@ -47,7 +47,7 @@ class AuthenticationLogoutCurrentSession
   # the stop is applied in OP, preserving the Zenith -> OP lock order.
   def stop_risk_authority!(_token_record)
     actor = resource
-    unless [Client, Visitor, Operator].include?(actor.class) && actor.persisted?
+    unless [Client, Operator].include?(actor.class) && actor.persisted?
       raise OpAuthorityStopCommitter::Refused, "risk stop requires an established principal"
     end
 
@@ -192,7 +192,6 @@ class AuthenticationLogoutCurrentSession
         device_session =
           case persisted_token
           when ClientToken then ClientDeviceSession.find_by(id: persisted_token.device_session_id)
-          when VisitorToken then VisitorDeviceSession.find_by(id: persisted_token.device_session_id)
           when OperatorToken then OperatorDeviceSession.find_by(id: persisted_token.device_session_id)
           end
         device_session&.revoked? == true
@@ -210,7 +209,6 @@ class AuthenticationLogoutCurrentSession
     case token_class&.name
     when "ClientToken" then ClientDeviceSession
     when "OperatorToken" then OperatorDeviceSession
-    when "VisitorToken" then VisitorDeviceSession
     end
   end
 
@@ -256,7 +254,7 @@ class AuthenticationLogoutCurrentSession
 
   def op_root?(record) = record.present? && op_root_class?(record.class)
 
-  def op_root_class?(klass) = [ClientToken, VisitorToken, OperatorToken].include?(klass)
+  def op_root_class?(klass) = [ClientToken, OperatorToken].include?(klass)
 
   # D-123: the stop names its principal; one that cannot be established is refused by the primitive.
   def principal_public_id_for(root)
@@ -266,7 +264,7 @@ class AuthenticationLogoutCurrentSession
 
   def device_session_for_token(token_record)
     case token_record
-    when ClientToken, VisitorToken, OperatorToken
+    when ClientToken, OperatorToken
       token_record.device_session_record
     end
   end

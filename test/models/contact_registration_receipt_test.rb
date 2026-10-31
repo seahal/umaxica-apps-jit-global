@@ -9,8 +9,6 @@ class ContactRegistrationReceiptTest < ActiveSupport::TestCase
   [
     [ClientEmailCeremonyTransaction, "app", IdentityEmailCeremonyContract::Error],
     [ClientTelephoneCeremonyTransaction, "app", IdentityTelephoneCeremony::Error],
-    [VisitorEmailCeremonyTransaction, "com", IdentityEmailCeremonyContract::Error],
-    [VisitorTelephoneCeremonyTransaction, "com", IdentityTelephoneCeremony::Error],
   ].each do |model, surface, error_class|
     test "#{model} registration receipt uses its own DB clock and retains a canonical terminal receipt" do
       transaction = model.create_transaction!(

@@ -5,21 +5,87 @@ require "test_helper"
 class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
+    test "#{surface} Email signup refuses a changed destination for the same candidate and Flow" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+      )
+      email = ClientEmail.create!(
+        user_id: owner.id, raw_address: "digest-binding-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+      )
+      now = ClientSignUpFlow.database_now
+      nonce = "digest-binding-browser"
+      flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+        principal_id: owner.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+        nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+      )
+      session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      old_digest = IdentifierBlindIndex.bidx_for_email("previous-destination@example.test", realm: :app)
+      transaction = ClientEmailCeremonyTransaction.create_transaction!(
+        operation: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
+        email_candidate_ref: email.public_id, normalized_email_digest: old_digest,
+        transaction_id: PublicId.generate, expires_at: flow.expires_at,
+      )
+      previous = transaction.attributes
+      sent_at = email.otp_last_sent_at
+      result = nil
+
+      assert_no_difference("ClientEmailCeremonyTransaction.count") do
+        result = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
+      end
+
+      assert_equal :binding_mismatch, result.status
+      assert_nil result.code
+      assert_withheld("refusal preserves the existing transaction") { previous == transaction.reload.attributes }
+      assert_equal sent_at, email.reload.otp_last_sent_at
+    end
+
+    test "#{surface} Email signup refuses an existing transaction with a different parent expiry" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+      )
+      email = ClientEmail.create!(
+        user_id: owner.id, raw_address: "expiry-binding-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+      )
+      now = ClientSignUpFlow.database_now
+      nonce = "expiry-binding-browser"
+      flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+        principal_id: owner.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+        nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+      )
+      session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      transaction = ClientEmailCeremonyTransaction.create_transaction!(
+        operation: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
+        email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
+        transaction_id: PublicId.generate, expires_at: flow.expires_at + 1.second,
+      )
+      sent_at = email.otp_last_sent_at
+
+      [-1, 1].each do |offset|
+        transaction.update_columns(expires_at: flow.expires_at + offset.seconds)
+        previous = transaction.reload.attributes
+        result = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
+
+        assert_equal :binding_mismatch, result.status
+        assert_nil result.code
+        assert_withheld("refusal preserves the transaction") { previous == transaction.reload.attributes }
+        assert_equal sent_at, email.reload.otp_last_sent_at
+      end
+    end
+
     test "#{surface} Email signup retries a generated transaction reference collision" do
       owner_model, email_model, flow_model, transaction_model, owner_key, status =
         case surface
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
@@ -66,9 +132,6 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
@@ -115,9 +178,6 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       namespace = "email-signup-receipt:#{SecureRandom.hex(12)}"
       connection = Umaxica::Valkey::Connection.new(namespace: namespace)
@@ -176,7 +236,6 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         owner_model, email_model, flow_model, owner_key, status =
           case surface
           when "app" then [Client, ClientEmail, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-          when "com" then [Visitor, VisitorEmail, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
           end
         owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         email = email_model.create!(
@@ -237,7 +296,6 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, email_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientEmail, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorEmail, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
@@ -284,9 +342,6 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction, :user_id,
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction, :visitor_id,
-           VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
@@ -302,8 +357,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
       )
       original = email.attributes.slice(
-        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
-        "staff_id",
+        "public_id", "address_digest", "number_digest", "user_id", "staff_id",
       )
       denied = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: flow.public_id)
 
@@ -375,9 +429,6 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction, :user_id,
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction, :visitor_id,
-           VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
@@ -393,8 +444,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
       )
       original = email.attributes.slice(
-        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
-        "staff_id",
+        "public_id", "address_digest", "number_digest", "user_id", "staff_id",
       )
       resend = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
       scope = { flow: flow, email: email, session_nonce: nonce }

@@ -8,33 +8,26 @@ module AuthBoundaryAuthorityMap
 
   FIRST_PARTY_RP_CLIENT_IDS = %w(
     core-app-jp
-    core-com-jp
     core-org-jp
     warp-app-jp
-    warp-com-jp
     warp-org-jp
     edit-org-ww
     base-app-ww
-    base-com-ww
     base-org-ww
     palm-app-jp
     tech-org-ww
   ).freeze
 
-  BASE_SELF_RP_CLIENT_IDS = %w(base-app-ww base-com-ww base-org-ww).freeze
+  BASE_SELF_RP_CLIENT_IDS = %w(base-app-ww base-org-ww).freeze
 
   # Approved RP faces include regional cells and global first-party surfaces.
   REGIONAL_RP_CLIENT_IDS = %w(
     core-app-jp
     core-app-us
-    core-com-jp
-    core-com-us
     core-org-jp
     core-org-us
     warp-app-jp
     warp-app-us
-    warp-com-jp
-    warp-com-us
     warp-org-jp
     warp-org-us
   ).freeze
@@ -44,14 +37,10 @@ module AuthBoundaryAuthorityMap
   APPROVED_RP_FACES = {
     "core-app-jp" => { surface: "core", face: "app", region: "jp", actor: "client" },
     "core-app-us" => { surface: "core", face: "app", region: "us", actor: "client" },
-    "core-com-jp" => { surface: "core", face: "com", region: "jp", actor: "visitor" },
-    "core-com-us" => { surface: "core", face: "com", region: "us", actor: "visitor" },
     "core-org-jp" => { surface: "core", face: "org", region: "jp", actor: "operator" },
     "core-org-us" => { surface: "core", face: "org", region: "us", actor: "operator" },
     "warp-app-jp" => { surface: "warp", face: "app", region: "jp", actor: "client" },
     "warp-app-us" => { surface: "warp", face: "app", region: "us", actor: "client" },
-    "warp-com-jp" => { surface: "warp", face: "com", region: "jp", actor: "visitor" },
-    "warp-com-us" => { surface: "warp", face: "com", region: "us", actor: "visitor" },
     "warp-org-jp" => { surface: "warp", face: "org", region: "jp", actor: "operator" },
     "warp-org-us" => { surface: "warp", face: "org", region: "us", actor: "operator" },
     "edit-org-ww" => { surface: "edit", face: "org", region: nil, actor: "operator" },
@@ -75,14 +64,11 @@ module AuthBoundaryAuthorityMap
 
   RP_FACES = {
     "core-app-jp" => { surface: "core", face: "app", actor: "client" },
-    "core-com-jp" => { surface: "core", face: "com", actor: "visitor" },
     "core-org-jp" => { surface: "core", face: "org", actor: "operator" },
     "warp-app-jp" => { surface: "warp", face: "app", actor: "client" },
-    "warp-com-jp" => { surface: "warp", face: "com", actor: "visitor" },
     "warp-org-jp" => { surface: "warp", face: "org", actor: "operator" },
     "edit-org-ww" => { surface: "edit", face: "org", actor: "operator" },
     "base-app-ww" => { surface: "base", face: "app", actor: "client" },
-    "base-com-ww" => { surface: "base", face: "com", actor: "visitor" },
     "base-org-ww" => { surface: "base", face: "org", actor: "operator" },
     "palm-app-jp" => { surface: "palm", face: "app", actor: "client" },
     "tech-org-ww" => { surface: "tech", face: "org", actor: "operator" },
@@ -92,8 +78,8 @@ module AuthBoundaryAuthorityMap
   CANONICAL_RP_SIGN_IN_PATH = "/sign"
   CANONICAL_RP_SIGN_OUT_PATH = "/sign/out/completion"
 
-  AUTH_CEREMONY_FACES = %w(app com org).freeze
-  BASE_AUTHORITY_FACES = %w(app com org).freeze
+  AUTH_CEREMONY_FACES = %w(app org).freeze
+  BASE_AUTHORITY_FACES = %w(app org).freeze
 
   def first_party_rp_client_ids
     FIRST_PARTY_RP_CLIENT_IDS

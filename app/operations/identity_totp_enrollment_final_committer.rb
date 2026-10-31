@@ -70,42 +70,53 @@ class IdentityTotpEnrollmentFinalCommitter
 
     def commit_ticket!(actor, token, transaction, payload, digest)
       OpBaseAppRecord.connected_to(role: :writing) do
-        token.with_lock do
-          record = ClientStepUpSession.lock.find_by!(
-            user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
-          )
-          transaction.with_lock do
-            child = ClientTotpCeremonyTransaction.lock.find_by!(
-              step_up_ceremony_transaction_ref: transaction.transaction_id,
-            )
-            candidate = IdentityTotpCeremonyCandidate.lock.find_by!(ref: child.credential_candidate_ref)
-            ceremony = ClientAuthCeremonySession.lock.find(payload.fetch("ceremony_session_ref"))
-            now = ClientStepUpCeremonyTransaction.database_now
-            validate_ticket!(actor, token, transaction, record, digest, payload, now)
-            validate_candidate!(actor, token, transaction, child, candidate, now)
-            validate_continuity!(ceremony, transaction, now)
-            return existing_credential!(actor, transaction, child, candidate, ceremony) if transaction.consumed?
+        device = token.device_session_record!
+        device.with_lock do
+          token.with_lock do
+            validate_enrollment_device!(actor, token, device)
+            transaction.with_lock do
+              record = ClientStepUpSession.lock.find_by!(
+                user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
+              )
+              child = ClientTotpCeremonyTransaction.lock.find_by!(
+                step_up_ceremony_transaction_ref: transaction.transaction_id,
+              )
+              candidate = IdentityTotpCeremonyCandidate.lock.find_by!(ref: child.credential_candidate_ref)
+              ceremony = ClientAuthCeremonySession.lock.find(payload.fetch("ceremony_session_ref"))
+              now = ClientStepUpCeremonyTransaction.database_now
+              validate_ticket!(actor, token, transaction, record, digest, payload, now)
+              validate_candidate!(actor, token, transaction, child, candidate, now)
+              validate_continuity!(ceremony, transaction, now)
+              return existing_credential!(actor, transaction, child, candidate, ceremony) if transaction.consumed?
 
-            if child.consumed? || candidate.consumed_at || ceremony.completed?
-              raise IdentityTotpCeremonyContract::Error, "enrollment already ended"
+              if child.consumed? || candidate.consumed_at || ceremony.completed?
+                raise IdentityTotpCeremonyContract::Error, "enrollment already ended"
+              end
+
+              credential = ClientTotpCredential.create_for_user!(
+                user: actor, private_key: candidate.private_key, title: candidate.title,
+                last_otp_at: candidate.last_otp_at,
+                user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+              )
+              consume_registration_step_up!(actor, token, transaction, now) if
+                transaction.purpose == "credential_registration"
+              child.update!(status: "consumed", result_jti: transaction.result_jti, consumed_at: now)
+              candidate.update!(consumed_at: now)
+              transaction.commit_registration_consumption!(
+                now: now, method: "totp", registered_credential_ref: credential.public_id,
+              )
+              ceremony.complete!(now: now)
+              credential
             end
-
-            credential = ClientTotpCredential.create_for_user!(
-              user: actor, private_key: candidate.private_key, title: candidate.title,
-              last_otp_at: candidate.last_otp_at,
-              user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-            )
-            consume_registration_step_up!(actor, token, transaction, now) if
-              transaction.purpose == "credential_registration"
-            child.update!(status: "consumed", result_jti: transaction.result_jti, consumed_at: now)
-            candidate.update!(consumed_at: now)
-            transaction.commit_registration_consumption!(
-              now: now, method: "totp", registered_credential_ref: credential.public_id,
-            )
-            ceremony.complete!(now: now)
-            credential
           end
         end
+      end
+    end
+
+    def validate_enrollment_device!(actor, token, device)
+      unless device.usable? && device.user_id == actor.id && token.user_id == actor.id &&
+          token.device_session_id == device.id && device.current_refresh_token_id == token.id
+        raise IdentityTotpCeremonyContract::Error, "enrollment device or session unavailable"
       end
     end
 

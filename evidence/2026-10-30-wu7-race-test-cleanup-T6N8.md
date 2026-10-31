@@ -1,0 +1,6 @@
+# WU-7 reset race test cleanup
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- The failed cleanup described in `2026-10-30-wu7-save-reset-lock-order-K7R4.md` left five synthetic preference parents and their audits. Their IDs `980190973` through `980190977`, creation times from 22:49:41 to 22:49:42 UTC, and one com preference Chronicle per subject matched the failed test's 22:49:42 log completion. The two earlier parents have different IDs and timestamps.
+- Before cleanup, separate custom-format dumps of local `test_com_setting_db` and `test_chronicle_db` were saved under `/tmp/wu7-reset-race-cleanup-20261030/`; their SHA-256 values are `52661bc35a5ee835c7846e9300c1d9529aba8f3edbe3208bdd1cfe5f9a92d59c` and `84d9b275f70b293fe038d6f205c434a49d2bb53413520c540ffafd7fcf77a221`. They are separate, transient snapshots; restore was not rehearsed.
+- A test-environment Rails runner verified the exact IDs, creation interval, absence of receipts and count of corresponding audits, then acquired the exclusive audit lock and removed those five synthetic audits and parents with their dependent rows. Read-only queries afterward found none of the five IDs or their audits; the databases retained two preference parents and one Chronicle row. Production and Neon were not targeted. No migration was run.

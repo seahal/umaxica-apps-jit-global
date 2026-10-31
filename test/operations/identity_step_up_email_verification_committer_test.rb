@@ -27,6 +27,27 @@ class IdentityStepUpEmailVerificationCommitterTest < ActiveSupport::TestCase
     @record.mark_bound_email_delivery!(transaction: @transaction, generation: generation, success: true)
   end
 
+  %i(revoked superseded).product(%i(valid invalid)).each do |invalidation, code_kind|
+    test "#{invalidation} device refuses #{code_kind} Email Step-Up without mutation" do
+      device = @token.device_session_record!
+      if invalidation == :revoked
+        device.revoke!
+      else
+        replacement = ClientToken.create!(authentication_epoch: 0, user: @actor, device_session: device)
+        device.update!(current_refresh_token_id: replacement.id)
+      end
+      code = (code_kind == :valid) ? "012345" : "999999"
+
+      assert_not IdentityStepUpEmailVerificationCommitter.call!(
+        actor: @actor, credential: @credential, transaction: @transaction, session_record: @record, code: code,
+      )
+      assert_equal 0, @credential.reload.step_up_otp_failures
+      assert_nil @record.reload.email_code_consumed_at
+      assert_equal "pending", @transaction.reload.status
+      assert_nil @token.reload.last_step_up_at
+    end
+  end
+
   test "failure persists across replacement codes and success records proof only once" do
     assert_not IdentityStepUpEmailVerificationCommitter.call!(
       actor: @actor, credential: @credential, transaction: @transaction, session_record: @record, code: "999999",

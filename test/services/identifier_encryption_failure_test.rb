@@ -28,7 +28,7 @@ class IdentifierEncryptionFailureTest < ActiveSupport::TestCase
   end
 
   test "re-encryption targets reject nil empty unknown and non identifier models" do
-    [nil, [], [nil], [0], [Client], [Operator], [Visitor], ["ClientEmail"]].each do |models|
+    [nil, [], [nil], [0], [Client], [Operator], ["ClientEmail"]].each do |models|
       assert_raises(ArgumentError) { IdentifierEncryptionReencrypt.new(models: models) }
     end
   end

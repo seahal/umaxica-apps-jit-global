@@ -11,8 +11,6 @@ class AuthSignEntryUnknownLoginChallengeTest < ActionDispatch::IntegrationTest
   ENTRY_POINTS = {
     "app sign-in" => ["PUBLIC_AUTH_SERVICE_URL", :auth_app_sign_in_url],
     "app sign-up" => ["PUBLIC_AUTH_SERVICE_URL", :auth_app_sign_up_url],
-    "com sign-in" => ["PUBLIC_AUTH_CORPORATE_URL", :auth_com_sign_in_url],
-    "com sign-up" => ["PUBLIC_AUTH_CORPORATE_URL", :auth_com_sign_up_url],
     "org sign-in" => ["PUBLIC_AUTH_STAFF_URL", :auth_org_sign_in_url],
     "org sign-up" => ["PUBLIC_AUTH_STAFF_URL", :auth_org_sign_up_url],
   }.freeze

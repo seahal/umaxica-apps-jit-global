@@ -92,15 +92,17 @@ surface-specific. These are durable requirements, not current verification resul
 - AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or JSON
   `true`); telephone entry also requires explicit MFA-use consent. Missing, null, empty, unchecked
   and unsupported consent values refuse before creating registration or OTP artifacts.
-- AUTH-21: APP/COM sign-up entry is fail-closed (D-177). A second entry submit while the browser's
+- AUTH-21: APP sign-up entry is fail-closed (D-177). A second entry submit while the browser's
   attempt is not terminal with completed cleanup is refused (422) and preserves the flow, locator,
   pending contact, principal and proof, queuing no OTP; no controller ends or cleans the earlier
-  attempt. An underage birthdate is never written and its refusal halts the attempt with
-  same-request cleanup (D-178). Stuck-registration reporting is read-only and logs identifiers, not
+  attempt. A birthdate of today or later is never written; it receives a 422 and leaves the
+  checkpoint active. A birthdate before today satisfies the sign-up age rule (D-178, R-AU-50).
+  Stuck-registration reporting is read-only and logs identifiers, not
   contact values; report failure does not interrupt cleanup. An operator retries only a diagnosed,
   capped terminal Flow through the existing cleanup service; a missing-Flow case remains held for
   escalation (D-180). See [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement)
-  and the [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md).
+  the [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md), and
+  [sign-up eligibility](../policy/signup-eligibility.md).
 
 - AUTH-22: Protected CAPTCHA entry points reject missing and failed tokens server-side. Enabling
   outage degradation still refuses missing/empty tokens, failed challenges and missing secrets; only
@@ -173,6 +175,13 @@ surface-specific. These are durable requirements, not current verification resul
   selected; Base Home/Dashboard retain their final authentication outcomes. Visa roots issue no
   cookies and protocol endpoints retain their existing transport exemptions. See
   [request context](../architecture/preference.md#request-context-parameters).
+
+- AUTH-36: APP email and telephone sign-up issuance and resend retain the newly committed OTP
+  generation when the delivery queue refuses it or the SMS channel is suspended. The browser
+  receives an unavailable response and can cancel the active attempt; queue acceptance is not
+  treated as proof of delivery.
+- AUTH-37: APP Email and Telephone sign-up OTP resend and verification do not turn an unregistered
+  internal result into a routine invalid-code response; an unsupported result fails explicitly.
 
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),

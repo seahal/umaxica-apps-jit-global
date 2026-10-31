@@ -19,27 +19,34 @@ class IdentityStepUpEmailVerificationCommitter
             return false unless actor.login_allowed? && credential_valid?(credential)
 
             transaction.class.connection_owner.connected_to(role: :writing) do
-              token.with_lock do
-                session_record.with_lock do
-                  transaction.with_lock do
-                    now = transaction.class.database_now
-                    return false unless verification_pending?(
-                      actor, token, credential, transaction, session_record,
-                      now,
-                    )
+              device = token.device_session_record!
+              device.with_lock do
+                token.with_lock do
+                  return false unless device.usable? && device.user_id == actor.id &&
+                    token.device_session_id == device.id && device.current_refresh_token_id == token.id &&
+                    token.user_id == actor.id
 
-                    if session_record.consume_bound_email_code!(
-                      transaction: transaction, credential_ref: credential.public_id, code: code,
-                    )
-                      credential.update!(step_up_otp_failures: 0, step_up_otp_locked_until: nil)
-                      true
-                    else
-                      failures = credential.step_up_otp_failures + 1
-                      credential.update!(
-                        step_up_otp_failures: failures,
-                        step_up_otp_locked_until: (failures >= MAX_FAILURES) ? now + LOCKOUT_DURATION : nil,
+                  transaction.with_lock do
+                    session_record.with_lock do
+                      now = transaction.class.database_now
+                      return false unless session_record.user_token_id == token.id && verification_pending?(
+                        actor, token, credential, transaction, session_record,
+                        now,
                       )
-                      false
+
+                      if session_record.consume_bound_email_code!(
+                        transaction: transaction, credential_ref: credential.public_id, code: code,
+                      )
+                        credential.update!(step_up_otp_failures: 0, step_up_otp_locked_until: nil)
+                        true
+                      else
+                        failures = credential.step_up_otp_failures + 1
+                        credential.update!(
+                          step_up_otp_failures: failures,
+                          step_up_otp_locked_until: (failures >= MAX_FAILURES) ? now + LOCKOUT_DURATION : nil,
+                        )
+                        false
+                      end
                     end
                   end
                 end
@@ -61,13 +68,6 @@ class IdentityStepUpEmailVerificationCommitter
           token.user_id == actor.id
 
         token
-      when Visitor
-        token = VisitorToken.find(record.visitor_token_id) if record.is_a?(VisitorStepUpSession)
-        return unless credential.is_a?(VisitorEmail) && credential.visitor_id == actor.id &&
-          transaction.is_a?(VisitorStepUpCeremonyTransaction) && record.is_a?(VisitorStepUpSession) &&
-          token.visitor_id == actor.id
-
-        token
       end
     end
 
@@ -76,10 +76,6 @@ class IdentityStepUpEmailVerificationCommitter
       when ClientEmail
         credential.class.effective_binding.where(
           id: credential.id, user_email_status_id: [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
-        ).where("discard_at > clock_timestamp()").exists?
-      when VisitorEmail
-        credential.class.effective_binding.where(
-          id: credential.id, visitor_email_status_id: [VisitorEmailStatus::VERIFIED, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP],
         ).where("discard_at > clock_timestamp()").exists?
       end
     end

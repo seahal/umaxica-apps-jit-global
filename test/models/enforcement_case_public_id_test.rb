@@ -4,7 +4,7 @@
 require "test_helper"
 
 class EnforcementCasePublicIdTest < ActiveSupport::TestCase
-  REALM_CASES = [AppEnforcementCase, ComEnforcementCase, OrgEnforcementCase].freeze
+  REALM_CASES = [AppEnforcementCase, OrgEnforcementCase].freeze
 
   test "each realm enforcement case uses the shared Nanoid-21 issuer" do
     REALM_CASES.each do |case_class|

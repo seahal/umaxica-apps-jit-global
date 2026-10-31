@@ -110,23 +110,15 @@ scope module: :warp, as: :warp do
     end
   end
 
-  # Corporate control-plane host.
+  # Corporate control-plane host. The com surface is anonymous and read-only: it keeps the
+  # landing, the settings shell, and the operational/static endpoints. It has no principal, no
+  # credential or session boundary, and no OIDC relying-party route.
   constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_corporate.host,
                      "warp.com.localhost",].compact do
     # Corporate surface controllers.
     scope module: :com, as: :com do
       # Thin landing endpoint.
       root to: "roots#index"
-
-      namespace :well_known, path: ".well-known" do
-        resource :jwks, only: :show, path: "jwks.json", format: false
-      end
-
-      # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
-      # transport carries every protocol method in the JSON-RPC body, so one create action is the
-      # whole endpoint.
-      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
-      # resource :mcp, only: :create
 
       # Deployment identifier endpoint.
       resource :revision, only: :show, format: false
@@ -147,8 +139,9 @@ scope module: :warp, as: :warp do
       end
 
       # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
-      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
-      # JSON-only; the controllers answer 406 to any other `Accept`.
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent that the
+      # com realm no longer serves. These are JSON-only; the controllers answer 406 to any other
+      # `Accept`.
       namespace(:api) do
         namespace(:v0) do
           resource(:health, only: :show, path: "health.json", format: false)
@@ -165,47 +158,6 @@ scope module: :warp, as: :warp do
       # Control-plane settings index.
       resource :settings, only: :show
 
-      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
-      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
-      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
-      # 2026-10-02 amendment).
-      namespace :api do
-        namespace :v0 do
-          namespace :preferences do
-            get :cookie, to: "cookies#show"
-            patch :cookie, to: "cookies#update"
-            get :theme, to: "themes#show"
-            patch :theme, to: "themes#update"
-          end
-        end
-      end
-
-      # Signed-in dashboard.
-      resource :dashboard, only: :show
-
-      # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
-      scope path: "sign", as: :sign do
-        get "", to: "sign/entries#show", as: :show
-        post "", to: "sign/entries#create", as: :create
-        # D-153: one generic landing for expected abnormal endings of the sign flow.
-        resource :interruption, only: :show, module: :sign
-      end
-
-      # R5-WU16 matching-session RP cookie purge after OP logout.
-      namespace :oidc do
-        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
-        resource :callback, only: :show
-        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resources :closures, only: :create
-      end
-
-      namespace :sign do
-        # First-party RP sign-out start and completion resources.
-
-        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: :show, path: "out/completion", controller: :outs
-      end
-
       # Browser CSP report sink; keep configured report-uri path.
       resource :csp_violation_report, only: :create, path: "csp-violation-report"
 
@@ -217,6 +169,7 @@ scope module: :warp, as: :warp do
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
     end
   end
+
 
   # Staff control-plane host.
   constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_staff.host, "warp.org.localhost"].compact do

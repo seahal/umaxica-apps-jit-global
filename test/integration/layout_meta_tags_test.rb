@@ -9,7 +9,6 @@ class LayoutMetaTagsTest < ActiveSupport::TestCase
     "Base::Com" => "app/views/layouts/base/com/application.html.erb",
     "Base::Org" => "app/views/layouts/base/org/application.html.erb",
     "Auth::App" => "app/views/layouts/auth/app/application.html.erb",
-    "Auth::Com" => "app/views/layouts/auth/com/application.html.erb",
     "Auth::Org" => "app/views/layouts/auth/org/application.html.erb",
   }.freeze
 

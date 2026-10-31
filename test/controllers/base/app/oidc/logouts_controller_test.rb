@@ -30,6 +30,13 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     load_jump_rt_env!
   end
 
+  teardown do
+    if @env_snapshot_before_test
+      ENV.replace(@env_snapshot_before_test)
+      JitSecurityJwtRegistry.reload!
+    end
+  end
+
   test "routes get and post to oidc logout without changing helper" do
     get_route = Rails.application.routes.recognize_path("https://#{@host}/oidc/logout", method: :get)
     post_route = Rails.application.routes.recognize_path("https://#{@host}/oidc/logout", method: :post)
@@ -515,11 +522,12 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a confirmation POST with no pending request is refused without a signed-out page" do
-    post "/oidc/logout/confirmation", params: { ri: "jp" }
+    assert_no_difference "OpAppAuthorityStop.count" do
+      post "/oidc/logout/confirmation", params: { ri: "jp" }
+    end
 
     assert_response :unprocessable_entity
     assert_equal I18n.t("sign.shared.sign_out.stale_description"), response.body
-    assert_equal 0, OpAppAuthorityStop.count
   end
 
   test "D-33 refuses an unknown RP-facing logout_challenge on POST" do
@@ -3903,15 +3911,6 @@ class Visa::App::Oidc::LogoutsControllerTest
     ClientPasskeyStatus.find_or_create_by!(id: ClientPasskeyStatus::ACTIVE)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
   def ensure_user_token_reference_records!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
@@ -3926,29 +3925,6 @@ class Visa::App::Oidc::LogoutsControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -3959,13 +3935,6 @@ class Visa::App::Oidc::LogoutsControllerTest
   def satisfy_staff_verification(token, scope: nil)
     _verification, raw_token = OperatorVerification.issue_for_token!(token: token)
     cookies[OperatorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
     mark_token_step_up_satisfied_for_test(token, scope: scope)
     true
   end
@@ -3983,8 +3952,7 @@ class Visa::App::Oidc::LogoutsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM VISA_APP VISA_ORG VISA_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG VISA_APP VISA_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
@@ -4081,13 +4049,10 @@ class Visa::App::Oidc::LogoutsControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end

@@ -11,6 +11,151 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
+  test "source audit failures after OP commits spend Secret rename and revocation proofs" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fallback", uv_verified_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    candidate = ClientSecretCredential.create!(
+      client: actor, issuance: issuance, name: "Original", password: SecureRandom.base58(32),
+    )
+    at = Client.database_now
+    ClientSecretAuditOutbox.transaction do
+      issuance.update!(presented_at: at)
+      ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: actor.public_id, credential_ref: candidate.public_id,
+        operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
+      )
+    end
+    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    commits = []
+    observer =
+      lambda do |_name, _start, _finish, _id, event|
+        commits << event.fetch(:connection).pool.db_config.name if event.fetch(:sql).start_with?("COMMIT")
+      end
+    failure = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "injected source audit failure" }
+    %i(rename revoke).each do |operation|
+      token.reload.update!(
+        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+        last_step_up_resource_ref: candidate.public_id,
+      )
+      commits.clear
+      ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+        ClientSecretAuditOutbox.stub(:record!, failure) do
+          case operation
+          when :rename
+            assert_raises(ClientSecretNameCommitter::DependencyFailure) do
+              ClientSecretNameCommitter.call!(
+                actor_context: context, token: token, credential: candidate, name: "Failed",
+              )
+            end
+          when :revoke
+            assert_raises(ClientSecretRevocationCommitter::DependencyFailure) do
+              ClientSecretRevocationCommitter.call!(
+                actor_context: context, token: token, credential: candidate, purge_after: 1.day,
+              )
+            end
+          end
+        end
+      end
+
+      assert_includes commits, "op_base_app"
+      assert_nil token.reload.last_step_up_at
+      assert_equal "Original", candidate.reload.name
+      assert_nil candidate.revoked_at
+      assert_equal 0, ClientSecretAuditOutbox.where(
+        credential_ref: candidate.public_id, event_name: %w(secret.renamed secret.revoked secret.discarded),
+      ).count
+    end
+  ensure
+    if actor
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
+      ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
+      ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      token&.destroy!
+      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+      actor.strict_loading!(false)
+      actor.destroy!
+    end
+  end
+
+  test "a source write failure after the separate OP commit spends proof without confirming" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    candidate = ClientSecretCredential.create!(
+      client: actor, issuance: issuance, name: "Confirmation failure", password: SecureRandom.base58(32),
+    )
+    at = Client.database_now
+    ClientSecretAuditOutbox.transaction do
+      issuance.update!(presented_at: at)
+      ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: actor.public_id, credential_ref: candidate.public_id,
+        operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
+      )
+    end
+    commits = []
+    observer =
+      lambda do |_name, _start, _finish, _id, event|
+        sql = event.fetch(:sql)
+        if sql.start_with?("COMMIT")
+          commits << event.fetch(:connection).pool.db_config.name
+        elsif sql.match?(/\A\s*UPDATE\s+"client_secret_issuances"/i)
+          raise ActiveRecord::ConnectionNotEstablished, "injected source failure"
+        end
+      end
+
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      assert_raises(ClientSecretStorageConfirmationCommitter::DependencyFailure) do
+        ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+      end
+    end
+
+    assert_includes commits, "op_base_app"
+    assert_nil token.reload.last_step_up_at
+    assert_nil issuance.reload.confirmed_at
+    assert_nil candidate.reload.confirmed_at
+    assert_equal 0, ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.storage_declared",
+    ).count
+  ensure
+    if actor
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
+      ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
+      ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      token&.destroy!
+      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+      actor.strict_loading!(false)
+      actor.destroy!
+    end
+  end
+
   test "confirmation racing cancellation commits one consistent terminal state and releases the reservation" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
@@ -25,6 +170,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Confirmation cancellation race", password: raw,
@@ -127,6 +273,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     admission = OidcTestEntry.issue!(
@@ -264,6 +411,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Concurrent confirmation", password: raw,

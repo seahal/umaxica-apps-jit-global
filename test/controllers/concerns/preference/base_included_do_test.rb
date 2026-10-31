@@ -9,14 +9,6 @@ class PreferenceBaseIncludedDoTest < ActiveSupport::TestCase
     include PreferenceBase
   end
 
-  test "ACCESS_TOKEN_TTL constant is defined" do
-    assert_kind_of ActiveSupport::Duration, PreferenceBase::ACCESS_TOKEN_TTL
-  end
-
-  test "REFRESH_TOKEN_TTL constant is defined" do
-    assert_kind_of ActiveSupport::Duration, PreferenceBase::REFRESH_TOKEN_TTL
-  end
-
   test "including base does not register preference callbacks implicitly" do
     callbacks = Harness._process_action_callbacks.map(&:filter)
 

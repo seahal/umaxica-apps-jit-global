@@ -64,25 +64,17 @@ class AccountSessionRevocationTest < ActiveSupport::TestCase
     assert_equal({}, event.metadata.fetch("token_classes"))
   end
 
-  test "revokes visitor and operator sessions through the shared primitive" do
-    visitor = visitors(:reserved_visitor)
+  test "revokes operator sessions through the shared primitive" do
     operator = operators(:one)
     target_operator = operators(:two)
-    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     operator_token = OperatorToken.create!(authentication_epoch: 0, staff: target_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
 
-    AccountSessionRevocation.purge!(
-      account: visitor,
-      operator: operator,
-      reason_code: "security_incident",
-    )
     AccountSessionRevocation.emergency_revoke!(
       account: target_operator,
       operator: operator,
       reason_code: "security_incident",
     )
 
-    assert_predicate visitor_token.reload, :revoked?
     assert_predicate operator_token.reload, :revoked?
     assert_equal AccountAccessEvent::EVENT_TYPE_EMERGENCY_SESSION_REVOKE,
                  AccountAccessEvent.order(:created_at).last.event_type

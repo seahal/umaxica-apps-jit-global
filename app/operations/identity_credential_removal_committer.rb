@@ -30,32 +30,39 @@ class IdentityCredentialRemovalCommitter
     validate_binding!
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
-        current_session.class.connection_class_for_self.connected_to(role: :writing) do
-          current_session.device_session_record!.with_lock do
-            current_session.with_lock do
-              credential.lock!
-              validate_binding!
-              unless current_session.active_status?(current_session.class.database_now)
-                raise ArgumentError, "credential removal session is unavailable"
-              end
-              if current_session.is_a?(OperatorToken) && current_session.standby_authentication_context?
-                raise ArgumentError, "credential removal requires a Normal session"
-              end
-              return false if terminal? || (contact? && !credential.binding_effective?) || !removable?
-              return false unless passkey_management_authorized?
+        return false unless actor.login_allowed?
 
-              # Ticket invalidation precedes principal mutation. A separate-DB failure can
-              # remove freshness while retaining the credential, but cannot preserve stale authority.
-              CredentialSecurityTransition.call(
-                actor: actor, current_session: current_session, reason: :mfa_level_changed,
-                affected_surface: surface, revoke_other_sessions: false, request: request,
-              )
-              remove_credential!
-              record_contact_release_intent!
-              true
+        invalidated =
+          current_session.class.connection_class_for_self.connected_to(role: :writing) do
+            device = current_session.device_session_record!
+            device.with_lock do
+              return false unless authorized_device?(device)
+
+              current_session.with_lock do
+                credential.lock!
+                validate_binding!
+                validate_session!(device)
+                if current_session.is_a?(OperatorToken) && current_session.standby_authentication_context?
+                  raise ArgumentError, "credential removal requires a Normal session"
+                end
+                return false if terminal? || (contact? && !credential.binding_effective?) || !removable?
+                return false unless passkey_management_authorized? && client_credential_management_authorized?
+
+                # Ticket invalidation precedes principal mutation. A separate-DB failure can
+                # remove freshness while retaining the credential, but cannot preserve stale authority.
+                CredentialSecurityTransition.call(
+                  actor: actor, current_session: current_session, reason: :mfa_level_changed,
+                  affected_surface: surface, revoke_other_sessions: false, request: request,
+                )
+                true
+              end
             end
           end
-        end
+        return false unless invalidated
+
+        remove_credential!
+        record_contact_release_intent!
+        true
       end
     end
   end
@@ -64,13 +71,33 @@ class IdentityCredentialRemovalCommitter
 
   attr_reader :actor, :credential, :current_session, :actor_context, :request
 
+  def validate_session!(device)
+    now =
+      case current_session
+      when ClientToken then ClientToken.database_now
+      when OperatorToken then OperatorToken.database_now
+      else raise ArgumentError, "unsupported credential removal session"
+      end
+    return if current_session.device_session_id == device.id && current_session.active_status?(now)
+
+    raise ArgumentError, "credential removal session is unavailable"
+  end
+
+  def authorized_device?(device)
+    owner_matches =
+      case [actor, device]
+      in [Client, ClientDeviceSession] then device.user_id == actor.id
+      in [Operator, OperatorDeviceSession] then device.staff_id == actor.id
+      else false
+      end
+    owner_matches && device.usable? && device.current_refresh_token_id == current_session.id
+  end
+
   def validate_binding!
     owner_matches =
       case [actor, credential, current_session]
       in [Client, ClientPasskey | ClientTotpCredential | ClientEmail | ClientTelephone, ClientToken]
         credential.user_id == actor.id && current_session.user_id == actor.id
-      in [Visitor, VisitorPasskey | VisitorEmail | VisitorTelephone, VisitorToken]
-        credential.visitor_id == actor.id && current_session.visitor_id == actor.id
       in [Operator, OperatorPasskey, OperatorToken]
         credential.staff_id == actor.id && current_session.staff_id == actor.id
       else false
@@ -84,17 +111,15 @@ class IdentityCredentialRemovalCommitter
   end
 
   def contact?
-    credential.is_a?(ClientEmail) || credential.is_a?(ClientTelephone) ||
-      credential.is_a?(VisitorEmail) || credential.is_a?(VisitorTelephone)
+    credential.is_a?(ClientEmail) || credential.is_a?(ClientTelephone)
   end
 
   def passkey_management_authorized?
     policy =
       case credential
       when ClientPasskey then ClientPasskeyPolicy.new(credential, user: actor)
-      when VisitorPasskey then VisitorPasskeyPolicy.new(credential, user: actor)
       when OperatorPasskey then OperatorPasskeyPolicy.new(credential, user: actor)
-      when ClientTotpCredential, ClientEmail, ClientTelephone, VisitorEmail, VisitorTelephone then return true
+      when ClientTotpCredential, ClientEmail, ClientTelephone then return true
       else raise ArgumentError, "unsupported removal credential"
       end
     evidence = policy.management_credential(token: current_session)
@@ -106,10 +131,29 @@ class IdentityCredentialRemovalCommitter
     )
   end
 
+  def client_credential_management_authorized?
+    scope =
+      case credential
+      when ClientTotpCredential then "settings_totp"
+      when ClientEmail then "settings_email"
+      when ClientTelephone then "settings_telephone"
+      else return true
+      end
+    requirement = StepUpRequirement.new(
+      scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
+      session_binding: current_session.public_id, token_binding: current_session.public_id,
+      require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+      actor_ref: actor.public_id, resource_ref: credential.public_id, tenant_ref: nil,
+    )
+    StepUpResolver.call(token: current_session, requirement: requirement, now: ClientToken.database_now).satisfied?
+  end
+
   def validate_contact_context!
     return unless contact?
 
-    expected_role = actor.is_a?(Client) ? :client : :visitor
+    expected_role = :client
     unless actor_context.is_a?(ActorValuesContext) && actor_context.subject == actor &&
         actor_context.actor_type == expected_role && actor_context.tld.to_s == surface
       raise ArgumentError, "Contact removal requires its authenticated Actor context"
@@ -129,7 +173,6 @@ class IdentityCredentialRemovalCommitter
   def surface
     case actor
     when Client then "app"
-    when Visitor then "com"
     when Operator then "org"
     else raise ArgumentError, "unsupported credential removal actor"
     end
@@ -138,27 +181,26 @@ class IdentityCredentialRemovalCommitter
   def terminal?
     case credential
     when ClientPasskey then [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED].include?(credential.status_id)
-    when VisitorPasskey then [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].include?(credential.status_id)
     when OperatorPasskey then credential.status_id == OperatorPasskeyStatus::REVOKED
     when ClientTotpCredential then credential.revoked? || credential.deleted?
-    when ClientEmail, ClientTelephone, VisitorEmail, VisitorTelephone then credential.binding_released?
+    when ClientEmail, ClientTelephone then credential.binding_released?
     else raise ArgumentError, "unsupported removal credential"
     end
   end
 
   def removable?
     case credential
-    when ClientPasskey, VisitorPasskey, OperatorPasskey then AuthMethodGuard.can_remove_passkey?(actor, credential)
+    when ClientPasskey, OperatorPasskey then AuthMethodGuard.can_remove_passkey?(actor, credential)
     when ClientTotpCredential then AuthMethodGuard.can_remove_totp?(actor, credential)
-    when ClientEmail, VisitorEmail then AuthMethodGuard.can_remove_email?(actor, credential)
-    when ClientTelephone, VisitorTelephone then AuthMethodGuard.can_remove_telephone?(actor, credential)
+    when ClientEmail then AuthMethodGuard.can_remove_email?(actor, credential)
+    when ClientTelephone then AuthMethodGuard.can_remove_telephone?(actor, credential)
     else raise ArgumentError, "unsupported removal credential"
     end
   end
 
   def remove_credential!
     case credential
-    when ClientPasskey, VisitorPasskey, OperatorPasskey
+    when ClientPasskey, OperatorPasskey
       PasskeyAuditOutbox.record_for!(
         passkey: credential,
         event_type: "passkey.removed",
@@ -175,12 +217,6 @@ class IdentityCredentialRemovalCommitter
     when ClientTelephone
       credential.release_binding!(at: ClientTelephone.database_now)
       credential.update!(user_identity_telephone_status_id: ClientTelephoneStatus::DELETED)
-    when VisitorEmail
-      credential.release_binding!(at: VisitorEmail.database_now)
-      credential.update!(visitor_email_status_id: VisitorEmailStatus::DELETED)
-    when VisitorTelephone
-      credential.release_binding!(at: VisitorTelephone.database_now)
-      credential.update!(visitor_telephone_status_id: VisitorTelephoneStatus::DELETED)
     else raise ArgumentError, "unsupported removal credential"
     end
   end

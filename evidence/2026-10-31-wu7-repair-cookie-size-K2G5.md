@@ -1,0 +1,5 @@
+# WU-7 repaired display cookie sizes
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Staged, unstaged and untracked work affected the result.
+- Inspected the Base com repair path: it validates the complete database snapshot against the codec's closed option set before creating the two display cookies. A local Rails runner selected the largest escaped value from each current option list and serialized cookies with a synthetic 254-character Domain attribute. Rack produced a 343-byte language header and a 623-byte experience header, both below 3,072 bytes. An initial runner invocation referenced the singleton-owned constant through the wrong namespace and failed; the corrected inspection succeeded.
+- The actual GET repair, stale-JWT repair and prefetch read-only selection passed: 3 runs, 114 assertions, zero failures, errors or skips. The calculation assumes a Domain attribute no longer than the synthetic input; it is not a proof for arbitrary unbounded Host values or future option lists. No migration or non-test purge was performed. Full-suite comparison remains outstanding.

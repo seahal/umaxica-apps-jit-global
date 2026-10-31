@@ -4,6 +4,8 @@
 require "test_helper"
 
 class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
 
   REALMS = [
@@ -24,20 +26,6 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
       callback: ["/social/google/session", "/social/google/callback", :google],
     },
     {
-      surface: "com",
-      auth_host_env: "PUBLIC_AUTH_CORPORATE_URL",
-      client_id: "core-com-jp",
-      binding_class: VisitorAuthAdmissionBinding,
-      ceremony_class: VisitorAuthCeremonySession,
-      sign_in_flow_class: VisitorSignInFlow,
-      sign_up_flow_class: VisitorSignUpFlow,
-      actor_class: Visitor,
-      posts: [
-        ["/sign/in/email", { visitor_email: { raw_address: "blocked@example.test" } }, false],
-        ["/sign/in/passkey/options", { "cf-turnstile-response" => "test" }, true],
-      ],
-    },
-    {
       surface: "org",
       auth_host_env: "PUBLIC_AUTH_STAFF_URL",
       client_id: "core-org-jp",
@@ -53,7 +41,7 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
 
   setup do
     @previous_sign_in_flags =
-      %w(app com org).to_h do |surface|
+      %w(app org).to_h do |surface|
         feature = FeatureFlags::REGISTRY.fetch(:"sign_in_available_#{surface}").name
         [feature, Flipper.enabled?(feature)]
       end
@@ -71,6 +59,66 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
     OmniAuth.config.test_mode = @previous_omniauth_mode
     @previous_mock_auth.each do |provider, value|
       value.nil? ? OmniAuth.config.mock_auth.delete(provider) : OmniAuth.config.mock_auth[provider] = value
+    end
+  end
+
+  test "blocked sign in preserves an attached but unconfirmed admission on app and org" do
+    REALMS.each do |realm|
+      surface = realm.fetch(:surface)
+      feature = FeatureFlags::REGISTRY.fetch(:"sign_in_available_#{surface}").name
+      host = ENV.fetch(realm.fetch(:auth_host_env))
+      client_id = realm.fetch(:client_id)
+      client = OidcClientRegistry.find!(client_id)
+      Flipper.enable(feature)
+      transaction = OidcAuthorizationTransactionCoordinator.issue!(
+        surface:, intent: "sign_in",
+        params: {
+          response_type: "code",
+          client_id:,
+          redirect_uri: client.redirect_uris_by_realm.fetch(client.resource_type).first,
+          code_challenge: SecureRandom.urlsafe_base64(32),
+          code_challenge_method: "S256",
+          scope: "openid profile",
+          state: SecureRandom.urlsafe_base64(24),
+          nonce: SecureRandom.urlsafe_base64(24),
+        },
+      ).transaction
+      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction:, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      binding = realm.fetch(:binding_class).find_by!(entry_ref: issuance.reference)
+      browser = open_session
+      browser.host!(host)
+      browser.https!
+      browser.get(
+        "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS,
+      )
+
+      assert_equal 303, browser.response.status
+      assert_predicate binding.reload, :attached?
+      assert_not binding.confirmed?
+      before = [binding.attributes, realm.fetch(:ceremony_class).order(:id).map(&:attributes),
+                realm.fetch(:sign_in_flow_class).order(:id).map(&:attributes), browser.cookies.to_hash,]
+      Flipper.disable(feature)
+      browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
+      assert_equal 503, browser.response.status
+      assert_equal "no-store", browser.response.headers["Cache-Control"]
+      after = [binding.reload.attributes, realm.fetch(:ceremony_class).order(:id).map(&:attributes),
+               realm.fetch(:sign_in_flow_class).order(:id).map(&:attributes), browser.cookies.to_hash,]
+
+      # Comparing snapshots as a boolean keeps admission and cookie values out of failure output.
+      assert_not before != after, "blocked entry changed admission, ceremony, flow or cookie state"
+      browser.get(
+        "/sign/in", params: { entry_ref: issuance.reference, ri: "jp", emergency: "true" },
+                    headers: NAVIGATION_HEADERS,
+      )
+
+      assert_equal 503, browser.response.status
+      after_parameter = [binding.reload.attributes, realm.fetch(:ceremony_class).order(:id).map(&:attributes),
+                         realm.fetch(:sign_in_flow_class).order(:id).map(&:attributes), browser.cookies.to_hash,]
+
+      assert_not before != after_parameter, "request parameter changed blocked admission state"
     end
   end
 
@@ -118,7 +166,7 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
       ]
       Flipper.disable(feature)
 
-      direct_browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      direct_browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
       redirect_hops = 0
       if direct_browser.response.redirect?
         redirect_hops += 1
@@ -152,7 +200,9 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
         realm.fetch(:actor_class).order(:id).map(&:attributes),
         direct_browser.cookies.to_hash,
       ]
-      direct_browser.get("/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp" })
+      direct_browser.get(
+        "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS,
+      )
       observed << [surface, "GET /ceremony_bindings", direct_browser.response.status,
                    direct_browser.response.location && URI.parse(direct_browser.response.location).path,]
       attachment_after = [
@@ -230,16 +280,22 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
         browser = open_session
         browser.host!(auth_host)
         browser.https!
-        browser.get("/sign/in", params: { entry_ref: continuation_issuance.reference, ri: "jp" })
+        browser.get(
+          "/sign/in", params: { entry_ref: continuation_issuance.reference, ri: "jp" },
+                      headers: NAVIGATION_HEADERS,
+        )
 
         assert_equal 303, browser.response.status
         assert_equal "/ceremony_bindings", URI.parse(browser.response.location).path
-        browser.get(browser.response.location)
+        browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
 
         assert_equal 303, browser.response.status
         binding = realm.fetch(:binding_class).find_by!(entry_ref: continuation_issuance.reference)
         binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-        browser.get("/sign/in", params: { entry_ref: continuation_issuance.reference, ri: "jp" })
+        browser.get(
+          "/sign/in", params: { entry_ref: continuation_issuance.reference, ri: "jp" },
+                      headers: NAVIGATION_HEADERS,
+        )
 
         assert_equal 303, browser.response.status
         browser.get("/sign/in", params: { ri: "jp" })
@@ -300,16 +356,16 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
       browser = open_session
       browser.host!(auth_host)
       browser.https!
-      browser.get("/sign/in", params: { entry_ref: callback_issuance.reference, ri: "jp" })
+      browser.get("/sign/in", params: { entry_ref: callback_issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
       assert_equal "/ceremony_bindings", URI.parse(browser.response.location).path
-      browser.get(browser.response.location)
+      browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
       binding = realm.fetch(:binding_class).find_by!(entry_ref: callback_issuance.reference)
       binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      browser.get("/sign/in", params: { entry_ref: callback_issuance.reference, ri: "jp" })
+      browser.get("/sign/in", params: { entry_ref: callback_issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
       browser.get("/sign/in", params: { ri: "jp" })

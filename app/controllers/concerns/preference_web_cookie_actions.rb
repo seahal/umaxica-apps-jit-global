@@ -14,6 +14,8 @@ module PreferenceWebCookieActions
   end
 
   def update
+    return unless require_preference_browser_writer!
+
     consent = cookie_consent_request
     if consent.fetch(:invalid_pointers).any?
       render_preference_browser_api_invalid_fields(consent.fetch(:invalid_pointers))
@@ -21,6 +23,11 @@ module PreferenceWebCookieActions
     end
 
     apply_cookie_consent_update!(consent.fetch(:attrs))
+    if anonymous_preference_claim_shape?(preference_class)
+      render json: { cookie: consent.fetch(:attrs) }, status: :ok
+      return
+    end
+
     head :no_content
   end
 end

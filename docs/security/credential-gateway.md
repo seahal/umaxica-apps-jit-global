@@ -61,10 +61,15 @@ The APP/COM Base `/identity/recovery/session` entry is email OTP re-entry for an
 visible `security_lock` whose release mode is `verification_required`. It requires an effective
 email binding and the permitted verified email status. Unknown destinations and unbound
 candidates take the existing dummy-response path and cannot receive a recovery ceremony.
+For APP, OTP completion locks the Client, Email and matching in-force Cases, then rechecks the
+Email binding, verified status and eligible Case before issuing the recovery ceremony. A rejected
+completion can leave the one-time OTP consumed; it does not issue a normal session.
 
 Successful OTP verification issues a narrowly scoped recovery ceremony, not a Root Session or
 RP session. The recovery completion consumes that ceremony to release the selected account's
-eligible security lock. These routes do not implement a forgotten-password reset. The current
+eligible security lock. Completion locks and revalidates both the Case and ceremony, then commits
+Case ending and ceremony consumption together before downstream unlock and audit delivery.
+These routes do not implement a forgotten-password reset. The current
 Auth route inventory has no general email-link password-reset flow; adding one requires its
 own credential, expiry, one-time consumption and session-revocation contract rather than
 reusing lock recovery or interpreting email submission as proof.

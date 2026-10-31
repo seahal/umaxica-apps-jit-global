@@ -28,7 +28,7 @@ class OidcDiscoveryDocumentTest < ActiveSupport::TestCase
   end
 
   test "each realm advertises session-aware backchannel logout" do
-    %w(client visitor operator).each do |resource_type|
+    %w(client operator).each do |resource_type|
       document = OidcDiscoveryDocument.for_resource_type(resource_type)
 
       assert document[:backchannel_logout_supported]
@@ -40,7 +40,7 @@ class OidcDiscoveryDocumentTest < ActiveSupport::TestCase
   # be a bare https origin (no query/fragment) and no advertised endpoint may
   # carry `ri`, regardless of any regional request context.
   test "issuer and endpoints never carry ri or a query/fragment" do
-    %w(client visitor operator).each do |resource_type|
+    %w(client operator).each do |resource_type|
       document = OidcDiscoveryDocument.for_resource_type(resource_type)
       issuer = URI.parse(document.fetch(:issuer))
 

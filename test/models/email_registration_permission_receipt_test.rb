@@ -7,34 +7,18 @@ require "minitest/mock"
 class EmailRegistrationPermissionReceiptTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(success terminal_retry expiry_before expiry_at expiry_after wrong_method caller_nil_clock
        caller_clock).each do |kind|
       test "#{surface} email permission receipt #{kind} uses original locked database clock" do
-        actor =
-          if surface == :app
-            Client.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL,
-              id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-            )
-          else
-            Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL,
-              id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-            )
-          end
-        token =
-          if surface == :app
-            ClientToken.create!(
-              authentication_epoch: 0, user: actor,
-              root_login_established_at: ClientToken.database_now,
-            )
-          else
-            VisitorToken.create!(
-              authentication_epoch: 0, visitor: actor,
-              root_login_established_at: VisitorToken.database_now,
-            )
-          end
+        actor = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+        )
+        token = ClientToken.create!(
+          authentication_epoch: 0, user: actor,
+          root_login_established_at: ClientToken.database_now,
+        )
         token.rotate_refresh_token!
         requirement = StepUpRequirement.new(
           step_up_required: false, scope: "settings_email", purpose: "bootstrap",
@@ -48,18 +32,10 @@ class EmailRegistrationPermissionReceiptTest < ActiveSupport::TestCase
           actor:, token:, requirement:, return_to: "/identity/emails",
           base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: token,
         ).transaction
-        contact =
-          if surface == :app
-            actor.client_emails.create!(
-              raw_address: "permission-#{SecureRandom.hex(8)}@example.test",
-              confirm_policy: "1",
-            )
-          else
-            actor.visitor_emails.create!(
-              raw_address: "permission-#{SecureRandom.hex(8)}@example.test",
-              confirm_policy: "1",
-            )
-          end
+        contact = actor.client_emails.create!(
+          raw_address: "permission-#{SecureRandom.hex(8)}@example.test",
+          confirm_policy: "1",
+        )
         initial = parent.attributes
         now = parent.class.database_now
         case kind

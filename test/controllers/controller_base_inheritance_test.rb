@@ -9,7 +9,6 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
 
   BARE_CONTROLLERS = [
     Auth::App::BareController,
-    Auth::Com::BareController,
     Auth::Org::BareController,
     Base::App::BareController,
     Base::Com::BareController,
@@ -17,7 +16,6 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Base::Net::BareController,
     Base::Org::BareController,
     Core::App::BareController,
-    Core::Com::BareController,
     Core::Dev::BareController,
     Core::Net::BareController,
     Core::Org::BareController,
@@ -38,7 +36,6 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Palm::App::BareController,
     Tech::Org::BareController,
     Visa::App::BareController,
-    Visa::Com::BareController,
     Visa::Org::BareController,
     Warp::App::BareController,
     Warp::Com::BareController,
@@ -47,7 +44,6 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
 
   APPLICATION_CONTROLLERS = [
     Auth::App::ApplicationController,
-    Auth::Com::ApplicationController,
     Auth::Org::ApplicationController,
     Base::App::ApplicationController,
     Base::Com::ApplicationController,
@@ -57,7 +53,6 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Edit::Org::ApplicationController,
     Tech::Org::ApplicationController,
     Core::App::ApplicationController,
-    Core::Com::ApplicationController,
     Core::Org::ApplicationController,
     Warp::App::ApplicationController,
     Warp::Com::ApplicationController,
@@ -115,10 +110,8 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
       Base::Com,
       Base::Org,
       Core::App,
-      Core::Com,
       Core::Org,
       Auth::App,
-      Auth::Com,
       Auth::Org,
       Warp::App,
       Warp::Com,

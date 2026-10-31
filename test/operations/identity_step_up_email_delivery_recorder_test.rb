@@ -41,6 +41,39 @@ class IdentityStepUpEmailDeliveryRecorderTest < ActiveSupport::TestCase
     end
   end
 
+  [false, true].each do |superseded|
+    test "a #{superseded ? "superseded" : "revoked"} device cannot deliver a queued Email Step-Up code" do
+      device = @token.device_session_record!
+      if superseded
+        replacement = ClientToken.create!(authentication_epoch: 0, user: @actor, device_session: device)
+        device.update!(current_refresh_token_id: replacement.id)
+      else
+        device.revoke!
+      end
+
+      assert_not IdentityStepUpEmailDeliveryRecorder.call!(
+        credential: @credential, transaction_ref: @transaction.transaction_id,
+        generation: @generation, encrypted_code: @ciphertext,
+      )
+      assert_empty ActionMailer::Base.deliveries
+      assert_equal "pending", @record.reload.email_delivery_state
+      assert_nil @record.email_code_consumed_at
+      assert_equal "pending", @transaction.reload.status
+    end
+  end
+
+  test "a released Email binding cannot receive a queued Step-Up code" do
+    @credential.release_binding!
+
+    assert_not IdentityStepUpEmailDeliveryRecorder.call!(
+      credential: @credential, transaction_ref: @transaction.transaction_id,
+      generation: @generation, encrypted_code: @ciphertext,
+    )
+    assert_empty ActionMailer::Base.deliveries
+    assert_equal "pending", @record.reload.email_delivery_state
+    assert_nil @record.email_code_consumed_at
+  end
+
   test "encrypted Noticed job delivers the current code and records delivery before verification" do
     perform_enqueued_jobs(only: StepUpEmailDeliveryJob) do
       Notify::App::StepUpOtpNotifier.issue(

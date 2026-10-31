@@ -14,8 +14,8 @@ class PublicRobotsRoutingTest < ActionDispatch::IntegrationTest
 
   test "sign surfaces define public file helpers" do
     assert_public_file_helpers(
-      robots: %i(sign_com_robots_path sign_app_robots_path sign_org_robots_path),
-      sitemap: %i(sign_com_sitemap_path sign_app_sitemap_path sign_org_sitemap_path),
+      robots: %i(sign_app_robots_path sign_org_robots_path),
+      sitemap: %i(sign_app_sitemap_path sign_org_sitemap_path),
     )
   end
 
@@ -64,13 +64,11 @@ class PublicRobotsRoutingTest < ActionDispatch::IntegrationTest
       [method(:acme_com_robots_url), ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost"), "robots"],
       [method(:acme_app_robots_url), ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"), "robots"],
       [method(:acme_org_robots_url), ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost"), "robots"],
-      [method(:sign_com_robots_url), ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "id.com.localhost"), "robots"],
       [method(:sign_app_robots_url), ENV["PRIVATE_AUTH_SERVICE_URL"] || "id.app.localhost", "robots"],
       [method(:sign_org_robots_url), ENV["PRIVATE_AUTH_STAFF_URL"] || "id.org.localhost", "robots"],
       [method(:acme_com_sitemap_url), ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost"), "sitemap"],
       [method(:acme_app_sitemap_url), ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"), "sitemap"],
       [method(:acme_org_sitemap_url), ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost"), "sitemap"],
-      [method(:sign_com_sitemap_url), ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "id.com.localhost"), "sitemap"],
       [method(:sign_app_sitemap_url), ENV["PRIVATE_AUTH_SERVICE_URL"] || "id.app.localhost", "sitemap"],
       [method(:sign_org_sitemap_url), ENV["PRIVATE_AUTH_STAFF_URL"] || "id.org.localhost", "sitemap"],
     ]
@@ -147,7 +145,6 @@ class PublicRobotsRoutingTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
     "acme_com_" => "base_com_",

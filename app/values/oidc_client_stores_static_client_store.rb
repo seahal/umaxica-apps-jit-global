@@ -31,11 +31,6 @@ module OidcClientStoresStaticClientStore
       resource_type: "client",
       name: "Core App RP",
     },
-    "core-com" => {
-      env_key: "PUBLIC_CORE_CORPORATE_URL",
-      resource_type: "visitor",
-      name: "Core Com RP",
-    },
     "core-org" => {
       env_key: "PUBLIC_CORE_STAFF_URL",
       resource_type: "operator",
@@ -46,12 +41,6 @@ module OidcClientStoresStaticClientStore
       default_host: "warp.app.localhost",
       resource_type: "client",
       name: "Warp App RP",
-    },
-    "warp-com" => {
-      env_key: "PUBLIC_WARP_CORPORATE_URL",
-      default_host: "warp.com.localhost",
-      resource_type: "visitor",
-      name: "Warp Com RP",
     },
     "warp-org" => {
       env_key: "PUBLIC_WARP_STAFF_URL",
@@ -81,12 +70,6 @@ module OidcClientStoresStaticClientStore
       resource_type: "client",
       name: "Base App Self RP",
       jwt_namespace: "BASE_RP_APP_WW",
-    },
-    "base-com" => {
-      env_key: "BASE_CORPORATE_URL",
-      resource_type: "visitor",
-      name: "Base Com Self RP",
-      jwt_namespace: "BASE_RP_COM_WW",
     },
     "base-org" => {
       env_key: "BASE_STAFF_URL",

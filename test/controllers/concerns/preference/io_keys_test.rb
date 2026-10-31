@@ -2,32 +2,20 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 class PreferenceIoKeysTest < ActiveSupport::TestCase
-  test "io keys module is loadable" do
-    assert defined?(PreferenceIoKeys)
-  end
-
-  test "preference io key values stay stable" do
-    assert_equal "__Host-", PreferenceIoKeys::HOST_COOKIE_PREFIX
-    assert_equal "__Host-", PreferenceIoKeys::SECURE_COOKIE_PREFIX
-    assert_equal "ct", PreferenceIoKeys::Cookies::THEME
+  test "exposes only current display and parameter keys" do
     assert_equal "language", PreferenceIoKeys::Cookies::LANGUAGE
-    assert_equal "tz", PreferenceIoKeys::Cookies::TIMEZONE
-    assert_equal "cu", PreferenceIoKeys::Cookies::CURRENCY
-    assert_equal "df", PreferenceIoKeys::Cookies::DATE_FORMAT
-    assert_equal "tf", PreferenceIoKeys::Cookies::TIME_FORMAT
-    assert_equal "mo", PreferenceIoKeys::Cookies::MOTION
-    assert_equal "dn", PreferenceIoKeys::Cookies::DENSITY
-    assert_equal "ps", PreferenceIoKeys::Cookies::PAGE_SIZE
-    assert_equal "preference_access", PreferenceIoKeys::Cookies::ACCESS_BASENAME
-    assert_equal "preference_refresh", PreferenceIoKeys::Cookies::REFRESH_BASENAME
+    assert_equal :ct, PreferenceIoKeys::Params::CT
+    assert_equal :lx, PreferenceIoKeys::Params::LX
+    assert_equal :ri, PreferenceIoKeys::Params::RI
+    assert_equal :tz, PreferenceIoKeys::Params::TZ
+    assert_equal :option_id, PreferenceIoKeys::Params::OPTION_ID
   end
 
-  test "preference refresh token is never accepted via URL or body params" do
-    # Refresh tokens flow only through HttpOnly cookies. Reintroducing a
-    # params constant would invite logging and Referer leaks.
+  test "preference transport keys do not accept refresh parameters" do
     assert_not PreferenceIoKeys::Params.const_defined?(:REFRESH_TOKEN, false)
+    assert_not PreferenceIoKeys::Cookies.const_defined?(:REFRESH_BASENAME, false)
+    assert_not PreferenceIoKeys::Cookies.const_defined?(:DBSC_BASENAME, false)
   end
 end

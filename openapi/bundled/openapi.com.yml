@@ -23,12 +23,10 @@ info:
 
     ## Preferences
 
-    `/api/v0/preferences/{cookie,theme}` is a host-local browser API served on several first-party
-    hosts of this surface (Base, Auth, Core, and Warp), each listed in the path's `servers`. Each
-    host reads and writes its own host-only preference credentials, so a browser calls only the
-    origin it is on; the endpoints are not for cross-origin use. The Auth host serves them only as
-    display-preference transport for its ceremony pages
-    (adr/preference-browser-transport-family-capability.md).
+    `/api/v0/preferences/{cookie,theme,web_push}` is a browser API served by Base on this
+    surface, listed in the path's `servers`. Base uses a same-TLD preference token and a host-only browser binding for consent and Web Push;
+    a browser calls only the origin it is on; the endpoints are not for cross-origin
+    use. The com surface is anonymous: Auth, Core, and Warp serve no preference API on com hosts.
 
     The text operational endpoints -- `GET /health`, `GET /health/{startup,liveness,readiness}`,
     and `GET /revision` -- are absent because they are not JSON: they render `text/plain` and do
@@ -38,14 +36,15 @@ info:
     ## Hosts
 
     `servers` appears only where a host is real, public, and knowable from the repository. The
-    Core session paths carry one, and the preference paths list every host that serves them. The health and revision endpoints carry none because they are blocked
-    at the edge. The content and Palm paths carry none because their hosts are supplied by
-    deployment environment variables, and the docs and news content editions have no production
-    host at all.
+    preference paths list every host that serves them. The health and revision endpoints carry none
+    because they are blocked at the edge. The content and Palm paths carry none because their hosts
+    are supplied by deployment environment variables, and the docs and news content editions have no
+    production host at all.
 
     ## Errors
 
-    Errors use RFC 9457 Problem Details (`application/problem+json`). Problem `type` values are
+    Most errors use RFC 9457 Problem Details (`application/problem+json`). Duplicate preference
+    cookie names are rejected with an empty 400 response. Problem `type` values are
     the stable identifiers clients branch on; `title` and `detail` are human-readable and may
     change. Two extension members are defined: `request_id` and `errors`.
 
@@ -56,10 +55,8 @@ info:
 tags:
   - name: Health
     description: Machine-readable health aggregate and deployment revision. Blocked at the edge, JSON only.
-  - name: Session
-    description: Core browser BFF session and token lifecycle, authenticated by first-party cookie.
   - name: Preferences
-    description: Cookie-consent and color-theme JSON endpoints under `/api/v0/preferences`.
+    description: Cookie-consent, color-theme and Web Push JSON endpoints under `/api/v0/preferences`.
   - name: Content
     description: Read-only published documentation, help, news, and info entries.
 paths:
@@ -133,86 +130,13 @@ paths:
                 type: string
                 enum:
                   - no-store
-  /api/v0/session:
-    servers:
-      - url: https://jp.umaxica.com
-        description: Canonical Core public host for the com (public and corporate) surface.
-    get:
-      summary: Current browser session summary
-      description: Reports whether the caller's first-party cookie authenticates them, and returns the CSRF token required for unsafe requests on this surface. Never returns a credential.
-      operationId: getSession
-      tags:
-        - Session
-      security:
-        - coreBrowserCookie: []
-        - {}
-      responses:
-        '200':
-          description: Session summary. `authenticated` is false for an anonymous caller.
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionSummary'
-        '403':
-          $ref: '#/components/responses/Problem'
-        '406':
-          $ref: '#/components/responses/NotAcceptable'
-        '503':
-          $ref: '#/components/responses/Problem'
-  /api/v0/token/refresh:
-    servers:
-      - url: https://jp.umaxica.com
-        description: Canonical Core public host for the com (public and corporate) surface.
-    post:
-      summary: Rotate the browser credential pair
-      description: 'Exchanges the opaque refresh cookie for a new access cookie and a rotated refresh cookie. Credentials are returned as `Set-Cookie` only, never in the body. Requires `X-CSRF-Token`. Rejects requests that present an `Authorization` header: this endpoint serves the cookie transport only.'
-      operationId: refreshToken
-      tags:
-        - Session
-      security:
-        - coreBrowserCookie: []
-      parameters:
-        - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Credentials rotated. The new cookies are on the response; there is no representation to return, so there is no body (RFC 9110 15.3.5).
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-        '401':
-          $ref: '#/components/responses/Problem'
-        '403':
-          $ref: '#/components/responses/Problem'
-        '406':
-          $ref: '#/components/responses/NotAcceptable'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        '503':
-          $ref: '#/components/responses/Problem'
   /api/v0/preferences/cookie:
     servers:
-      - url: https://jp.umaxica.com
-        description: Core public host for the com (public and corporate) surface.
       - url: https://www.umaxica.com
         description: Base public host for the com (public and corporate) surface.
-      - url: https://auth.umaxica.com
-        description: Auth public host for the com (public and corporate) surface.
-      - url: https://www-jp.umaxica.com
-        description: Warp public host for the com (public and corporate) surface.
     get:
       summary: Cookie-consent banner state
-      description: 'Reports whether the cookie-consent banner should be shown. Open: no session is required. Served host-locally by each listed host: each host reads and writes its own host-only preference credentials, and a browser calls only its current origin.'
+      description: 'Reports whether the cookie-consent banner should be shown. Open: no session is required. A same-TLD preference token and a matching host-only browser binding identify a recorded decision.'
       operationId: getPreferencesCookie
       tags:
         - Preferences
@@ -230,13 +154,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CookieBanner'
+        '400':
+          description: Ambiguous duplicate preference cookies were rejected without a response body.
         '406':
           $ref: '#/components/responses/NotAcceptable'
         '429':
           $ref: '#/components/responses/RateLimited'
     patch:
       summary: Record cookie consent
-      description: 'Records a cookie-consent decision. Open: a caller without a preference token records the decision in the consent buffer only. `cookie.consented` is required; each present flag must be a boolean or one of `1`, `0`, `"1"`, `"0"`, `"true"`, `"false"`, `"t"`, `"f"` (and the upper-case forms), otherwise the request is a 422 naming each field. Successful writes have no representation.'
+      description: 'Records a cookie-consent decision. Open: a caller without a valid preference token receives a new preference. Either `consented` or `cookie.consented` is required; each present flag must be a boolean or one of `1`, `0`, `"1"`, `"0"`, `"true"`, `"false"`, `"t"`, `"f"` (and the upper-case forms), otherwise the request is a 422 naming each field.'
       operationId: patchPreferencesCookie
       tags:
         - Preferences
@@ -247,9 +173,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - cookie
+              anyOf:
+                - required:
+                    - consented
+                - required:
+                    - cookie
               properties:
+                consented: {}
                 cookie:
                   type: object
                   required:
@@ -260,20 +190,49 @@ paths:
                     performant: {}
                     targetable: {}
       responses:
-        '204':
-          description: Consent recorded. No body (RFC 9110 15.3.5).
+        '200':
+          description: Recorded consent choices.
           headers:
             Cache-Control:
               schema:
                 type: string
                 enum:
                   - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - cookie
+                properties:
+                  cookie:
+                    type: object
+                    required:
+                      - consented
+                      - functional
+                      - performant
+                      - targetable
+                    properties:
+                      consented:
+                        type: boolean
+                      functional:
+                        type: boolean
+                      performant:
+                        type: boolean
+                      targetable:
+                        type: boolean
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/ForeignPreferenceToken'
+          description: Malformed JSON or ambiguous duplicate preference cookies.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '403':
-          $ref: '#/components/responses/CsrfVerificationFailed'
+          description: CSRF verification failed or the browser binding did not match.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '406':
           $ref: '#/components/responses/NotAcceptable'
         '415':
@@ -282,19 +241,104 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /api/v0/preferences/web_push:
+    servers:
+      - url: https://www.umaxica.com
+        description: Base public host for the com surface.
+    get:
+      summary: Current Web Push preference
+      description: Returns disabled when there is no active preference and matching browser binding.
+      operationId: getPreferencesWebPush
+      tags:
+        - Preferences
+      security: []
+      responses:
+        '200':
+          description: Current Web Push preference.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - web_push
+                properties:
+                  web_push:
+                    type: string
+                    enum:
+                      - disabled
+                      - enabled
+        '400':
+          description: Ambiguous duplicate preference cookies were rejected without a response body.
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    patch:
+      summary: Update Web Push preference
+      operationId: patchPreferencesWebPush
+      tags:
+        - Preferences
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - web_push
+              properties:
+                web_push:
+                  type: string
+                  enum:
+                    - disabled
+                    - enabled
+      responses:
+        '200':
+          description: Updated Web Push preference.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - web_push
+                properties:
+                  web_push:
+                    type: string
+                    enum:
+                      - disabled
+                      - enabled
+        '400':
+          description: Malformed JSON or ambiguous duplicate preference cookies.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: CSRF verification failed or the browser binding did not match.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Problem'
   /api/v0/preferences/theme:
     servers:
-      - url: https://jp.umaxica.com
-        description: Core public host for the com (public and corporate) surface.
       - url: https://www.umaxica.com
         description: Base public host for the com (public and corporate) surface.
-      - url: https://auth.umaxica.com
-        description: Auth public host for the com (public and corporate) surface.
-      - url: https://www-jp.umaxica.com
-        description: Warp public host for the com (public and corporate) surface.
     get:
       summary: Current color theme
-      description: 'Reports the caller''s color theme. No session is required. Served host-locally by each listed host: each host reads and writes its own host-only preference credentials, and a browser calls only its current origin.'
+      description: Reports the caller's color theme. No session is required. A valid same-TLD preference token identifies the preference.
       operationId: getPreferencesTheme
       tags:
         - Preferences
@@ -312,13 +356,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ColorTheme'
+        '400':
+          description: Ambiguous duplicate preference cookies were rejected without a response body.
         '406':
           $ref: '#/components/responses/NotAcceptable'
         '429':
           $ref: '#/components/responses/RateLimited'
     patch:
       summary: Update color theme
-      description: Writes the color theme cookie (and the preference record when a preference token is present). `theme` is `light`, `dark`, or `system` (case-insensitive) or a stored code; any other value, including a missing member, is a 422 with the pointer `/theme`. Unknown members are ignored.
+      description: Updates the preference record, creating one when no valid preference token is present. `theme` is `light`, `dark`, or `system` (case-insensitive) or a stored code; any other value, including a missing member, is a 422 with the pointer `/theme`. Unknown members are ignored.
       operationId: patchPreferencesTheme
       tags:
         - Preferences
@@ -334,13 +380,7 @@ paths:
               properties:
                 theme:
                   type: string
-                  enum:
-                    - light
-                    - dark
-                    - system
-                    - li
-                    - dr
-                    - sy
+                  pattern: ^([lL][iI][gG][hH][tT]|[dD][aA][rR][kK]|[sS][yY][sS][tT][eE][mM]|[lL][iI]|[dD][rR]|[sS][yY])$
       responses:
         '200':
           description: Theme after the write.
@@ -355,9 +395,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ColorTheme'
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/ForeignPreferenceToken'
+          description: Malformed JSON or ambiguous duplicate preference cookies.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '403':
           $ref: '#/components/responses/CsrfVerificationFailed'
         '406':
@@ -368,6 +410,8 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Problem'
   /api/v0/entries:
     get:
       summary: List published entries
@@ -500,12 +544,6 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 components:
-  securitySchemes:
-    coreBrowserCookie:
-      type: apiKey
-      in: cookie
-      name: __Host-auth_access
-      description: 'First-party HttpOnly access cookie. The `__Host-` prefix is present in any secure context; the basename alone (`auth_access`) is used otherwise. Unsafe methods additionally require `X-CSRF-Token`, which OpenAPI cannot express as part of a security scheme; it is declared as a required header parameter instead. Requests that also carry an `Authorization` header are rejected: an endpoint accepts exactly one credential transport.'
   schemas:
     CheckStatus:
       type: object
@@ -572,29 +610,14 @@ components:
           type: string
           format: date-time
           description: UTC time when Rails rendered the revision response, formatted as RFC 3339 with `Z`.
-    SessionSummary:
+    CookieBanner:
       type: object
       required:
-        - authenticated
-        - csrf_token
+        - show_banner
       properties:
-        authenticated:
+        show_banner:
           type: boolean
-        csrf_token:
-          type: string
-          description: Required as `X-CSRF-Token` on unsafe requests to this surface.
-        actor:
-          type: object
-          description: Present only when authenticated.
-          required:
-            - id
-            - display_name
-          properties:
-            id:
-              type: string
-              description: Public identifier. Never a database primary key.
-            display_name:
-              type: string
+          description: True when the caller has not recorded cookie consent.
     Problem:
       type: object
       description: RFC 9457 Problem Details. This repository defines exactly two extension members, `request_id` and `errors`; see docs/reference/api-design-standards.md.
@@ -654,14 +677,6 @@ components:
                 format: uri
               detail:
                 type: string
-    CookieBanner:
-      type: object
-      required:
-        - show_banner
-      properties:
-        show_banner:
-          type: boolean
-          description: True when the caller has not recorded cookie consent.
     ColorTheme:
       type: object
       required:
@@ -765,20 +780,8 @@ components:
           minimum: 1
           description: The last page number for the current filtered collection.
   responses:
-    Problem:
-      description: An RFC 9457 problem document.
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
     NotAcceptable:
       description: The request `Accept` excludes both `application/json` and `application/problem+json`. The refusal is still sent as a problem document (RFC 9110 15.5.7).
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    UnsupportedMediaType:
-      description: The request carries a body whose `Content-Type` is not `application/json`.
       content:
         application/problem+json:
           schema:
@@ -798,20 +801,8 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
-    BadRequest:
-      description: The request body is not well-formed JSON.
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    ForeignPreferenceToken:
-      description: The request presented a preference access token minted for another host or audience. A request that presents no preference token is not refused.
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    CsrfVerificationFailed:
-      description: The unsafe request did not pass this host's forgery protection.
+    UnsupportedMediaType:
+      description: The request carries a body whose `Content-Type` is not `application/json`.
       content:
         application/problem+json:
           schema:
@@ -822,14 +813,19 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    Problem:
+      description: An RFC 9457 problem document.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    CsrfVerificationFailed:
+      description: The unsafe request did not pass this host's forgery protection.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
   parameters:
-    CsrfToken:
-      name: X-CSRF-Token
-      in: header
-      required: true
-      schema:
-        type: string
-      description: CSRF token obtained from `GET /api/v0/session`. Required on every unsafe method. OpenAPI has no security scheme for a double-submit CSRF token in any version, so it is described here as an ordinary required header.
     Page:
       name: page
       in: query

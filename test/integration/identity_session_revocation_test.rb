@@ -3,7 +3,7 @@
 
 require "test_helper"
 
-# Self-service session management on the app and com browser surfaces:
+# Self-service session management on the app browser surface:
 # listing sessions, revoking one selected session, and revoking every other session.
 #
 # The org surface runs the same controllers with an operator actor. It is
@@ -18,13 +18,11 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     ensure_token_reference_records!
 
     @app_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
   end
 
   test "self-service routes cannot revoke every session" do
     {
       @app_host => "/identity/sessions",
-      @com_host => "/identity/sessions",
       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "/identity/sessions",
     }.each do |host, path|
       assert_raises(ActionController::RoutingError, host) do
@@ -113,58 +111,6 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     assert_predicate @other_token.reload, :currently_usable?
   end
 
-  # --- com surface -------------------------------------------------------
-
-  test "com session index renders the revoke controls when other sessions exist" do
-    host! @com_host
-    setup_com_actor!
-
-    get base_com_identity_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
-
-    assert_response :success
-    assert_match "/sessions/other", response.body
-    assert_match @other_token.public_id, response.body
-  end
-
-  test "com revoke other sessions keeps the current session" do
-    host! @com_host
-    setup_com_actor!
-    mark_step_up_satisfied!(@current_token, audience: "step_up:com")
-
-    delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
-
-    assert_response :see_other
-    assert_not_predicate @other_token.reload, :currently_usable?
-    assert_predicate @current_token.reload, :currently_usable?
-  end
-
-  test "com revoke other sessions requires a fresh step-up" do
-    host! @com_host
-    setup_com_actor!
-    sessions_url = base_com_identity_sessions_url(ri: "jp", host: @com_host)
-    with_forgery_protection do
-      get sessions_url, headers: @com_headers
-
-      assert_response :success
-      csrf_token = response.parsed_body.at_css('meta[name="csrf-token"]')&.[]("content")
-
-      assert_predicate csrf_token, :present?
-
-      delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host),
-             headers: @com_headers.merge("X-CSRF-Token" => csrf_token)
-
-      assert_response :see_other
-      gateway = URI.parse(response.location)
-
-      assert_equal @com_host, gateway.host
-      assert_includes %w(/verification /verification/setup), gateway.path
-      assert_equal "session_revoke_all", Rack::Utils.parse_nested_query(gateway.query)["scope"]
-      assert_nil Rack::Utils.parse_nested_query(gateway.query)["rt"]
-      assert_predicate @current_token.reload, :currently_usable?
-      assert_predicate @other_token.reload, :currently_usable?
-    end
-  end
-
   private
 
   def setup_app_actor!
@@ -179,32 +125,11 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   def ensure_token_reference_records!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::NOTHING)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::NOTHING)
-    VisitorTokenBindingMethod.ensure_defaults!
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def setup_com_actor!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    @actor = Visitor.create!(
-      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
-      status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-    )
-    @current_token = create_visitor_token
-    @other_token = create_visitor_token
-    @com_headers = bearer_session_headers(@actor, @current_token, host: @com_host, resource_type: "visitor")
   end
 
   def bearer_session_headers(actor, token, host:, resource_type:)
     https!
-    client_id = (resource_type == "client") ? "base-app-ww" : "base-com-ww"
-    client = OidcClientRegistry.find!(client_id)
+    client = OidcClientRegistry.find!("base-app-ww")
     attributes = {
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",
@@ -213,11 +138,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
       oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,
     }
-    rp_session =
-      case token
-      when ClientToken then OpAppGrant.create!(attributes.merge(authentication_epoch: 0, client_token: token))
-      when VisitorToken then OpComGrant.create!(attributes.merge(authentication_epoch: 0, visitor_token: token))
-      end
+    rp_session = OpAppGrant.create!(attributes.merge(authentication_epoch: 0, client_token: token))
     access = AuthenticationTokenService.encode(
       actor, host: host, resource_type: resource_type, session_public_id: token.public_id,
              base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
@@ -239,19 +160,6 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
       user: @actor,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: PublicId.generate,
-      discard_at: 1.day.from_now,
-    )
-    token.update!(created_at: 1.hour.ago)
-    token
-  end
-
-  def create_visitor_token
-    token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: @actor,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )

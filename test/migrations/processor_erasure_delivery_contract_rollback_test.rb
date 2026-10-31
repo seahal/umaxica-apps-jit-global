@@ -3,7 +3,6 @@
 require "active_record"
 require "minitest/autorun"
 require_relative "../../db/app_principals_migrate/20260923160000_validate_client_processor_delivery_contract"
-require_relative "../../db/com_principals_migrate/20260923160001_validate_visitor_processor_delivery_contract"
 
 class ProcessorErasureDeliveryContractRollbackTest < Minitest::Test
   class MigrationProbe
@@ -39,15 +38,6 @@ class ProcessorErasureDeliveryContractRollbackTest < Minitest::Test
     migration.down
 
     assert_equal ["chk_client_proc_notif_idem_digest_nn"], probe.removed_constraints
-  end
-
-  def test_visitor_validation_rollback_removes_the_helper_constraint_it_adds
-    probe = MigrationProbe.new("chk_visitor_proc_notif_idem_digest_nn")
-    migration = migration_with_probe(ValidateVisitorProcessorDeliveryContract, probe)
-
-    migration.down
-
-    assert_equal ["chk_visitor_proc_notif_idem_digest_nn"], probe.removed_constraints
   end
 
   private

@@ -23,7 +23,7 @@
 #  fk_user_preference_themes_on_preference_id  (preference_id => client_preferences.id)
 #
 class ClientPreferenceTheme < AppPrincipalRecord
-  belongs_to :preference, class_name: "ClientPreference", inverse_of: :user_preference_theme
+  belongs_to :preference, class_name: "ClientPreference", inverse_of: :client_preference_theme
   belongs_to :option,
              class_name: "ClientPreferenceThemeOption",
              inverse_of: :client_preference_themes

@@ -36,11 +36,18 @@ class ClientSecretManualIssuanceInvalidator
 
     def invalidate!(actor_context, token, issuance, purge_after, reason)
       validate_binding!(actor_context, token, issuance, purge_after)
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            actor_context.subject.with_lock(requires_new: true) do
-              cancel!(actor_context, token, issuance, purge_after, reason)
+      AppZenithRecord.connected_to(role: :writing) do
+        actor_context.subject.with_lock(requires_new: true) do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientToken.transaction do
+              device = token.device_session_record!
+              device.with_lock do
+                unless device.usable? && device.user_id == actor_context.subject.id
+                  raise Denied, "Secret cancellation device is unavailable"
+                end
+
+                cancel!(actor_context, token, issuance, purge_after, reason, device)
+              end
             end
           end
         end
@@ -58,7 +65,7 @@ class ClientSecretManualIssuanceInvalidator
       raise ArgumentError, "Secret cancellation requires an explicit positive finite retention duration"
     end
 
-    def cancel!(context, token, issuance, duration, reason)
+    def cancel!(context, token, issuance, duration, reason, device)
       actor = context.subject
       raise Denied, "Secret cancellation actor is unavailable" unless actor.login_allowed?
 
@@ -67,7 +74,7 @@ class ClientSecretManualIssuanceInvalidator
 
       current = verify_session!(
         actor, token,
-        (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey",
+        (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey", owned, device,
       )
       unless owned.browser_session_ref == current.public_id &&
           owned.sign_up_flow_ref.nil?
@@ -120,9 +127,11 @@ class ClientSecretManualIssuanceInvalidator
       issuance
     end
 
-    def verify_session!(actor, token, scope)
+    def verify_session!(actor, token, scope, issuance, device)
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
-      raise Denied, "Secret cancellation session is unavailable" unless current
+      unless current && current.device_session_id == device.id && device.current_refresh_token_id == current.id
+        raise Denied, "Secret cancellation session is unavailable"
+      end
 
       now = ClientToken.database_now
       requirement = StepUpRequirement.new(
@@ -131,7 +140,7 @@ class ClientSecretManualIssuanceInvalidator
         full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
         session_binding: current.public_id, token_binding: current.public_id,
         require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+        actor_ref: actor.public_id, resource_ref: issuance.public_id, tenant_ref: nil,
       )
       unless current.active_status?(now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?

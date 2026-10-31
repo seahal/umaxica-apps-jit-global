@@ -4,17 +4,12 @@
 class IdentityStepUpCeremonyTransactionPurger
   MODEL_BY_SURFACE = {
     app: ClientStepUpCeremonyTransaction,
-    com: VisitorStepUpCeremonyTransaction,
     org: OperatorStepUpCeremonyTransaction,
   }.freeze
   DEPENDENT_MODELS = {
     ClientStepUpCeremonyTransaction => [
       ClientAuthCeremonySession, ClientStepUpSession, ClientPasskeyCeremonyTransaction,
       ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate, IdentityPasskeyCeremonyCandidate,
-    ],
-    VisitorStepUpCeremonyTransaction => [
-      VisitorAuthCeremonySession, VisitorStepUpSession, VisitorPasskeyCeremonyTransaction,
-      VisitorPasskeyCeremonyCandidate,
     ],
     OperatorStepUpCeremonyTransaction => [
       OperatorAuthCeremonySession, OperatorStepUpSession, OperatorPasskeyCeremonyTransaction,
@@ -94,17 +89,17 @@ class IdentityStepUpCeremonyTransactionPurger
   def eligible_children(relation)
     model = relation.klass
     cutoff = now - retention_period
-    if [ClientStepUpSession, VisitorStepUpSession, OperatorStepUpSession].include?(model)
+    if [ClientStepUpSession, OperatorStepUpSession].include?(model)
       relation.where(model.arel_table[:discard_at].lteq(cutoff))
         .where(model.arel_table[:purge_eligible_at].lteq(now))
-    elsif [ClientAuthCeremonySession, VisitorAuthCeremonySession, OperatorAuthCeremonySession].include?(model)
+    elsif [ClientAuthCeremonySession, OperatorAuthCeremonySession].include?(model)
       expired = relation.where(model.arel_table[:expires_at].lteq(cutoff))
       %i(completed_at cancelled_at revoked_at).reduce(expired) do |scope, column|
         scope.where(model.arel_table[column].eq(nil).or(model.arel_table[column].lteq(cutoff)))
       end
-    elsif [ClientPasskeyCeremonyTransaction, VisitorPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
+    elsif [ClientPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
            ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
-           IdentityPasskeyCeremonyCandidate, VisitorPasskeyCeremonyCandidate,
+           IdentityPasskeyCeremonyCandidate,
            OperatorPasskeyCeremonyCandidate,].include?(model)
       relation.where(model.arel_table[:expires_at].lteq(cutoff))
         .where(model.arel_table[:consumed_at].eq(nil).or(model.arel_table[:consumed_at].lteq(cutoff)))

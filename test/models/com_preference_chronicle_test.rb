@@ -59,6 +59,18 @@ class ComPreferenceChronicleTest < ActiveSupport::TestCase
     assert_kind_of Integer, @audit.id
   end
 
+  test "an audit writer lock blocks a purge lock on another connection" do
+    ComPreferenceChronicle.lock_preference_audit_writers!
+
+    assert_equal "f", probe_advisory_lock("pg_try_advisory_xact_lock")
+  end
+
+  test "a purge lock blocks an audit writer lock on another connection" do
+    ComPreferenceChronicle.lock_preference_audit_for_purge!
+
+    assert_equal "f", probe_advisory_lock("pg_try_advisory_xact_lock_shared")
+  end
+
   test "belongs to com_preference" do
     assert_equal @preference, @audit.com_preference
   end
@@ -87,9 +99,11 @@ class ComPreferenceChronicleTest < ActiveSupport::TestCase
   end
 
   test "validates presence of subject_id" do
-    @audit.subject_id = nil
-
-    assert_raises(ActiveRecord::NotNullViolation) { @audit.save!(validate: false) }
+    assert_raises(ActiveRecord::NotNullViolation) do
+      ComPreferenceChronicle.transaction(requires_new: true) do
+        ComPreferenceChronicle.where(id: @audit.id).update_all(subject_id: nil)
+      end
+    end
   end
 
   test "validates presence of subject_type" do
@@ -111,5 +125,21 @@ class ComPreferenceChronicleTest < ActiveSupport::TestCase
     @audit.level_id = 1
 
     assert_kind_of Integer, @audit.level_id
+  end
+
+  private
+
+  def probe_advisory_lock(function)
+    config = ComPreferenceChronicle.connection_db_config.configuration_hash
+    connection = PG.connect(
+      host: config.fetch(:host), port: config.fetch(:port), dbname: config.fetch(:database),
+      user: config.fetch(:username), password: config.fetch(:password),
+    )
+    connection.exec("BEGIN")
+    result = connection.exec("SELECT #{function}(#{ComPreferenceChronicle::PREFERENCE_AUDIT_LOCK_KEY})")
+
+    result.getvalue(0, 0)
+  ensure
+    connection&.finish
   end
 end

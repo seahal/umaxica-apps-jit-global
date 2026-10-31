@@ -32,7 +32,6 @@ module EmailDeadIdentifierHistory
     history_model, owner_model, owner_key, realm =
       case self
       when ClientEmail then [ClientEmailHistory, Client, :user_id, "app"]
-      when VisitorEmail then [VisitorEmailHistory, Visitor, :visitor_id, "com"]
       when OperatorEmail then [OperatorEmailHistory, Operator, :staff_id, "org"]
       else raise ArgumentError, "unsupported email archive model"
       end
@@ -53,13 +52,11 @@ module EmailDeadIdentifierHistory
       held =
         case owner
         when Client then owner.client_retention_holds.active_at(now).exists?
-        when Visitor then owner.visitor_retention_holds.active_at(now).exists?
         when Operator then false
         end
       enforcement =
         case owner
         when Client then AppEnforcementCase
-        when Visitor then ComEnforcementCase
         when Operator then OrgEnforcementCase
         end
       if held || enforcement.principal_effect_blocking?(owner.public_id, :withdrawal_purge_blocked) ||
@@ -98,7 +95,7 @@ module EmailDeadIdentifierHistory
   end
 
   def refuse_retained_email_destruction!(current, now)
-    return unless current.is_a?(ClientEmail) || current.is_a?(VisitorEmail)
+    return unless current.is_a?(ClientEmail)
     return if current.discard_at == Float::INFINITY && current.purge_eligible_at == Float::INFINITY
     return if current.lapsed?(now) && current.purgeable?(now)
 

@@ -15,6 +15,8 @@ surfaces are described in `docs/architecture/base-auth-seven-rp-boundary.md`.
 | News app/com/org    | `config/routes/news.rb` | Surface-local `BareController`                     |
 | Help app/com/org    | `config/routes/help.rb` | Surface-local `BareController`                     |
 | Guid net            | `config/routes/guid.rb` | `Guid::Net::BareController`                        |
+| Base com            | `config/routes/base.rb` | Anonymous com application controller; no principal |
+| Warp com            | `config/routes/warp.rb` | Anonymous com application controller; no principal |
 | Base developer face | `config/routes/base.rb` | `Base::Dev::ApplicationController`, bare stack     |
 | Core developer face | `config/routes/core.rb` | `Core::Dev::BareController`                        |
 | Base network face   | `config/routes/base.rb` | `Base::Net::ApplicationController`, bare stack     |
@@ -23,8 +25,10 @@ surfaces are described in `docs/architecture/base-auth-seven-rp-boundary.md`.
 
 The diagnostic hosts are Mission, Flipper, Blazer, PgHero, Performance, Coverband, and Swagger.
 
-Auth app/com/org (`config/routes/auth.rb`) is also a Non-Participant, as a ceremony service with its
-own contract; see `docs/architecture/auth-ceremony-session-boundary.md`.
+Auth app/org (`config/routes/auth.rb`) is also a Non-Participant, as a ceremony service with its own
+contract; see `docs/architecture/auth-ceremony-session-boundary.md`. The corporate Auth host has no
+route at all, and Base com and Warp com serve only the anonymous public preference entry and
+public read-only pages.
 
 ### Content surfaces and Guid
 

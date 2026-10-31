@@ -5,20 +5,16 @@ require "test_helper"
 class EmailSignUpOtpDeliveryTest < ActiveJob::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
-    test "#{surface} signup Notifier sends only encrypted current transaction generation and rejects cancellation" do
+  %w(app).each do |surface|
+    test "app signup Notifier sends only encrypted current transaction generation and rejects cancellation" do
       _, email_model, flow_model, notifier, =
         case surface
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, Notify::App::OtpNotifier, :user_id,
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorEmail, VisitorSignUpFlow, Notify::Com::OtpNotifier, :visitor_id, VisitorStatus::ACTIVE]
         end
       email = email_model.new(raw_address: "signup-job-#{SecureRandom.hex(8)}@example.test", confirm_policy: true)
       owner = EmailSignUpCandidateCreator.call(email: email)

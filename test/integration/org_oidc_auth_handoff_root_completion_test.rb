@@ -8,7 +8,7 @@ require "faraday"
 # Keep browser/proof values out of assertion output and the whole journey in one browser context.
 # rubocop:disable Minitest/MultipleAssertions
 class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
-  %i(complete missing_primary missing_mfa expired_mfa).each do |outcome|
+  %i(complete preference_failure missing_primary missing_mfa expired_mfa).each do |outcome|
     test "org real OIDC Entra and Passkey #{outcome} preserves Base root authority" do
       previous_protection = ActionController::Base.allow_forgery_protection
       previous_omniauth = OmniAuth.config.test_mode
@@ -29,6 +29,24 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         status_id: OperatorStatus::ACTIVE,
         security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: OperatorMfaStatus::UNCONFIGURED,
       )
+      actor_preference = nil
+      if outcome == :complete
+        OperatorPreferenceStatus.ensure_defaults!
+        [OperatorPreferenceThemeOption, OperatorPreferenceLanguageOption,
+         OperatorPreferenceRegionOption, OperatorPreferenceDateFormatOption,
+         OperatorPreferenceTimeFormatOption, OperatorPreferenceCurrencyOption,].each(&:ensure_defaults!)
+        actor_preference = OperatorPreference.create!(
+          operator_id: actor.id,
+          status_id: OperatorPreferenceStatus::ACTIVE,
+          explicit_fields: %w(theme language region date_format time_format currency),
+        )
+        actor_preference.create_operator_preference_theme!(option_id: OperatorPreferenceThemeOption::DARK)
+        actor_preference.create_operator_preference_language!(option_id: OperatorPreferenceLanguageOption::EN)
+        actor_preference.create_operator_preference_region!(option_id: OperatorPreferenceRegionOption::US)
+        actor_preference.create_operator_preference_date_format!(option_id: OperatorPreferenceDateFormatOption::US)
+        actor_preference.create_operator_preference_time_format!(option_id: OperatorPreferenceTimeFormatOption::HOUR_12)
+        actor_preference.create_operator_preference_currency!(option_id: OperatorPreferenceCurrencyOption::USD)
+      end
       tenant = ExternalAuthentication::ProviderRegistry.tenant_id("entra")
       audience = ExternalAuthentication::ProviderRegistry.audience("entra")
       entra_issuer = ExternalAuthentication::ProviderRegistry.issuer_for("entra")
@@ -167,7 +185,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
           "#{cookie_name}=#{Rack::Utils.escape(cookie_value)}", URI.parse("https://#{auth_host}/"),
         )
       end
-      if outcome == :complete
+      if %i(complete preference_failure).include?(outcome)
         [
           [nil, origin], ["invalid-csrf-token", origin],
           [csrf, "https://foreign.example.test"], [csrf, "null"],
@@ -343,19 +361,74 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       assert_equal visa_host, result.host
       assert_equal "/oidc/result", result.path
       browser.host!(result.host)
-      browser.get(
-        result.request_uri,
-        headers: {
-          "Sec-Fetch-Mode" => "navigate",
-          "Sec-Fetch-Dest" => "document",
-          "Sec-Fetch-Site" => "cross-site",
-          "Origin" => "https://#{visa_host}",
-          "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
-          "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
-        },
-      )
+      visa_result_headers = {
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "cross-site",
+        "Origin" => "https://#{visa_host}",
+        "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+        "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+      }
+      actor_preference_state_before_visa = if actor_preference
+                                             [
+                                               actor_preference.reload.attributes,
+                                               [
+                                                 OperatorPreferenceLanguage,
+                                                 OperatorPreferenceTimezone,
+                                                 OperatorPreferenceRegion,
+                                                 OperatorPreferenceTheme,
+                                                 OperatorPreferenceCurrency,
+                                                 OperatorPreferenceDateFormat,
+                                                 OperatorPreferenceTimeFormat,
+                                                 OperatorPreferenceMotion,
+                                                 OperatorPreferenceDensity,
+                                                 OperatorPreferencePageSize,
+                                               ].map do |child_class|
+                                                 child_class.find_by(preference_id: actor_preference.id)&.attributes
+                                               end,
+                                             ]
+                                           end
+      if outcome == :preference_failure
+        PreferenceToken.stub(:encode, nil) { browser.get(result.request_uri, headers: visa_result_headers) }
+      else
+        browser.get(result.request_uri, headers: visa_result_headers)
+      end
 
       assert_equal 303, browser.response.status
+      assert_nil browser.cookies[PreferenceCookieName.anonymous_jwt] if outcome == :preference_failure
+      if actor_preference
+        preference_token = browser.cookies[PreferenceCookieName.anonymous_jwt]
+        assert_predicate preference_token, :present?
+        preference_claims = PreferenceToken.decode(
+          preference_token, host: visa_host, jwt_issuer_id: "preference_org",
+        )
+        anonymous_preference = OrgPreference.find_by!(public_id: preference_claims.fetch("sub"))
+
+        assert_equal "dark", preference_claims.fetch("preferences").fetch("theme")
+        assert_equal "en", preference_claims.fetch("preferences").fetch("language")
+        assert_equal "us", preference_claims.fetch("preferences").fetch("date_format")
+        assert_equal "12", preference_claims.fetch("preferences").fetch("time_format")
+        assert_equal "usd", preference_claims.fetch("preferences").fetch("currency")
+        assert_equal OrgPreferenceRegionOption::JP, anonymous_preference.org_preference_region.option_id
+        actor_preference_state_after_visa = [
+          actor_preference.reload.attributes,
+          [
+            OperatorPreferenceLanguage,
+            OperatorPreferenceTimezone,
+            OperatorPreferenceRegion,
+            OperatorPreferenceTheme,
+            OperatorPreferenceCurrency,
+            OperatorPreferenceDateFormat,
+            OperatorPreferenceTimeFormat,
+            OperatorPreferenceMotion,
+            OperatorPreferenceDensity,
+            OperatorPreferencePageSize,
+          ].map do |child_class|
+            child_class.find_by(preference_id: actor_preference.id)&.attributes
+          end,
+        ]
+        assert_equal actor_preference_state_before_visa, actor_preference_state_after_visa
+      end
       completion = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
       assert_equal "https", completion.scheme

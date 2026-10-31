@@ -12,7 +12,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     https!
   end
 
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} ordinary verification conflicts with a pending bootstrap purpose without replacing it" do
       actor_id = SecureRandom.random_number(1 << 60) + 1_000_000_000
       actor, token, transaction_class, host, headers =
@@ -92,83 +92,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                 resource_type: "client",
               ),
               host: fx0_host,
-            )
-          end,]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: actor_id, status_id: VisitorStatus::ACTIVE)
-          token = VisitorToken.create!(
-            authentication_epoch: 0, visitor: actor,
-            root_login_established_at: VisitorToken.database_now,
-          )
-          host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-          [actor, token, VisitorStepUpCeremonyTransaction, host, begin
-            fx1_host = host
-            fx1_token = token
-            fx1_visitor = actor
-            begin
-              f1_cookie_pairs =
-                begin
-                  f1_host = fx1_host
-                  f1_token = fx1_token
-                  f1_client = OidcClientRegistry.find!("base-com-ww")
-                  f1_key = [f1_client.client_id, f1_token.public_id]
-                  @base_browser_rp_credentials ||= {}
-                  if @base_browser_rp_credentials[f1_key] ||
-                      (f1_token.currently_usable? &&
-                        !(f1_token.device_session_id && OpComGrant.exists?(
-                          device_session_id: f1_token.device_session_id,
-                          oidc_client_id: f1_client.client_id,
-                          revoked_at: nil,
-                        )))
-                    unless @base_browser_rp_credentials[f1_key]
-                      f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
-                      f1_now = Time.current
-                      f1_session = OpComGrant.create!(
-                        authentication_epoch: 0,
-                        visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
-                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
-                        refresh_token_expires_at: f1_now + 10.minutes,
-                      )
-                      f1_access = AuthenticationTokenService.encode(
-                        fx1_visitor,
-                        host: f1_host,
-                        resource_type: "visitor",
-                        session_public_id: f1_token.public_id,
-                        base_session_public_id: f1_token.public_id,
-                        oidc_sid: f1_session.public_id,
-                        oidc_jti: f1_session.oidc_jti,
-                        expires_at: f1_now + 10.minutes,
-                        scopes: %w(openid profile),
-                        issuer: OidcIssuer.for_client(f1_client),
-                        audiences: [f1_client.aud],
-                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
-                        subject: OidcSubject.for(
-                          fx1_visitor,
-                          resource_type: "visitor",
-                        ),
-                        client_id: f1_client.client_id,
-                      )
-                      @base_browser_rp_credentials[f1_key] = [f1_access, f1_session.issue_refresh_token!]
-                    end
-                    f1_access, f1_refresh = @base_browser_rp_credentials.fetch(f1_key)
-                    [
-                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f1_access)}",
-                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f1_refresh)}",
-                    ]
-                  else
-                    []
-                  end
-                end
-              cookies.merge(f1_cookie_pairs, URI.parse("https://#{f1_host}/"))
-            end
-            bearer_headers(
-              jwt_access_token_for(
-                fx1_visitor,
-                host: fx1_host,
-                session_public_id: fx1_token.public_id,
-                resource_type: "visitor",
-              ),
-              host: fx1_host,
             )
           end,]
         when "org"
@@ -271,11 +194,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
       case surface
       when "app"
         actor.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
-      when "com"
-        actor.visitor_emails.create!(
-          address: "purpose-#{SecureRandom.hex(8)}@example.com",
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).finalize_binding!
       when "org"
         actor.operator_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
       end
@@ -291,8 +209,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     test "#{surface} a changed return target conflicts and protected continue retains the original intent" do
       actor_class, token_class, transaction_class, host_key, passkeys = {
         "app" => [Client, ClientToken, ClientStepUpCeremonyTransaction, "PUBLIC_BASE_SERVICE_URL", :client_passkeys],
-        "com" => [Visitor, VisitorToken, VisitorStepUpCeremonyTransaction,
-                  "PUBLIC_BASE_CORPORATE_URL", :visitor_passkeys,],
         "org" => [Operator, OperatorToken, OperatorStepUpCeremonyTransaction,
                   "PUBLIC_BASE_STAFF_URL", :operator_passkeys,],
       }.fetch(surface)
@@ -301,16 +217,10 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
         security_mode_id: SecurityModeConfigurable::ADVANCED,
         id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
       )
-      if surface == "com"
-        VisitorEmail.create!(
-          visitor: actor, address: "conflict-#{SecureRandom.hex(8)}@example.com",
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).finalize_binding!
-      end
       actor.public_send(passkeys).create!(
         webauthn_id: SecureRandom.hex(32), public_key: "public-key",
       )
-      owner_key = { "app" => :user, "com" => :visitor, "org" => :staff }.fetch(surface)
+      owner_key = { "app" => :user, "org" => :staff }.fetch(surface)
       token = token_class.create!(:authentication_epoch => 0, owner_key => actor)
       host = ENV.fetch(host_key)
       headers =
@@ -377,77 +287,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
               resource_type: "client",
             ),
             host: fx3_host,
-          )
-        end
-        when "com" then begin
-          fx4_host = host
-          fx4_token = token
-          fx4_visitor = actor
-          begin
-            f4_cookie_pairs =
-              begin
-                f4_host = fx4_host
-                f4_token = fx4_token
-                f4_client = OidcClientRegistry.find!("base-com-ww")
-                f4_key = [f4_client.client_id, f4_token.public_id]
-                @base_browser_rp_credentials ||= {}
-                if @base_browser_rp_credentials[f4_key] ||
-                    (f4_token.currently_usable? &&
-                      !(f4_token.device_session_id && OpComGrant.exists?(
-                        device_session_id: f4_token.device_session_id,
-                        oidc_client_id: f4_client.client_id,
-                        revoked_at: nil,
-                      )))
-                  unless @base_browser_rp_credentials[f4_key]
-                    f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
-                    f4_now = Time.current
-                    f4_session = OpComGrant.create!(
-                      authentication_epoch: 0,
-                      visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
-                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
-                      refresh_token_expires_at: f4_now + 10.minutes,
-                    )
-                    f4_access = AuthenticationTokenService.encode(
-                      fx4_visitor,
-                      host: f4_host,
-                      resource_type: "visitor",
-                      session_public_id: f4_token.public_id,
-                      base_session_public_id: f4_token.public_id,
-                      oidc_sid: f4_session.public_id,
-                      oidc_jti: f4_session.oidc_jti,
-                      expires_at: f4_now + 10.minutes,
-                      scopes: %w(openid profile),
-                      issuer: OidcIssuer.for_client(f4_client),
-                      audiences: [f4_client.aud],
-                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
-                      subject: OidcSubject.for(
-                        fx4_visitor,
-                        resource_type: "visitor",
-                      ),
-                      client_id: f4_client.client_id,
-                    )
-                    @base_browser_rp_credentials[f4_key] =
-                      [f4_access, f4_session.issue_refresh_token!]
-                  end
-                  f4_access, f4_refresh = @base_browser_rp_credentials.fetch(f4_key)
-                  [
-                    "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f4_access)}",
-                    "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f4_refresh)}",
-                  ]
-                else
-                  []
-                end
-              end
-            cookies.merge(f4_cookie_pairs, URI.parse("https://#{f4_host}/"))
-          end
-          bearer_headers(
-            jwt_access_token_for(
-              fx4_visitor,
-              host: fx4_host,
-              session_public_id: fx4_token.public_id,
-              resource_type: "visitor",
-            ),
-            host: fx4_host,
           )
         end
         when "org" then begin
@@ -659,6 +498,8 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     post base_app_verification_url(ri: "jp", host:), params: { scope: "settings_email", pt: }, headers: headers
 
     assert_response :conflict
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
     forms = response.parsed_body.css("form")
 
     assert_equal [["settings_email", pt], ["settings_email", pt]], forms.map { |form|
@@ -1167,6 +1008,8 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     get base_app_verification_url(scope: "settings_email", pt:, ri: "jp", host:),
         params: { restart_of: binding.entry_ref }, headers: http_headers_43
 
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
     assert_equal [200, binding.entry_ref, "settings_email", pt, nil],
                  [response.status, response.parsed_body.at_css('input[name="restart_of"]')&.[]("value"),
                   response.parsed_body.at_css('input[name="scope"]')&.[]("value"),
@@ -1439,6 +1282,8 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
         headers: http_headers_41
 
     assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
     assert_equal ["verified", nil], [transaction.reload.status, token.reload.last_step_up_at]
 
     http_headers_40 =
@@ -2046,7 +1891,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
   test "base completion controllers do not skip forgery protection" do
     [
       "app/controllers/base/app/verifications_controller.rb",
-      "app/controllers/base/com/verifications_controller.rb",
       "app/controllers/base/org/verifications_controller.rb",
       "app/controllers/concerns/base_step_up_completion.rb",
     ].each do |path|
@@ -3002,6 +2846,14 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
           host: fx29_host,
         )
       end
+    get base_app_verification_cancellation_url(ri: "jp", host: host),
+        headers: http_headers_26, params: cancellation
+
+    assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
+    assert_not_predicate transaction.reload, :canceled?
+
     post base_app_verification_cancellation_url(ri: "jp", host: host),
          headers: http_headers_26,
          params: cancellation.merge(scope: "settings_email", return_to: return_to)
@@ -4190,374 +4042,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
-  test "com base cancellation ignores a posted return_to" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    visitor = create_verified_visitor_with_email(
-      email_address: "visitor-cancel-dest-#{SecureRandom.hex(4)}@example.com",
-    )
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    return_to = base_com_identity_emails_path(ri: "jp")
-    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
-    http_headers_13 =
-      begin
-        fx43_host = host
-        fx43_token = token
-        fx43_visitor = visitor
-        begin
-          f43_cookie_pairs =
-            begin
-              f43_host = fx43_host
-              f43_token = fx43_token
-              f43_client = OidcClientRegistry.find!("base-com-ww")
-              f43_key = [f43_client.client_id, f43_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f43_key] ||
-                  (f43_token.currently_usable? &&
-                    !(f43_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f43_token.device_session_id,
-                      oidc_client_id: f43_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f43_key]
-                  f43_token.rotate_refresh_token! unless f43_token.device_session_record.current_refresh_token_id
-                  f43_now = Time.current
-                  f43_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f43_token, oidc_client_id: f43_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f43_now,
-                    refresh_token_expires_at: f43_now + 10.minutes,
-                  )
-                  f43_access = AuthenticationTokenService.encode(
-                    fx43_visitor,
-                    host: f43_host,
-                    resource_type: "visitor",
-                    session_public_id: f43_token.public_id,
-                    base_session_public_id: f43_token.public_id,
-                    oidc_sid: f43_session.public_id,
-                    oidc_jti: f43_session.oidc_jti,
-                    expires_at: f43_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f43_client),
-                    audiences: [f43_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f43_client),
-                    subject: OidcSubject.for(
-                      fx43_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f43_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f43_key] = [f43_access, f43_session.issue_refresh_token!]
-                end
-                f43_access, f43_refresh = @base_browser_rp_credentials.fetch(f43_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f43_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f43_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f43_cookie_pairs, URI.parse("https://#{f43_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx43_visitor,
-            host: fx43_host,
-            session_public_id: fx43_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx43_host,
-        )
-      end
-    post base_com_verification_url(ri: "jp", host: host),
-         params: { scope: "settings_email", pt: pt }, headers: http_headers_13
-
-    assert_response :see_other
-    transaction =
-      begin
-        fv5032 = VisitorStepUpCeremonyTransaction
-        fv5031 = visitor
-        fv5030 = token
-        fv5032.where(
-          actor_ref: fv5031.public_id,
-          session_ref: fv5030.public_id,
-        ).order(id: :desc).first!
-      end
-    cancellation =
-      begin
-        fv5028 = transaction
-        fv5029 = BaseAuthAdmissionCoordinator.issue_cancellation!(transaction: fv5028)
-        {
-
-          cancellation_ref: fv5029.reference,
-          transaction_ref: fv5028.transaction_id,
-        }
-      end
-
-    http_headers_12 =
-      begin
-        fx44_host = host
-        fx44_token = token
-        fx44_visitor = visitor
-        begin
-          f44_cookie_pairs =
-            begin
-              f44_host = fx44_host
-              f44_token = fx44_token
-              f44_client = OidcClientRegistry.find!("base-com-ww")
-              f44_key = [f44_client.client_id, f44_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f44_key] ||
-                  (f44_token.currently_usable? &&
-                    !(f44_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f44_token.device_session_id,
-                      oidc_client_id: f44_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f44_key]
-                  f44_token.rotate_refresh_token! unless f44_token.device_session_record.current_refresh_token_id
-                  f44_now = Time.current
-                  f44_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f44_token, oidc_client_id: f44_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f44_now,
-                    refresh_token_expires_at: f44_now + 10.minutes,
-                  )
-                  f44_access = AuthenticationTokenService.encode(
-                    fx44_visitor,
-                    host: f44_host,
-                    resource_type: "visitor",
-                    session_public_id: f44_token.public_id,
-                    base_session_public_id: f44_token.public_id,
-                    oidc_sid: f44_session.public_id,
-                    oidc_jti: f44_session.oidc_jti,
-                    expires_at: f44_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f44_client),
-                    audiences: [f44_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f44_client),
-                    subject: OidcSubject.for(
-                      fx44_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f44_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f44_key] =
-                    [f44_access, f44_session.issue_refresh_token!]
-                end
-                f44_access, f44_refresh = @base_browser_rp_credentials.fetch(f44_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f44_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f44_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f44_cookie_pairs, URI.parse("https://#{f44_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx44_visitor,
-            host: fx44_host,
-            session_public_id: fx44_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx44_host,
-        )
-      end
-    post base_com_verification_cancellation_url(ri: "jp", host: host),
-         headers: http_headers_12,
-         params: cancellation.merge(scope: "settings_email", return_to: "https://evil.example/steal")
-
-    assert_response :see_other
-    assert_equal base_com_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
-    assert_equal host, URI.parse(response.location).host
-    assert_predicate transaction.reload, :canceled?
-  end
-
-  test "com base cancellation closes the pending transaction without granting freshness" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    visitor = create_verified_visitor_with_email(email_address: "visitor-cancel-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    return_to = base_com_identity_emails_path(ri: "jp")
-    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
-    http_headers_11 =
-      begin
-        fx45_host = host
-        fx45_token = token
-        fx45_visitor = visitor
-        begin
-          f45_cookie_pairs =
-            begin
-              f45_host = fx45_host
-              f45_token = fx45_token
-              f45_client = OidcClientRegistry.find!("base-com-ww")
-              f45_key = [f45_client.client_id, f45_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f45_key] ||
-                  (f45_token.currently_usable? &&
-                    !(f45_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f45_token.device_session_id,
-                      oidc_client_id: f45_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f45_key]
-                  f45_token.rotate_refresh_token! unless f45_token.device_session_record.current_refresh_token_id
-                  f45_now = Time.current
-                  f45_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f45_token, oidc_client_id: f45_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f45_now,
-                    refresh_token_expires_at: f45_now + 10.minutes,
-                  )
-                  f45_access = AuthenticationTokenService.encode(
-                    fx45_visitor,
-                    host: f45_host,
-                    resource_type: "visitor",
-                    session_public_id: f45_token.public_id,
-                    base_session_public_id: f45_token.public_id,
-                    oidc_sid: f45_session.public_id,
-                    oidc_jti: f45_session.oidc_jti,
-                    expires_at: f45_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f45_client),
-                    audiences: [f45_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f45_client),
-                    subject: OidcSubject.for(
-                      fx45_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f45_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f45_key] = [f45_access, f45_session.issue_refresh_token!]
-                end
-                f45_access, f45_refresh = @base_browser_rp_credentials.fetch(f45_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f45_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f45_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f45_cookie_pairs, URI.parse("https://#{f45_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx45_visitor,
-            host: fx45_host,
-            session_public_id: fx45_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx45_host,
-        )
-      end
-    post base_com_verification_url(ri: "jp", host: host),
-         params: { scope: "settings_email", pt: pt }, headers: http_headers_11
-
-    assert_response :see_other
-    transaction =
-      begin
-        fv5027 = VisitorStepUpCeremonyTransaction
-        fv5026 = visitor
-        fv5025 = token
-        fv5027.where(
-          actor_ref: fv5026.public_id,
-          session_ref: fv5025.public_id,
-        ).order(id: :desc).first!
-      end
-    cancellation =
-      begin
-        fv5023 = transaction
-        fv5024 = BaseAuthAdmissionCoordinator.issue_cancellation!(transaction: fv5023)
-        {
-
-          cancellation_ref: fv5024.reference,
-          transaction_ref: fv5023.transaction_id,
-        }
-      end
-
-    http_headers_10 =
-      begin
-        fx46_host = host
-        fx46_token = token
-        fx46_visitor = visitor
-        begin
-          f46_cookie_pairs =
-            begin
-              f46_host = fx46_host
-              f46_token = fx46_token
-              f46_client = OidcClientRegistry.find!("base-com-ww")
-              f46_key = [f46_client.client_id, f46_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f46_key] ||
-                  (f46_token.currently_usable? &&
-                    !(f46_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f46_token.device_session_id,
-                      oidc_client_id: f46_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f46_key]
-                  f46_token.rotate_refresh_token! unless f46_token.device_session_record.current_refresh_token_id
-                  f46_now = Time.current
-                  f46_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f46_token, oidc_client_id: f46_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f46_now,
-                    refresh_token_expires_at: f46_now + 10.minutes,
-                  )
-                  f46_access = AuthenticationTokenService.encode(
-                    fx46_visitor,
-                    host: f46_host,
-                    resource_type: "visitor",
-                    session_public_id: f46_token.public_id,
-                    base_session_public_id: f46_token.public_id,
-                    oidc_sid: f46_session.public_id,
-                    oidc_jti: f46_session.oidc_jti,
-                    expires_at: f46_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f46_client),
-                    audiences: [f46_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f46_client),
-                    subject: OidcSubject.for(
-                      fx46_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f46_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f46_key] = [f46_access, f46_session.issue_refresh_token!]
-                end
-                f46_access, f46_refresh = @base_browser_rp_credentials.fetch(f46_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f46_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f46_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f46_cookie_pairs, URI.parse("https://#{f46_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx46_visitor,
-            host: fx46_host,
-            session_public_id: fx46_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx46_host,
-        )
-      end
-    post base_com_verification_cancellation_url(ri: "jp", host: host),
-         headers: http_headers_10, params: cancellation
-
-    assert_response :see_other
-    assert_predicate transaction.reload, :canceled?
-    assert_predicate session[:base_step_up_marker_locator], :present?
-    assert_nil token.reload.last_step_up_at
-  end
-
   test "org base cancellation ignores a posted return_to" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     operator = operators(:one)
@@ -4915,6 +4399,14 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
           host: fx50_host,
         )
       end
+    get base_org_verification_cancellation_url(ri: "jp", host: host),
+        headers: http_headers_6, params: cancellation
+
+    assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
+    assert_not_predicate transaction.reload, :canceled?
+
     post base_org_verification_cancellation_url(ri: "jp", host: host),
          headers: http_headers_6, params: cancellation
 
@@ -4922,319 +4414,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_predicate transaction.reload, :canceled?
     assert_predicate session[:base_step_up_marker_locator], :present?
     assert_nil token.reload.last_step_up_at
-  end
-
-  test "com base verification intent creates a visitor transaction bound to the session" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    visitor = create_verified_visitor_with_email(email_address: "visitor-intent-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    return_to = base_com_identity_emails_path(ri: "jp")
-    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
-    http_headers_5 =
-      begin
-        fx51_host = host
-        fx51_token = token
-        fx51_visitor = visitor
-        begin
-          f51_cookie_pairs =
-            begin
-              f51_host = fx51_host
-              f51_token = fx51_token
-              f51_client = OidcClientRegistry.find!("base-com-ww")
-              f51_key = [f51_client.client_id, f51_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f51_key] ||
-                  (f51_token.currently_usable? &&
-                    !(f51_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f51_token.device_session_id,
-                      oidc_client_id: f51_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f51_key]
-                  f51_token.rotate_refresh_token! unless f51_token.device_session_record.current_refresh_token_id
-                  f51_now = Time.current
-                  f51_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f51_token, oidc_client_id: f51_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f51_now,
-                    refresh_token_expires_at: f51_now + 10.minutes,
-                  )
-                  f51_access = AuthenticationTokenService.encode(
-                    fx51_visitor,
-                    host: f51_host,
-                    resource_type: "visitor",
-                    session_public_id: f51_token.public_id,
-                    base_session_public_id: f51_token.public_id,
-                    oidc_sid: f51_session.public_id,
-                    oidc_jti: f51_session.oidc_jti,
-                    expires_at: f51_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f51_client),
-                    audiences: [f51_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f51_client),
-                    subject: OidcSubject.for(
-                      fx51_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f51_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f51_key] = [f51_access, f51_session.issue_refresh_token!]
-                end
-                f51_access, f51_refresh = @base_browser_rp_credentials.fetch(f51_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f51_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f51_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f51_cookie_pairs, URI.parse("https://#{f51_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx51_visitor,
-            host: fx51_host,
-            session_public_id: fx51_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx51_host,
-        )
-      end
-    post base_com_verification_url(ri: "jp", host: host),
-         params: { scope: "settings_email", pt: pt }, headers: http_headers_5
-
-    assert_response :see_other
-    transaction =
-      begin
-        fv5012 = VisitorStepUpCeremonyTransaction
-        fv5011 = visitor
-        fv5010 = token
-        fv5012.where(
-          actor_ref: fv5011.public_id,
-          session_ref: fv5010.public_id,
-        ).order(id: :desc).first!
-      end
-
-    assert_equal visitor.public_id, transaction.actor_ref
-    assert_equal token.public_id, transaction.session_ref
-    assert_equal "com", transaction.surface
-    assert_equal "step_up", transaction.purpose
-    assert_equal return_to, transaction.return_to
-    assert_predicate redirect_query["entry_ref"], :present?
-    assert_nil redirect_query["step_up_ceremony_grant"]
-  end
-
-  test "com base completion consumes the opaque result and commits freshness" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    visitor = create_verified_visitor_with_email(email_address: "visitor-completion-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    return_to = base_com_identity_emails_path(ri: "jp")
-    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
-    http_headers_4 =
-      begin
-        fx52_host = host
-        fx52_token = token
-        fx52_visitor = visitor
-        begin
-          f52_cookie_pairs =
-            begin
-              f52_host = fx52_host
-              f52_token = fx52_token
-              f52_client = OidcClientRegistry.find!("base-com-ww")
-              f52_key = [f52_client.client_id, f52_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f52_key] ||
-                  (f52_token.currently_usable? &&
-                    !(f52_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f52_token.device_session_id,
-                      oidc_client_id: f52_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f52_key]
-                  f52_token.rotate_refresh_token! unless f52_token.device_session_record.current_refresh_token_id
-                  f52_now = Time.current
-                  f52_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f52_token, oidc_client_id: f52_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f52_now,
-                    refresh_token_expires_at: f52_now + 10.minutes,
-                  )
-                  f52_access = AuthenticationTokenService.encode(
-                    fx52_visitor,
-                    host: f52_host,
-                    resource_type: "visitor",
-                    session_public_id: f52_token.public_id,
-                    base_session_public_id: f52_token.public_id,
-                    oidc_sid: f52_session.public_id,
-                    oidc_jti: f52_session.oidc_jti,
-                    expires_at: f52_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f52_client),
-                    audiences: [f52_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f52_client),
-                    subject: OidcSubject.for(
-                      fx52_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f52_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f52_key] = [f52_access, f52_session.issue_refresh_token!]
-                end
-                f52_access, f52_refresh = @base_browser_rp_credentials.fetch(f52_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f52_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f52_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f52_cookie_pairs, URI.parse("https://#{f52_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx52_visitor,
-            host: fx52_host,
-            session_public_id: fx52_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx52_host,
-        )
-      end
-    post base_com_verification_url(ri: "jp", host: host),
-         params: { scope: "settings_email", pt: pt }, headers: http_headers_4
-
-    assert_response :see_other
-    transaction =
-      begin
-        fv5009 = VisitorStepUpCeremonyTransaction
-        fv5008 = visitor
-        fv5007 = token
-        fv5009.where(
-          actor_ref: fv5008.public_id,
-          session_ref: fv5007.public_id,
-        ).order(id: :desc).first!
-      end
-    email = visitor.visitor_emails.first
-    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
-    transaction.record_verification!(
-      method: "email_otp", aal: "none", phishing_resistant: false, user_verified: false,
-      verified_at: VisitorStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
-    )
-    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
-    binding = VisitorAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
-    attached, raw_sid = VisitorAuthCeremonySession.issue!
-    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
-    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
-    BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: binding.entry_ref, surface: "com", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
-    )
-    ceremony, = VisitorAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-      previous_raw_sid: raw_sid,
-    )
-    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
-    result = BaseAuthAdmissionCoordinator.issue_result!(
-      transaction: transaction,
-      ceremony_session_ref: ceremony.id.to_s,
-    )
-
-    foreign = open_session
-    foreign.host!(host)
-    foreign.https!
-    [OidcRpBrowserCredentialContract::ACCESS_COOKIE, OidcRpBrowserCredentialContract::REFRESH_COOKIE].each do |name|
-      foreign.cookies.merge("#{name}=#{Rack::Utils.escape(cookies[name])}", URI.parse("https://#{host}/"))
-    end
-    foreign.get(
-      base_com_verification_completion_url(ri: "jp", host:),
-      params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
-    )
-
-    assert_equal [400, nil, "verified", nil],
-                 [foreign.response.status, foreign.response.location, transaction.reload.status,
-                  token.reload.last_step_up_at,]
-
-    http_headers_3 =
-      begin
-        fx53_host = host
-        fx53_token = token
-        fx53_visitor = visitor
-        begin
-          f53_cookie_pairs =
-            begin
-              f53_host = fx53_host
-              f53_token = fx53_token
-              f53_client = OidcClientRegistry.find!("base-com-ww")
-              f53_key = [f53_client.client_id, f53_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if @base_browser_rp_credentials[f53_key] ||
-                  (f53_token.currently_usable? &&
-                    !(f53_token.device_session_id && OpComGrant.exists?(
-                      device_session_id: f53_token.device_session_id,
-                      oidc_client_id: f53_client.client_id,
-                      revoked_at: nil,
-                    )))
-                unless @base_browser_rp_credentials[f53_key]
-                  f53_token.rotate_refresh_token! unless f53_token.device_session_record.current_refresh_token_id
-                  f53_now = Time.current
-                  f53_session = OpComGrant.create!(
-                    authentication_epoch: 0,
-                    visitor_token: f53_token, oidc_client_id: f53_client.client_id, oidc_scope: "openid profile",
-                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f53_now,
-                    refresh_token_expires_at: f53_now + 10.minutes,
-                  )
-                  f53_access = AuthenticationTokenService.encode(
-                    fx53_visitor,
-                    host: f53_host,
-                    resource_type: "visitor",
-                    session_public_id: f53_token.public_id,
-                    base_session_public_id: f53_token.public_id,
-                    oidc_sid: f53_session.public_id,
-                    oidc_jti: f53_session.oidc_jti,
-                    expires_at: f53_now + 10.minutes,
-                    scopes: %w(openid profile),
-                    issuer: OidcIssuer.for_client(f53_client),
-                    audiences: [f53_client.aud],
-                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f53_client),
-                    subject: OidcSubject.for(
-                      fx53_visitor,
-                      resource_type: "visitor",
-                    ),
-                    client_id: f53_client.client_id,
-                  )
-                  @base_browser_rp_credentials[f53_key] =
-                    [f53_access, f53_session.issue_refresh_token!]
-                end
-                f53_access, f53_refresh = @base_browser_rp_credentials.fetch(f53_key)
-                [
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f53_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f53_refresh)}",
-                ]
-              else
-                []
-              end
-            end
-          cookies.merge(f53_cookie_pairs, URI.parse("https://#{f53_host}/"))
-        end
-        bearer_headers(
-          jwt_access_token_for(
-            fx53_visitor,
-            host: fx53_host,
-            session_public_id: fx53_token.public_id,
-            resource_type: "visitor",
-          ),
-          host: fx53_host,
-        )
-      end
-    post base_com_verification_completion_url(ri: "jp", host: host),
-         params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
-         headers: http_headers_3
-
-    assert_response :see_other
-    assert_equal return_to, URI.parse(response.location).request_uri
-    assert_equal "settings_email", token.reload.last_step_up_scope
-    assert_equal "consumed", transaction.reload.status
   end
 
   test "org base verification intent creates an operator transaction bound to the session" do
@@ -5640,7 +4819,6 @@ class BaseStepUpIntentAuthorityTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -5678,13 +4856,6 @@ class BaseStepUpIntentAuthorityTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -5706,23 +4877,6 @@ class BaseStepUpIntentAuthorityTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -5737,17 +4891,9 @@ class BaseStepUpIntentAuthorityTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -5872,10 +5018,8 @@ class BaseStepUpIntentAuthorityTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private
@@ -5962,32 +5106,6 @@ class BaseStepUpIntentAuthorityTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    email = VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    email.finalize_binding!
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

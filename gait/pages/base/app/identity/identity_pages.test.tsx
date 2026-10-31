@@ -371,21 +371,22 @@ describe("identity multi factor screens", () => {
 });
 
 describe("identity privacy erasure screens", () => {
-  it("renders the request form", () => {
+  it("shows that the request is unavailable", () => {
     const html = renderToStaticMarkup(
       <PrivacyErasureNew
         title="Early personal data erasure"
-        notices={["It is separate from withdrawal."]}
+        notices={["Requests cannot be submitted here at this time."]}
         form={{
           action: "/identity/privacy/erasure",
           jurisdiction: "unknown",
-          submit_label: "Request early erasure",
+          submit_label: "Unavailable",
         }}
       />,
     );
 
-    expect(html).toContain("It is separate from withdrawal.");
-    expect(html).toContain("Request early erasure");
+    expect(html).toContain("Requests cannot be submitted here at this time.");
+    expect(html).toContain("Unavailable");
+    expect(html).toContain("disabled");
   });
 
   it("renders an active request", () => {

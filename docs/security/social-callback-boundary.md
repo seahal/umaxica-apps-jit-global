@@ -40,6 +40,17 @@ from the authentication mode, callback state (CSRF/replay) validation, provider 
 verification, and session binding of the intent. A future screen where an operator manages another
 staff member's links MUST design object-level authorization in its own controller.
 
+The APP social-link callback stages a receiver-local POST form with `strict-origin` in its response
+and HTML metadata. The subsequent POST retains CSRF, session, device and Step-Up checks; its
+referrer carries no callback path or query.
+
+The current APP link-completion controller holds the Client lock while it validates the candidate,
+grant and device. It consumes the candidate, grant and operation-scoped Step-Up in the OP device
+transaction before attempting the Zenith identity link and its audit outbox write. If the Zenith
+link fails after that OP commit, the spent authorization cannot be reused; a new ceremony is
+required. The implementation currently performs this final link in Auth, although the historical
+responsibility list above assigns linking decisions to Visa.
+
 ## Related
 
 - `docs/security/social-login-provider-scope.md`

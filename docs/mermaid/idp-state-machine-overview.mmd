@@ -32,7 +32,8 @@ flowchart TB
         M72["idp-client-dpop-nonce"]
         M73["idp-client-administrative-access"]
         M74["idp-client-email-verification-challenge"]
-        M75["idp-client-preference-dbsc"]
+        M151["idp-app-preference-status"]
+        M152["idp-client-preference-status"]
         M76["idp-client-email-otp"]
         M77["idp-client-telephone-otp"]
         M92["idp-client-withdrawal"]
@@ -70,7 +71,6 @@ flowchart TB
         M79["idp-visitor-dpop-nonce"]
         M80["idp-visitor-administrative-access"]
         M81["idp-visitor-email-verification-challenge"]
-        M82["idp-visitor-preference-dbsc"]
         M83["idp-visitor-email-otp"]
         M84["idp-visitor-telephone-otp"]
         M93["idp-visitor-withdrawal"]
@@ -107,7 +107,8 @@ flowchart TB
         M86["idp-operator-dpop-nonce"]
         M87["idp-operator-administrative-access"]
         M88["idp-operator-email-verification-challenge"]
-        M89["idp-operator-preference-dbsc"]
+        M153["idp-org-preference-status"]
+        M154["idp-operator-preference-status"]
         M90["idp-operator-email-otp"]
         M91["idp-operator-telephone-otp"]
         M95["idp-operator-entra-identity"]
@@ -140,6 +141,12 @@ flowchart TB
     M30 -->|"current device gates Visa request"| M150
     M47 -->|"current device gates Visa request"| M150
     M150 -->|"committed OP completion issues notice"| M122
+    M9 -->|"finalized Visa APP sign-in writes anonymous Preference"| M151
+    M152 -->|"Visa APP sign-in reads explicit Client display values"| M151
+    M42 -->|"finalized Visa ORG sign-in writes anonymous Preference"| M153
+    M154 -->|"Visa ORG sign-in reads explicit Operator display values"| M153
+    M150 -->|"committed APP logout rebuilds anonymous Preference"| M151
+    M150 -->|"committed ORG logout rebuilds anonymous Preference"| M153
     M0 -->|"Auth admits Base-issued local flow"| M3
     M3 -->|"Auth evidence / generation delivery"| M11
     M11 -->|"Base commit rechecks flow and finalizes login"| M0

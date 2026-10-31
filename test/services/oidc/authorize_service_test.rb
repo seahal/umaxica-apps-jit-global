@@ -334,58 +334,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "core-org-jp", payload.fetch("client_id")
   end
 
-  test "issues authorization code for visitor with com client" do
-    visitor = create_visitor!
-    com_client = OidcClientRegistry.find("core-com-jp")
-    com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
 
-    result = authorize_service_call(
-      params: {
-        response_type: "code",
-        client_id: "core-com-jp",
-        redirect_uri: com_redirect_uri,
-        code_challenge: @code_challenge,
-        code_challenge_method: "S256",
-        state: "visitor_state",
-        nonce: "visitor_nonce",
-        scope: "openid profile email",
-      },
-      resource: visitor,
-    )
-
-    assert_predicate result, :success?
-    uri = URI.parse(result.redirect_url)
-    query = URI.decode_www_form(uri.query).to_h
-
-    assert_predicate query["code"], :present?
-    assert_equal "visitor_state", query["state"]
-  end
-
-  test "visitor authorization code is stored with visitor_id" do
-    visitor = create_visitor!
-    com_client = OidcClientRegistry.find("core-com-jp")
-    com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
-
-    result = authorize_service_call(
-      params: {
-        response_type: "code",
-        client_id: "core-com-jp",
-        redirect_uri: com_redirect_uri,
-        code_challenge: @code_challenge,
-        code_challenge_method: "S256",
-        state: "visitor_state",
-        nonce: "visitor_nonce",
-        scope: "openid profile email",
-      },
-      resource: visitor,
-    )
-
-    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
-    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
-
-    assert_equal OidcSubject.for(visitor, resource_type: "visitor"), payload.fetch("subject")
-    assert_equal "core-com-jp", payload.fetch("client_id")
-  end
 
   # --- realm/redirect_uri binding (issuer/realm must match the registered redirect_uri's realm) ---
 
@@ -423,27 +372,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_COM authorize rejects an org core-org-jp redirect_uri before code issuance" do
-    visitor = create_visitor!
-    org_redirect_uri = OidcClientRegistry.find("core-org-jp").redirect_uris_by_realm.fetch("operator").first
-
-    result = authorize_service_call(
-      params: {
-        response_type: "code",
-        client_id: "core-com-jp",
-        redirect_uri: org_redirect_uri,
-        code_challenge: @code_challenge,
-        code_challenge_method: "S256",
-        state: "visitor_state",
-        nonce: "visitor_nonce",
-        scope: "openid profile email",
-      },
-      resource: visitor,
-    )
-
-    assert_not result.success?
-    assert_equal "invalid_request", result.error
-  end
 
   test "BASE_APP authorize rejects a core app request with an org RP redirect_uri before code issuance" do
     org_redirect_uri = OidcClientRegistry.find!("core-org-jp").redirect_uris_by_realm.fetch("operator").first
@@ -457,17 +385,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_APP authorize rejects a core app request with a com RP redirect_uri before code issuance" do
-    com_redirect_uri = OidcClientRegistry.find!("core-com-jp").redirect_uris_by_realm.fetch("visitor").first
-
-    result = authorize_service_call(
-      params: valid_params.merge(client_id: "core-app-jp", redirect_uri: com_redirect_uri),
-      resource: @user,
-    )
-
-    assert_not result.success?
-    assert_equal "invalid_request", result.error
-  end
 
   test "BASE_ORG authorize rejects a warp-app-jp client before code issuance" do
     staff = operators(:one)
@@ -492,28 +409,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_ORG authorize rejects a warp-com-jp client before code issuance" do
-    staff = operators(:one)
-    com_client = OidcClientRegistry.find!("warp-com-jp")
-    com_redirect_uri = com_client.redirect_uris.first
-
-    result = authorize_service_call(
-      params: {
-        response_type: "code",
-        client_id: "warp-com-jp",
-        redirect_uri: com_redirect_uri,
-        code_challenge: @code_challenge,
-        code_challenge_method: "S256",
-        state: "staff_state",
-        nonce: "staff_nonce",
-        scope: "openid profile email",
-      },
-      resource: staff,
-    )
-
-    assert_not result.success?
-    assert_equal "invalid_request", result.error
-  end
 
   private
 
@@ -528,12 +423,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
       nonce: "test_nonce",
       scope: "openid profile email",
     }.merge(overrides)
-  end
-
-  def create_visitor!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
   end
 
   def authorize_service_call(
@@ -556,13 +445,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
       @user_session_token ||= ClientToken.create!(authentication_epoch: 0, user: @user)
     when Operator
       @staff_session_token ||= OperatorToken.create!(authentication_epoch: 0, staff: resource)
-    when Visitor
-      ensure_visitor_reference_records!
-      ensure_visitor_token_reference_records!
-      @visitor_session_token ||= VisitorToken.create!(
-        authentication_epoch: 0, visitor: resource,
-        visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      )
     else
       raise ArgumentError, "unsupported resource: #{resource.class.name}"
     end
@@ -593,7 +475,6 @@ class OidcAuthorizeCoordinatorTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -631,13 +512,6 @@ class OidcAuthorizeCoordinatorTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -659,23 +533,6 @@ class OidcAuthorizeCoordinatorTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -690,17 +547,9 @@ class OidcAuthorizeCoordinatorTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -885,31 +734,6 @@ class OidcAuthorizeCoordinatorTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

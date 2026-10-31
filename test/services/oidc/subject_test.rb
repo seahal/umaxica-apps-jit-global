@@ -14,7 +14,7 @@ class OidcSubjectTest < ActiveSupport::TestCase
 
   test "uses separate prefixes for each actor type" do
     assert_equal "opr", OidcSubject.prefix_for("operator")
-    assert_equal "vis", OidcSubject.prefix_for("visitor")
+    assert_equal "cli", OidcSubject.prefix_for("client")
   end
 
   test "uses oidc_subject when resource provides it" do
@@ -35,15 +35,9 @@ class OidcSubjectTest < ActiveSupport::TestCase
     assert_equal "opr_#{operator.public_id}", OidcSubject.for(operator)
   end
 
-  test "infers visitor resource type" do
-    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1, public_id: "vis_xyz")
-
-    assert_equal "vis_#{visitor.public_id}", OidcSubject.for(visitor)
-  end
-
-  test "defaults to client prefix for unknown resource types" do
+  test "rejects unknown resource types during inference" do
     unknown = OpenStruct.new(public_id: "custom_001")
 
-    assert_equal "cli_custom_001", OidcSubject.for(unknown)
+    assert_raises(ArgumentError) { OidcSubject.for(unknown) }
   end
 end

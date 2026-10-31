@@ -1,0 +1,7 @@
+# WU-7 cookie lifetime and read recheck
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- Extended the consent API test with a controlled database decision time. It checks the signed token's 400-day lifetime, all four cookie expiration headers against that same expiry, the persisted issuance timestamps, and that a subsequent consent GET does not issue any of those four cookies or change the persisted expiry. The decision clock was substituted to make the comparison deterministic.
+- Before the change the two decision-time cases passed with 9 assertions; after the change they passed with 27. `PARALLEL_WORKERS=1 bin/rails test test/integration/anonymous_com_preference_write_journey_test.rb test/values/anonymous_com_preference_token_shape_test.rb` passed: 63 runs, 865 assertions, zero failures, errors or skips. RuboCop passed on the changed test.
+- Documentation discrepancy observed: the illustrative header in `two.md` section 4.2 says `typ: JWT`, while the existing codec, `docs/architecture/preference.md`, and `adr/rfc9068-access-token-profile.md` require `at+jwt`. The accepted ADR also describes a legacy preference claim shape that differs from the new com shape. This check preserves current code behavior and does not resolve the conflicting contract.
+- This checks consent issuance and its follow-up GET, not every write or reader. Full-suite comparison and WU-7 completion remain unverified. No migration was run.

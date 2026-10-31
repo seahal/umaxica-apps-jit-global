@@ -10,6 +10,10 @@ module Auth
         include ActionController::MimeResponds
         include ::RateLimit
         include ::DefaultNoStore
+        include ::SignEntryClassification
+
+        # D-59: Apple's server-to-server notification is not a browser Sign Entry.
+        sign_entry_classification! :excluded, reason: "Apple server-to-server notification webhook"
 
         AUTHENTICATION_MODE = :bare
 

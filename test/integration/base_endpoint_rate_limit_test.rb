@@ -52,7 +52,6 @@ class BaseEndpointRateLimitTest < ActionDispatch::IntegrationTest
 
   {
     "app" => [:app, :visa_app_oauth_userinfo_path],
-    "com" => [:com, :visa_com_oauth_userinfo_path],
     "org" => [:org, :visa_org_oauth_userinfo_path],
   }.each do |surface, (host_surface, helper)|
     test "the #{surface} OAuth userinfo endpoint bounds bearer-token probing per source" do
@@ -73,9 +72,7 @@ class BaseEndpointRateLimitTest < ActionDispatch::IntegrationTest
 
   {
     "app recovery" => ["PUBLIC_BASE_SERVICE_URL", :base_app_identity_recovery_session_path],
-    "com recovery" => ["PUBLIC_BASE_CORPORATE_URL", :base_com_identity_recovery_session_path],
     "app withdrawal" => ["PUBLIC_BASE_SERVICE_URL", :base_app_identity_withdrawal_session_path],
-    "com withdrawal" => ["PUBLIC_BASE_CORPORATE_URL", :base_com_identity_withdrawal_session_path],
   }.each do |label, (env_name, helper)|
     test "the #{label} re-entry endpoint bounds address probing per source" do
       host! ENV.fetch(env_name)

@@ -6,21 +6,19 @@ require_relative "../support/oidc_rp_logout_hint_helper"
 class OidcLogoutRealmAcceptanceTest < ActionDispatch::IntegrationTest
   include OidcRpLogoutHintHelper
 
-  fixtures :clients, :visitors, :operators, :client_token_kinds, :visitor_token_kinds, :operator_token_kinds
+  fixtures :clients, :operators, :client_token_kinds, :operator_token_kinds
 
-  test "APP logout preserves COM and ORG sessions and refuses a COM hint at APP" do
+  test "APP logout preserves the ORG session and refuses an ORG hint at APP" do
     client = clients(:one)
-    visitor = visitors(:reserved_visitor)
     operator = operators(:one)
     app = ClientToken.create!(authentication_epoch: 0, user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    com = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     org = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-    grant = OpComGrant.create!(
-      authentication_epoch: 0, visitor_token: com, oidc_client_id: "core-com-jp", oidc_scope: "openid",
+    grant = OpOrgGrant.create!(
+      authentication_epoch: 0, operator_token: org, oidc_client_id: "core-org-jp", oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
-    store_oidc_rp_logout_hint!(grant, visitor, OidcClientRegistry.find!(grant.oidc_client_id))
+    store_oidc_rp_logout_hint!(grant, operator, OidcClientRegistry.find!(grant.oidc_client_id))
     host = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
     browser = open_session
     browser.host!(host)
@@ -41,7 +39,6 @@ class OidcLogoutRealmAcceptanceTest < ActionDispatch::IntegrationTest
 
     assert_equal 400, browser.response.status
     assert_nil browser.response.location
-    assert_predicate com.reload, :currently_usable?
     assert_predicate org.reload, :currently_usable?
     assert_predicate grant.reload, :active?
 
@@ -52,7 +49,6 @@ class OidcLogoutRealmAcceptanceTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, browser.response.status
     assert_predicate app.reload, :revoked?
-    assert_predicate com.reload, :currently_usable?
     assert_predicate org.reload, :currently_usable?
     assert_predicate grant.reload, :active?
   end

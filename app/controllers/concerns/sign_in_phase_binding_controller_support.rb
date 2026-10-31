@@ -81,14 +81,7 @@ module SignInPhaseBindingControllerSupport
   end
 
   def refuse_sign_in_phase_request!(reason_code: "wrong_binding")
-    response.headers["Cache-Control"] = "private, no-store"
-    refuse_sign_in_path!(
-      reason_code,
-      body: I18n.t("errors.messages.phase_violation_refused"),
-      status: :conflict,
-      clear_continuity: false,
-    )
-    false
+    render_sign_in_phase_refusal!(reason_code:)
   end
 
   def sign_in_binding_flow_class
@@ -134,7 +127,6 @@ module SignInPhaseBindingControllerSupport
 
   def auth_sign_in_phase_binding_controller?
     is_a?(Auth::App::ApplicationController) ||
-      is_a?(Auth::Com::ApplicationController) ||
       is_a?(Auth::Org::ApplicationController)
   end
 end

@@ -35,13 +35,13 @@ module SignEntryExit
     record
   end
 
-  # Authentication evidence ends the first page everywhere; App and Com also record a sent email OTP
+  # Authentication evidence ends the first page everywhere; App also records a sent email OTP
   # on the ceremony, while Org sign-in has no email OTP step and no such column.
   def sign_entry_ceremony_progressed?(record)
     return true if record.authentication_evidence_recorded?
 
     case record
-    when ClientAuthCeremonySession, VisitorAuthCeremonySession then record.email_otp_context.present?
+    when ClientAuthCeremonySession then record.email_otp_context.present?
     when OperatorAuthCeremonySession then false
     else raise ArgumentError, "unsupported Auth ceremony session: #{record.class.name}"
     end
@@ -86,6 +86,6 @@ module SignEntryExit
 
   def refuse_sign_entry_exit!(reason)
     refusal_reason = (reason.to_s == "not_on_first_page") ? "not_on_first_page" : "exit_unavailable"
-    refuse_sign_in_path!(refusal_reason)
+    render_sign_in_phase_refusal!(reason_code: refusal_reason)
   end
 end

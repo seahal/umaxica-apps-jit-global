@@ -136,10 +136,6 @@ module BrowserRpAuthentication
     current_resource if browser_rp_resource_type.to_s == "client"
   end
 
-  def current_visitor
-    current_resource if browser_rp_resource_type.to_s == "visitor"
-  end
-
   def current_operator
     current_resource if browser_rp_resource_type.to_s == "operator"
   end
@@ -148,20 +144,12 @@ module BrowserRpAuthentication
     current_client&.active? || false
   end
 
-  def active_visitor?
-    current_visitor&.active? || false
-  end
-
   def active_operator?
     current_operator&.active? || false
   end
 
   def logged_in_client?
     current_client.present?
-  end
-
-  def logged_in_visitor?
-    current_visitor.present?
   end
 
   def logged_in_operator?
@@ -345,7 +333,6 @@ module BrowserRpAuthentication
   def browser_rp_resource_class
     case browser_rp_resource_type.to_s
     when "operator" then Operator
-    when "visitor" then Visitor
     when "client" then Client
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
@@ -354,7 +341,6 @@ module BrowserRpAuthentication
   def browser_rp_root_token_class
     case browser_rp_resource_type.to_s
     when "operator" then OperatorToken
-    when "visitor" then VisitorToken
     when "client" then ClientToken
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
@@ -363,7 +349,6 @@ module BrowserRpAuthentication
   def browser_rp_resource_foreign_key
     case browser_rp_resource_type.to_s
     when "operator" then :staff_id
-    when "visitor" then :visitor_id
     when "client" then :user_id
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
@@ -372,7 +357,6 @@ module BrowserRpAuthentication
   def browser_rp_session_class
     case browser_rp_resource_type.to_s
     when "operator" then OpOrgGrant
-    when "visitor" then OpComGrant
     when "client" then OpAppGrant
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
@@ -381,7 +365,6 @@ module BrowserRpAuthentication
   def browser_rp_connection_owner
     case browser_rp_resource_type.to_s
     when "operator" then OpBaseOrgRecord
-    when "visitor" then OpBaseComRecord
     when "client" then OpBaseAppRecord
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
@@ -621,8 +604,6 @@ module BrowserRpAuthentication
           case browser_rp_resource_type.to_s
           when "operator"
             OpOrgGrant.includes(:operator_device_session)
-          when "visitor"
-            OpComGrant.includes(:visitor_device_session)
           when "client"
             OpAppGrant.includes(:client_device_session)
           else
@@ -640,7 +621,6 @@ module BrowserRpAuthentication
     actor_key =
       case rp_session
       when OpOrgGrant then :staff_id
-      when OpComGrant then :visitor_id
       when OpAppGrant then :user_id
       else raise ArgumentError, "unsupported Browser RP Session class"
       end
@@ -689,8 +669,8 @@ module BrowserRpAuthentication
     )
   end
 
-  # The same answers root authentication gives a deactivated actor: JSON 403, and on the app and
-  # com Base surfaces an HTML redirect to that surface's withdrawal session entry.
+  # The same answers root authentication gives a deactivated actor: JSON 403, and on the app Base
+  # surface an HTML redirect to that surface's withdrawal session entry.
   def render_browser_rp_withdrawal_required!
     response.set_header("Cache-Control", "no-store")
     if request.format.json?
@@ -710,7 +690,6 @@ module BrowserRpAuthentication
     entry_path =
       case controller_path.split("/").first(2)
       when %w(base app) then new_base_app_identity_withdrawal_session_path(ri: ri)
-      when %w(base com) then new_base_com_identity_withdrawal_session_path(ri: ri)
       end
     if entry_path
       redirect_to(entry_path, allow_other_host: false)

@@ -268,7 +268,7 @@ module Auth
     end
 
     test "VALID_ACTOR_TYPES constant is defined" do
-      assert_equal %w(client operator visitor), AuthenticationBase::VALID_ACTOR_TYPES
+      assert_equal %w(client operator), AuthenticationBase::VALID_ACTOR_TYPES
     end
 
     test "checkpoint continuation uses db-backed sign-in cycle when locator is present" do
@@ -636,10 +636,8 @@ class Auth::BaseTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private

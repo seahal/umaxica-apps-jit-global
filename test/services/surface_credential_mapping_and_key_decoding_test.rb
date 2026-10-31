@@ -16,7 +16,7 @@ class SurfaceCredentialMappingAndKeyDecodingTest < ActiveSupport::TestCase
   test "the risk score is read from the occurrence table of the actor's own surface" do
     assert_equal 0, SignRiskEngine.score
     assert_equal 0, SignRiskEngine.score(staff_id: operators(:one).id)
-    assert_equal 0, SignRiskEngine.score(visitor_id: 1)
+    assert_raises(ArgumentError) { SignRiskEngine.score(visitor_id: 1) }
     assert_equal 0, SignRiskEngine.score(user_id: 1)
   end
 

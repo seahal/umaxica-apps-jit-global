@@ -4,7 +4,6 @@
 class IdentitySecretCredentialCeremonyTransactionPurger
   MODELS = {
     app: ClientSecretCredentialCeremonyTransaction,
-    com: VisitorSecretCredentialCeremonyTransaction,
     org: OperatorSecretCredentialCeremonyTransaction,
   }.freeze
 

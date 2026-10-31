@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Shared Base-side session-limit resolution for the three authority realms.
+# Shared Base-side session-limit resolution for the app and org realms.
 # The browser carries only SessionLimitGate's opaque challenge and binding; the
 # child transaction supplies the actor, parent flow and selected-session
 # authority.
@@ -220,7 +220,6 @@ module BaseSignInLimitations
   def selected_token
     case token_class.name
     when "ClientToken" then SessionLimitResolutionTokenRef.find_client_token(params[:session_ref])
-    when "VisitorToken" then SessionLimitResolutionTokenRef.find_visitor_token(params[:session_ref])
     when "OperatorToken" then SessionLimitResolutionTokenRef.find_operator_token(params[:session_ref])
     else raise FlowConfigurationError, "unsupported session-limit token class"
     end
@@ -229,7 +228,6 @@ module BaseSignInLimitations
   def token_belongs_to_actor?(token)
     case token
     when ClientToken then token.user_id == @actor.id && @actor.is_a?(Client) && token.active_status?
-    when VisitorToken then token.visitor_id == @actor.id && @actor.is_a?(Visitor) && token.active_status?
     when OperatorToken then token.staff_id == @actor.id && @actor.is_a?(Operator) && token.active_status?
     else false
     end

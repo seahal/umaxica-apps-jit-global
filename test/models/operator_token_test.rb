@@ -100,6 +100,23 @@ class OperatorTokenTest < ActiveSupport::TestCase
     assert_equal @staff.id, @token.staff_id
   end
 
+  test "token cannot bind a device session belonging to another Operator" do
+    other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: other)
+    original_device_id = @token.device_session_id
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+
+    assert_equal "fk_operator_tokens_on_staff_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+    assert_equal original_device_id, @token.reload.device_session_id
+  end
+
   test "device session rejects a current token owned by another session" do
     other_token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     session = @token.device_session
@@ -195,7 +212,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
     @staff = Operator.includes(
       :staff_passkeys, :staff_tokens, :operator_device_sessions, :staff_secret_credentials, :oidc_connections,
       :staff_operators, :operator_workspace_accounts, :staff_bulletins, :staff_banners, :rp_account,
-      :authority_lock, :staff_preference, :core_org_operator_bridge,
+      :authority_lock, :operator_preference, :core_org_operator_bridge,
     ).find(@staff.id)
     @staff.destroy!
 

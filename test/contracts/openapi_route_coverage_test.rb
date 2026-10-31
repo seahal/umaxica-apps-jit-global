@@ -27,10 +27,6 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
   # `/api/v0/health.json` and `/api/v0/revision.json` are described.
   TEXT_ONLY_PATHS = ["/health", "/health/startup", "/health/liveness", "/health/readiness"].freeze
 
-  # DBSC's wire format is fixed by its own specification, so it is absent from the JSON
-  # descriptions even after the registration endpoint moved under `/api/v0/preferences`.
-  PROTOCOL_EXEMPT_PATHS = ["/api/v0/preferences/dbsc"].freeze
-
   # Base owner APIs (R5-WU12/14/15) are server-to-server calls from the realm's own Base Self-RP,
   # not a client-facing JSON contract; their contract is
   # docs/architecture/avatar-authority-contract-proposal.md and the owner/relay tests. Deferred, not
@@ -121,7 +117,6 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
       path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
       next unless path.match?(DESCRIBED_PREFIXES)
       next if TEXT_ONLY_PATHS.include?(path)
-      next if PROTOCOL_EXEMPT_PATHS.include?(path)
       next if OWNER_API_PATHS.match?(path)
 
       verb = route.verb.to_s

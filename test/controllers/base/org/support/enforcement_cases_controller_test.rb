@@ -250,89 +250,16 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_response :forbidden
   end
 
-  test "an app grant does not reach the com realm, and no grant reaches the org realm" do
-    [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, OperatorCapabilityGrant::ENFORCEMENT_READ_COM].each do |capability|
-      OperatorCapabilityGrant.create!(
-        operator: @operator,
-        granted_by_operator: @approver,
-        origin: "grant",
-        capability: capability,
-        reason_code: "duty_assignment",
-        starts_at: 1.minute.ago,
-        expires_at: 1.day.from_now,
-      )
-    end
-    OperatorCapabilityGrant.where(operator: @operator, capability: OperatorCapabilityGrant::ENFORCEMENT_READ_COM)
-      .find_each { |grant| grant.update!(revoked_at: Time.current, revoke_reason_code: "duty_ended") }
-
-    http_headers_17 =
-      begin
-        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpOrgGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpOrgGrant.create!(
-              authentication_epoch: 0,
-              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "operator",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "operator",
-                                     ), client_id: rp_client.client_id,
-            )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
-    get(
-      base_org_support_com_enforcement_cases_url(host: @host),
-      headers: http_headers_17,
-      as: :json,
+  test "an app grant does not reach the org realm" do
+    OperatorCapabilityGrant.create!(
+      operator: @operator,
+      granted_by_operator: @approver,
+      origin: "grant",
+      capability: OperatorCapabilityGrant::ENFORCEMENT_READ_APP,
+      reason_code: "duty_assignment",
+      starts_at: 1.minute.ago,
+      expires_at: 1.day.from_now,
     )
-
-    assert_response :forbidden
 
     http_headers_16 =
       begin
@@ -402,98 +329,6 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     )
 
     assert_response :forbidden
-  end
-
-  test "a realm query parameter cannot redirect an app route to com cases" do
-    OperatorCapabilityGrant.create!(
-      operator: @operator,
-      granted_by_operator: @approver,
-      origin: "grant",
-      capability: OperatorCapabilityGrant::ENFORCEMENT_READ_APP,
-      reason_code: "duty_assignment",
-      starts_at: 1.minute.ago,
-      expires_at: 1.day.from_now,
-    )
-    com_case = ComEnforcementCase.create!(
-      kind: "cooldown",
-      duration_mode: "timed",
-      visibility: "visible",
-      release_mode: "automatic",
-      effective_at: Time.current,
-      expires_at: 1.day.from_now,
-      reason_code: "abuse",
-      principal_public_id: visitors(:reserved_visitor).public_id,
-      applied_by_operator_public_id: @approver.public_id,
-    )
-
-    http_headers_15 =
-      begin
-        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpOrgGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpOrgGrant.create!(
-              authentication_epoch: 0,
-              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "operator",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "operator",
-                                     ), client_id: rp_client.client_id,
-            )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
-    get(
-      base_org_support_app_enforcement_case_url(com_case.public_id, realm: "com", host: @host),
-      headers: http_headers_15,
-      as: :json,
-    )
-
-    assert_response :not_found
   end
 
   test "without a grant the operator is refused before any Step-Up is asked for" do
@@ -857,7 +692,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_nil @operator_token.reload.last_step_up_at
   end
 
-  test "a case naming no existing principal, or a principal of another realm, is not found" do
+  test "a case naming no existing principal is not found" do
     [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, OperatorCapabilityGrant::ENFORCEMENT_APPLY_APP].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @operator,
@@ -871,7 +706,8 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     end
     mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_apply")
 
-    ["NO0SUCH0PRINCIPAL", visitors(:reserved_visitor).public_id].each do |principal_public_id|
+    # A visitor principal no longer exists; any unknown principal references stay not-found.
+    ["NO0SUCH0PRINCIPAL"].each do |principal_public_id|
       assert_no_difference -> { AppEnforcementCase.count } do
         http_headers_10 =
           begin
@@ -2050,7 +1886,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_equal @approver.public_id, event.operator_public_id
   end
 
-  test "index scopes strictly to the app realm and never returns com cases" do
+  test "index scopes strictly to the app realm" do
     app_client = clients(:one)
     app_case = AppEnforcementCase.create!(
       kind: "cooldown",
@@ -2061,17 +1897,6 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       expires_at: 1.day.from_now,
       reason_code: "abuse",
       principal_public_id: app_client.public_id,
-      applied_by_operator_public_id: @approver.public_id,
-    )
-    com_case = ComEnforcementCase.create!(
-      kind: "cooldown",
-      duration_mode: "timed",
-      visibility: "visible",
-      release_mode: "automatic",
-      effective_at: Time.current,
-      expires_at: 1.day.from_now,
-      reason_code: "abuse",
-      principal_public_id: visitors(:reserved_visitor).public_id,
       applied_by_operator_public_id: @approver.public_id,
     )
     OperatorCapabilityGrant.create!(
@@ -2155,7 +1980,6 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     public_ids = response.parsed_body.fetch("enforcement_cases").map { |c| c.fetch("public_id") }
 
     assert_includes public_ids, app_case.public_id
-    assert_not_includes public_ids, com_case.public_id
   end
 
   test "a malformed principal filter is a bad request, not an empty list" do
@@ -2269,7 +2093,6 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end

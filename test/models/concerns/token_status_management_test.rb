@@ -5,19 +5,12 @@ require "test_helper"
 
 class TokenStatusManagementTest < ActiveSupport::TestCase
   test "token revocation closes admitted continuity before at and after expiry on all three surfaces" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       [-1, 0, 1].each do |microseconds|
         actor, token, ceremony_model =
           case surface
           when :app
             [@user, ClientToken.create!(authentication_epoch: 0, user: @user), ClientAuthCeremonySession]
-          when :com
-            visitor = Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL,
-              status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
-            )
-            [visitor, VisitorToken.create!(authentication_epoch: 0, visitor: visitor, skip_session_limit_check: true),
-             VisitorAuthCeremonySession,]
           when :org
             operator = Operator.create!(
               security_mode_id: SecurityModeConfigurable::ADVANCED,
@@ -88,11 +81,6 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
   end
 
   test "strict issuance context maps absent columns and NULL to Normal and rejects corrupt values" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, skip_session_limit_check: true)
     operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
@@ -100,7 +88,6 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
     operator_token = OperatorToken.create!(authentication_epoch: 0, staff: operator, authentication_context: nil)
 
     assert_predicate @token.strict_authentication_context_value, :normal?
-    assert_predicate visitor_token.strict_authentication_context_value, :normal?
     assert_predicate operator_token.strict_authentication_context_value, :normal?
 
     operator_token.update!(authentication_context: AuthenticationContextValue::NORMAL_KEY)

@@ -33,7 +33,6 @@ module SignAcmeAuthorityRedirect
   def base_rp_host
     case self.class.name
     when /\AAuth::App::/ then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    when /\AAuth::Com::/ then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     when /\AAuth::Org::/ then ENV.fetch("PUBLIC_BASE_STAFF_URL")
     else
       raise JumpRtConfigurationError, "No Base RP host is configured for #{self.class.name}"

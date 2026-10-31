@@ -106,8 +106,6 @@ gem "openid_connect"
 gem "jwt"
 # Web Push notification support.
 gem "web-push", require: false
-# Native Action Push integration.
-gem "action_push_native", require: false
 # Notification orchestration across delivery channels.
 gem "noticed", "~> 3.0"
 # Solid Queue backend.
@@ -208,6 +206,8 @@ group :development, :test do
   gem "erb_lint", require: false
   # Type for ruby.
   gem "sorbet"
+  # herb 
+  gem "herb"
 end
 
 group :test do

@@ -7,6 +7,15 @@
 module SignInPathRefusal
   private
 
+  def render_sign_in_phase_refusal!(reason_code: nil)
+    record_sign_in_path_refusal!(reason_code, clear_continuity: false) if reason_code
+    request.env[AuthPhaseRefusalResponseBoundary::ENV_KEY] = true
+    session.options[:skip] = true
+    response.headers["Cache-Control"] = "private, no-store"
+    render plain: I18n.t("errors.messages.phase_violation_refused"), status: :conflict
+    false
+  end
+
   def refuse_sign_in_path!(reason, body: nil, status: nil, clear_continuity: true)
     refusal = record_sign_in_path_refusal!(reason, clear_continuity:)
     return refusal if performed?

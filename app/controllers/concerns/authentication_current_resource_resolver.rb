@@ -207,7 +207,6 @@ class AuthenticationCurrentResourceResolver
     case @resource_type.to_s
     when "client" then ::ClientDeviceSession
     when "operator" then ::OperatorDeviceSession
-    when "visitor" then ::VisitorDeviceSession
     end
   end
 
@@ -273,7 +272,6 @@ class AuthenticationCurrentResourceResolver
     token_actor_id =
       case @resource_type.to_s
       when "client" then token_record_attribute(token_record, :user_id)
-      when "visitor" then token_record_attribute(token_record, :visitor_id)
       when "operator" then token_record_attribute(token_record, :staff_id)
       else raise FlowConfigurationError, "unsupported authentication resource type"
       end
@@ -283,7 +281,6 @@ class AuthenticationCurrentResourceResolver
     device_session = token_record.device_session_record
     case [@resource_type.to_s, device_session]
     in ["client", ClientDeviceSession] then device_session.user_id == resource.id
-    in ["visitor", VisitorDeviceSession] then device_session.visitor_id == resource.id
     in ["operator", OperatorDeviceSession] then device_session.staff_id == resource.id
     else false
     end
@@ -318,7 +315,7 @@ class AuthenticationCurrentResourceResolver
   end
 
   def withdrawal_required?(resource)
-    return false unless %w(client visitor).include?(@resource_type.to_s)
+    return false unless @resource_type.to_s == "client"
     return true if resource.respond_to?(:suspended?) && resource.suspended?
     return true if resource.respond_to?(:terminated?) && resource.terminated?
     return true if resource.respond_to?(:withdrawn?) && resource.withdrawn?

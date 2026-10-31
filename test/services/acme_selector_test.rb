@@ -12,13 +12,6 @@ class AcmeSelectorTest < ActiveSupport::TestCase
     assert_equal Client, config.principal_class
   end
 
-  test "config_for returns config for com surface" do
-    config = AcmeSelector.config_for(:com)
-
-    assert_equal :com, config.surface
-    assert_equal Visitor, config.principal_class
-  end
-
   test "config_for returns config for org surface" do
     config = AcmeSelector.config_for(:org)
 

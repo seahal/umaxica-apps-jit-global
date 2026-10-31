@@ -33,7 +33,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
   SURFACE_ACTOR = {
     "app" => "client",
-    "com" => "visitor",
     "org" => "operator",
   }.freeze
 
@@ -70,19 +69,16 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
   CEREMONY_SESSION = {
     "app" => ClientAuthCeremonySession,
-    "com" => VisitorAuthCeremonySession,
     "org" => OperatorAuthCeremonySession,
   }.freeze
 
   STEP_UP_TRANSACTION = {
     "app" => ClientStepUpCeremonyTransaction,
-    "com" => VisitorStepUpCeremonyTransaction,
     "org" => OperatorStepUpCeremonyTransaction,
   }.freeze
 
   ADMISSION_BINDING = {
     "app" => ClientAuthAdmissionBinding,
-    "com" => VisitorAuthAdmissionBinding,
     "org" => OperatorAuthAdmissionBinding,
   }.freeze
 
@@ -173,9 +169,13 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       binding
     end
 
-    def validate_admission_continuation!(binding:, surface:, expected_intent:)
-      unless binding.is_a?(admission_binding_model(surface)) && binding.live? &&
-          admission_reference_purposes(expected_intent).include?(binding.purpose)
+    def validate_admission_continuation!(binding:, surface:, expected_intent:, allow_redeemed: false)
+      unless binding.is_a?(admission_binding_model(surface))
+        raise Denied.new("admission continuation is unavailable", code: "invalid_admission")
+      end
+
+      available = binding.live? || (allow_redeemed && binding.redeemed? && !binding.retired? && !binding.expired?)
+      unless available && admission_reference_purposes(expected_intent).include?(binding.purpose)
         raise Denied.new("admission continuation is unavailable", code: "invalid_admission")
       end
 
@@ -320,8 +320,12 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
       now = transaction.class.database_now
       curfew_at = authentication_handoff_curfew_at(transaction)
+      unless curfew_at && now < curfew_at
+        raise Denied.new("switch admission curfew has passed or is missing", code: "expired_admission")
+      end
+
       expires_at = now + SWITCH_HANDOFF_TTL
-      expires_at = curfew_at if curfew_at && curfew_at > now && curfew_at < expires_at
+      expires_at = curfew_at if curfew_at < expires_at
 
       switch_handoff_encryptor.encrypt_and_sign(
         JSON.generate(
@@ -338,11 +342,15 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
       payload = JSON.parse(switch_handoff_encryptor.decrypt_and_verify(handoff))
       unless payload.is_a?(Hash) && payload.fetch("version") == SWITCH_HANDOFF_VERSION &&
-          payload.fetch("surface") == surface.to_s && Time.zone.iso8601(payload.fetch("expires_at")) > Time.current
+          payload.fetch("surface") == surface.to_s
         raise Denied.new("switch handoff is invalid", code: "invalid_admission")
       end
 
       transaction = authorization_transaction_for_exit(surface:, transaction_ref: payload.fetch("transaction_ref"))
+      unless Time.zone.iso8601(payload.fetch("expires_at")) > transaction.class.database_now
+        raise Denied.new("switch handoff is invalid", code: "invalid_admission")
+      end
+
       target = payload.fetch("target")
       validate_switch_target!(transaction:, target:)
       ceremony =
@@ -557,7 +565,14 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def with_admission_binding_lock!(binding, &)
-      token = admission_base_token_record(binding)
+      token =
+        binding.class.connection_owner.connected_to(role: :writing) do
+          admission_base_token_record(binding)
+        end
+      if binding.base_token_id.present? && !token
+        raise Denied.new("Base session is unavailable", code: "session_expired")
+      end
+
       if token
         actor = admission_root_actor(token)
         actor.class.connection_class_for_self.connected_to(role: :writing) do
@@ -836,11 +851,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def binding_parent_matches?(binding, transaction)
       case transaction
-      when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction,
-           OperatorOidcAuthorizationTransaction
+      when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
         binding.authorization_transaction_id == transaction.id
-      when ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction,
-           OperatorStepUpCeremonyTransaction
+      when ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
         binding.step_up_ceremony_transaction_id == transaction.id
       else
         false
@@ -911,7 +924,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       payload
     end
 
-    # Only a pending App/Com parent with the neutral `authentication` intent can switch: a fixed
+    # Only a pending App parent with the neutral `authentication` intent can switch: a fixed
     # sign_in or sign_up intent would need an intent change, which D06 forbids. prompt=login keeps
     # Sign In.
     def validate_switch_target!(transaction:, target:)
@@ -978,11 +991,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def binding_parent_attributes(transaction)
       case transaction
-      when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction,
-           OperatorOidcAuthorizationTransaction
+      when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
         { authorization_transaction_id: transaction.id }
-      when ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction,
-           OperatorStepUpCeremonyTransaction
+      when ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
         { step_up_ceremony_transaction_id: transaction.id }
       else
         raise Denied.new("unsupported admission parent", code: "malformed_request")
@@ -991,9 +1002,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def transaction_subject_reference(transaction)
       case transaction
-      when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction,
-           OperatorOidcAuthorizationTransaction, ClientStepUpCeremonyTransaction,
-           VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
+      when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction,
+           ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
         transaction.transaction_id
       else
         raise Denied.new("unsupported admission parent", code: "malformed_request")
@@ -1002,11 +1012,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def transaction_expiry(transaction)
       case transaction
-      when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction,
-           OperatorOidcAuthorizationTransaction
+      when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
         [transaction.expires_at, transaction.login_challenge_expires_at].compact.min
-      when ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction,
-           OperatorStepUpCeremonyTransaction
+      when ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
         transaction.expires_at
       else
         raise Denied.new("unsupported admission parent", code: "malformed_request")
@@ -1016,13 +1024,11 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     def validate_base_token!(transaction:, surface:, base_token:)
       expected_class = {
         "app" => ClientToken,
-        "com" => VisitorToken,
         "org" => OperatorToken,
       }.fetch(surface.to_s)
       allowed_without_token =
         case transaction
-        when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction,
-             OperatorOidcAuthorizationTransaction
+        when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
           true
         else
           false
@@ -1117,14 +1123,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
           authorization_transaction_class: ClientOidcAuthorizationTransaction,
           step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
         )
-      when VisitorAuthAdmissionBinding
-        admission_parent_record_for_surface(
-          binding.parent_kind,
-          authorization_transaction_id: binding.authorization_transaction_id,
-          step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-          authorization_transaction_class: VisitorOidcAuthorizationTransaction,
-          step_up_ceremony_transaction_class: VisitorStepUpCeremonyTransaction,
-        )
       when OperatorAuthAdmissionBinding
         admission_parent_record_for_surface(
           binding.parent_kind,
@@ -1159,7 +1157,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       return if binding.base_token_id.nil?
 
       case binding
-      when ClientAuthAdmissionBinding, VisitorAuthAdmissionBinding, OperatorAuthAdmissionBinding
+      when ClientAuthAdmissionBinding, OperatorAuthAdmissionBinding
         binding.association(:base_token).tap { |owner| owner.reset_scope }.scope.take
       else raise Denied.new("admission binding is invalid", code: "invalid_admission")
       end
@@ -1170,7 +1168,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
       case token
       when ClientToken then ClientDeviceSession.find_by(id: token.device_session_id)
-      when VisitorToken then VisitorDeviceSession.find_by(id: token.device_session_id)
       when OperatorToken then OperatorDeviceSession.find_by(id: token.device_session_id)
       else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
       end
@@ -1197,10 +1194,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       return false unless token && transaction.consumed?
 
       case transaction
-      when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
+      when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
         transaction.base_finalized_at.present? && transaction.browser_session_ref == token.public_id &&
           transaction.actor_ref == admission_root_actor(token).public_id
-      when ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
+      when ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
         transaction.purpose == "reauthentication" && binding.base_token_id.present? &&
           admission_base_token_record(binding)&.device_session_id == token.device_session_id &&
           transaction.actor_ref == admission_root_actor(token).public_id
@@ -1219,12 +1216,20 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def admission_root_actor(token)
-      case token
-      when ClientToken then token.association(:user).tap { |owner| owner.reset_scope }.scope.take
-      when VisitorToken then token.association(:visitor).tap { |owner| owner.reset_scope }.scope.take
-      when OperatorToken then token.association(:staff).tap { |owner| owner.reset_scope }.scope.take
-      else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
-      end
+      actor_class, association =
+        case token
+        when ClientToken then [Client, token.association(:user)]
+        when OperatorToken then [Operator, token.association(:staff)]
+        else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
+        end
+      actor =
+        actor_class.connection_class_for_self.connected_to(role: :writing) do
+          association.reset_scope
+          association.scope.take
+        end
+      raise Denied.new("Base actor is unavailable", code: "authorization_denied") unless actor
+
+      actor
     end
 
     def with_admission_ticket_locks!(binding, token, &)

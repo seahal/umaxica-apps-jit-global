@@ -8,12 +8,24 @@ import {
   readThemeCookie,
   themeFromCode,
   themeFromDocument,
+  watchThemeCookie,
   watchSystemTheme,
 } from "@/lib/theme";
 
 import { present } from "../support/present";
 
 type MediaListener = () => void;
+
+const COM_EXPERIENCE = {
+  theme: "dark",
+  timezone: "Asia/Tokyo",
+  currency: "jpy",
+  date_format: "iso",
+  time_format: "24",
+  motion: "standard",
+  density: "standard",
+  page_size: "infinity",
+};
 
 let mediaMatches: boolean;
 let listeners: MediaListener[];
@@ -51,6 +63,7 @@ beforeEach(() => {
   clearCookies();
   document.documentElement.className = "";
   delete document.documentElement.dataset["theme"];
+  delete document.documentElement.dataset["edition"];
   window.history.replaceState({}, "", "/");
 });
 
@@ -91,6 +104,109 @@ describe("codeFromTheme", () => {
 });
 
 describe("readThemeCookie", () => {
+  test("com reads the experience theme instead of the retired ct cookie", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.cookie = "ct=li; path=/";
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify(COM_EXPERIENCE))}; Secure; Path=/`;
+
+    await expect(readThemeCookie()).resolves.toBe("dark");
+  });
+
+  test("com retains the server-rendered theme when experience is absent or malformed", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.documentElement.dataset["theme"] = "dark";
+    document.cookie = "ct=li; path=/";
+
+    await expect(readThemeCookie()).resolves.toBe("dark");
+    document.cookie = "__Secure-experience=invalid; Secure; Path=/";
+    await expect(readThemeCookie()).resolves.toBe("dark");
+  });
+
+  test("com does not trust either of two same-name experience cookies", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.documentElement.dataset["theme"] = "dark";
+    window.history.replaceState({}, "", "/nested/page");
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify(COM_EXPERIENCE))}; Secure; Path=/`;
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify({ ...COM_EXPERIENCE, theme: "light" }))}; Secure; Path=/nested`;
+
+    try {
+      await expect(readThemeCookie()).resolves.toBe("dark");
+    } finally {
+      document.cookie = "__Secure-experience=; Secure; Path=/nested; Max-Age=0";
+    }
+  });
+
+  test.each([
+    JSON.stringify({ theme: "light" }),
+    JSON.stringify({ ...COM_EXPERIENCE, theme: "light", timezone: "unknown" }),
+    JSON.stringify({ ...COM_EXPERIENCE, theme: "light", unexpected: "value" }),
+    JSON.stringify({ ...COM_EXPERIENCE, theme: "light" }).replace(
+      '"theme":"light"',
+      '"theme":"dark","theme":"light"',
+    ),
+  ])("com preserves the rendered theme for an invalid experience projection", async (value) => {
+    document.documentElement.dataset["edition"] = "com";
+    document.documentElement.dataset["theme"] = "dark";
+    document.cookie = `__Secure-experience=${encodeURIComponent(value)}; Secure; Path=/`;
+
+    await expect(readThemeCookie()).resolves.toBe("dark");
+  });
+
+  test("com preserves a request theme overlay when an experience cookie is present", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.documentElement.dataset["theme"] = "light";
+    window.history.replaceState({}, "", "/?ct=li");
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify(COM_EXPERIENCE))}; Secure; Path=/`;
+
+    await expect(readThemeCookie()).resolves.toBe("light");
+  });
+
+  test("com watches the experience cookie rather than the retired ct cookie", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify(COM_EXPERIENCE))}; Secure; Path=/`;
+    const seen: string[] = [];
+    const stop = watchThemeCookie((theme) => seen.push(theme));
+    const event = new Event("change");
+    Object.defineProperties(event, {
+      changed: {
+        value: [
+          {
+            name: "__Secure-experience",
+            value: encodeURIComponent(JSON.stringify(COM_EXPERIENCE)),
+          },
+        ],
+      },
+      deleted: { value: [] },
+    });
+    window.cookieStore.dispatchEvent(event);
+    await vi.waitFor(() => expect(seen).toEqual(["dark"]));
+    stop();
+  });
+
+  test("com rechecks same-name cookie ambiguity after a cookie change", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.documentElement.dataset["theme"] = "dark";
+    window.history.replaceState({}, "", "/nested/page");
+    const light = JSON.stringify({ ...COM_EXPERIENCE, theme: "light" });
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify(COM_EXPERIENCE))}; Secure; Path=/`;
+    document.cookie = `__Secure-experience=${encodeURIComponent(light)}; Secure; Path=/nested`;
+    const seen: string[] = [];
+    const stop = watchThemeCookie((theme) => seen.push(theme));
+    const event = new Event("change");
+    Object.defineProperties(event, {
+      changed: { value: [{ name: "__Secure-experience", value: encodeURIComponent(light) }] },
+      deleted: { value: [] },
+    });
+
+    try {
+      window.cookieStore.dispatchEvent(event);
+      await vi.waitFor(() => expect(seen).toEqual(["dark"]));
+    } finally {
+      stop();
+      document.cookie = "__Secure-experience=; Secure; Path=/nested; Max-Age=0";
+    }
+  });
+
   test("reads the theme Rails rendered the first paint from", async () => {
     document.cookie = "ct=dr; path=/";
 

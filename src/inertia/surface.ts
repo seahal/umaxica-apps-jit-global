@@ -141,7 +141,7 @@ export function reportInertiaBootFailure(error: unknown): void {
 }
 
 /**
- * Keeps `<html data-theme>` in step with the `ct` cookie.
+ * Keeps `<html data-theme>` in step with the current surface's display cookie.
  *
  * Rails renders the attribute from the cookie, and every `dark:` utility and every `--ui-*` token
  * is keyed on it, so the document's colours are only ever as current as the last document load.

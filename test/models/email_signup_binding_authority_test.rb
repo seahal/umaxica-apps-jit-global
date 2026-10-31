@@ -5,20 +5,16 @@ require "test_helper"
 class EmailSignupBindingAuthorityTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %i(late_checkpoint foreign_browser uncleared_otp unconsumed_child expired_parent).each do |state|
       test "#{surface} Email signup binding validates #{state} durable authority" do
         email_model, flow_model, status_key, verified_status =
           case surface
           when "app"
             [ClientEmail, ClientSignUpFlow, :user_email_status_id, ClientEmailStatus::VERIFIED_WITH_SIGN_UP]
-          when "com"
-            [VisitorEmail, VisitorSignUpFlow, :visitor_email_status_id, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP]
           end
         email = email_model.new(raw_address: "signup-writer-#{SecureRandom.hex(8)}@example.test", confirm_policy: true)
         owner = EmailSignUpCandidateCreator.call(email: email)

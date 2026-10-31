@@ -456,227 +456,24 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # rubocop:disable Minitest/MultipleAssertions
-  test "auth com route contract" do
+  # two.md WU-3: the corporate Auth host owns no credential ceremony, so it claims no route.
+  test "auth com claims no ceremony route" do
     assert_recognizes(
-      { controller: "auth/com/roots", action: "index" },
+      { controller: "unknown_hosts", action: "show" },
       { path: "http://#{SIGN_COM_HOST}/", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "auth/com/well_known/jwks", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/.well-known/jwks.json", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/healths", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/health", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/health/livenesses", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/health/liveness", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/health/readinesses", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/health/readiness", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/health/startups", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/health/startup", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/robots", action: "index" },
-      { path: "http://#{SIGN_COM_HOST}/robots.txt", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sitemaps", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sitemap.xml", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/outs", action: "new" },
-      { path: "http://#{SIGN_COM_HOST}/sign/out/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/outs", action: "edit" },
-      { path: "http://#{SIGN_COM_HOST}/sign/out/edit", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/outs", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/sign/out", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/outs", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/out", method: :delete },
-    )
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/out/complete", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/out/cancellation", method: :post)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/logout", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/logout", method: :post)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/backchannel/logout", method: :post)
-    end
-
-    assert_recognizes(
-      { controller: "auth/com/csp_violation_reports", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/csp-violation-report", method: :post },
-    )
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/dashboard", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/callback", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/authorization", method: :get)
-    end
-
-    assert_recognizes(
-      { controller: "auth/com/sign/ups", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/up/check/email/otps", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up/check/email/otp", method: :delete },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/up/check/email/birthdates", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up/check/email/birthdate", method: :delete },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/up/check/telephone/otps", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up/check/telephone/otp", method: :delete },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/up/check/telephone/passkeys", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up/check/telephone/passkey", method: :delete },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/up/check/telephone/birthdates", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up/check/telephone/birthdate", method: :delete },
-    )
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/up/email", method: :get)
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/up/check/email/cancellation", method: :post)
-    end
-
-    assert_recognizes(
-      { controller: "auth/com/sign/ins", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/emails", action: "new" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/email/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/emails", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/email", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/emails", action: "edit" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/email/edit", method: :get },
-    )
-
-    ["/sign/up/entrance", "/sign/in/entrance"].each do |bad_path|
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}#{bad_path}", method: :get)
+    %w(
+      /sign /sign/in /sign/up /sign/out /verification/emails /settings
+      /.well-known/jwks.json /health /robots.txt /sitemap.xml /csp-violation-report
+    ).each do |path|
+      %i(get post).each do |method|
+        assert_raises(ActionController::RoutingError, "#{method.to_s.upcase} #{path} must stay unroutable") do
+          Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}#{path}", method: method)
+        end
       end
-    end
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/guards", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/guard", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/checks", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/check", method: :get },
-    )
-
-    %i(patch delete).each do |method|
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/in/check", method: method)
-      end
-    end
-
-    assert_recognizes(
-      { controller: "auth/com/verification/cancellations", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/verification/cancellation", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/challenges", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/challenge", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/passkeys", action: "new" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/passkey/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/passkey/options", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/passkey/options", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/passkey/verifications", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/passkey/verification", method: :post },
-    )
-
-    [
-      { controller: "auth/com/settings", action: "show", path: "/settings" },
-    ].each do |route|
-      assert_recognizes(
-        { controller: route[:controller], action: route[:action] },
-        { path: "http://#{SIGN_COM_HOST}#{route[:path]}", method: :get },
-      )
-    end
-
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path(
-        "http://#{SIGN_COM_HOST}/settings/passkeys",
-        method: :get,
-      )
     end
   end
-  # rubocop:enable Minitest/MultipleAssertions
 
   # rubocop:disable Minitest/MultipleAssertions
   test "auth org route contract" do
@@ -881,10 +678,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_recognizes(
-      { controller: "auth/org/configurations", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/configuration", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/configuration", method: :get)
+    end
 
     assert_recognizes(
       { controller: "auth/org/accounts", action: "index" },

@@ -2,23 +2,71 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
+# ADR `sign-up-one-day-minimum-age-and-feature-level-age-restrictions`: sign-up establishes
+# identity, not age. Eligibility is the explicit one-day rule alone, shared by `.app` and `.org`.
 class SignUpEligibilityPolicyTest < ActiveSupport::TestCase
-  test "app client direct signup minimum age is sixteen" do
-    today = Date.new(2026, 6, 25)
+  self.fixture_table_names = []
 
-    assert_equal 16, SignUpEligibilityPolicy.minimum_age(surface: :app)
-    assert_not SignUpEligibilityPolicy.minimum_age_reached?("2010-06-26", surface: :app, today: today)
-    assert SignUpEligibilityPolicy.minimum_age_reached?("2010-06-25", surface: :app, today: today)
-    assert SignUpEligibilityPolicy.minimum_age_reached?("2000-01-01", surface: :app, today: today)
+  test "the one-day boundary follows the calendar before on and after leap day" do
+    [Date.new(2024, 2, 28), Date.new(2024, 2, 29), Date.new(2024, 3, 1)].each do |today|
+      %i(app org).each do |surface|
+        assert SignUpEligibilityPolicy.eligible?((today - 1).iso8601, surface: surface, today: today)
+        assert_not SignUpEligibilityPolicy.eligible?(today.iso8601, surface: surface, today: today)
+        assert_not SignUpEligibilityPolicy.eligible?((today + 1).iso8601, surface: surface, today: today)
+        assert SignUpEligibilityPolicy.eligible?("2011-03-01", surface: surface, today: today)
+      end
+    end
   end
 
-  test "com visitor account signup keeps its existing minimum age" do
+  test "the closest eligible birthdate is yesterday and today is refused" do
     today = Date.new(2026, 6, 25)
 
-    assert_equal 13, SignUpEligibilityPolicy.minimum_age(surface: :com)
-    assert_not SignUpEligibilityPolicy.minimum_age_reached?("2013-06-26", surface: :com, today: today)
-    assert SignUpEligibilityPolicy.minimum_age_reached?("2013-06-25", surface: :com, today: today)
+    assert_not SignUpEligibilityPolicy.eligible?("2026-06-25", surface: :app, today: today)
+    assert_not SignUpEligibilityPolicy.eligible?("2026-06-26", surface: :app, today: today)
+    assert SignUpEligibilityPolicy.eligible?("2026-06-24", surface: :app, today: today)
+    assert SignUpEligibilityPolicy.eligible?("2000-06-25", surface: :app, today: today)
+  end
+
+  test "the refusal moves with the service date without an age threshold" do
+    birthdate = "2026-06-24"
+
+    assert_not SignUpEligibilityPolicy.eligible?(birthdate, surface: :app, today: Date.new(2026, 6, 24))
+    assert_not SignUpEligibilityPolicy.eligible?(birthdate, surface: :app, today: Date.new(2026, 6, 23))
+    assert SignUpEligibilityPolicy.eligible?(birthdate, surface: :app, today: Date.new(2026, 6, 25))
+  end
+
+  test "the same one-day rule applies to the org surface without raising" do
+    today = Date.new(2026, 6, 25)
+
+    assert_not SignUpEligibilityPolicy.eligible?("2026-06-25", surface: :org, today: today)
+    assert SignUpEligibilityPolicy.eligible?("2026-06-24", surface: :org, today: today)
+  end
+
+  test "an unsupported surface is refused instead of guessed" do
+    error =
+      assert_raises(ArgumentError) do
+        SignUpEligibilityPolicy.eligible?("2026-06-24", surface: :com, today: Date.new(2026, 6, 25))
+      end
+
+    assert_equal "unsupported sign-up eligibility surface: :com", error.message
+  end
+
+  test "surface validation rejects missing empty and non-string inputs explicitly" do
+    [nil, "", 0, [], :com].each do |surface|
+      assert_not SignUpEligibilityPolicy.supported_surface?(surface)
+      assert_raises(ArgumentError) do
+        SignUpEligibilityPolicy.eligible?("2026-06-24", surface: surface, today: Date.new(2026, 6, 25))
+      end
+    end
+
+    assert SignUpEligibilityPolicy.supported_surface?("app")
+    assert SignUpEligibilityPolicy.supported_surface?(:org)
+  end
+
+  test "an unparseable birthdate is not eligible" do
+    assert_not SignUpEligibilityPolicy.eligible?("not-a-date", surface: :app)
+    assert_not SignUpEligibilityPolicy.eligible?("", surface: :app)
+    assert_not SignUpEligibilityPolicy.eligible?(nil, surface: :app)
   end
 end

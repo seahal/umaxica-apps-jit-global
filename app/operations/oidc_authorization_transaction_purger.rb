@@ -7,13 +7,11 @@
 class OidcAuthorizationTransactionPurger
   MODELS = {
     "app" => ClientOidcAuthorizationTransaction,
-    "com" => VisitorOidcAuthorizationTransaction,
     "org" => OperatorOidcAuthorizationTransaction,
   }.freeze
 
   SESSION_LIMIT_RESOLUTION_MODELS = {
     ClientOidcAuthorizationTransaction => [ClientSessionLimitResolutionTransaction, ClientSignInFlow],
-    VisitorOidcAuthorizationTransaction => [VisitorSessionLimitResolutionTransaction, VisitorSignInFlow],
     OperatorOidcAuthorizationTransaction => [OperatorSessionLimitResolutionTransaction, OperatorSignInFlow],
   }.freeze
 

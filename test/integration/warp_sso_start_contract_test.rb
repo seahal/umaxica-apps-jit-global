@@ -10,11 +10,6 @@ class WarpSsoStartContractTest < ActionDispatch::IntegrationTest
       client_id: "warp-app-jp",
       issuer: "https://www-jp.umaxica.app",
     },
-    "com" => {
-      host: "PUBLIC_WARP_CORPORATE_URL",
-      client_id: "warp-com-jp",
-      issuer: "https://www-jp.umaxica.com",
-    },
     "org" => {
       host: "PUBLIC_WARP_STAFF_URL",
       client_id: "warp-org-jp",
@@ -22,7 +17,7 @@ class WarpSsoStartContractTest < ActionDispatch::IntegrationTest
     },
   }.freeze
 
-  test "cross-site sign-in starts issue a surface-bound Jump RT on app com and org" do
+  test "cross-site sign-in starts issue a surface-bound Jump RT on app and org" do
     previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
 
@@ -75,7 +70,7 @@ class WarpSsoStartContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "missing Jump RT signing keys raise a configuration failure on app com and org" do
+  test "missing Jump RT signing keys raise a configuration failure on app and org" do
     previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
 

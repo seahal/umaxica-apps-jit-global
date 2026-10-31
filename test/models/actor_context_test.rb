@@ -24,7 +24,6 @@ class ActorContextTest < ActiveSupport::TestCase
     assert_not Actor.signed_up?
     assert_nil Actor.client
     assert_nil Actor.operator
-    assert_nil Actor.visitor
     assert_equal Actor::Authentication::NULL, Actor.authn
     assert_equal Actor::Configuration::NULL, Actor.configuration
   end
@@ -105,18 +104,6 @@ class ActorContextTest < ActiveSupport::TestCase
     assert_predicate Actor, :operator?
     assert_predicate Actor, :authenticated?
     assert_equal staff, Actor.operator
-  end
-
-  test "setting visitor actor" do
-    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 789)
-    Actor.actor = visitor
-    Actor.actor_type = :visitor
-
-    assert_equal visitor, Actor.actor
-    assert_equal :visitor, Actor.actor_type
-    assert_predicate Actor, :visitor?
-    assert_predicate Actor, :authenticated?
-    assert_equal visitor, Actor.visitor
   end
 
   test "resets preference to NULL" do

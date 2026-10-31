@@ -8,7 +8,7 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
     ids = AuthBoundaryAuthorityMap.first_party_rp_client_ids
     clients = ids.map { |client_id| OidcClientRegistry.find!(client_id) }
 
-    assert_equal 12, clients.size
+    assert_equal 9, clients.size
     assert_equal ids, clients.map(&:client_id)
     assert_equal ids.size, clients.map(&:aud).uniq.size
     assert_equal ids.size, clients.map(&:jwt_namespace).uniq.size

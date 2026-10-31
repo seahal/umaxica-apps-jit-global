@@ -1,0 +1,8 @@
+# Sign-flow reference reconstruction
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained extensive uncommitted changes affecting this result.
+- The app sign-flow data migration now exposes its existing fixed-row writer, and `db/seeds.rb` invokes that same writer on the OP app connection before the production return. This addresses the missing replay of those fixed IDs after a SQL structure-only load; it does not create a new data format.
+- Executed the writer twice against five temporary PostgreSQL tables in a rolled-back development connection transaction. The resulting sets exactly matched the migration catalog: 14 sign-in states, 15 signup statuses, five signup cleanup statuses, 10 signout statuses, and four signout kinds. The temporary transaction was rolled back; no persistent reference rows were modified by this probe.
+- Scoped `git diff --check` passed. RuboCop on the migration and seed files reported one pre-existing `Rails/SkipsModelValidations` offense on the unchanged `insert_all` line in `db/seeds.rb`. A complete fresh database reconstruction and full `db:seed` were not run, and no production or Neon database was touched. Other reference catalogs are not covered by this check.
+
+- Clarification: the temporary-table transactions themselves were rolled back. Development Rails boot also runs the existing Preference reference initializer, which can write fixed status/audit/binding IDs outside those transactions; its actual writes during each boot were not separately measured. Statements above about no persistent changes refer to the probe transaction, not a guarantee that boot had no writes.

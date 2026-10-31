@@ -40,26 +40,31 @@
 class OperatorPreference < OrgPrincipalRecord
   include ::PublicId
   include ::PreferenceExplicitFields
+  include ::ActorPreferenceExplicitDisplay
+
+  ACTIVE_STATUS_ID = OperatorPreferenceStatus::ACTIVE
+  RETIRED_STATUS_ID = OperatorPreferenceStatus::RETIRED
 
   DESTROY_DEPENDENT_ASSOCIATIONS = %i(
-    staff_preference_language staff_preference_timezone staff_preference_region staff_preference_theme
+    operator_preference_language operator_preference_timezone operator_preference_region operator_preference_theme
     operator_preference_currency operator_preference_date_format operator_preference_time_format
     operator_preference_motion operator_preference_density operator_preference_page_size
     operator_preference_adult_content_gate
   ).freeze
 
-  belongs_to :staff, inverse_of: :staff_preference, class_name: "Operator"
+  belongs_to :operator, foreign_key: :operator_id, inverse_of: :operator_preference
+  belongs_to :operator_preference_status, foreign_key: :status_id, inverse_of: :operator_preferences
 
-  has_one :staff_preference_language, class_name: "OperatorPreferenceLanguage", foreign_key: :preference_id,
+  has_one :operator_preference_language, class_name: "OperatorPreferenceLanguage", foreign_key: :preference_id,
                                       inverse_of: :preference,
                                       dependent: :destroy
-  has_one :staff_preference_timezone, class_name: "OperatorPreferenceTimezone", foreign_key: :preference_id,
+  has_one :operator_preference_timezone, class_name: "OperatorPreferenceTimezone", foreign_key: :preference_id,
                                       inverse_of: :preference,
                                       dependent: :destroy
-  has_one :staff_preference_region, class_name: "OperatorPreferenceRegion", foreign_key: :preference_id,
+  has_one :operator_preference_region, class_name: "OperatorPreferenceRegion", foreign_key: :preference_id,
                                     inverse_of: :preference,
                                     dependent: :destroy
-  has_one :staff_preference_theme, class_name: "OperatorPreferenceTheme", foreign_key: :preference_id,
+  has_one :operator_preference_theme, class_name: "OperatorPreferenceTheme", foreign_key: :preference_id,
                                    inverse_of: :preference,
                                    dependent: :destroy
   has_one :operator_preference_currency,
@@ -91,19 +96,39 @@ class OperatorPreference < OrgPrincipalRecord
           inverse_of: :preference,
           dependent: :destroy
 
-  validates :staff_id, uniqueness: true
-  validates :consented, inclusion: { in: [true, false] }
-  validates :functional, inclusion: { in: [true, false] }
-  validates :performant, inclusion: { in: [true, false] }
-  validates :targetable, inclusion: { in: [true, false] }
-  after_initialize :set_defaults
+  attribute :status_id, default: ACTIVE_STATUS_ID
+  validates :operator_id, presence: true
+  validates :status_id, inclusion: { in: OperatorPreferenceStatus::DEFAULTS }
+  validates :public_id, presence: true, uniqueness: true
+  validate :retired_status_cannot_be_reactivated, on: :update
   before_destroy :preload_dependent_associations, prepend: true
 
-  def adult_content_gate
-    operator_preference_adult_content_gate&.option&.name || "nothing"
+  def retire!
+    with_lock do
+      raise PreferenceLifecycle::InvalidTransition, "only an active Preference can be retired" unless
+        status_id == ACTIVE_STATUS_ID
+
+      update!(status_id: RETIRED_STATUS_ID)
+    end
   end
 
   private
+
+  def actor_preference_child_for(field)
+    case field
+    when "language" then operator_preference_language
+    when "timezone" then operator_preference_timezone
+    when "region" then operator_preference_region
+    when "theme" then operator_preference_theme
+    when "currency" then operator_preference_currency
+    when "date_format" then operator_preference_date_format
+    when "time_format" then operator_preference_time_format
+    when "motion" then operator_preference_motion
+    when "density" then operator_preference_density
+    when "page_size" then operator_preference_page_size
+    else raise ArgumentError, "unsupported actor preference field: #{field.inspect}"
+    end
+  end
 
   def preload_dependent_associations
     ActiveRecord::Associations::Preloader.new(
@@ -111,14 +136,9 @@ class OperatorPreference < OrgPrincipalRecord
     ).call
   end
 
-  # New records get explicit non-consent defaults so a nil never reaches a
-  # boolean consent column.
-  def set_defaults
-    return unless new_record?
+  def retired_status_cannot_be_reactivated
+    return unless status_id_in_database == RETIRED_STATUS_ID && status_id == ACTIVE_STATUS_ID
 
-    self.consented = false if consented.nil?
-    self.functional = false if functional.nil?
-    self.performant = false if performant.nil?
-    self.targetable = false if targetable.nil?
+    errors.add(:status_id, :invalid)
   end
 end

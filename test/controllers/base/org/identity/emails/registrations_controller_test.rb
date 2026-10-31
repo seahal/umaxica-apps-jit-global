@@ -336,6 +336,48 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_redirected_to new_base_org_identity_emails_registration_path(ri: "jp")
   end
 
+  test "ORG Email Ticket failure leaves Source finalized and Step-Up unchanged" do
+    post base_org_identity_emails_registration_url(ri: "jp", host: @host),
+         params: { staff_email: { raw_address: "org-ticket-fault-#{SecureRandom.hex(8)}@example.test" } },
+         headers: @headers
+    email = @operator.staff_emails.find_by!(public_id: session[:staff_email_registration_public_id])
+    transaction = OperatorEmailCeremonyTransaction.find_by!(
+      transaction_id: session[:staff_email_registration_transaction_ref],
+    )
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == email.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    nonce = session.fetch("auth_admission_browser_nonce")
+    verified = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      actor: @operator, token: @token, email: email, transaction: transaction, browser_nonce: nonce, code: code,
+    )
+
+    assert_predicate verified, :success?
+    step_up_at = @token.reload.last_step_up_at
+    context = ActorValuesContext.empty.with(subject: @operator, actor_type: :operator, tld: :org, surface: :base)
+    requirement = OperatorEmailPolicy.new(email, user: @operator).credential_registration_requirement(token: @token)
+
+    transaction.stub(:consume_registration_result!, -> { raise ActiveRecord::StatementInvalid }) do
+      assert_raises(ActiveRecord::StatementInvalid) do
+        OperatorEmailRegistrationOtpFinalizer.call!(
+          actor: @operator, actor_context: context, token: @token, email: email, transaction: transaction,
+          browser_nonce: nonce, code: code, requirement: requirement,
+        )
+      end
+    end
+
+    assert_equal OperatorEmailStatus::VERIFIED, email.reload.staff_email_status_id
+    assert_nil transaction.reload.consumed_at
+    assert_equal step_up_at, @token.reload.last_step_up_at
+    assert_predicate StepUpResolver.call(
+      token: @token, requirement: requirement, now: @token.class.database_now,
+    ), :satisfied?
+  end
+
   %i(browser policy_scope weakened_policy lost_credential actor_context).each do |change|
     test "ORG Email finalization rejects #{change} even after the original OTP was consumed" do
       post base_org_identity_emails_registration_url(ri: "jp", host: @host),

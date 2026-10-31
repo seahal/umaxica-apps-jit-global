@@ -135,7 +135,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
             ) if flow1_intent.to_s == "link" && flow1_token
             flow1_headers = flow1_headers.merge(flow1_user_headers)
           end
+          signup_flows_before = ClientSignUpFlow.count
           post(flow1_continue_path, headers: flow1_headers)
+          signup_flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+          admission = ClientAuthAdmissionBinding.find(signup_flow.auth_admission_binding_id)
+
+          assert_equal [signup_flows_before + 1, "sign_up", true, true, "social_callback"],
+                       [ClientSignUpFlow.count, admission.entry_intent, admission.redeemed?,
+                        signup_flow.expires_at <= admission.curfew_at, signup_flow.step,]
           social_auth_state_from_response
         end
       setup_mock_auth(flow0_config, uid: flow0_uid, token: "new_signup_token")
@@ -424,11 +431,12 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         )
         follow_redirect!
 
-        assert_response :ok
-        assert_equal "auth/app/sign/up/check/social/confirmations/show", inertia_component
+        assert_equal [200, "auth/app/sign/up/check/social/confirmations/show"], [response.status, inertia_component]
         assert_predicate inertia_props.fetch("confirm_label"), :present?
       end
       flow0_cycle = ClientSignUpFlow.order(:id).last
+
+      assert_equal [signup_flows_before + 1, signup_flow.id], [ClientSignUpFlow.count, flow0_cycle.id]
 
       begin
         flow5_config = flow0_config
@@ -711,8 +719,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       assert_equal "2000-02-03", flow0_user.reload.birthdate
       assert ClientToken.exists?(user_id: flow0_user.id)
 
-      assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, flow0_user.status_id
-      assert_equal "active", flow0_identity.state
+      assert_equal [ClientStatus::VERIFIED_WITH_SIGN_UP, "active"], [flow0_user.status_id, flow0_identity.state]
       assert_equal flow0_config.fetch(:provider), flow0_identity.provider
       assert_not_nil flow0_identity.last_authenticated_at
       assert_nil ClientEmail.find_by(user: flow0_user)
@@ -809,7 +816,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
             ) if flow8_intent.to_s == "link" && flow8_token
             flow8_headers = flow8_headers.merge(flow8_user_headers)
           end
+          signup_flows_before = ClientSignUpFlow.count
           post(flow8_continue_path, headers: flow8_headers)
+          signup_flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+          admission = ClientAuthAdmissionBinding.find(signup_flow.auth_admission_binding_id)
+
+          assert_equal [signup_flows_before + 1, "sign_up", true, true, "social_callback"],
+                       [ClientSignUpFlow.count, admission.entry_intent, admission.redeemed?,
+                        signup_flow.expires_at <= admission.curfew_at, signup_flow.step,]
           social_auth_state_from_response
         end
       setup_mock_auth(flow7_config, uid: flow7_uid, token: "new_signup_token")
@@ -1098,11 +1112,12 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         )
         follow_redirect!
 
-        assert_response :ok
-        assert_equal "auth/app/sign/up/check/social/confirmations/show", inertia_component
+        assert_equal [200, "auth/app/sign/up/check/social/confirmations/show"], [response.status, inertia_component]
         assert_predicate inertia_props.fetch("confirm_label"), :present?
       end
       flow7_cycle = ClientSignUpFlow.order(:id).last
+
+      assert_equal [signup_flows_before + 1, signup_flow.id], [ClientSignUpFlow.count, flow7_cycle.id]
 
       begin
         flow12_config = flow7_config
@@ -1396,6 +1411,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       flow14_user = create_social_client
       flow14_identity = create_social_identity(flow14_config, user: flow14_user, uid: flow14_uid)
 
+      signup_flow_count = ClientSignUpFlow.count
       flow14_state =
         begin
           flow15_provider = flow14_config.fetch(:provider)
@@ -1724,6 +1740,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
       assert_equal flow14_user.id, flow14_identity.user_id
       assert_not_nil flow14_identity.last_authenticated_at
+      assert_equal signup_flow_count, ClientSignUpFlow.count
     end
   end
 
@@ -1734,6 +1751,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       flow18_user = create_social_client
       flow18_identity = create_social_identity(flow18_config, user: flow18_user, uid: flow18_uid)
 
+      signup_flow_count = ClientSignUpFlow.count
       flow18_state =
         begin
           flow19_provider = flow18_config.fetch(:provider)
@@ -2062,6 +2080,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
       assert_equal flow18_user.id, flow18_identity.user_id
       assert_not_nil flow18_identity.last_authenticated_at
+      assert_equal signup_flow_count, ClientSignUpFlow.count
     end
   end
 
@@ -4749,10 +4768,6 @@ class SocialAuthAppFlowContractTest
         ENV.fetch("PUBLIC_BASE_STAFF_URL"),
         ENV.fetch("PRIVATE_BASE_STAFF_URL"),
       ],
-      "COM" => [
-        ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-        ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
-      ],
     }
     base_surface = base_hosts.find { |_surface, hosts| hosts.include?(normalized) }&.first
     return "surface:BASE_#{base_surface}" if base_surface
@@ -4762,13 +4777,10 @@ class SocialAuthAppFlowContractTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -4800,13 +4812,6 @@ class SocialAuthAppFlowContractTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -4828,23 +4833,6 @@ class SocialAuthAppFlowContractTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -4858,17 +4846,9 @@ class SocialAuthAppFlowContractTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -5285,31 +5265,6 @@ class SocialAuthAppFlowContractTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope:)

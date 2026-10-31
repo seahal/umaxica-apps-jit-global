@@ -31,13 +31,13 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
         OidcClientRegistry.find!(client_id).jwt_namespace
       end
 
-    assert_equal 12, namespaces.uniq.size
+    assert_equal 9, namespaces.uniq.size
     assert_equal(
-      %w(CORE_APP_JP CORE_COM_JP CORE_ORG_JP WARP_APP_JP WARP_COM_JP WARP_ORG_JP EDIT_ORG_WW BASE_RP_APP_WW
-         BASE_RP_COM_WW BASE_RP_ORG_WW PALM_APP_JP TECH_ORG_WW),
+      %w(CORE_APP_JP CORE_ORG_JP WARP_APP_JP WARP_ORG_JP EDIT_ORG_WW BASE_RP_APP_WW
+         BASE_RP_ORG_WW PALM_APP_JP TECH_ORG_WW),
       namespaces,
     )
-    assert_equal 12, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
+    assert_equal 9, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
   end

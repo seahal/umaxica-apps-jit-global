@@ -6,7 +6,6 @@ class VisaAuthorizationStartBoundaryTest < ActionDispatch::IntegrationTest
   test "Visa authorization HEAD cannot allocate an authentication transaction" do
     [
       ["visa.umaxica.app", "core-app-jp", "client", ClientOidcAuthorizationTransaction],
-      ["visa.umaxica.com", "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction],
       ["visa.umaxica.org", "core-org-jp", "operator", OperatorOidcAuthorizationTransaction],
     ].each do |host, client_id, realm, model|
       host! host
@@ -36,7 +35,6 @@ class VisaAuthorizationStartBoundaryTest < ActionDispatch::IntegrationTest
   test "Visa authorization GET rejects continuation parameters before allocating a transaction" do
     [
       ["visa.umaxica.app", "core-app-jp", "client", ClientOidcAuthorizationTransaction],
-      ["visa.umaxica.com", "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction],
       ["visa.umaxica.org", "core-org-jp", "operator", OperatorOidcAuthorizationTransaction],
     ].each do |host, client_id, realm, model|
       host! host
@@ -68,7 +66,6 @@ class VisaAuthorizationStartBoundaryTest < ActionDispatch::IntegrationTest
   test "Visa authorization POST rejects blank continuation fields as well as populated ones" do
     [
       ["visa.umaxica.app", "core-app-jp", "client", ClientOidcAuthorizationTransaction],
-      ["visa.umaxica.com", "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction],
       ["visa.umaxica.org", "core-org-jp", "operator", OperatorOidcAuthorizationTransaction],
     ].each do |host, client_id, realm, model|
       host! host
@@ -100,8 +97,6 @@ class VisaAuthorizationStartBoundaryTest < ActionDispatch::IntegrationTest
   [
     ["app", "visa.umaxica.app", "core-app-jp", "client", ClientOidcAuthorizationTransaction,
      ClientAuthAdmissionBinding,],
-    ["com", "visa.umaxica.com", "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction,
-     VisitorAuthAdmissionBinding,],
     ["org", "visa.umaxica.org", "core-org-jp", "operator", OperatorOidcAuthorizationTransaction,
      OperatorAuthAdmissionBinding,],
   ].each do |surface, host, client_id, realm, transaction_class, binding_class|

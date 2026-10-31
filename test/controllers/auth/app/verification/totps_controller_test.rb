@@ -6,6 +6,8 @@ require "test_helper"
 # Success, Turnstile rejection and malformed input are covered by AuthStepUpAdmissionTest; these
 # cases cover credential selection, replay of a consumed window, revocation and method admission.
 class Auth::App::Verification::TotpsControllerTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
 
   fixtures :client_statuses, :client_totp_credential_statuses
@@ -79,7 +81,10 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
 
     get new_auth_app_verification_totp_path(ri: "jp")
 
@@ -149,7 +154,10 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     now = ClientTotpCredential.database_now
@@ -225,7 +233,10 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
     credential.update!(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::REVOKED)
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
@@ -311,7 +322,11 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/"),
         )
-        browser.post(auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference })
+        browser.get(
+          auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS,
+        )
+
+        assert_equal 303, browser.response.status
         [browser, issuance.transaction]
       end
     now = ClientTotpCredential.database_now
@@ -387,7 +402,10 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
 
     get new_auth_app_verification_totp_path(ri: "jp")
 

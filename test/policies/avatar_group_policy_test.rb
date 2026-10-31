@@ -22,17 +22,13 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
     assert_predicate policy, :create?
   end
 
-  test "non-owner and com actor cannot list or create groups" do
+  test "non-owner actor cannot list or create groups" do
     membership = @bootstrap.account.persona_memberships.find_by!(enterprise: @bootstrap.collective)
     membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
     policy = AvatarGroupPolicy.new(AvatarGroup, user: @user)
 
     assert_not policy.index?
     assert_not policy.create?
-
-    Actor.install_context!(tld: :com)
-
-    assert_not AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
   end
 
   test "selected account and owner can show and mutate an active app group" do
@@ -106,7 +102,7 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
   test "relation scope is empty for non-owner actor or missing selected context" do
     group = create_group
 
-    assert_empty AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).apply_scope(
+    assert_empty AvatarGroupPolicy.new(AvatarGroup, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)).apply_scope(
       AvatarGroup.all,
       type: :active_record_relation,
     )

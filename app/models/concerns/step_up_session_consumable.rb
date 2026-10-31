@@ -169,8 +169,6 @@ module StepUpSessionConsumable
       key =
         if self == ClientStepUpSession && token.is_a?(ClientToken)
           :user_token_id
-        elsif self == VisitorStepUpSession && token.is_a?(VisitorToken)
-          :visitor_token_id
         elsif self == OperatorStepUpSession && token.is_a?(OperatorToken)
           :staff_token_id
         else

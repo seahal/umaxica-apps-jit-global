@@ -124,7 +124,7 @@ module Auth::CommonHelper
   end
 
   # Today's date is a typing convenience only. It is never eligible: the checkpoint rejects it via
-  # SignUpEligibilityPolicy.minimum_age_reached? and HasBirthdate#birthdate_not_future rejects it on persist.
+  # SignUpEligibilityPolicy.eligible? and HasBirthdate#birthdate_not_future rejects it on persist.
   def sign_up_birthdate_today_parts
     today = Time.zone.today
     {

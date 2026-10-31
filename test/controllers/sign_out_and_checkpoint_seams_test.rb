@@ -12,7 +12,6 @@ class SignOutAndCheckpointSeamsTest < ActiveSupport::TestCase
 
   [
     SignAppInCheckControllerSupport,
-    SignComInCheckControllerSupport,
     SignOrgInCheckControllerSupport,
   ].each do |concern|
     test "#{concern.name} starts the checkpoint page from an empty item list" do

@@ -1,0 +1,7 @@
+# WU-7 test Chronicle recovery candidates
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contained staged, unstaged and untracked changes.
+- A read-only PostgreSQL catalog query found `test_chronicle_db_0` through `test_chronicle_db_15`. Each contains one com Preference Chronicle row created before the 20:49 UTC browser attempts, and each row references one of the two pre-existing parents still in `test_com_setting_db`.
+- Full-row SHA-256 fingerprints differ across all 16 candidates. When `occurred_at`, `created_at`, `updated_at`, `discard_at` and `purge_eligible_at` are excluded, the remaining row contents have one common fingerprint. The original lost row's full contents were not captured before the incident, so these observations do not identify an exact replacement or prove any candidate has its original timestamps. The checked-in fixture uses time-dependent values, consistent with that uncertainty.
+- The local PostgreSQL server reported `archive_mode=off` and `wal_level=replica`; this alone does not rule out backups outside the server. A filename search under the workspace and `/tmp`, excluding dependency/vendor trees, found no candidate `.dump`, `.backup`, `.pgdump`, `.sql.gz`, `.snapshot`, or Chronicle-named backup. External backups were not searched.
+- Only read-only queries were executed. No record was copied, restored, deleted or changed. Do not substitute a worker's time-varying audit row for the lost original without owner direction. Fixture-based Rails tests and the WU-7 destructive migration remain on hold.

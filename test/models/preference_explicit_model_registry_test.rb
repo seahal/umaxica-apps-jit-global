@@ -6,7 +6,7 @@ require "test_helper"
 class PreferenceExplicitModelRegistryTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  PREFIXES = %w(App Com Org Client Operator Visitor).freeze
+  PREFIXES = %w(App Com Org Client Operator).freeze
   TYPES = %i(currency date_format time_format motion density page_size).freeze
 
   test "extended preference records and options are explicit model files" do

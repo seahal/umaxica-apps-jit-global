@@ -23,7 +23,7 @@
 #  fk_user_preference_languages_on_preference_id  (preference_id => client_preferences.id)
 #
 class ClientPreferenceLanguage < AppPrincipalRecord
-  belongs_to :preference, class_name: "ClientPreference", inverse_of: :user_preference_language
+  belongs_to :preference, class_name: "ClientPreference", inverse_of: :client_preference_language
   belongs_to :option,
              class_name: "ClientPreferenceLanguageOption",
              inverse_of: :client_preference_languages

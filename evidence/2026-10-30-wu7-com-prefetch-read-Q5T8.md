@@ -1,0 +1,6 @@
+# WU-7 com prefetch reads
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- Added a request test that sends GET and HEAD with `Purpose: prefetch` and `Sec-Purpose: prefetch` to seven Base com routes: root, preference index, theme and cookie screens, and consent, theme and Web Push APIs. It exercises missing, invalid and valid preference JWTs; the valid case also sends the browser binding. Each response was 200 and the SQL notification observer recorded no statements beginning with INSERT, UPDATE, DELETE, MERGE or TRUNCATE during these requests. A preceding consent write prepares the valid case and is outside the observed request interval.
+- Before the change, `PARALLEL_WORKERS=1 bin/rails test test/integration/anonymous_com_web_push_initialization_test.rb test/controllers/base/com/roots_controller_test.rb` passed with 35 runs and 397 assertions. Afterward the same selection passed with 36 runs and 482 assertions, zero failures, errors or skips. RuboCop passed on the changed test file.
+- This covers the listed routes and observed Active Record SQL statements; it does not prove absence of writes outside that observer or for every route. Full-suite comparison and WU-7 completion remain unverified. No migration was run in this slice.

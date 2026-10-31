@@ -28,10 +28,6 @@ class StaticAssetsEndpointsTest < ActionDispatch::IntegrationTest
       controller: "auth/app/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
-      controller: "auth/com/sitemaps",
-    },
-    {
       host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
       controller: "auth/org/sitemaps",
     },

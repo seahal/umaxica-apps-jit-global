@@ -75,6 +75,7 @@ class Operator < OrgPrincipalRecord
   PUBLIC_ID_ALPHABET = SecureRandom::BASE32_ALPHABET.join.freeze
   PUBLIC_ID_FORMAT = /\A[0-9A-FGHJKMNPQRSTVWXYZ]{16}\z/
   MAX_PUBLIC_ID_RETRIES = 5
+  AVAILABILITY_GUARD_LOCK = [0x554D4158, 0x4F504156].freeze
 
   encrypts :admin_locked_reason_note
 
@@ -178,7 +179,8 @@ class Operator < OrgPrincipalRecord
   has_one :core_org_operator_bridge,
           dependent: :destroy,
           inverse_of: :operator
-  has_one :staff_preference, class_name: "OperatorPreference", dependent: :destroy, inverse_of: :staff
+  has_one :operator_preference, class_name: "OperatorPreference", foreign_key: :operator_id,
+                             dependent: :destroy, inverse_of: :operator
 
   validates :status_id, numericality: { only_integer: true }
   mfa_status_reference OperatorMfaStatus
@@ -198,6 +200,16 @@ class Operator < OrgPrincipalRecord
 
   delegate :generate_public_id, to: :class
 
+  # Lifecycle and administrative-lock writers acquire this before any Operator row lock.
+  def self.lock_availability_guard!
+    connection = lease_connection
+    raise ActiveRecord::ActiveRecordError,
+          "operator availability guard requires a transaction" unless connection.transaction_open?
+
+    connection.execute("SELECT pg_advisory_xact_lock(#{AVAILABILITY_GUARD_LOCK.join(", ")})")
+  end
+  public_class_method :lock_availability_guard!
+
   def self.generate_public_id
     Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.length)] }.join
   end
@@ -207,6 +219,15 @@ class Operator < OrgPrincipalRecord
 
     value.strip.gsub(/[-_]/, "").upcase
   end
+
+  # SQL counterpart of capability_eligible?, used while guarding availability transitions.
+  def self.capability_eligible_at(now)
+    where(
+      access_state: AdministrativeAccessLockable::ACCESS_STATE_ENABLED,
+      withdrawal_started_at: nil, withdrawn_at: nil, deactivated_at: nil,
+    ).where.not(status_id: LOGIN_BLOCKED_STATUS_IDS).where(arel_table[:discard_at].gt(now))
+  end
+  public_class_method :capability_eligible_at
 
   def operator?
     true

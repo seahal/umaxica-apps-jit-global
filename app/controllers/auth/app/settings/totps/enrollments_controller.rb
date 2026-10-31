@@ -7,6 +7,9 @@ module Auth
       module Totps
         # POST starts the admitted candidate once; DELETE cancels the exact Base permission.
         class EnrollmentsController < ::Auth::App::ApplicationController
+          # D-59: TOTP enrollment is a step-up ceremony, not a Sign Entry.
+          sign_entry_classification! :excluded, reason: "signed-in settings surface, not a sign entry"
+
           include ::SignSettingsTotpRegistration
           include ::AuthStepUpCeremonyContext
 

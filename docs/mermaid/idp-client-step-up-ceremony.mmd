@@ -8,6 +8,8 @@ stateDiagram-v2
     state "revoked" as revoked
     %% expired, canceled and revoked are absorbing terminal states.
     [*] --> pending
+    %% APP TOTP rechecks owner, credential and device before recording evidence.
+    %% Passkey verification rechecks actor, credential and device before evidence.
     pending --> verified: record_verification! / record_registration_verification!
     verified --> verified: prepare_result_delivery!
     pending --> canceled: Base cancellation committer

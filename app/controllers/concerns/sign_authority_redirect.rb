@@ -43,7 +43,6 @@ module SignAuthorityRedirect
   def sign_authority_host
     case self.class.name
     when /\A(Auth::App|Base::App)::/ then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    when /\A(Auth::Com|Base::Com)::/ then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     when /\A(Auth::Org|Base::Org)::/ then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     else
       request.host
@@ -53,7 +52,6 @@ module SignAuthorityRedirect
   def base_rp_host
     case self.class.name
     when /\AAuth::App::/ then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    when /\AAuth::Com::/ then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     when /\AAuth::Org::/ then ENV.fetch("PUBLIC_BASE_STAFF_URL")
     else
       request.host

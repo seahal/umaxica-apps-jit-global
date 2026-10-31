@@ -8,9 +8,9 @@ module SignOidcLogout
   OIDC_LOGOUT_COMPLETED_SESSION_KEY = :oidc_logout_completed
   OIDC_LOGOUT_REALMS = {
     "app" => { device: ClientDeviceSession, grant: OpAppGrant, root: :client_token, resource_type: "client" },
-    "com" => { device: VisitorDeviceSession, grant: OpComGrant, root: :visitor_token, resource_type: "visitor" },
     "org" => { device: OperatorDeviceSession, grant: OpOrgGrant, root: :operator_token, resource_type: "operator" },
   }.freeze
+  include ::PreferenceWriteBoundary
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
@@ -77,7 +77,7 @@ module SignOidcLogout
     if pending
       return render_oidc_end_session_forbidden unless pending.device_session_public_id == device.public_id
 
-      return render_oidc_end_session_confirmation
+      return render_oidc_confirmation_page!
     end
 
     store_oidc_logout_request!(@oidc_end_session_request, device: device, grant: grant)
@@ -85,7 +85,7 @@ module SignOidcLogout
       return redirect_to(sign_out_edit_path, status: :see_other)
     end
 
-    render_oidc_end_session_confirmation
+    render_oidc_confirmation_page!
   end
 
   # Errors the authority stop can raise from storage or from its own refusal. Anything else is a
@@ -121,7 +121,7 @@ module SignOidcLogout
         clear_oidc_logout_browser!
         return render_oidc_already_signed_out
       end
-      finish_oidc_committed_logout(result)
+      finish_oidc_committed_logout(result, actor: resource)
     when :active
       precondition_failed ? render_oidc_end_session_forbidden : render_oidc_stop_failure
     when :unknown
@@ -131,7 +131,13 @@ module SignOidcLogout
     end
   end
 
-  def finish_oidc_committed_logout(result)
+  def finish_oidc_committed_logout(result, actor:)
+    begin
+      write_preference!(operation: :sign_out, actor:, submitted: {})
+    rescue StandardError => e
+      log_visa_preference_write_failure(:sign_out, e)
+    end
+
     clear_oidc_logout_browser!
     if result.grant_public_id.present? && result.post_logout_redirect_uri.present?
       redirect_to_jump_url(post_logout_redirect_uri_with_state(result), strict: true, status: :see_other)
@@ -188,6 +194,11 @@ module SignOidcLogout
 
   def render_oidc_end_session_confirmation
     render :show, status: :ok
+  end
+
+  def render_oidc_confirmation_page!
+    @sign_out_confirmation_page = true
+    render_oidc_end_session_confirmation
   end
 
   def render_oidc_already_signed_out
@@ -304,7 +315,6 @@ module SignOidcLogout
   def sign_out_confirmation_form_path
     case sign_surface_name
     when "app" then visa_app_oidc_logout_confirmation_path(ri: params[:ri])
-    when "com" then visa_com_oidc_logout_confirmation_path(ri: params[:ri])
     when "org" then visa_org_oidc_logout_confirmation_path(ri: params[:ri])
     else raise ArgumentError, "unsupported Visa logout surface: #{sign_surface_name.inspect}"
     end

@@ -7,15 +7,14 @@ require "test_helper"
 class ApplicationHelperTest < ActionView::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
-  fixtures :client_banners, :operator_banners, :visitor_banners, :clients, :client_statuses, :operators,
-           :operator_statuses, :visitors, :visitor_statuses, :visitor_visibilities, :visitor_security_modes,
-           :visitor_mfa_statuses
+  fixtures :client_banners, :operator_banners, :clients, :client_statuses, :operators,
+           :operator_statuses
 
   setup do
     @helper_context = view
     @helper_context.extend(ApplicationHelper)
-    define_singleton_method(:theme_cookie_value) { @helper_context.theme_cookie_value }
-    define_singleton_method(:theme_html_class) { @helper_context.theme_html_class }
+    define_singleton_method(:theme_cookie_value) { |value = nil| @helper_context.theme_cookie_value(value) }
+    define_singleton_method(:theme_html_class) { |value = nil| @helper_context.theme_html_class(value) }
     define_singleton_method(:edge_host) { @helper_context.edge_host }
     define_singleton_method(:current_banner_for) { |**kwargs| @helper_context.current_banner_for(**kwargs) }
   end
@@ -41,52 +40,34 @@ class ApplicationHelperTest < ActionView::TestCase
     end
   end
 
-  test "theme_cookie_value maps short codes" do
-    stub_cookie("dr")
-
-    assert_equal "system", theme_cookie_value
-
-    stub_cookie("li")
-
-    assert_equal "system", theme_cookie_value
-
-    stub_cookie("sy")
-
-    assert_equal "system", theme_cookie_value
+  test "theme_cookie_value maps the Preference theme codes and names" do
+    { "dr" => "dark", "dark" => "dark", "li" => "light", "light" => "light",
+      "sy" => "system", "system" => "system", }.each do |value, expected|
+      assert_equal expected, theme_cookie_value(value), value
+    end
   end
 
-  test "theme_cookie_value accepts full names" do
-    stub_cookie("dark")
+  test "theme_cookie_value reads the request Actor display value" do
+    Actor.install_context!(preferences: Actor::Preference.new(theme: "dr"))
 
-    assert_equal "system", theme_cookie_value
-
-    stub_cookie("light")
-
-    assert_equal "system", theme_cookie_value
-
-    stub_cookie("system")
-
-    assert_equal "system", theme_cookie_value
+    assert_equal "dark", theme_cookie_value
+  ensure
+    Actor.clear
   end
 
-  test "theme_cookie_value falls back to system for unknown values" do
-    stub_cookie("unknown")
+  test "theme_cookie_value uses system for a missing or unsupported value" do
+    Actor.install_context!(preferences: Actor::Preference::NULL)
 
     assert_equal "system", theme_cookie_value
+    assert_equal "system", theme_cookie_value("unknown")
+  ensure
+    Actor.clear
   end
 
-  test "theme_html_class includes dark class only for dark theme" do
-    stub_cookie("dark")
-
-    assert_equal "theme-system", theme_html_class
-
-    stub_cookie("light")
-
-    assert_equal "theme-system", theme_html_class
-
-    stub_cookie("system")
-
-    assert_equal "theme-system", theme_html_class
+  test "theme_html_class includes dark class only for dark Preference theme" do
+    assert_equal "theme-dark dark", theme_html_class("dr")
+    assert_equal "theme-light", theme_html_class("li")
+    assert_equal "theme-system", theme_html_class("sy")
   end
 
   test "page_title sets content for with title" do
@@ -105,17 +86,17 @@ class ApplicationHelperTest < ActionView::TestCase
   end
 
   test "theme_class is backward compatible alias for theme_html_class" do
-    stub_cookie("dark")
+    Actor.install_context!(preferences: Actor::Preference.new(theme: "dr"))
 
-    assert_equal theme_html_class, theme_class
+    assert_equal theme_html_class, @helper_context.theme_class
+  ensure
+    Actor.clear
   end
 
   test "current_banner_for returns current banner for each surface" do
     travel_to Time.zone.parse("2026-03-18 00:00:00 UTC") do
       assert_equal client_banners(:newer_current_user_banner), current_banner_for(tld: :app, region: :jp, domain: :news)
       assert_equal operator_banners(:current_staff_banner), current_banner_for(tld: :org, region: :jp, domain: :news)
-      assert_equal visitor_banners(:current_visitor_banner),
-                   current_banner_for(tld: :com, region: :jp, domain: :news)
     end
   end
 
@@ -192,17 +173,4 @@ class ApplicationHelperTest < ActionView::TestCase
   end
 
   private
-
-  def stub_cookie(theme)
-    cookies[:root_theme] = theme
-  end
-
-  def assert_theme_cookie_for(theme, path:, expected: theme)
-    stub_cookie(theme)
-
-    get(path)
-
-    assert_response :success
-    assert_select "html[data-theme=?]", expected
-  end
 end

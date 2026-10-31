@@ -4,7 +4,6 @@
 class IdentityEmailCeremonyReplayStore
   MODELS = {
     "app" => ClientEmailCeremonyTransaction,
-    "com" => VisitorEmailCeremonyTransaction,
     "org" => OperatorEmailCeremonyTransaction,
   }.freeze
 

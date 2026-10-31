@@ -8,6 +8,12 @@ whose `VISA_*` or existing surface JWKS endpoint must be used. The signed `url` 
 destination origin. The JWT `aud` remains the configured Jump audience (`https://jump.umaxica.net`);
 it is not the destination origin.
 
+Corporate status: the `*_COM` namespaces stay registered so the sixteen-namespace Jump contract
+keeps its signing keys, but `AUTH_COM`, `VISA_COM`, `BASE_COM`, `CORE_COM` and `WARP_COM` are
+inactive edges. No corporate host routes a credential ceremony, authorization request, callback or
+JWKS publication; the com rows below are retained only to describe the registered namespace set
+until the Jump scaffolding is retired.
+
 | Issuer namespace | Issuer origin | Destination namespace | Destination origin | Purpose |
 |---|---|---|---|---|
 | `AUTH_APP` | `https://auth.umaxica.app` | `VISA_APP` | `https://visa.umaxica.app` | authentication result |

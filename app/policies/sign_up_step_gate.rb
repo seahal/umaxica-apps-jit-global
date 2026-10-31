@@ -51,17 +51,6 @@ class SignUpStepGate
         birthdate: :auth_app_sign_up_check_telephone_birthdate_path,
       },
     },
-    com: {
-      "email" => {
-        otp: :auth_com_sign_up_check_email_otp_path,
-        birthdate: :auth_com_sign_up_check_email_birthdate_path,
-      },
-      "telephone" => {
-        otp: :auth_com_sign_up_check_telephone_otp_path,
-        passkey: :auth_com_sign_up_check_telephone_passkey_path,
-        birthdate: :auth_com_sign_up_check_telephone_birthdate_path,
-      },
-    },
   }.freeze
 
   CREATE_STEPS = %i(otp passkey).freeze
@@ -162,15 +151,6 @@ class SignUpStepGate
     controller.send(:current_sign_up_flow_ticket)
   end
 
-  def cycle_class
-    case surface
-    when :app then ClientSignUpFlow
-    when :com then VisitorSignUpFlow
-    else
-      raise ArgumentError, "unsupported sign-up surface"
-    end
-  end
-
   # The request must name the same flow instance that the session locator resolves. A page rendered
   # for an earlier flow, a request with no binding, and a binding minted for another surface fail
   # here and are never attributed to the current flow.
@@ -214,7 +194,6 @@ class SignUpStepGate
     owner_model, contact_model, outbox_model, owner_key =
       case surface
       when :app then [Client, ClientEmail, ClientContactAuditOutbox, :user_id]
-      when :com then [Visitor, VisitorEmail, VisitorContactAuditOutbox, :visitor_id]
       else return false
       end
     owner = owner_model.find_by(id: ticket.principal_id)

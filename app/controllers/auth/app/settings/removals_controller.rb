@@ -8,6 +8,9 @@ module Auth
       # sign/id owns credential lifecycle. This endpoint keeps the POST .../removal URL working
       # by redirecting to the resource's canonical sign settings page.
       class RemovalsController < ::Auth::App::ApplicationController
+        # D-59: credential removal redirects to the owner surface; it is not a Sign Entry.
+        sign_entry_classification! :excluded, reason: "signed-in settings surface, not a sign entry"
+
         include ::SignAuthorityRedirect
 
         AUTHENTICATION_MODE = :private

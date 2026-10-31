@@ -1,13 +1,4 @@
-# == Schema Information
-#
-# Table name: app_preference_statuses
-# Database name: app_setting
-#
-#  id :bigint           not null, primary key
-#
-nothing:
+active:
   id: 0
-deleted:
+retired:
   id: 1
-legacy_nothing:
-  id: 2

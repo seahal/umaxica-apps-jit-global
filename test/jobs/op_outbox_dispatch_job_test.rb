@@ -166,6 +166,23 @@ class OpOutboxDispatchJobTest < ActiveSupport::TestCase
     assert_operator @event.next_attempt_at, :>, OpAppAuthorityStopParticipant.database_now
   end
 
+  test "a transient RP delivery failure preserves the OP stop until a later delivery succeeds" do
+    OidcBackchannelLogoutClient.stub(:call, "http_503") { OpOutboxDispatchJob.perform_now }
+
+    assert_predicate @grant.client_token.reload, :revoked?
+    assert_not_nil @grant.reload.revoked_at
+    assert_equal [status("pending"), "http_503", 1],
+                 [@event.reload.status_id, @event.last_outcome, @event.delivery_attempts]
+
+    @event.update!(next_attempt_at: OpAppAuthorityStopParticipant.database_now - 1.second)
+    OidcBackchannelLogoutClient.stub(:call, :acknowledged) { OpOutboxDispatchJob.perform_now }
+
+    assert_predicate @grant.client_token.reload, :revoked?
+    assert_not_nil @grant.reload.revoked_at
+    assert_equal [status("acknowledged"), "acknowledged", 2],
+                 [@event.reload.status_id, @event.last_outcome, @event.delivery_attempts]
+  end
+
   test "an expired lease from a crashed worker is picked up again" do
     @event.update_columns(lease_expires_at: 1.minute.ago, delivery_attempts: 1)
     OidcBackchannelLogoutClient.stub(:call, :acknowledged) { OpOutboxDispatchJob.perform_now }

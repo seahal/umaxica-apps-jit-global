@@ -4,10 +4,10 @@
 require "test_helper"
 
 class OtpEmailNotifierAdapterTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(sign_up credential_registration recovery withdrawal).each do |purpose|
       test "#{surface} notifier adapter retains #{purpose} transaction and generation binding" do
-        notifier = (surface == "app") ? Notify::App::OtpNotifier : Notify::Com::OtpNotifier
+        notifier = Notify::App::OtpNotifier
         references =
           case purpose
           when "sign_up"

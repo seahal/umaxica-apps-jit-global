@@ -4,6 +4,9 @@
 class Auth::Org::Edge::V0::Token::ChecksController < ::Auth::Org::ApplicationController
   include SignEdgeV0JsonApi
 
+  # D-59: the edge token check is not a browser Sign Entry.
+  sign_entry_classification! :excluded, reason: "edge token endpoint, not a sign entry"
+
   AUTHENTICATION_MODE = :deny_all
 
   declare_authentication_mode! :open

@@ -2,28 +2,23 @@
 
 require "test_helper"
 
-# The chrome decides theme and cookie controls by family and surface, never by surface alone, and
-# hands each control the same-origin endpoint its family serves. Palm shares the app surface with
-# Core but serves no preference endpoint, which is how a surface-only decision rendered controls on
-# Palm that called a route Palm does not have.
+# The chrome decides Preference controls by family and surface, never by surface alone. Base owns
+# browser writes; Auth, Core, and Warp remain display readers without interactive control routes.
 class SurfaceChromePreferenceControlsTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_preferences, :client_token_kinds
 
   PAGES = [
     { family: "core", surface: "app", host: ENV.fetch("PUBLIC_CORE_SERVICE_URL"), path: "/" },
-    { family: "core", surface: "com", host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL"), path: "/" },
     { family: "core", surface: "org", host: ENV.fetch("PUBLIC_CORE_STAFF_URL"), path: "/" },
     { family: "warp", surface: "app", host: ENV.fetch("PUBLIC_WARP_SERVICE_URL"), path: "/" },
-    { family: "warp", surface: "com", host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL"), path: "/" },
     { family: "warp", surface: "org", host: ENV.fetch("PUBLIC_WARP_STAFF_URL"), path: "/" },
     { family: "base", surface: "app", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), path: "/preference" },
     { family: "base", surface: "com", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), path: "/preference" },
     { family: "base", surface: "org", host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), path: "/preference" },
     { family: "auth", surface: "app", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), path: "/sign/up/email/new" },
-    { family: "auth", surface: "com", host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), path: "/sign/up/email/new" },
   ].freeze
 
-  test "families with a preference endpoint hand each control its same-origin endpoint" do
+  test "page chrome exposes browser write endpoints only to Base" do
     PAGES.each do |page|
       expected = PreferenceBrowserControlsRegistry.fetch(family: page.fetch(:family), surface: page.fetch(:surface))
       host! page.fetch(:host)
@@ -84,11 +79,14 @@ class SurfaceChromePreferenceControlsTest < ActionDispatch::IntegrationTest
 
       assert_equal expected.theme_endpoint_path, chrome.dig("theme_controls", "endpoint_url"), label
       assert_equal expected.cookie_endpoint_path, chrome.dig("cookie_controls", "endpoint_url"), label
-      assert_match %r{\A/(?!/)}, chrome.dig("theme_controls", "endpoint_url"), label
+      if expected.theme_endpoint_path
+        assert_match %r{\A/(?!/)}, chrome.dig("theme_controls", "endpoint_url"), label
+        assert_match %r{\A/(?!/)}, chrome.dig("cookie_controls", "endpoint_url"), label
+      end
     end
   end
 
-  test "core controls use the canonical api preferences endpoints" do
+  test "core receives no interactive Preference controls" do
     host! ENV.fetch("PUBLIC_CORE_SERVICE_URL")
 
     get "/", params: { ri: "jp" }
@@ -96,8 +94,31 @@ class SurfaceChromePreferenceControlsTest < ActionDispatch::IntegrationTest
     assert_response :success
     chrome = inertia_props.fetch("chrome")
 
-    assert_equal "/api/v0/preferences/theme", chrome.dig("theme_controls", "endpoint_url")
-    assert_equal "/api/v0/preferences/cookie", chrome.dig("cookie_controls", "endpoint_url")
+    assert_nil chrome.dig("theme_controls", "endpoint_url")
+    assert_nil chrome.dig("cookie_controls", "endpoint_url")
+  end
+
+  # Warp com lost its browser preference endpoints with the rest of its credential surface. The
+  # page chrome must say so explicitly rather than pointing at routes the host does not serve.
+  test "warp com renders a read-only link to Base cookie settings" do
+    host! ENV.fetch("PUBLIC_WARP_CORPORATE_URL")
+    https!
+
+    get "/", params: { ri: "jp" }
+
+    assert_response :success
+    chrome = inertia_props.fetch("chrome")
+
+    assert_equal "com", chrome.fetch("surface")
+    assert_nil chrome.fetch("theme_controls")
+    cookie_controls = chrome.fetch("cookie_controls")
+
+    assert_nil cookie_controls.fetch("endpoint_url")
+    settings = URI.parse(cookie_controls.fetch("settings_url"))
+
+    assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), settings.host
+    assert_equal "/preference/cookie/edit", settings.path
+    assert_equal "https", settings.scheme
   end
 
   test "palm app renders no theme or cookie controls even though it is an app surface" do

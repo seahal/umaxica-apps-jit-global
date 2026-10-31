@@ -20,27 +20,33 @@ class IdentityTotpEnrollmentVerificationCommitter
           return false unless actor.login_allowed?
 
           OpBaseAppRecord.connected_to(role: :writing) do
-            token.with_lock do
-              record = ClientStepUpSession.lock.find_by!(
-                user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
-              )
-              transaction.with_lock do
-                child = ClientTotpCeremonyTransaction.lock.find_by!(
-                  step_up_ceremony_transaction_ref: transaction.transaction_id, credential_candidate_ref: candidate_ref,
-                )
-                candidate = IdentityTotpCeremonyCandidate.lock.find_by!(ref: candidate_ref)
-                now = ClientStepUpCeremonyTransaction.database_now
-                validate_permission!(actor, token, transaction, record, now)
-                validate_candidate!(child, candidate, transaction, actor, token, now)
-                accepted = valid_code?(candidate.private_key, code, now)
-                unless accepted
-                  record.update!(attempt_count: record.attempt_count + 1)
-                  return false
-                end
+            device = token.device_session_record!
+            device.with_lock do
+              token.with_lock do
+                validate_device!(actor, token, device)
 
-                candidate.update!(last_otp_at: Time.zone.at(accepted), title: title)
-                transaction.record_registration_verification!(method: "totp", verified_at: now)
-                true
+                transaction.with_lock do
+                  record = ClientStepUpSession.lock.find_by!(
+                    user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
+                  )
+                  child = ClientTotpCeremonyTransaction.lock.find_by!(
+                    step_up_ceremony_transaction_ref: transaction.transaction_id,
+                    credential_candidate_ref: candidate_ref,
+                  )
+                  candidate = IdentityTotpCeremonyCandidate.lock.find_by!(ref: candidate_ref)
+                  now = ClientStepUpCeremonyTransaction.database_now
+                  validate_permission!(actor, token, transaction, record, now)
+                  validate_candidate!(child, candidate, transaction, actor, token, now)
+                  accepted = valid_code?(candidate.private_key, code, now)
+                  unless accepted
+                    record.update!(attempt_count: record.attempt_count + 1)
+                    return false
+                  end
+
+                  candidate.update!(last_otp_at: Time.zone.at(accepted), title: title)
+                  transaction.record_registration_verification!(method: "totp", verified_at: now)
+                  true
+                end
               end
             end
           end
@@ -49,6 +55,13 @@ class IdentityTotpEnrollmentVerificationCommitter
     end
 
     private
+
+    def validate_device!(actor, token, device)
+      return if device.usable? && device.user_id == actor.id && token.device_session_id == device.id &&
+        device.current_refresh_token_id == token.id
+
+      raise IdentityTotpCeremonyContract::Error, "TOTP enrollment device unavailable"
+    end
 
     # Bootstrap retains the original protected operation; the child binds TOTP registration.
     # Later authenticator registration requires its own settings scope.

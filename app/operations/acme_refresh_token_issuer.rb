@@ -86,8 +86,7 @@ class AcmeRefreshTokenIssuer
 
   def find_token(public_id)
     ClientToken.find_by(public_id: public_id) ||
-      OperatorToken.find_by(public_id: public_id) ||
-      VisitorToken.find_by(public_id: public_id)
+      OperatorToken.find_by(public_id: public_id)
   end
 
   # When reuse is observed (a valid token that no longer matches the
@@ -156,7 +155,6 @@ class AcmeRefreshTokenIssuer
   def actor_identifier_column(token)
     return :user_id if token.respond_to?(:user_id) && token.user_id.present?
     return :staff_id if token.respond_to?(:staff_id) && token.staff_id.present?
-    return :visitor_id if token.respond_to?(:visitor_id) && token.visitor_id.present?
 
     nil
   end

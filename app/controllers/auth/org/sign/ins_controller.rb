@@ -12,6 +12,7 @@ module Auth
         include ::SignEntryExit
 
         AUTHENTICATION_MODE = :guest
+        sign_entry_classification! :sign_in
         declare_authentication_mode! :guest, no_redirect: true
 
         before_action -> {

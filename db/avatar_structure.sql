@@ -756,43 +756,6 @@ ALTER SEQUENCE public.avatar_groups_id_seq OWNED BY public.avatar_groups.id;
 
 
 --
--- Name: avatar_individual_bindings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.avatar_individual_bindings (
-    id bigint NOT NULL,
-    avatar_id bigint NOT NULL,
-    individual_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    public_id character varying(21) CONSTRAINT avatar_individual_bindings_public_id_not_null1 NOT NULL,
-    assigned_at timestamp(6) with time zone CONSTRAINT avatar_individual_bindings_assigned_at_not_null1 NOT NULL,
-    revoked_at timestamp(6) with time zone,
-    CONSTRAINT chk_avatar_individual_bindings_pid CHECK ((char_length((public_id)::text) = 21)),
-    CONSTRAINT chk_avatar_individual_bindings_revoked_after_assigned CHECK (((revoked_at IS NULL) OR (revoked_at >= assigned_at)))
-);
-
-
---
--- Name: avatar_individual_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.avatar_individual_bindings_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: avatar_individual_bindings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.avatar_individual_bindings_id_seq OWNED BY public.avatar_individual_bindings.id;
-
-
---
 -- Name: avatar_lifecycle_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2317,13 +2280,6 @@ ALTER TABLE ONLY public.avatar_groups ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
--- Name: avatar_individual_bindings id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.avatar_individual_bindings ALTER COLUMN id SET DEFAULT nextval('public.avatar_individual_bindings_id_seq'::regclass);
-
-
---
 -- Name: avatar_lifecycle_events id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2737,14 +2693,6 @@ ALTER TABLE ONLY public.avatar_group_ownership_periods
 
 ALTER TABLE ONLY public.avatar_groups
     ADD CONSTRAINT avatar_groups_pkey PRIMARY KEY (id);
-
-
---
--- Name: avatar_individual_bindings avatar_individual_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.avatar_individual_bindings
-    ADD CONSTRAINT avatar_individual_bindings_pkey PRIMARY KEY (id);
 
 
 --
@@ -3284,20 +3232,6 @@ CREATE UNIQUE INDEX idx_avatar_group_ownership_periods_one_current ON public.ava
 
 
 --
--- Name: idx_avatar_individual_bindings_active_avatar; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_avatar_individual_bindings_active_avatar ON public.avatar_individual_bindings USING btree (avatar_id) WHERE (revoked_at IS NULL);
-
-
---
--- Name: idx_avatar_individual_bindings_active_individual; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_avatar_individual_bindings_active_individual ON public.avatar_individual_bindings USING btree (individual_id) WHERE (revoked_at IS NULL);
-
-
---
 -- Name: idx_avatar_ownership_periods_avatar_id_all_rows; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3484,27 +3418,6 @@ CREATE INDEX index_avatar_groups_on_account_surface_and_account_public_id ON pub
 --
 
 CREATE UNIQUE INDEX index_avatar_groups_on_public_id ON public.avatar_groups USING btree (public_id);
-
-
---
--- Name: index_avatar_individual_bindings_on_avatar_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_individual_bindings_on_avatar_id ON public.avatar_individual_bindings USING btree (avatar_id);
-
-
---
--- Name: index_avatar_individual_bindings_on_individual_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_individual_bindings_on_individual_id ON public.avatar_individual_bindings USING btree (individual_id);
-
-
---
--- Name: index_avatar_individual_bindings_on_public_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_avatar_individual_bindings_on_public_id ON public.avatar_individual_bindings USING btree (public_id);
 
 
 --
@@ -4321,14 +4234,6 @@ ALTER TABLE ONLY public.avatar_agent_bindings
 
 
 --
--- Name: avatar_individual_bindings fk_avatar_individual_bindings_on_avatar_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.avatar_individual_bindings
-    ADD CONSTRAINT fk_avatar_individual_bindings_on_avatar_id FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
-
-
---
 -- Name: avatar_lifecycle_events fk_avatar_lifecycle_events_from_state_key; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4413,7 +4318,7 @@ ALTER TABLE ONLY public.avatars
 --
 
 ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details
-    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4445,7 +4350,7 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4509,7 +4414,7 @@ ALTER TABLE ONLY public.avatar_bureau_agent_grants
 --
 
 ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details
-    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4597,7 +4502,7 @@ ALTER TABLE ONLY public.avatar_lifecycle_events
 --
 
 ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details
-    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4637,7 +4542,7 @@ ALTER TABLE ONLY public.member_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4669,7 +4574,7 @@ ALTER TABLE ONLY public.client_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4717,7 +4622,7 @@ ALTER TABLE ONLY public.member_avatar_oversights
 --
 
 ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
-    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4725,7 +4630,7 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4855,6 +4760,7 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261029120100'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261020120001'),

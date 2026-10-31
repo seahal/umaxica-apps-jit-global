@@ -9,7 +9,7 @@
 class EnforcementExpiryJob < ApplicationJob
   queue_as :retention
 
-  CASE_CLASSES = [AppEnforcementCase, ComEnforcementCase, OrgEnforcementCase].freeze
+  CASE_CLASSES = [AppEnforcementCase, OrgEnforcementCase].freeze
 
   def perform(batch_size: 200)
     now = Time.current

@@ -9,7 +9,6 @@ module Core
       include ::JumpRtReturnVerification
       include ::Session
       include ::PreferenceGlobal
-      include ::PreferenceAdoption
       include ::BrowserRpAuthentication
       include ::AuthenticationWithdrawalGate
       include ::BrowserRpSafeRequestRefresh
@@ -109,9 +108,6 @@ module Core
 
       private
 
-      def preference_dbsc_path
-        dbsc_canonical_url(core_app_api_v0_preferences_dbsc_path)
-      end
     end
   end
 end

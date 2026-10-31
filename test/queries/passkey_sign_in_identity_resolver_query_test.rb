@@ -5,7 +5,7 @@ require "test_helper"
 # adr/passkey-identifier-first-sign-in.md V1: only an effective contact binding of the same surface
 # selects an Identity; every other identifier selects nobody.
 class PasskeySignInIdentityResolverQueryTest < ActiveSupport::TestCase
-  fixtures :client_statuses, :client_email_statuses, :visitor_statuses, :visitor_email_statuses
+  fixtures :client_statuses, :client_email_statuses
 
   setup do
     @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
@@ -53,12 +53,6 @@ class PasskeySignInIdentityResolverQueryTest < ActiveSupport::TestCase
       surface: :app,
       identifier: "unknown-#{SecureRandom.hex(4)}@example.test",
     )
-  end
-
-  test "an APP contact never selects a COM Identity" do
-    @email.finalize_binding!
-
-    assert_nil PasskeySignInIdentityResolverQuery.call(surface: :com, identifier: @email.address)
   end
 
   test "an effective Telephone binding selects its Identity" do

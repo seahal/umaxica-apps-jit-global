@@ -1,61 +1,15 @@
-# == Schema Information
-#
-# Table name: app_preferences
-# Database name: app_setting
-#
-#  id                       :bigint           not null, primary key
-#  dbsc_challenge           :text
-#  dbsc_challenge_issued_at :datetime
-#  dbsc_public_key          :jsonb
-#  discard_at             :datetime         default(Infinity), not null
-#  explicit_fields          :jsonb            not null
-#  jti                      :string
-#  purge_eligible_at                :datetime         default(Infinity), not null
-#  token_digest             :binary
-#  used_at                  :datetime
-#  created_at               :datetime         not null
-#  updated_at               :datetime         not null
-#  binding_method_id        :bigint           default(0), not null
-#  dbsc_session_id          :string
-#  dbsc_status_id           :bigint           default(0), not null
-#  public_id                :string           not null
-#  replaced_by_id           :bigint
-#  status_id                :bigint           default(0), not null
-#
-# Indexes
-#
-#  index_app_preferences_on_binding_method_id  (binding_method_id)
-#  index_app_preferences_on_dbsc_session_id    (dbsc_session_id) UNIQUE
-#  index_app_preferences_on_dbsc_status_id     (dbsc_status_id)
-#  index_app_preferences_on_jti                (jti) UNIQUE
-#  index_app_preferences_on_public_id          (public_id) UNIQUE
-#  index_app_preferences_on_purge_eligible_at          (purge_eligible_at)
-#  index_app_preferences_on_replaced_by_id     (replaced_by_id)
-#  index_app_preferences_on_status_id          (status_id)
-#  index_app_preferences_on_token_digest       (token_digest)
-#  index_app_preferences_on_used_at            (used_at)
-#
-# Foreign Keys
-#
-#  fk_app_preferences_on_binding_method_id  (binding_method_id => app_preference_binding_methods.id)
-#  fk_app_preferences_on_dbsc_status_id     (dbsc_status_id => app_preference_dbsc_statuses.id)
-#  fk_app_preferences_on_status_id          (status_id => app_preference_statuses.id)
-#  fk_rails_...                             (replaced_by_id => app_preferences.id) ON DELETE => nullify
-#
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 one:
-  public_id: "922xxxxxxxxxxxxxxxxxx" # was app_pref_001
-  binding_method_id: <%= AppPreferenceBindingMethod::NOTHING %>
-  dbsc_status_id: <%= AppPreferenceDbscStatus::NOTHING %>
-  status_id: 2
-  purge_eligible_at: <%= 20.years.from_now %>
-  discard_at: <%= 20.years.from_now %>
-  token_digest: <%= Digest::SHA256.hexdigest("test_token_001") %>
+  id: 1
+  public_id: "922xxxxxxxxxxxxxxxxxx"
+  jti: "app-preference-jti-one"
+  status_id: 0
+  last_issued_at: <%= Time.current %>
+  last_issued_expires_at: <%= 20.years.from_now %>
+
 two:
-  public_id: "820xxxxxxxxxxxxxxxxxx" # was app_pref_002
-  binding_method_id: <%= AppPreferenceBindingMethod::NOTHING %>
-  dbsc_status_id: <%= AppPreferenceDbscStatus::NOTHING %>
-  status_id: 2
-  purge_eligible_at: <%= 20.years.from_now %>
-  discard_at: <%= 20.years.from_now %>
-  token_digest: <%= Digest::SHA256.hexdigest("test_token_002") %>
+  id: 2
+  public_id: "820xxxxxxxxxxxxxxxxxx"
+  jti: "app-preference-jti-two"
+  status_id: 0
+  last_issued_at: <%= Time.current %>
+  last_issued_expires_at: <%= 20.years.from_now %>

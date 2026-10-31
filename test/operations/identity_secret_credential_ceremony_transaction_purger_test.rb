@@ -10,14 +10,12 @@ class IdentitySecretCredentialCeremonyTransactionPurgerTest < ActiveSupport::Tes
 
     stale_app = create_sc_tx!(ClientSecretCredentialCeremonyTransaction, expires_at: now - retention - 1.hour)
     fresh_app = create_sc_tx!(ClientSecretCredentialCeremonyTransaction, expires_at: now + 1.hour)
-    stale_com = create_sc_tx!(VisitorSecretCredentialCeremonyTransaction, expires_at: now - retention - 2.hours)
     stale_org = create_sc_tx!(OperatorSecretCredentialCeremonyTransaction, expires_at: now - retention - 3.hours)
 
     result = IdentitySecretCredentialCeremonyTransactionPurger.new(now: now, retention_period: retention).call
 
-    assert_equal({ app: 1, com: 1, org: 1 }, result)
+    assert_equal({ app: 1, org: 1 }, result)
     assert_nil ClientSecretCredentialCeremonyTransaction.find_by(id: stale_app.id)
-    assert_nil VisitorSecretCredentialCeremonyTransaction.find_by(id: stale_com.id)
     assert_nil OperatorSecretCredentialCeremonyTransaction.find_by(id: stale_org.id)
     assert ClientSecretCredentialCeremonyTransaction.exists?(fresh_app.id)
   end

@@ -41,7 +41,6 @@ module WithdrawalOccurrenceRecording
   def self.occurrence_class_for(subject)
     case subject
     when Client then ClientOccurrence
-    when Visitor then VisitorOccurrence
     else
       raise ArgumentError, "unsupported withdrawal occurrence subject: #{subject.class.name}"
     end
@@ -49,14 +48,12 @@ module WithdrawalOccurrenceRecording
 
   def self.occurrence_status_id_for(occurrence_class)
     return ClientOccurrenceStatus::ACTIVE if occurrence_class == ClientOccurrence
-    return VisitorOccurrenceStatus::ACTIVE if occurrence_class == VisitorOccurrence
 
     raise ArgumentError, "unsupported occurrence class: #{occurrence_class.name}"
   end
 
   def self.occurrence_status_class_for(occurrence_class)
     return ClientOccurrenceStatus if occurrence_class == ClientOccurrence
-    return VisitorOccurrenceStatus if occurrence_class == VisitorOccurrence
 
     raise ArgumentError, "unsupported occurrence class: #{occurrence_class.name}"
   end
@@ -78,7 +75,6 @@ module WithdrawalOccurrenceRecording
   def self.surface_for(subject)
     case subject
     when Client then "app"
-    when Visitor then "com"
     else
       raise ArgumentError, "unsupported subject: #{subject.class.name}"
     end

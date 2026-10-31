@@ -4,6 +4,137 @@
 require "test_helper"
 
 class EnforcementReconciliationJobTest < ActiveJob::TestCase
+  test "retries a missing ORG principal lock and records the Case's access audit" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    operator = operators(:one)
+    the_case = OrgEnforcementCase.new(
+      kind: "security_lock", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: actor.public_id, applied_by_operator_public_id: operator.public_id,
+    )
+    the_case.build_principal_effect(
+      principal_public_id: actor.public_id, access_blocking: true, effective_at: Time.current,
+    )
+
+    AdministrativeAccessLock.stub(:lock!, ->(**) { raise ActiveRecord::RecordNotUnique }) do
+      assert_raises(ActiveRecord::RecordNotUnique) do
+        EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+      end
+    end
+
+    EnforcementReconciliationJob.perform_now
+
+    assert_predicate actor.reload, :admin_locked?
+    assert_predicate AccountAccessEvent.where(account_type: "Operator", account_id: actor.id)
+      .where("metadata @> ?::jsonb", { enforcement_case_public_id: the_case.public_id }.to_json), :exists?
+    assert_not OrgEnforcementCase.pending_convergence.exists?(id: the_case.id)
+  end
+
+  test "a lock from another decision does not complete this Case's principal effect" do
+    client = create_test_client!
+    operator = operators(:one)
+    AdministrativeAccessLock.lock!(account: client, operator: operator, reason_code: "security_incident")
+    the_case = AppEnforcementCase.new(
+      kind: "security_lock", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: client.public_id, applied_by_operator_public_id: operator.public_id,
+    )
+    the_case.build_principal_effect(
+      principal_public_id: client.public_id, access_blocking: true, effective_at: Time.current,
+    )
+
+    AdministrativeAccessLock.stub(:lock!, ->(**) { raise ActiveRecord::RecordNotUnique }) do
+      assert_raises(ActiveRecord::RecordNotUnique) do
+        EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+      end
+    end
+
+    EnforcementReconciliationJob.perform_now
+
+    assert_predicate AccountAccessEvent.where(account_type: "Client", account_id: client.id)
+      .where("metadata @> ?::jsonb", { enforcement_case_public_id: the_case.public_id }.to_json)
+      .where(event_type: AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK_REAFFIRMED), :exists?
+    assert_not AppEnforcementCase.pending_convergence.exists?(id: the_case.id)
+  end
+
+  test "retries the principal effect when its access audit failed after the principal lock" do
+    client = create_test_client!
+    operator = operators(:one)
+    the_case = AppEnforcementCase.new(
+      kind: "security_lock", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: client.public_id, applied_by_operator_public_id: operator.public_id,
+    )
+    the_case.build_principal_effect(
+      principal_public_id: client.public_id, access_blocking: true, effective_at: Time.current,
+    )
+
+    AccountAccessEvent.stub(:create!, ->(**) { raise ActiveRecord::RecordNotUnique }) do
+      assert_raises(ActiveRecord::RecordNotUnique) do
+        EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+      end
+    end
+
+    assert_predicate client.reload, :admin_locked?
+    assert AppEnforcementCase.pending_convergence.exists?(id: the_case.id)
+
+    EnforcementReconciliationJob.perform_now
+
+    lock_types = [AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK, AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK_REAFFIRMED]
+
+    assert_predicate AccountAccessEvent.where(account_type: "Client", account_id: client.id)
+      .where("metadata @> ?::jsonb", { enforcement_case_public_id: the_case.public_id }.to_json)
+      .where(event_type: lock_types), :exists?
+    assert_not AppEnforcementCase.pending_convergence.exists?(id: the_case.id)
+  end
+
+  test "a missing principal remains pending and is reported during reconciliation" do
+    the_case = AppEnforcementCase.create!(
+      kind: "security_lock", state: "active", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: SecureRandom.uuid, applied_by_operator_public_id: "apply-test-operator",
+    )
+    logged = []
+
+    Rails.logger.stub(:error, ->(message) { logged << message }) { EnforcementReconciliationJob.perform_now }
+
+    assert AppEnforcementCase.pending_convergence.exists?(id: the_case.id)
+    assert_nil the_case.reload.sessions_revoked_at
+    assert_nil the_case.audited_at
+    assert logged.any? { |message| message.include?(the_case.public_id) && message.include?("RecordNotFound") }
+  end
+
+  test "retries an unestablished principal lock before marking the Case converged" do
+    client = create_test_client!
+    operator = operators(:one)
+    the_case = AppEnforcementCase.new(
+      kind: "security_lock", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: client.public_id, applied_by_operator_public_id: operator.public_id,
+    )
+    the_case.build_principal_effect(
+      principal_public_id: client.public_id, access_blocking: true,
+      effective_at: Time.current,
+    )
+
+    AdministrativeAccessLock.stub(:lock!, ->(**) { raise ActiveRecord::RecordNotUnique }) do
+      assert_raises(ActiveRecord::RecordNotUnique) do
+        EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+      end
+    end
+
+    logged = []
+    Rails.logger.stub(:error, ->(message) { logged << message }) do
+      EnforcementReconciliationJob.perform_now
+    end
+
+    assert_predicate client.reload, :admin_locked?
+    assert_not AppEnforcementCase.pending_convergence.exists?(id: the_case.id)
+    assert_predicate the_case.reload.sessions_revoked_at, :present?
+    assert_predicate the_case.audited_at, :present?
+    assert_empty logged
+  end
+
   test "reconciles a case whose sessions_revoked_at and audited_at are still nil after apply!" do
     client = create_test_client!
     operator = operators(:one)

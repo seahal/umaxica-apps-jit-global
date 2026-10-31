@@ -1,0 +1,8 @@
+# WU-7 com anonymous explicit-fields removal
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contained staged, unstaged and untracked changes.
+- The owner authorized destructive migration. The test-only scope, pre-change counts, backup and recovery limits are recorded in `plans/2026-10-30-wu7-explicit-fields-ticket.md`. Before execution, both preference rows contained empty explicit-fields arrays.
+- Under the test process lock, `RAILS_ENV=test bin/rails db:migrate:up:com_setting VERSION=20261030214029` succeeded against the local test database. The migration locks the table, refuses nonempty metadata, and removes the anonymous column; Rails reported 0.0032 seconds. A later query found the column absent and two preference rows retained. Production and Neon were not targeted.
+- Removed the anonymous com explicit-fields concern and region-bundle marking; the shared language edit checks whether the model supports explicit metadata. The three-realm regional update test now checks the absence of the com column and retains app/org explicit-metadata assertions. Actor-local metadata was not removed.
+- Before the change, selected com write, Web Push initialization and shared-base tests passed: 86 runs, 729 assertions. Afterward, the expanded com and shared-base selection passed: 126 runs, 941 assertions. The three realm region-update cases passed: 3 runs, 39 assertions. Both results had zero failures, errors or skips. RuboCop passed for the four checked application and migration files.
+- Nonempty-metadata refusal, backup restoration, schema-dump parity, full suite and WU-7 completion remain unverified. The pre-existing staged and unstaged schema dump was not overwritten.

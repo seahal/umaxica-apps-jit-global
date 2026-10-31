@@ -9,8 +9,6 @@ class EmailIdentifierPurger
         case record
         when ClientEmail
           [record.association(:user).tap { |owner| owner.reset_scope }.scope.take, AppZenithRecord]
-        when VisitorEmail
-          [record.association(:visitor).tap { |owner| owner.reset_scope }.scope.take, ComZenithRecord]
         when OperatorEmail
           [record.association(:staff).tap { |owner| owner.reset_scope }.scope.take, OrgZenithRecord]
         else raise ArgumentError, "unsupported email identifier"
@@ -27,7 +25,6 @@ class EmailIdentifierPurger
           actual_owner_id =
             case current
             when ClientEmail then current.user_id
-            when VisitorEmail then current.visitor_id
             when OperatorEmail then current.staff_id
             end
           raise ArgumentError, "email purge owner mismatch" unless actual_owner_id == owner.id
@@ -46,7 +43,7 @@ class EmailIdentifierPurger
     def purge_permitted?(current, owner, now)
       eligible =
         case current
-        when ClientEmail, VisitorEmail then current.lapsed?(now) && current.purgeable?(now)
+        when ClientEmail then current.lapsed?(now) && current.purgeable?(now)
         when OperatorEmail then owner.lapsed?(now) && owner.purgeable?(now)
         end
       raise ArgumentError, "email identifier is still live or recoverable" unless eligible
@@ -54,7 +51,6 @@ class EmailIdentifierPurger
       held =
         case owner
         when Client then owner.client_retention_holds.active_at(now).exists?
-        when Visitor then owner.visitor_retention_holds.active_at(now).exists?
         when Operator then false
         end
       return false if held
@@ -62,7 +58,6 @@ class EmailIdentifierPurger
       enforcement =
         case owner
         when Client then AppEnforcementCase
-        when Visitor then ComEnforcementCase
         when Operator then OrgEnforcementCase
         end
       !enforcement.principal_effect_blocking?(owner.public_id, :withdrawal_purge_blocked) &&

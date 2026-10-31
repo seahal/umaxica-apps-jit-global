@@ -11,10 +11,15 @@ class SeedAppSignFlowReferenceData < ActiveRecord::Migration[8.2]
 
   def up
     safety_assured do
-      REFERENCE_ROWS.each do |table, ids|
-        ids.each do |id|
-          execute("INSERT INTO #{table} (id) VALUES (#{id}) ON CONFLICT (id) DO NOTHING")
-        end
+      self.class.seed_into(connection)
+    end
+  end
+
+  def self.seed_into(connection, tables: REFERENCE_ROWS.keys)
+    tables.each do |table|
+      ids = REFERENCE_ROWS.fetch(table)
+      ids.each do |id|
+        connection.execute("INSERT INTO #{table} (id) VALUES (#{id}) ON CONFLICT (id) DO NOTHING")
       end
     end
   end

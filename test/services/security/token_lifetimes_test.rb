@@ -45,7 +45,7 @@ module Security
 
     test "keeps existing family constants aligned with the application policy" do
       assert_equal SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL, AuthenticationBase::ACCESS_TOKEN_TTL
-      assert_equal SecurityTokenLifetimes::PREFERENCE_JWT_TTL, PreferenceBase::ACCESS_TOKEN_TTL
+      assert_equal 400.days, SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL
       assert_equal SecurityTokenLifetimes::PREFERENCE_JWT_TTL, PreferenceToken::ACCESS_TOKEN_TTL
       assert_equal SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL, OidcIdTokenIssuer::TOKEN_TTL
       assert_equal SecurityTokenLifetimes::JUMP_RT_TTL, JumpRtIssuer::DEFAULT_TTL

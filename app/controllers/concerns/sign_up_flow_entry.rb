@@ -49,7 +49,6 @@ module SignUpFlowEntry
   # flow, or reason was involved. It is always the Japanese copy: the contract fixes the body
   # rather than localizing it.
   def render_sign_flow_phase_refusal
-    no_store
-    render plain: I18n.t("errors.messages.phase_violation_refused"), status: :conflict
+    render_sign_in_phase_refusal!
   end
 end

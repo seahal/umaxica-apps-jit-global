@@ -3522,7 +3522,7 @@ ALTER TABLE ONLY public.op_org_authority_stop_participants
 --
 
 ALTER TABLE ONLY public.operator_sign_in_flows
-    ADD CONSTRAINT fk_rails_0451f7d1d6 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_0451f7d1d6 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
 
 
 --
@@ -3538,7 +3538,7 @@ ALTER TABLE ONLY public.operator_step_up_sessions
 --
 
 ALTER TABLE ONLY public.operator_sign_up_flows
-    ADD CONSTRAINT fk_rails_10f95a7068 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_10f95a7068 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
 
 
 --
@@ -3546,7 +3546,7 @@ ALTER TABLE ONLY public.operator_sign_up_flows
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -3578,7 +3578,7 @@ ALTER TABLE ONLY public.operator_auth_ceremony_sessions
 --
 
 ALTER TABLE ONLY public.operator_step_up_sessions
-    ADD CONSTRAINT fk_rails_6daa6fb880 FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_6daa6fb880 FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
 
 
 --
@@ -3586,7 +3586,7 @@ ALTER TABLE ONLY public.operator_step_up_sessions
 --
 
 ALTER TABLE ONLY public.operator_auth_admission_bindings
-    ADD CONSTRAINT fk_rails_781188228f FOREIGN KEY (auth_ceremony_session_id) REFERENCES public.operator_auth_ceremony_sessions(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_781188228f FOREIGN KEY (auth_ceremony_session_id) REFERENCES public.operator_auth_ceremony_sessions(id) ON DELETE RESTRICT;
 
 
 --
@@ -3650,7 +3650,7 @@ ALTER TABLE ONLY public.operator_passkey_ceremony_transactions
 --
 
 ALTER TABLE ONLY public.operator_verifications
-    ADD CONSTRAINT fk_rails_c8ab8d08df FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_c8ab8d08df FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
 
 
 --
@@ -3666,7 +3666,7 @@ ALTER TABLE ONLY public.operator_sign_in_flows
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_rails_f211b6bc2e FOREIGN KEY (staff_token_kind_id) REFERENCES public.operator_token_kinds(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_f211b6bc2e FOREIGN KEY (staff_token_kind_id) REFERENCES public.operator_token_kinds(id) ON DELETE RESTRICT;
 
 
 --
@@ -3674,7 +3674,7 @@ ALTER TABLE ONLY public.operator_tokens
 --
 
 ALTER TABLE ONLY public.operator_sign_up_flows
-    ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id);
 
 
 --
@@ -3682,7 +3682,7 @@ ALTER TABLE ONLY public.operator_sign_up_flows
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_staff_tokens_on_staff_token_binding_method_id FOREIGN KEY (staff_token_binding_method_id) REFERENCES public.operator_token_binding_methods(id) NOT VALID;
+    ADD CONSTRAINT fk_staff_tokens_on_staff_token_binding_method_id FOREIGN KEY (staff_token_binding_method_id) REFERENCES public.operator_token_binding_methods(id);
 
 
 --
@@ -3690,7 +3690,7 @@ ALTER TABLE ONLY public.operator_tokens
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id);
 
 
 --

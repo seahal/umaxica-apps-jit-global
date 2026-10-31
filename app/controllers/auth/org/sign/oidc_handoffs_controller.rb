@@ -8,6 +8,7 @@ module Auth
         include ::AuthOidcResultHandoff
 
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :parent_intent
         declare_authentication_mode! :open
         prepend_before_action :authenticate_oidc_result_actor!
         before_action :authorize_oidc_result_handoff!

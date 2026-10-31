@@ -711,6 +711,7 @@ ja:
         issuance: Secret の発行操作
       client_sign_up_flow:
         auth_admission_binding: 受付バインディング
+        cleanup_status: 片付け状態参照
       client_telephone:
         number: 電話番号
         number_digest: 電話番号ダイジェスト
@@ -718,9 +719,6 @@ ja:
         otp_private_key: OTP秘密鍵
       client_telephone_ceremony_transaction:
         result_jti: 結果JTI
-      com_enforcement_appeal:
-        reason_code: 申し立て理由
-        statement: 申し立て内容
       company:
         title: タイトル
       enterprise:
@@ -730,13 +728,6 @@ ja:
       individual_assignment:
         assigned_at: 割当日時
       op_app_client_activation:
-        actor_ref: 変更者
-        audit_ref: 監査参照
-        changed_at: 変更日時
-        client_id: クライアント ID
-        enabled: 有効
-        source_manifest_digest: マニフェストのダイジェスト
-      op_com_client_activation:
         actor_ref: 変更者
         audit_ref: 監査参照
         changed_at: 変更日時
@@ -805,43 +796,6 @@ ja:
         created_at: 作成日時
         last_otp_at: 最終使用日
         title: 名前
-      visitor:
-        security_mode: セキュリティモード
-      visitor_contact_audit_outbox:
-        acknowledged_at: 確認日時
-        actor_ref: 実行者参照
-        contact_kind: 連絡先種別
-        contact_ref: 連絡先参照
-        event_name: イベント
-        event_uuid: イベント UUID
-        occurred_at: 発生日時
-        operation_ref: 操作参照
-        owner_ref: 所有者参照
-      visitor_email:
-        address: メールアドレス
-        address_digest: メールアドレスダイジェスト
-        otp_counter: OTPカウンター
-        otp_private_key: OTP秘密鍵
-      visitor_identity:
-        source_record_id: ソースレコードID
-      visitor_passkey:
-        description: 名前
-        sign_count: 使用回数
-      visitor_secret_credential:
-        name: 名前
-      visitor_sign_up_flow:
-        auth_admission_binding: 受付バインディング
-      visitor_step_up_session:
-        visitor_token_id: ビジタートークンID
-      visitor_telephone:
-        number: 電話番号
-        number_digest: 電話番号ダイジェスト
-        otp_counter: OTPカウンター
-        otp_private_key: OTP秘密鍵
-      visitor_token:
-        discard_at: 有効期限
-        purge_eligible_at: 削除予定日時
-        refresh_expires_at: リフレッシュトークン有効期限
     errors:
       messages:
         birthdate_before_today: は本日より前の日付を入力してください
@@ -1088,8 +1042,6 @@ ja:
     user_secret_credential_kind: シークレット種別
     user_token_id: ユーザートークンID
     visible_by_default: 標準表示可否
-    visitor: ビジター
-    visitor_token_id: ビジタートークンID
     vocabulary_public_id_snapshot: 語彙公開IDのスナップショット
     webauthn_id: WebAuthn ID
   auth:
@@ -1124,16 +1076,6 @@ ja:
         emails:
           update:
             page_title: メールアドレスの確認
-    com:
-      dashboards:
-        show:
-          description: Sign Com のサインイン後のランディングです。
-      settings:
-        activity:
-          events:
-            logged_in: ログイン
-            login_success: ログイン
-            unknown: 不明なイベント（%{event_id}）
     org:
       dashboards:
         show:
@@ -1641,18 +1583,12 @@ ja:
         support:
           areas: 機能
           clients: app のクライアント
-          description: app／com レルムのアカウントサポート。
+          description: app のアカウントサポート。
           enforcement_app: app の措置ケース
-          enforcement_com: com の措置ケース
           title: サポート
-          visitors: com のビジター
         values:
           bootstrap: ブートストラップ手順
           none: なし
-        visitors:
-          empty: 該当するビジターはありません。
-          show_title: com ビジター %{public_id}
-          title: com のビジター
       avatars:
         moniker_validation:
           blank: 名前を入力してください。
@@ -1891,6 +1827,7 @@ ja:
             medium: 中
             none: なし
           title: アクティビティ履歴
+          unavailable: アクティビティ履歴を一時的に表示できません。しばらくしてからもう一度お試しください。
           unknown_device: 不明なデバイス
           unknown_location: 場所を確認できません
         links:
@@ -2708,18 +2645,6 @@ ja:
               sign_up: UMAXICA - メールアドレスを確認してください
             title: メールアドレスの確認
             verify_link: メールアドレスを確認する
-      com:
-        otp_mailer:
-          create:
-            expiration_note: このコードは10分間有効です。
-            ignore_instruction: 心当たりがない場合は、このメールを無視してください。
-            instruction: 以下の確認コードを使用して、手続きを続行してください：
-            subject: 確認コードのお知らせ
-            subjects:
-              sign_in: UMAXICA - サインインを確認してください
-              sign_up: UMAXICA - メールアドレスを確認してください
-            title: メールアドレスの確認
-            verify_link: メールアドレスを確認する
       org:
         otp_mailer:
           create:
@@ -2749,8 +2674,6 @@ ja:
     identity_audit_event_format_invalid: イベントIDの形式が無効です。大文字とアンダースコアのみ使用可能です。
   models:
     user:
-      recovery_identity_required: パスキー/シークレットを登録するには、先にメールアドレスまたは電話番号を1つ以上登録（確認）してください。
-    visitor:
       recovery_identity_required: パスキー/シークレットを登録するには、先にメールアドレスまたは電話番号を1つ以上登録（確認）してください。
   news:
     app:
@@ -2922,7 +2845,10 @@ ja:
   preferences:
     title: 設定
   privacy_erasure:
-    forbidden: プライバシー消去リクエストは、退下手順中にのみ利用可能です。
+    existing_requests: これまでに送信したリクエストの状況は引き続き確認できます。
+    forbidden: 現在、ここからプライバシー消去リクエストを送信することはできません。
+    unavailable_action: 利用できません
+    withdrawal_separate: 退下手続きは引き続き別に進められます。
   pwa:
     offline:
       description: サーバーに接続できませんでした。インターネット接続を確認して、もう一度お試しください。
@@ -3236,6 +3162,7 @@ ja:
           edit:
             code_label: 認証コード
             code_placeholder: 6桁の数字を入力
+            delivery_unavailable: "コードの送信を確認できませんでした。再送するか、戻ってコードの確認を中止できます。"
             delivery_help: "※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。"
             description: 完了まであと少しです。メールに送信された6桁の認証コードを入力してください。
             page_title: 認証コードの入力
@@ -3347,8 +3274,6 @@ ja:
       registration:
         cancelled_retry_later: 登録をキャンセルしました。しばらくしてから再度お試しください。
         checkpoint:
-          age_restricted: この登録方法ではアカウントを作成できません。16歳の誕生日以降にもう一度お試しください。
-          age_restricted_retry: あとでもう一度サインアップしてください。
           show:
             birthdate:
               description: 登録を続けるため、生年月日を入力してください。
@@ -3775,214 +3700,6 @@ ja:
           title: 認証方法の登録
         success:
           complete: 検証が完了しました
-    com:
-      authentication:
-        email:
-          create:
-            cooldown: しばらくしてから再度お試しください。
-            invalid_format: 無効なメールアドレス形式です。
-          edit:
-            code_label: 認証コード
-            code_placeholder: 6桁の数字を入力
-            delivery_help: "※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。"
-            description: 完了まであと少しです。メールに送信された6桁の認証コードを入力してください。
-            page_title: 認証コードの入力
-            return_page: 戻る
-            submit: 送信する
-          new:
-            page_title: メールでログイン
-            you_have_already_logged_in: あなたはログインしています
-          update:
-            invalid_code: パスコードが正しくありません
-        new:
-          back: 他の方法を選びますか？
-          description: 今回のサインインで利用する認証方法を選択してください。
-          links:
-            email: メールアドレス
-            passkey: パスキー
-            registration: アカウント登録はこちら
-            secret_credential: シークレット
-          page_title: サインイン方法を選ぶ
-        passkey:
-          new:
-            description: パスキーを使って安全にログインします。
-            page_title: パスキーでログイン
-            pii_label: メールアドレスまたは電話番号
-            pii_placeholder: user@example.com または +81 90 1234 5678
-            submit: パスキーでログイン
-      in:
-        bulletins:
-          forbidden: アクセス権限がありません
-          show:
-            actions:
-              continue: 続行する
-              update: 更新する
-            body: mfa をおんにしてください。重要な規約の変更があります、承諾しますか？
-            title: ブリテン
-          timeout: timeout しました
-          welcome:
-            body: アカウントの作成が完了しました。ご利用ありがとうございます。
-            title: ようこそ
-        checkpoints:
-          show:
-            title: サインインの確認
-        mfa:
-          description: 認証方法を選択してください。
-          methods:
-            passkey: パスキーで認証
-          no_methods_available: 利用可能な認証方法がありません。サポートにお問い合わせください。
-          passkey:
-            authenticate: パスキーで認証
-            back: 認証方法の選択に戻る
-            description: 登録済みのパスキーで認証してください。
-            title: パスキーによる確認
-          title: 追加の認証が必要です
-      preferences:
-        footer:
-          dashboard: ダッシュボード
-          home: ホーム
-          preference: プリファレンス
-          settings: 設定
-      registration:
-        cancelled_retry_later: 登録をキャンセルしました。しばらくしてから再度お試しください。
-        checkpoint:
-          age_restricted: この登録方法ではアカウントを作成できません。13歳の誕生日以降にもう一度お試しください。
-          show:
-            birthdate:
-              description: 登録を続けるため、生年月日を入力してください。
-              label: 生年月日
-              submit: 続行
-              title: 生年月日の確認
-            complete: 登録に必要な項目は完了しています。
-            page_title: 登録を完了
-            passkey:
-              action: パスキーを登録
-              description: 登録を完了する前にパスキーを追加してください。
-              title: パスキーの登録
-            social:
-              cancel_if_wrong: 間違いならキャンセルしてください。
-              confirm_label: 新しいUmaxica Identityを作成することを理解しました。
-              create_identity: 新しいUmaxica Identityを作成します。
-              no_merge: 既存アカウントとは後から統合できません。
-              unregistered: この%{provider}アカウントは未登録です。
-        email:
-          create:
-            contact_held: このメールアドレスでは、いま登録を始められません。しばらくしてからもう一度お試しください。
-            address_required: メールアドレスを入力してください。
-            otp_resend_too_soon: しばらく時間をおいてから再度お試しください。
-            turnstile_validation_failed: セキュリティ検証に失敗しました。もう一度お試しください。
-            verification_code_sent: 入力いただいたメールアドレスに、認証コードという6桁の数字が届きますので、入力してボタンを押してください。
-          edit:
-            session_expired: セッションの有効期限が切れました。最初からやり直してください。
-          new:
-            error_summary: 入力内容を確認してください。
-            link_to_sign_in: ログインしますか？
-            page_title: メールアドレスで登録
-          update:
-            attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
-            code_required: 確認コードを入力してください。
-            invalid_code: パスコードが正しくありません
-        new:
-          links:
-            registration: アカウント登録はこちら
-            sign_in: ログイン
-          methods:
-            email:
-              cta: メールで登録する
-            telephone:
-              cta: 電話番号で登録する
-          page_description: "%{product} の利用をはじめるための登録方法を選択してください。"
-          page_title: アカウント登録
-          social:
-            disclaimer: 許可なく投稿や共有を行うことはありません。
-        session_missing: 登録セッションの有効期限が切れました。最初からやり直してください。
-        telephone:
-          create:
-            contact_held: この電話番号では、いま登録を始められません。しばらくしてからもう一度お試しください。
-            turnstile_validation_failed: セキュリティ検証に失敗しました。もう一度お試しください。
-            verification_code_sent: 入力いただいた電話番号に、認証コードという6桁の数字がSMSで届きますので、入力してボタンを押してください。
-          edit:
-            code_label: 認証コード
-            code_placeholder: 6桁の数字を入力
-            delivery_help: "※1分以上待っても届かない場合は、入力内容やSMSの受信設定をご確認の上、再度お試しください。"
-            page_title: 認証コード入力
-            session_expired: セッションの有効期限が切れました。最初からやり直してください。
-            submit: 送信する
-          new:
-            link_to_other_methods: 他の方法で登録しますか？
-            link_to_sign_in: ログインしますか？
-            page_title: 電話番号で登録
-          success: 電話番号が確認されました。
-          update:
-            attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
-            code_required: 確認コードを入力してください。
-            invalid_code: パスコードが正しくありません。
-            passkey_required: 電話番号が確認されました。パスキーを登録してください。
-            success: 電話番号が確認されました。
-      settings:
-        birthdate:
-          show:
-            birthdate_label: 生年月日
-            change_unavailable: この値の変更が必要な場合はサポートへ連絡してください。
-            description: 年齢制限がある機能の確認に使用される生年月日です。
-            not_set: 未設定
-            page_title: 生年月日
-        email:
-          destroy:
-            last_method: 最後のログイン手段のため削除できません。
-            success: メールアドレスを削除しました。
-          edit:
-            always_on: 重要なアカウント通知
-            always_on_description: セキュリティやアカウント上重要なメールは常に送信されます。
-            notifiable_description: 製品アップデートや運用上のお知らせを受け取ります。
-            notifiable_label: 通知メール
-            promotional_description: キャンペーン、特典、イベント案内を受け取ります。
-            promotional_label: プロモーションメール
-            save: メール設定を保存
-            title: メールアドレス設定
-          update:
-            failure: メール設定を更新できませんでした。
-            success: メール設定を更新しました。
-        passkeys:
-          new:
-            description_label: パスキーの名前
-            description_placeholder: '例: MacBook Pro'
-            submit: パスキーを登録
-        show:
-          account_settings: アカウント設定
-          logout: ログアウト
-          mfa: 多要素認証
-          others: その他
-          page_title: 設定
-          security_settings: セキュリティ設定
-          withdrawal: 退会
-      verification:
-        edit:
-          authenticate_with_passkey: パスキーで認証
-          back: 戻る
-          code_label: 確認コード
-          code_placeholder: 6桁
-          description: 本人確認のため、パスキーで認証してください。
-          email_delivery_help: "※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。"
-          email_description: 本人確認のため、コードの入力を行ってください。
-          submit: 確認
-          title: 本人確認
-        errors:
-          incorrect_code: 確認コードが正しくありません
-        index:
-          title: 検証セッション
-        new:
-          description: 続行する前に本人確認を行ってください。
-          methods:
-            email_otp: メール（ワンタイムコード）
-            passkey: パスキー
-          title: 本人確認
-        setup:
-          description: 続行する前に、パスキーまたはメールアドレスを登録してください。
-          methods:
-            email: メールを登録
-            passkey: パスキーを登録
-          title: 認証方法の登録
     common:
       birthdate_parts:
         day: 日
@@ -4606,6 +4323,7 @@ ja:
   ui_presentation:
     body_json: 文書をJSON形式で入力してください。
     confirmation_required: 上の確認項目にチェックを入れると、この操作を実行できます。
+    display_preferences_description: 表示設定を変更できます。
     information: お知らせ
     navigation:
       authentication: 認証メニュー
@@ -4697,45 +4415,6 @@ ja:
               capacity_still_full: セッション容量がまだいっぱいです。続行するには別のセッションを無効にしてください。
               invalid_or_expired: このサインイン制限リンクは無効または期限切れです。
               revoke_failed: 選択されたセッションを無効にできませんでした。
-        up:
-          emails:
-            edit:
-              submit: 確認する
-            new:
-              confirm_policy_label: 利用規約に同意する
-          telephones:
-            edit:
-              submit: 確認する
-            new:
-              confirm_policy_label: 利用規約に同意する
-              confirm_using_mfa_label: MFAの利用を確認する
-        verifications:
-          show:
-            no_methods: email/passkey/totp を登録してください
-      com:
-        settings:
-          emails:
-            index:
-              empty: メールアドレスは登録されていません。
-              unverified: 未認証
-              verified: 認証済み
-          telephones:
-            index:
-              actions: アクション
-              empty: 電話番号は登録されていません。
-              unverified: 未認証
-              verified: 認証済み
-            registrations:
-              edit:
-                description: SMSで届いた確認コードを入力してください。
-                heading: 確認コードの入力
-                page_title: 確認コードの入力
-              new:
-                description: 新しい電話番号を追加して、アカウントの管理をより安全にします。
-                help_text: 入力された電話番号にSMS等で確認コードを送信します。
-        shared:
-          sign_out:
-            confirm_description: 一度ログアウトすると、再度ログインが必要になります。
         up:
           emails:
             edit:

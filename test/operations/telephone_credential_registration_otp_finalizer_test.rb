@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpFinalizerTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(current foreign_browser lost_freshness credential_lost source_fault receipt_fault).each do |scenario|
       test "#{surface} Telephone finalization #{scenario} keeps Source audit ahead of Ticket reconciliation" do
         actor, token, telephone, policy, audit =
@@ -13,24 +13,11 @@ class TelephoneCredentialRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
             candidate = owner.client_telephones.create!(raw_number: "+12025550181", confirm_policy: true)
             [owner, root, candidate, ClientTelephonePolicy, ClientContactAuditOutbox]
-          when "com"
-            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-            candidate = owner.visitor_telephones.create!(raw_number: "+12025550182", confirm_policy: true)
-            [owner, root, candidate, VisitorTelephonePolicy, VisitorContactAuditOutbox]
           end
         token.rotate_refresh_token!
-        passkey =
-          case actor
-          when Client
-            actor.client_passkeys.create!(
-              webauthn_id: SecureRandom.uuid, public_key: "telephone-finalization-key", uv_verified_at: Time.current,
-            )
-          when Visitor
-            actor.visitor_passkeys.create!(
-              webauthn_id: SecureRandom.uuid, public_key: "telephone-finalization-key", uv_verified_at: Time.current,
-            )
-          end
+        passkey = actor.client_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "telephone-finalization-key", uv_verified_at: Time.current,
+        )
         token.update!(
           last_step_up_at: token.class.database_now, last_step_up_scope: "settings_telephone",
           last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -50,7 +37,7 @@ class TelephoneCredentialRegistrationOtpFinalizerTest < ActiveSupport::TestCase
         assert_predicate verified, :success?
         requirement = policy.new(telephone, user: actor).credential_registration_requirement(token: token)
         context = ActorValuesContext.empty.with(
-          subject: actor, actor_type: (surface == "app") ? :client : :visitor, tld: surface.to_sym, surface: :base,
+          subject: actor, actor_type: :client, tld: surface.to_sym, surface: :base,
         )
         arguments = {
           actor: actor,
@@ -81,6 +68,8 @@ class TelephoneCredentialRegistrationOtpFinalizerTest < ActiveSupport::TestCase
           assert_not audit.exists?(operation_ref: issued.transaction.transaction_id, event_name: "finalized")
           assert_nil issued.transaction.reload.consumed_at
         elsif scenario == "receipt_fault"
+          original_step_up_at = token.reload.last_step_up_at
+
           issued.transaction.stub(:consume_registration_result!, -> { raise ActiveRecord::StatementInvalid }) do
             assert_raises(ActiveRecord::StatementInvalid) do
               TelephoneCredentialRegistrationOtpFinalizer.call!(**arguments)
@@ -90,6 +79,7 @@ class TelephoneCredentialRegistrationOtpFinalizerTest < ActiveSupport::TestCase
           assert_predicate telephone.reload, :binding_effective?
           assert audit.exists?(operation_ref: issued.transaction.transaction_id, event_name: "finalized")
           assert_nil issued.transaction.reload.consumed_at
+          assert_equal original_step_up_at, token.reload.last_step_up_at
           assert_equal :finalized, TelephoneCredentialRegistrationOtpFinalizer.call!(**arguments)
           assert_predicate issued.transaction.reload, :consumed?
           assert_equal 1, audit.where(operation_ref: issued.transaction.transaction_id, event_name: "finalized").count

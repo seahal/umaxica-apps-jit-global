@@ -70,7 +70,6 @@ class SecurityJwtOidcIdTokenCodec
 
     def resource_type_for_client(client)
       return "operator" if %w(operator staff).include?(client.resource_type)
-      return "visitor" if %w(visitor customer).include?(client.resource_type)
 
       "client"
     end
@@ -78,7 +77,6 @@ class SecurityJwtOidcIdTokenCodec
     def resource_type_for_resource(resource)
       case resource
       when ::Operator then "operator"
-      when ::Visitor then "visitor"
       else "client"
       end
     end

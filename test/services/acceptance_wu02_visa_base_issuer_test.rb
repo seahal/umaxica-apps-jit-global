@@ -9,11 +9,9 @@ class AcceptanceWu02VisaBaseIssuerTest < ActiveSupport::TestCase
   setup do
     [
       ClientStatus, ClientVisibility, ClientMfaStatus,
-      VisitorStatus, VisitorVisibility, VisitorMfaStatus,
       OperatorStatus, OperatorVisibility, OperatorMfaStatus,
     ].each(&:ensure_defaults!)
     ClientSecurityMode.insert_missing_fixed_ids!(ClientSecurityMode::DEFAULTS)
-    VisitorSecurityMode.insert_missing_fixed_ids!(VisitorSecurityMode::DEFAULTS)
     OperatorSecurityMode.insert_missing_fixed_ids!(OperatorSecurityMode::DEFAULTS)
   end
 
@@ -21,11 +19,6 @@ class AcceptanceWu02VisaBaseIssuerTest < ActiveSupport::TestCase
     realms = [
       ["client", "core-app-jp", "BASE_APP",
        Client.create!(status_id: ClientStatus::ACTIVE, security_mode_id: ClientSecurityMode::NORMAL),],
-      ["visitor", "core-com-jp", "BASE_COM",
-       Visitor.create!(
-         status_id: VisitorStatus::ACTIVE, security_mode_id: VisitorSecurityMode::NORMAL,
-         visibility_id: VisitorVisibility::VISITOR,
-       ),],
       ["operator", "core-org-jp", "BASE_ORG",
        Operator.create!(
          status_id: OperatorStatus::ACTIVE, security_mode_id: OperatorSecurityMode::ADVANCED,
@@ -101,7 +94,6 @@ class AcceptanceWu02VisaBaseIssuerTest < ActiveSupport::TestCase
   test "A02-5: client assertions with the retired www token endpoint audience fail in every realm" do
     clients = [
       %w(client core-app-jp BASE_APP),
-      %w(visitor core-com-jp BASE_COM),
       %w(operator core-org-jp BASE_ORG),
     ]
 

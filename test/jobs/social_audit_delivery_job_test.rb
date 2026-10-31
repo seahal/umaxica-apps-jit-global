@@ -33,6 +33,37 @@ class SocialAuditDeliveryJobTest < ActiveJob::TestCase
     assert_not_nil event.reload.acknowledged_at
   end
 
+  test "a conflicting Social audit does not starve later pages" do
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    first = ClientExternalIdentity.create!(
+      client: client, provider: "google", issuer: "https://accounts.google.com", subject: SecureRandom.uuid,
+      audience: "google-test-client-id", verification_authority: "provider-fixture",
+      verified_at: ClientExternalIdentity.database_now,
+    )
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    second = ClientExternalIdentity.create!(
+      client: other, provider: "apple", issuer: "https://appleid.apple.com", subject: SecureRandom.uuid,
+      audience: "apple-test-client-id", verification_authority: "provider-fixture",
+      verified_at: ClientExternalIdentity.database_now,
+    )
+    poison, later =
+      AppPrincipalRecord.transaction do
+        [ClientSocialAuditOutbox.record!(identity: first, owner: client, event_name: "linked"),
+         ClientSocialAuditOutbox.record!(identity: second, owner: other, event_name: "linked"),]
+      end
+    ClientChronicle.create!(
+      event_uuid: poison.event_uuid, actor_type: "Client", actor_id: client.id,
+      event_id: ClientChronicleEvent::SOCIAL_LINKED, level_id: ClientChronicleLevel::NOTHING,
+      subject_id: client.id.to_s, subject_type: "Client", occurred_at: poison.occurred_at,
+      context: { "auth_method" => "social", "provider" => "wrong", "social_identity_type" => "ClientExternalIdentity" },
+    )
+
+    assert_raises(ArgumentError) { SocialAuditDeliveryJob.perform_now(batch_size: 1) }
+    assert_nil poison.reload.acknowledged_at
+    assert_predicate later.reload.acknowledged_at, :present?
+    assert_equal 1, ClientChronicle.where(event_uuid: later.event_uuid).count
+  end
+
   test "a conflicting Chronicle UUID does not acknowledge the Source event" do
     client = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,

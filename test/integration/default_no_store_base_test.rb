@@ -45,20 +45,11 @@ class DefaultNoStoreBaseTest < ActionDispatch::IntegrationTest
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end
 
-  test "Base com ApplicationController authentication redirect is no-store" do
-    host!("base.com.localhost")
-
-    get("/accounts", params: { ri: "jp" })
-
-    assert_response :found
-    assert_equal "no-store", response.headers.fetch("Cache-Control")
-  end
-
   test "Base com ApplicationController response halted by the availability gate is no-store" do
     Flipper.disable(FqdnAvailabilityRegistry.flag_name_for(:base_corporate))
     host!("base.com.localhost")
 
-    get("/accounts", params: { ri: "jp" })
+    get("/", params: { ri: "jp" })
 
     assert_response :service_unavailable
     assert_equal "no-store", response.headers.fetch("Cache-Control")
@@ -76,7 +67,7 @@ class DefaultNoStoreBaseTest < ActionDispatch::IntegrationTest
   test "Base org ApplicationController authentication redirect is no-store" do
     host!("base.org.localhost")
 
-    get("/configuration", params: { ri: "jp" })
+    get("/settings", params: { ri: "jp" })
 
     assert_response :found
     assert_equal "no-store", response.headers.fetch("Cache-Control")
@@ -86,7 +77,7 @@ class DefaultNoStoreBaseTest < ActionDispatch::IntegrationTest
     Flipper.disable(FqdnAvailabilityRegistry.flag_name_for(:base_staff))
     host!("base.org.localhost")
 
-    get("/configuration", params: { ri: "jp" })
+    get("/settings", params: { ri: "jp" })
 
     assert_response :service_unavailable
     assert_equal "no-store", response.headers.fetch("Cache-Control")

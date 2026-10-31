@@ -11,21 +11,39 @@ class IdentityTotpEnrollmentQuery
         raise IdentityTotpCeremonyContract::Error, "TOTP display surface mismatch"
       end
 
-      OpBaseAppRecord.connected_to(role: :writing) do
-        transaction.reload
-        token.reload
-        child = ClientTotpCeremonyTransaction.find_by(step_up_ceremony_transaction_ref: transaction.transaction_id)
-        candidate = IdentityTotpCeremonyCandidate.find_by!(ref: child.credential_candidate_ref) if child
-        now = ClientStepUpCeremonyTransaction.database_now
-        validate_permission!(actor, token, transaction, now)
-        return nil unless child
+      Client.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            device = token.device_session_record!
+            device.with_lock do
+              token.with_lock do
+                validate_device!(actor, token, device)
+                transaction.reload
+                now = ClientStepUpCeremonyTransaction.database_now
+                validate_permission!(actor, token, transaction, now)
+                child = ClientTotpCeremonyTransaction.find_by(
+                  step_up_ceremony_transaction_ref: transaction.transaction_id,
+                )
+                return nil unless child
 
-        validate_candidate!(child, candidate, actor, token, transaction, now)
-        candidate
+                candidate = IdentityTotpCeremonyCandidate.find_by!(ref: child.credential_candidate_ref)
+                validate_candidate!(child, candidate, actor, token, transaction, now)
+                candidate
+              end
+            end
+          end
+        end
       end
     end
 
     private
+
+    def validate_device!(actor, token, device)
+      return if device.usable? && device.user_id == actor.id && token.device_session_id == device.id &&
+        device.current_refresh_token_id == token.id
+
+      raise IdentityTotpCeremonyContract::Error, "TOTP display device unavailable"
+    end
 
     def validate_permission!(actor, token, transaction, now)
       scope_permitted = transaction.required_scope == "settings_totp" ||

@@ -9,8 +9,6 @@ class TelephoneIdentifierPurger
         case record
         when ClientTelephone
           [record.association(:user).tap { |owner| owner.reset_scope }.scope.take!, AppZenithRecord]
-        when VisitorTelephone
-          [record.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!, ComZenithRecord]
         when OperatorTelephone
           [record.association(:staff).tap { |owner| owner.reset_scope }.scope.take!, OrgZenithRecord]
         else raise ArgumentError, "unsupported telephone identifier"
@@ -27,7 +25,6 @@ class TelephoneIdentifierPurger
           actual_owner_id =
             case current
             when ClientTelephone then current.user_id
-            when VisitorTelephone then current.visitor_id
             when OperatorTelephone then current.staff_id
             end
           raise ArgumentError, "telephone purge owner mismatch" unless actual_owner_id == owner.id
@@ -46,7 +43,7 @@ class TelephoneIdentifierPurger
     def purge_permitted?(current, owner, now)
       eligible =
         case current
-        when ClientTelephone, VisitorTelephone then current.lapsed?(now) && current.purgeable?(now)
+        when ClientTelephone then current.lapsed?(now) && current.purgeable?(now)
         when OperatorTelephone then owner.lapsed?(now) && owner.purgeable?(now)
         end
       raise ArgumentError, "telephone identifier is still live or recoverable" unless eligible
@@ -54,7 +51,6 @@ class TelephoneIdentifierPurger
       held =
         case owner
         when Client then owner.client_retention_holds.active_at(now).exists?
-        when Visitor then owner.visitor_retention_holds.active_at(now).exists?
         when Operator then false
         end
       return false if held
@@ -62,7 +58,6 @@ class TelephoneIdentifierPurger
       enforcement =
         case owner
         when Client then AppEnforcementCase
-        when Visitor then ComEnforcementCase
         when Operator then OrgEnforcementCase
         end
       !enforcement.principal_effect_blocking?(owner.public_id, :withdrawal_purge_blocked) &&

@@ -6,8 +6,6 @@ class ProcessorErasureAttemptUniquenessTest < ActiveSupport::TestCase
   SURFACES = [
     [Client, ClientStatus::ACTIVE, ClientVisibility::USER, ClientPrivacyRequest, :client,
      ClientProcessorErasureNotification, :client_privacy_request, ClientProcessorErasureNotificationAttempt,],
-    [Visitor, VisitorStatus::ACTIVE, VisitorVisibility::VISITOR, VisitorPrivacyRequest, :visitor,
-     VisitorProcessorErasureNotification, :visitor_privacy_request, VisitorProcessorErasureNotificationAttempt,],
   ].freeze
 
   SURFACES.each do |principal_class, status, visibility, request_class, owner_key,

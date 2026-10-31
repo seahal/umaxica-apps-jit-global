@@ -8,6 +8,7 @@ module Auth
         module Guard
           class TelephonesController < BaseController
             AUTHENTICATION_MODE = :open
+            sign_entry_classification! :sign_up
 
             private
 

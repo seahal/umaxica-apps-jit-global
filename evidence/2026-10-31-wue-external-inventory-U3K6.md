@@ -1,0 +1,8 @@
+# WU-E external source inventory
+
+- Rails HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the Rails worktree had uncommitted changes affecting this investigation.
+- Read-only GitHub repository search identified `seahal/umaxica-apps-edge`, `seahal/umaxica-apps-edge-jump` and `seahal/umaxica-apps-edge-away`. Fresh local checkouts in `/tmp/two-wue-inspection` have Edge HEAD `185dd076404011ed391b2b550091be3fd7939ba0`, Jump HEAD `0678dfb4027d3ff47e1a8731b9d6f0d4dd038cb0`, and Away HEAD `8c061af91954fadf53b8bab3ccd7258ef2a0b55e`; their worktrees were clean at inspection. Edge's requested baseline commit `7437ca5c2847d78ad354ad506817934447a36261` exists and was checked out separately, without changing the main Edge checkout.
+- Jump's `src/config/registry.umaxica.ts` currently contains COM Auth/Core nodes and edges and no Edit or Tech nodes; production entries have `allowed_dst_external: false`. Its runtime validates exact issuer and destination origins. This is source inspection, not proof of deployed configuration.
+- Away's current `src/index.ts` exposes only `GET /health`; its README says the cushion and the signed approval contract are undecided. Therefore WU-E's separate `xt` acceptance and external redirect path cannot be claimed implemented.
+- The current Edge HEAD differs from two.md's baseline; its diff spans 2969 files. No detailed Edge impact classification, external tests, writes, deployment, registry approval or ADR approval was performed.
+- Tool check in the Jump checkout found Node `v24.20.0` (matching its declared requirement) but no `pnpm` executable; its AGENTS.md requires pnpm 12.0.0 and forbids npm/Corepack. No dependency installation or external-project tests were run.

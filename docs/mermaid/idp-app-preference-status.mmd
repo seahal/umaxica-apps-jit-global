@@ -1,0 +1,25 @@
+stateDiagram-v2
+    state "ACTIVE" as active
+    state "RETIRED" as retired
+
+    [*] --> active: create anonymous preference
+    active --> retired: Base reset or committed Visa sign-out / locked setting transaction
+
+    note right of active
+      AppPreferenceStatus uses ACTIVE=0 and RETIRED=1.
+      A valid anonymous JWT identifies the active row.
+      Reset and Visa sign-out create a replacement in
+      the same setting transaction that retires this row.
+      Visa sign-in applies only explicit Client display
+      values; region, consent, Web Push, and binding
+      are not imported from the account.
+      Visa sign-out copies stored display children
+      including region from the old row's database state.
+    end note
+
+    note right of retired
+      A retired row cannot be reactivated. Its last-issued
+      expiry remains the retention anchor. The local
+      schema cutover migration is authored but unapproved
+      and has not been applied.
+    end note

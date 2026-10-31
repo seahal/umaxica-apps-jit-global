@@ -7,9 +7,9 @@ class RootTokenCreationInvariantTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   ROOT_TOKEN_WRITES = %i(create create! insert insert! insert_all insert_all!).freeze
-  ROOT_TOKEN_RECEIVERS = /\A(?:ClientToken|VisitorToken|OperatorToken|token_class)\z/.freeze
-  ROOT_TOKEN_ASSOCIATIONS = /\.(?:client_tokens|visitor_tokens|staff_tokens)\z/.freeze
-  ROOT_TOKEN_TABLE_INSERTS = /\bINSERT\s+INTO\s+(?:client_tokens|visitor_tokens|operator_tokens)\b/i.freeze
+  ROOT_TOKEN_RECEIVERS = /\A(?:ClientToken|OperatorToken|token_class)\z/.freeze
+  ROOT_TOKEN_ASSOCIATIONS = /\.(?:client_tokens|staff_tokens)\z/.freeze
+  ROOT_TOKEN_TABLE_INSERTS = /\bINSERT\s+INTO\s+(?:client_tokens|operator_tokens)\b/i.freeze
   ISSUANCE_PATH = "app/controllers/concerns/authentication_base.rb"
 
   test "A44-7 root-token creation stays inside the final issuance method" do

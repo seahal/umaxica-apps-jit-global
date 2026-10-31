@@ -4,6 +4,17 @@
 require "test_helper"
 
 class SignInCyclePolicyTest < ActiveSupport::TestCase
+  test "operator MFA allows its owner and rejects another actor" do
+    operator = operators(:one)
+    flow = OperatorSignInFlow.new(
+      principal_id: operator.id, state_id: OperatorSignInFlow.state_id_for("MFA_PENDING"),
+    )
+
+    assert SignIn::CyclePolicy.new(flow, user: operator).show_mfa?
+    assert_not SignIn::CyclePolicy.new(flow, user: clients(:one)).show_mfa?
+    assert_not SignIn::CyclePolicy.new(flow, user: nil).show_mfa?
+  end
+
   test "fail is denied when the record is not a sign-in flow" do
     policy = SignIn::CyclePolicy.new(Object.new, user: clients(:one))
 

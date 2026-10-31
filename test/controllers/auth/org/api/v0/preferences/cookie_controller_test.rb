@@ -15,23 +15,23 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest < ActionDispatch::In
     host! @host
   end
 
-  test "GET show without access jwt returns consented false" do
-    cookies.delete(PreferenceCookieName.access)
+  test "GET shows the default consent banner without Preference state" do
+    cookies.delete(PreferenceCookieName.anonymous_jwt)
 
     get auth_org_api_v0_preferences_cookie_path, as: :json
 
     assert_response :ok
-    assert_includes [true, false], response.parsed_body["show_banner"]
+    assert response.parsed_body.fetch("show_banner")
   end
 
-  test "GET show returns consent state from jwt payload" do
+  test "GET ignores Preference state on the read-only Auth host" do
     token = encode_preference_jwt(
       preferences: { "consented" => true, "functional" => false, "performant" => false, "targetable" => false },
       host: @host,
       public_id: "pref-org-public-id",
       preference_type: "OrgPreference",
     )
-    cookies[PreferenceCookieName.access(surface: :org)] = token
+    cookies[PreferenceCookieName.anonymous_jwt] = token
 
     with_preference_jwt_keys(host: @host) do
       get auth_org_api_v0_preferences_cookie_path, as: :json
@@ -40,62 +40,19 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest < ActionDispatch::In
     end
 
     assert_response :ok
-    assert_includes [true, false], response.parsed_body["show_banner"]
+    assert response.parsed_body.fetch("show_banner")
+    assert_nil response.headers["Set-Cookie"]
   end
 
-  test "PATCH update with consented true updates preference cookie and issues access token" do
-    preference = OrgPreference.create!(status_id: OrgPreferenceStatus::NOTHING)
-    OrgPreferenceCookie.create!(
-      preference: preference,
-      targetable: false,
-      performant: false,
-      functional: false,
-      consented: false,
-      consented_at: nil,
-    )
-    token = encode_preference_jwt(
-      preferences: { "consented" => false },
-      host: @host,
-      public_id: preference.public_id,
-      preference_type: "OrgPreference",
-    )
-    cookies[PreferenceCookieName.access(surface: :org)] = token
-
-    with_preference_jwt_keys(host: @host) do
-      patch auth_org_api_v0_preferences_cookie_path, params: { consented: true }, as: :json
-    end
-
-    assert_response :no_content
-    preference.reload
-
-    assert preference.org_preference_cookie.consented
-    assert_not_nil preference.org_preference_cookie.consented_at
-    set_cookie = response.headers["Set-Cookie"].to_s
-
-    assert_includes set_cookie, "#{PreferenceCookieName.access}="
-    assert_includes set_cookie, "preference_consented=1"
-    assert_not_includes response_set_cookie_lines.find { |line|
-      line.start_with?("preference_consented=")
-    }.to_s.downcase,
-                        "httponly"
-  end
-
-  test "PATCH update without access jwt writes consent buffer without credential cookies" do
-    cookies.delete(PreferenceCookieName.access)
+  test "PATCH cannot write preference consent on the read-only Auth host" do
+    cookies.delete(PreferenceCookieName.anonymous_jwt)
 
     assert_no_difference -> { OrgPreference.count } do
       patch auth_org_api_v0_preferences_cookie_path, params: { consented: true }, as: :json
     end
 
-    assert_response :no_content
-    set_cookie = response.headers["Set-Cookie"].to_s
-    consent_cookie = response_set_cookie_lines.find { |line| line.start_with?("preference_consented=") }.to_s
-
-    assert_includes set_cookie, "preference_consented=1"
-    assert_includes consent_cookie.downcase, "samesite=strict"
-    assert_not_includes consent_cookie.downcase, "httponly"
-    assert_not_includes set_cookie, "#{PreferenceCookieName.access}="
-    assert_not_includes set_cookie, "#{AuthenticationBase::ACCESS_COOKIE_KEY}="
+    assert_response :forbidden
+    assert_nil response.headers["Set-Cookie"]
   end
   private
 
@@ -141,7 +98,6 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -179,13 +135,6 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -207,23 +156,6 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -238,17 +170,9 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -433,31 +357,6 @@ class Auth::Org::Api::V0::Preferences::CookieControllerTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

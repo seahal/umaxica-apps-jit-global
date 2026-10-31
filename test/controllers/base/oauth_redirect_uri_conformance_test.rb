@@ -27,7 +27,7 @@ class BaseOauthRedirectUriConformanceTest < ActionDispatch::IntegrationTest
       @registered.sub("/oidc/callback", "/OIDC/callback"),
       "#{@registered}?x=1",
       "#{@registered}#frag",
-      OidcClientRegistry.find!("core-com-jp").redirect_uris_by_realm.fetch("visitor").first,
+      OidcClientRegistry.find!("core-org-jp").redirect_uris_by_realm.fetch("operator").first,
     ]
     variants.each do |redirect_uri|
       get "/oauth/authorize", params: authorize_params(redirect_uri:), headers: { "Host" => @host }
@@ -85,7 +85,6 @@ class BaseOauthRedirectUriConformanceTest < ActionDispatch::IntegrationTest
 
   test "Discovery advertises prompt_values_supported per realm" do
     assert_equal %w(none login create), OidcDiscoveryDocument.for_resource_type("client")[:prompt_values_supported]
-    assert_equal %w(none login create), OidcDiscoveryDocument.for_resource_type("visitor")[:prompt_values_supported]
     assert_equal %w(none login), OidcDiscoveryDocument.for_resource_type("operator")[:prompt_values_supported]
   end
 

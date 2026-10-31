@@ -13,7 +13,6 @@ module Base
       include ::JumpRtReturnVerification
       include ::Session
       include ::PreferenceGlobal
-      include ::PreferenceAdoption
       include ::BaseAdmissionBrowserBinding
       include ::AuthenticationClient
       include ::SignErrorResponses

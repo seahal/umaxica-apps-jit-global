@@ -9,7 +9,7 @@
 #
 # Two problems motivate it, both observed in this codebase:
 #
-#   1. A misspelled feature name is not an error. `Flipper.enabled?(:outbund_push_suspended)`
+#   1. A misspelled feature name is not an error. `Flipper.enabled?(:outbund_email_suspended)`
 #      returns false forever, so a suspension switch silently never fires and a
 #      fail-closed gate silently never opens. Going through `enabled?` here turns
 #      an unregistered name into an ArgumentError at the call site.
@@ -45,10 +45,6 @@ module FeatureFlags
         effect: "Stops promotional mail only; transactional mail keeps delivering.",
       ),
       Flag.new(
-        name: :outbound_push_suspended, polarity: :suspension,
-        effect: "Stops APNs/FCM delivery in ApplicationPushNotificationJob.",
-      ),
-      Flag.new(
         name: :retention_purge_suspended, polarity: :suspension,
         effect: "Stops the irreversible deletes and anonymization in RetentionPurgeJob.",
       ),
@@ -59,14 +55,6 @@ module FeatureFlags
       Flag.new(
         name: :sign_up_available_app, polarity: :availability,
         effect: "Permits new sign-up ceremonies on the app surface.",
-      ),
-      Flag.new(
-        name: :sign_in_available_com, polarity: :availability,
-        effect: "Permits new sign-in ceremonies on the com surface.",
-      ),
-      Flag.new(
-        name: :sign_up_available_com, polarity: :availability,
-        effect: "Permits new sign-up ceremonies on the com surface.",
       ),
       Flag.new(
         name: :sign_in_available_org, polarity: :availability,

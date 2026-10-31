@@ -7,63 +7,123 @@
 # Database name: com_setting
 #
 #  id                       :bigint           not null, primary key
-#  dbsc_challenge           :text
-#  dbsc_challenge_issued_at :datetime
-#  dbsc_public_key          :jsonb
-#  discard_at             :datetime         default(Infinity), not null
-#  explicit_fields          :jsonb            not null
-#  jti                      :string
-#  purge_eligible_at                :datetime         default(Infinity), not null
-#  token_digest             :binary
-#  used_at                  :datetime
+#  jti                      :string           not null
 #  created_at               :datetime         not null
 #  updated_at               :datetime         not null
-#  binding_method_id        :bigint           default(0), not null
-#  dbsc_session_id          :string
-#  dbsc_status_id           :bigint           default(0), not null
 #  public_id                :string           not null
-#  replaced_by_id           :bigint
 #  status_id                :bigint           default(2), not null
 #
 # Indexes
 #
-#  index_com_preferences_on_binding_method_id  (binding_method_id)
-#  index_com_preferences_on_dbsc_session_id    (dbsc_session_id) UNIQUE
-#  index_com_preferences_on_dbsc_status_id     (dbsc_status_id)
 #  index_com_preferences_on_jti                (jti) UNIQUE
 #  index_com_preferences_on_public_id          (public_id) UNIQUE
-#  index_com_preferences_on_purge_eligible_at          (purge_eligible_at)
-#  index_com_preferences_on_replaced_by_id     (replaced_by_id)
 #  index_com_preferences_on_status_id          (status_id)
-#  index_com_preferences_on_token_digest       (token_digest)
-#  index_com_preferences_on_used_at            (used_at)
 #
 # Foreign Keys
 #
-#  fk_com_preferences_on_binding_method_id  (binding_method_id => com_preference_binding_methods.id)
-#  fk_com_preferences_on_dbsc_status_id     (dbsc_status_id => com_preference_dbsc_statuses.id)
 #  fk_com_preferences_on_status_id          (status_id => com_preference_statuses.id)
-#  fk_rails_...                             (replaced_by_id => com_preferences.id) ON DELETE => nullify
 #
 
 require "test_helper"
 
 class ComPreferenceTest < ActiveSupport::TestCase
-  PREFERENCE_CHILD_ASSOCIATIONS = %i(com_preference_cookie com_preference_region com_preference_timezone
+  test "issuance timestamps must be present before persistence" do
+    preference = ComPreference.new(jti: SecureRandom.uuid)
+
+    assert_not preference.valid?
+    assert_includes preference.errors.attribute_names, :last_issued_at
+    assert_includes preference.errors.attribute_names, :last_issued_expires_at
+
+    preference.last_issued_at = Time.current
+    preference.last_issued_expires_at = 400.days.from_now
+
+    assert_predicate preference, :valid?
+  end
+  PREFERENCE_CHILD_ASSOCIATIONS = %i(com_preference_cookie com_preference_consent_receipt
+                                     com_preference_web_push com_preference_browser_binding
+                                     com_preference_region com_preference_timezone
                                      com_preference_language com_preference_theme com_preference_currency
                                      com_preference_date_format com_preference_time_format com_preference_motion
                                      com_preference_density com_preference_page_size com_preference_adult_content_gate
-                                     com_preference_chronicles replacements).freeze
+                                     com_preference_chronicles).freeze
 
   setup do
-    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::NOTHING)
+    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::ACTIVE)
   end
 
   test "generates public_id on create" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
 
     assert_not_nil preference.public_id
     assert_equal 21, preference.public_id.length
+  end
+
+  test "a preference requires a unique nonempty generation" do
+    issued_at = Time.current
+    attributes = { last_issued_at: issued_at, last_issued_expires_at: issued_at + 400.days }
+    [nil, ""].each do |generation|
+      preference = ComPreference.new(**attributes, jti: generation)
+
+      assert_not preference.valid?
+      assert preference.errors.of_kind?(:jti, :blank)
+    end
+
+    ComPreference.create!(**attributes, jti: "generation-used")
+    duplicate = ComPreference.new(**attributes, jti: "generation-used")
+
+    assert_not duplicate.valid?
+    assert duplicate.errors.of_kind?(:jti, :taken)
+  end
+
+  test "database rejects missing and duplicate generations" do
+    issued_at = Time.current
+    first = ComPreference.create!(
+      jti: "database-generation", last_issued_at: issued_at, last_issued_expires_at: issued_at + 400.days,
+    )
+    attributes = {
+      public_id: PublicId.generate, last_issued_at: issued_at, last_issued_expires_at: issued_at + 400.days,
+    }
+
+    assert_raises(ActiveRecord::NotNullViolation) do
+      ComPreference.transaction(requires_new: true) { ComPreference.insert_all!([attributes.merge(jti: nil)]) }
+    end
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      ComPreference.transaction(requires_new: true) { ComPreference.insert_all!([attributes.merge(jti: first.jti)]) }
+    end
+  end
+
+  test "a preference with audit history cannot be destroyed" do
+    preference = com_preferences(:one)
+    audit = com_preference_chronicles(:one)
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { preference.destroy! }
+    assert_predicate ComPreference.where(id: preference.id), :exists?
+    assert_predicate ComPreferenceChronicle.where(id: audit.id), :exists?
+  end
+
+  test "destroying a preference removes its receipt, web push and browser binding children" do
+    ComPreferenceWebPushOption.ensure_defaults!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
+    push = ComPreferenceWebPush.create!(preference: preference, option_id: ComPreferenceWebPushOption::DISABLED)
+    binding = ComPreferenceBrowserBinding.create!(preference: preference, digest: "a" * 64)
+    receipt = ComPreferenceConsentReceipt.create!(
+      preference: preference, version: SecureRandom.uuid, recorded_at: Time.current,
+    )
+    loaded = ComPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
+
+    loaded.destroy!
+
+    assert_not ComPreferenceWebPush.exists?(push.id)
+    assert_not ComPreferenceBrowserBinding.exists?(binding.id)
+    assert_not ComPreferenceConsentReceipt.exists?(receipt.id)
   end
 
   test "validates the fixed public_id length" do
@@ -75,13 +135,22 @@ class ComPreferenceTest < ActiveSupport::TestCase
 
   test "does not overwrite existing public_id" do
     custom_id = "custom_public_id_123x"
-    preference = ComPreference.create!(public_id: custom_id)
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+      public_id: custom_id,
+    )
 
     assert_equal custom_id, preference.public_id
   end
 
   test "has one com_preference_cookie" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     preference = ComPreference.includes(:com_preference_cookie).find(preference.id)
     cookie = preference.create_com_preference_cookie!
 
@@ -91,7 +160,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys com_preference_cookie when destroyed" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     preference = ComPreference.includes(:com_preference_cookie).find(preference.id)
     cookie = preference.create_com_preference_cookie!
     cookie_id = cookie.id
@@ -102,7 +175,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one com_preference_region" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_region_options(:jp)
     preference = ComPreference.includes(:com_preference_region).find(preference.id)
     region = preference.create_com_preference_region!(option: option)
@@ -113,7 +190,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys com_preference_region when destroyed" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_region_options(:jp)
     preference = ComPreference.includes(:com_preference_region).find(preference.id)
     region = preference.create_com_preference_region!(option: option)
@@ -125,7 +206,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one com_preference_timezone" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_timezone_options(:asia_tokyo)
     preference = ComPreference.includes(:com_preference_timezone).find(preference.id)
     timezone = preference.create_com_preference_timezone!(option: option)
@@ -136,7 +221,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys com_preference_timezone when destroyed" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_timezone_options(:asia_tokyo)
     preference = ComPreference.includes(:com_preference_timezone).find(preference.id)
     timezone = preference.create_com_preference_timezone!(option: option)
@@ -148,7 +237,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one com_preference_language" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_language_options(:ja)
     preference = ComPreference.includes(:com_preference_language).find(preference.id)
     language = preference.create_com_preference_language!(option: option)
@@ -159,7 +252,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys com_preference_language when destroyed" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_language_options(:ja)
     preference = ComPreference.includes(:com_preference_language).find(preference.id)
     language = preference.create_com_preference_language!(option: option)
@@ -171,7 +268,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one com_preference_theme" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_theme_options(:light)
     preference = ComPreference.includes(:com_preference_theme).find(preference.id)
     theme = preference.create_com_preference_theme!(option: option)
@@ -182,7 +283,11 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys com_preference_theme when destroyed" do
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     option = com_preference_theme_options(:light)
     preference = ComPreference.includes(:com_preference_theme).find(preference.id)
     theme = preference.create_com_preference_theme!(option: option)
@@ -193,67 +298,113 @@ class ComPreferenceTest < ActiveSupport::TestCase
     assert_nil ComPreferenceTheme.find_by(id: theme_id)
   end
 
-  test "consume_once_by_digest! is replay-detectable" do
-    digest = ComPreference.digest_refresh_token("com-consume-once")
-    preference = ComPreference.create!(
-      status_id: ComPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      token_digest: digest,
-      jti: SecureRandom.uuid,
-    )
-
-    first = ComPreference.consume_once_by_digest!(digest: digest)
-
-    assert_equal preference.id, first.id
-    assert_predicate first.used_at, :present?
-    assert_nil ComPreference.consume_once_by_digest!(digest: digest)
-    assert_predicate preference.reload, :replay?
+  test "com preference does not expose refresh token rotation" do
+    assert_not_respond_to ComPreference, :rotate!
+    assert_not_respond_to ComPreference, :consume_once_by_digest!
   end
 
-  test "consume_once_by_digest! rejects revoked compromised and expired rows" do
-    revoked = ComPreference.create!(
-      status_id: ComPreferenceStatus::NOTHING,
-      token_digest: ComPreference.digest_refresh_token("com-revoked"),
-      discard_at: Time.current,
-      jti: SecureRandom.uuid,
-    )
-    compromised = ComPreference.create!(
-      status_id: ComPreferenceStatus::NOTHING,
-      token_digest: ComPreference.digest_refresh_token("com-compromised"),
-      discard_at: Time.current,
-      jti: SecureRandom.uuid,
-    )
-    expired = ComPreference.create!(
-      status_id: ComPreferenceStatus::NOTHING,
-      discard_at: 1.minute.ago,
-      token_digest: ComPreference.digest_refresh_token("com-expired"),
-      jti: SecureRandom.uuid,
-    )
+  test "com preference does not expose DBSC binding transitions" do
+    preference = ComPreference.new
 
-    assert_nil ComPreference.consume_once_by_digest!(digest: revoked.token_digest)
-    assert_nil ComPreference.consume_once_by_digest!(digest: compromised.token_digest)
-    assert_nil ComPreference.consume_once_by_digest!(digest: expired.token_digest)
-  end
-
-  test "rotate! creates replacement row and replacement link" do
-    digest = ComPreference.digest_refresh_token("com-rotate")
-    original = ComPreference.create!(
-      status_id: ComPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      token_digest: digest,
-      jti: SecureRandom.uuid,
-    )
-
-    rotated = ComPreference.rotate!(presented_digest: digest, now: Time.current)
-
-    assert_predicate rotated, :present?
-    assert_predicate rotated.issued_refresh_token, :present?
-    assert_not_equal original.id, rotated.id
-    assert_equal rotated.id, original.reload.replaced_by_id
+    assert_not_respond_to preference, :dbsc_enabled?
+    assert_not_respond_to preference, :dbsc_status_active?
   end
 
   test "adult_content_gate returns nothing when no gate is set" do
     assert_equal "nothing", ComPreference.new.adult_content_gate
+  end
+
+  test "retiring an active preference cannot retire it again" do
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+      status_id: ComPreferenceStatus::ACTIVE,
+    )
+
+    preference.retire!
+
+    assert_equal ComPreferenceStatus::RETIRED, preference.reload.status_id
+
+    assert_raises(PreferenceLifecycle::InvalidTransition) { preference.retire! }
+    assert_equal ComPreferenceStatus::RETIRED, preference.reload.status_id
+  end
+
+  test "preference status is limited to active and retired references" do
+    attributes = {
+      jti: SecureRandom.uuid, last_issued_at: Time.current, last_issued_expires_at: 400.days.from_now,
+    }
+
+    [nil, 0, 3].each do |status|
+      preference = ComPreference.new(**attributes, status_id: status)
+
+      assert_not preference.valid?
+      assert preference.errors.of_kind?(:status_id, :inclusion)
+    end
+    [ComPreferenceStatus::RETIRED, ComPreferenceStatus::ACTIVE].each do |status|
+      assert_predicate ComPreference.new(**attributes, status_id: status), :valid?
+    end
+  end
+
+  test "the status reference rejects integer values outside the two-state boundary in SQL" do
+    [0, 3].each do |status|
+      error =
+        assert_raises(ActiveRecord::StatementInvalid) do
+          ComPreferenceStatus.transaction(requires_new: true) { ComPreferenceStatus.insert_all!([{ id: status }]) }
+        end
+
+      assert_equal "23514", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+      assert_equal "chk_com_preference_statuses_id",
+                   error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+    end
+  end
+
+  test "a retired preference cannot be reactivated through model update" do
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+      status_id: ComPreferenceStatus::ACTIVE,
+    )
+    preference.retire!
+
+    assert_raises(ActiveRecord::RecordInvalid) { preference.update!(status_id: ComPreferenceStatus::ACTIVE) }
+    assert_equal ComPreferenceStatus::RETIRED, preference.reload.status_id
+  end
+
+  test "issuance retention elapses at the last issued expiry plus thirty days" do
+    issued_at = Time.current.change(usec: 0)
+    expires_at = issued_at + 400.days
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: issued_at, last_issued_expires_at: expires_at,
+    )
+    deadline = expires_at + 30.days
+
+    [ComPreferenceStatus::ACTIVE, ComPreferenceStatus::RETIRED].each do |status|
+      preference.retire! if status == ComPreferenceStatus::RETIRED
+
+      assert_equal status, preference.status_id
+      assert_not preference.issuance_retention_elapsed?(now: deadline - 1.second)
+      assert preference.issuance_retention_elapsed?(now: deadline)
+      assert preference.issuance_retention_elapsed?(now: deadline + 1.second)
+    end
+    assert_raises(ArgumentError) { preference.issuance_retention_elapsed?(now: nil) }
+  end
+
+  test "issued preference is active strictly before its stored expiry" do
+    issued_at = Time.current.change(usec: 0)
+    expires_at = issued_at + 400.days
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: issued_at, last_issued_expires_at: expires_at,
+    )
+
+    assert preference.issuance_active_at?(now: expires_at - Rational(1, 1_000_000))
+    assert_not preference.issuance_active_at?(now: expires_at)
+    assert_not preference.issuance_active_at?(now: expires_at + Rational(1, 1_000_000))
+    assert_raises(ArgumentError) { preference.issuance_active_at?(now: nil) }
+    preference.retire!
+
+    assert_not preference.issuance_active_at?(now: expires_at - Rational(1, 1_000_000))
   end
 
   test "adult_content_gate returns the gate option name when a gate is set" do

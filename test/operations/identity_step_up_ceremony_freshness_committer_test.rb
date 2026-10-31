@@ -51,21 +51,13 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
   end
 
   test "each realm full reauthentication replaces its root once and refuses revoked-device result replay" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       actor, token, credential =
         case surface
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor),
            actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          VisitorEmail.create!(
-            visitor: actor, address: "reauth-#{SecureRandom.hex(6)}@example.com", confirm_policy: "1",
-            visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          ).finalize_binding!
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor),
-           actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor),

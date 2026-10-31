@@ -7,36 +7,23 @@ class AuthEmailOtpDeliveryBindingTest < ActiveSupport::TestCase
 
   setup do
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
-    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
     ActionMailer::Base.deliveries.clear
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     %w(reissued verified expired released parent_expired revoked wrong_generation
        wrong_destination wrong_code missing_reference).each do |condition|
-      test "#{surface} sign-in delivery refuses #{condition} evidence without reviving it" do
+      test "app sign-in delivery refuses #{condition} evidence without reviving it" do
         address = "late-email-#{SecureRandom.hex(8)}@example.test"
-        if surface == "app"
-          owner = Client.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
-          )
-          contact = owner.client_emails.create!(
-            address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-          model = ClientAuthCeremonySession
-          mailer = Email::App::OtpMailer
-        else
-          owner = Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
-          )
-          contact = owner.visitor_emails.create!(
-            address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          ).tap(&:finalize_binding!)
-          model = VisitorAuthCeremonySession
-          mailer = Email::Com::OtpMailer
-        end
+        owner = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+        )
+        contact = owner.client_emails.create!(
+          address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+        ).tap(&:finalize_binding!)
+        model = ClientAuthCeremonySession
+        mailer = Email::App::OtpMailer
         issuance = OidcTestEntry.issue!(
           surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )

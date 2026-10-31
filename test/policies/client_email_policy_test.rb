@@ -23,7 +23,6 @@ class ClientEmailPolicyTest < ActiveSupport::TestCase
 
   def test_index_denies_other_actor_types
     assert_not ClientEmailPolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)).index?
-    assert_not ClientEmailPolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
   end
 
   def test_show
@@ -60,7 +59,6 @@ class ClientEmailPolicyTest < ActiveSupport::TestCase
 
   def test_create_denies_other_actor_types
     assert_not ClientEmailPolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)).create?
-    assert_not ClientEmailPolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).create?
   end
 
   # update?/destroy? require ownership of the specific record (record.user_id == client.id).

@@ -5,22 +5,20 @@ require "test_helper"
 class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-    [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
-    [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
   ].each do |owner_model, contact_model, owner_key, flow_model, surface, channel|
-    %w(current reissued consumed expired owner_locked).each do |state|
+    %w(
+      current reissued consumed expired owner_locked cancelled expiry_mismatch verified_expiry_mismatch
+    ).each do |state|
       test "#{surface} #{channel} signup delivery checks its original #{state} generation under owning locks" do
         owner = owner_model.create!(
           security_mode_id: SecurityModeConfigurable::NORMAL,
-          status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
+          status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
         )
         destination =
           if channel == :email
@@ -29,11 +27,9 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
             "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
           end
         status_key, status =
-          case [surface, channel]
-          when [:app, :email] then [:user_email_status_id, ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP]
-          when [:app, :telephone] then [:user_telephone_status_id, ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP]
-          when [:com, :email] then [:visitor_email_status_id, VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP]
-          when [:com, :telephone] then [:visitor_telephone_status_id, VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP]
+          case channel
+          when :email then [:user_email_status_id, ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP]
+          when :telephone then [:user_telephone_status_id, ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP]
           end
         contact = contact_model.create!(
           owner_key => owner.id, status_key => status, :confirm_policy => "1",
@@ -60,16 +56,25 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
           else
             issued.transaction.issue_telephone_otp!(purpose: "sign_up")
           end
-        elsif state == "consumed"
+        elsif %w(consumed verified_expiry_mismatch).include?(state)
           verifier = (channel == :email) ? EmailSignUpOtpVerificationCommitter : TelephoneSignUpOtpVerificationCommitter
           verified = verifier.call(:flow => flow, channel => contact, :session_nonce => nonce, :code => issued.code)
 
           assert_predicate verified, :success?
+          if state == "verified_expiry_mismatch"
+            flow.update_columns(expires_at: flow.expires_at - 1.second)
+          end
         elsif state == "owner_locked"
           owner.update!(
             access_state: "admin_locked", admin_locked_at: owner_model.database_now,
             admin_locked_by_operator_id: operators(:one).id, admin_locked_reason_code: "security_incident",
           )
+        elsif state == "cancelled"
+          result = SignUpTermination.call(cycle: flow, event: :cancel)
+
+          assert_equal :ok, result.status
+        elsif state == "expiry_mismatch"
+          issued.transaction.update_columns(expires_at: flow.expires_at + 1.second)
         end
         deadline = (state == "expired") ? flow.expires_at : now
         sent = 0
@@ -84,10 +89,26 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
 
         assert_equal state == "current", outcome
         assert_equal((state == "current") ? 1 : 0, sent)
-        # D-177: an undelivered expired generation leaves the Ticket for SignUpExpiryJob.
-        assert_not flow.reload.sign_up_terminal?
+        # D-177: expiry during delivery leaves termination to SignUpExpiryJob.
+        assert_equal state == "cancelled", flow.reload.sign_up_terminal?
         assert_nil contact.reload.binding_finalized_at
         assert_equal owner.id, contact[owner_key]
+        if state == "cancelled"
+          verifier = (channel == :email) ? EmailSignUpOtpVerificationCommitter : TelephoneSignUpOtpVerificationCommitter
+          verification = verifier.call(:flow => flow, channel => contact, :session_nonce => nonce, :code => issued.code)
+
+          assert_not_predicate verification, :success?
+          assert_equal :inactive_flow, verification.status
+          assert_nil issued.transaction.reload.otp_consumed_at
+        elsif %w(expiry_mismatch verified_expiry_mismatch).include?(state)
+          verifier = (channel == :email) ? EmailSignUpOtpVerificationCommitter : TelephoneSignUpOtpVerificationCommitter
+          verification = verifier.call(:flow => flow, channel => contact, :session_nonce => nonce, :code => issued.code)
+
+          assert_not_predicate verification, :success?
+          assert_not_predicate verification, :verified_evidence?
+          assert_equal :missing_challenge, verification.status
+          assert_nil issued.transaction.reload.otp_consumed_at if state == "expiry_mismatch"
+        end
       end
     end
   end

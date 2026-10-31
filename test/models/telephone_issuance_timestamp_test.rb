@@ -10,13 +10,6 @@ class TelephoneIssuanceTimestampTest < ActiveSupport::TestCase
     assert_not telephone.reregistration_window_active?
   end
 
-  test "COM telephone issuance has an explicit timestamp independent of row creation" do
-    telephone = VisitorTelephone.new(created_at: Time.current)
-
-    assert telephone.has_attribute?(:otp_last_sent_at)
-    assert_not telephone.reregistration_window_active?
-  end
-
   test "ORG telephone issuance has an explicit timestamp independent of row creation" do
     telephone = OperatorTelephone.new(created_at: Time.current)
 

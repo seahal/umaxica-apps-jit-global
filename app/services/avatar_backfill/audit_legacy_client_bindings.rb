@@ -160,7 +160,6 @@ module AvatarBackfill
       [
         AvatarPersonaBinding.active.find_by(avatar_id: avatar.id),
         AvatarAgentBinding.active.find_by(avatar_id: avatar.id),
-        AvatarIndividualBinding.active.find_by(avatar_id: avatar.id),
       ].compact
     end
 
@@ -170,8 +169,6 @@ module AvatarBackfill
         AvatarPersonaBinding.active.find_by(persona_id: subject.id)
       when Agent
         AvatarAgentBinding.active.find_by(agent_id: subject.id)
-      when Individual
-        AvatarIndividualBinding.active.find_by(individual_id: subject.id)
       end
     end
 
@@ -181,8 +178,6 @@ module AvatarBackfill
         binding.persona_id == subject.id
       in [AvatarAgentBinding, Agent]
         binding.agent_id == subject.id
-      in [AvatarIndividualBinding, Individual]
-        binding.individual_id == subject.id
       else
         false
       end

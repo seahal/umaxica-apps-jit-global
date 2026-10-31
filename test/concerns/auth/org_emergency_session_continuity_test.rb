@@ -153,15 +153,15 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
     assert_equal "normal", claims_of(normal[:access_token]).fetch(AuthenticationContextValue::CLAIM)
   end
 
-  # Emergency Access is org only, so app and com have no column to record a
-  # context in and no ceremony that could set one. Their sessions report Normal
+  # Emergency Access is org only, so the app surface has no column to record a
+  # context in and no ceremony that could set one. Its sessions report Normal
   # by construction rather than by a lookup that could be made to answer
   # otherwise.
-  test "app and com sessions have no authentication context to carry" do
-    [ClientToken, VisitorToken].each do |token_class|
-      assert_not_includes token_class.column_names, "authentication_context"
-      assert_predicate token_class.new.authentication_context_value, :normal?
-      assert_not_predicate token_class.new, :standby_authentication_context?
-    end
+  test "app sessions have no authentication context to carry" do
+    token_class = ClientToken
+
+    assert_not_includes token_class.column_names, "authentication_context"
+    assert_predicate token_class.new.authentication_context_value, :normal?
+    assert_not_predicate token_class.new, :standby_authentication_context?
   end
 end

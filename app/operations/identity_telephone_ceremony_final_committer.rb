@@ -18,16 +18,6 @@ class IdentityTelephoneCeremonyFinalCommitter
       audit_subject: :actor,
       binding: true,
     },
-    "com" => {
-      outbox_class: VisitorContactAuditOutbox,
-      actor_type: :visitor,
-      record_class: VisitorTelephone,
-      owner_key: :visitor_id,
-      status_key: :visitor_telephone_status_id,
-      unverified_status: VisitorTelephoneStatus::UNVERIFIED,
-      verified_status: VisitorTelephoneStatus::VERIFIED,
-      binding: true,
-    },
     "org" => {
       actor_type: :operator,
       record_class: OperatorTelephone,
@@ -60,11 +50,15 @@ class IdentityTelephoneCeremonyFinalCommitter
     validate_actor_binding!
     return reconcile_committed_result! if transaction.consumed?
 
-    validate_transaction_state!
-    validate_candidate_before_consumption!
-    consumption = IdentityTelephoneCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
-    commit_candidate!
-    Commit.new(transaction: consumption.transaction, result: consumption.result, telephone: telephone)
+    actor.with_lock do
+      raise IdentityTelephoneCeremony::Error, "Contact owner is unavailable" unless actor.active?
+
+      validate_transaction_state!
+      validate_candidate_before_consumption!
+      consumption = IdentityTelephoneCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
+      commit_candidate!
+      Commit.new(transaction: consumption.transaction, result: consumption.result, telephone: telephone)
+    end
   end
 
   private
@@ -210,7 +204,7 @@ class IdentityTelephoneCeremonyFinalCommitter
     candidate_ref = result["telephone_candidate_ref"].to_s
     raise IdentityTelephoneCeremony::Error, "telephone candidate is required" if candidate_ref.blank?
 
-    scope = config.fetch(:record_class).where(config.fetch(:owner_key) => actor.id)
+    scope = config.fetch(:record_class).where(config.fetch(:owner_key) => actor.id).lock
     if config.fetch(:record_class).column_names.include?("public_id")
       scope.find_by!(public_id: candidate_ref)
     else

@@ -4,6 +4,7 @@ module Auth
   module App
     module Social
       class LinkCompletionsController < ::Auth::App::ApplicationController
+        sign_entry_classification! :parent_intent
         include SocialAuth
         include VerificationClient
 
@@ -30,12 +31,19 @@ module Auth
           end
 
           current_client.with_lock do
-            OpBaseAppRecord.connected_to(role: :writing) do
-              device_session = token.device_session_record!
-              device_session.with_lock do
-                token.with_lock { commit_link_candidate!(reference, token, device_session) }
+            candidate, ceremony_started_at =
+              OpBaseAppRecord.connected_to(role: :writing) do
+                device_session = token.device_session_record!
+                device_session.with_lock do
+                  token.with_lock { consume_link_candidate!(reference, token, device_session) }
+                end
               end
-            end
+            ExternalAuthenticationLinkUseCase.call(
+              principal: candidate.callback_result.principal,
+              credential_candidate: candidate.callback_result.credential_candidate,
+              user: current_client,
+              ceremony_started_at: ceremony_started_at,
+            )
           end
           session.delete(SocialAuth::SOCIAL_LINK_COMPLETION_SESSION_KEY)
           redirect_to(auth_app_settings_path(ri: params[:ri]), status: :see_other)
@@ -47,7 +55,7 @@ module Auth
 
         private
 
-        def commit_link_candidate!(reference, token, device_session)
+        def consume_link_candidate!(reference, token, device_session)
           now = token.class.database_now
           unless current_client.login_allowed? && token.active_status?(now) && device_session.usable? &&
               device_session.current_refresh_token_id == token.id
@@ -67,12 +75,6 @@ module Auth
           grant = ClientSocialCeremonyTransaction.lock.find_by!(transaction_id: record.transaction_id)
           validate_link_grant!(grant, candidate, device_session, now)
 
-          ExternalAuthenticationLinkUseCase.call(
-            principal: candidate.callback_result.principal,
-            credential_candidate: candidate.callback_result.credential_candidate,
-            user: current_client,
-            ceremony_started_at: grant.created_at,
-          )
           token.consume_step_up_evidence!(
             requirement: social_auth_step_up_requirement(token, ttl: STEP_UP_TTL), now: now,
           )
@@ -81,6 +83,7 @@ module Auth
             not_found_message: "social link candidate unavailable", expired_message: "social link candidate expired",
           )
           grant.expire!
+          [candidate, grant.created_at]
         rescue TokenStatusManagement::StepUpEvidenceUnavailable
           raise SocialAuth::StepUpRequiredError.new("errors.social_auth.step_up_required")
         end

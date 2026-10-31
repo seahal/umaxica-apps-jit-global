@@ -7,6 +7,36 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   fixtures :clients, :client_statuses
 
+  test "a revoked or superseded device cannot start or resume a TOTP enrollment" do
+    [false, true].product(%i(revoked superseded)).each do |resume, invalidation|
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
+      transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+        actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
+        required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
+      )
+      ClientStepUpSession.create!(
+        user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
+        step_up_ceremony_transaction_ref: transaction.transaction_id, discard_at: transaction.expires_at,
+      )
+      IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction) if resume
+      device = token.device_session_record!
+      if invalidation == :revoked
+        device.revoke!
+      else
+        replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+        device.update!(current_refresh_token_id: replacement.id)
+      end
+      counts = [IdentityTotpCeremonyCandidate.count, ClientTotpCeremonyTransaction.count]
+
+      assert_raises(IdentityTotpCeremonyContract::Error) do
+        IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
+      end
+      assert_equal counts, [IdentityTotpCeremonyCandidate.count, ClientTotpCeremonyTransaction.count]
+      assert_equal "pending", transaction.reload.status
+    end
+  end
+
   test "TOTP ceremony transaction factory issues separate NanoID references" do
     actor = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)

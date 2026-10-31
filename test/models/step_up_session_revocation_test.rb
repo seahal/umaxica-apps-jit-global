@@ -5,7 +5,7 @@ require "minitest/mock"
 
 # Challenge references and raw secrets must not appear in failed assertion output.
 class StepUpSessionRevocationTest < ActiveSupport::TestCase
-  %i(app com org).each do |surface|
+  %i(app org).each do |surface|
     %i(pending consumed).each do |challenge_state|
       %i(early before_discard at_discard after_discard).each do |boundary_case|
         test "#{surface} root revocation retains #{challenge_state} challenge facts #{boundary_case}" do
@@ -16,11 +16,6 @@ class StepUpSessionRevocationTest < ActiveSupport::TestCase
               [owner, ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now),
                ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token,
                ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),]
-            when :com
-              owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-              [owner, VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now),
-               VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token,
-               ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
             when :org
               owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
               [owner, OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now),

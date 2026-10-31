@@ -8,7 +8,9 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   fixtures :client_statuses
 
-  test "GET with a Base admission reference shows a continuation and consumes nothing" do
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
+  test "a confirmed admission GET redeems once without granting login authority" do
     actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE,
@@ -63,25 +65,45 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
-    2.times do
-      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    https!
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    [{}, { "Sec-Fetch-Mode" => "navigate" }, { "Sec-Fetch-Dest" => "document" },
+     { "Sec-Fetch-Mode" => "cors", "Sec-Fetch-Dest" => "document" },
+     { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "empty" },
+     { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "iframe" },].each do |headers|
+      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: headers
 
-      assert_response :success
-      form = response.parsed_body.at_css("form#auth-admission-continuation-form")
-
-      assert_equal "post", form["method"]
-      assert_equal auth_app_verification_path, URI.parse(form["action"]).path
-      assert_equal issuance.reference, form.at_css('input[name="entry_ref"]')["value"]
-      assert_equal "private, no-store", response.headers["Cache-Control"]
-      assert_equal "no-referrer", response.headers["Referrer-Policy"]
+      assert_response :bad_request
+      assert_not_predicate binding.reload, :redeemed?
+      assert_not response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
     end
+    head auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+
+    assert_response :bad_request
+    assert_not_predicate binding.reload, :redeemed?
+    assert_not response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
+    assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_not_includes response.location, issuance.reference
     assert_equal "pending", issuance.transaction.reload.status
-    assert_equal 0, ClientAuthCeremonySession.where(
+    assert_equal 1, ClientAuthCeremonySession.where(
       step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
     ).count
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
+    issuance.transaction.with_lock do
+      issuance.transaction.commit_cancellation!(now: ClientStepUpCeremonyTransaction.database_now)
+    end
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+
+    assert_response :bad_request
+    assert_not response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
   end
 
-  test "POST redeems the admission once and the clean entry page lists only the actor's usable methods" do
+  test "GET redeems the admission once and the clean entry page lists only the actor's usable methods" do
     actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE,
@@ -140,10 +162,8 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
@@ -227,17 +247,43 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
 
     assert_response :see_other
 
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
     assert_equal 1, ClientAuthCeremonySession.where(
       step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
     ).count
+
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    foreign = open_session
+    foreign.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+    foreign.https!
+    foreign.get(auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS)
+
+    assert_equal 400, foreign.response.status
+    assert_not foreign.response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
+    [9, 10, 11].each do |seconds|
+      ClientAuthAdmissionBinding.stub(:database_now, binding.created_at + seconds.seconds) do
+        get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+      end
+
+      assert_equal((seconds == 9) ? 303 : 400, response.status)
+      assert_not response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
+      assert_equal 1, ClientAuthCeremonySession.where(
+        step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+      ).count
+    end
+    token.device_session.revoke!
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+
+    assert_response :bad_request
+    assert_not response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
   end
 
   # Sentinels of the reference parameter: missing, empty, unknown, NUL-bearing, and two references at once.
@@ -254,7 +300,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
       {}, { entry_ref: "" }, { entry_ref: "unknown-reference" }, { entry_ref: "abc\u0000def" }, { entry_ref: "0" },
       { entry_ref: "a", transaction_ref: "b" },
     ].each do |params|
-      post auth_app_verification_path(ri: "jp"), params: params
+      get auth_app_verification_path(ri: "jp"), params: params, headers: NAVIGATION_HEADERS
 
       assert_response :bad_request, params.inspect
       assert_equal I18n.t("errors.messages.invalid_request"), response.body
@@ -322,79 +368,20 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
 
     assert_response :bad_request
     assert_equal "pending", issuance.transaction.reload.status
 
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    get(
+      new_auth_app_verification_setup_path(ri: "jp"),
+      params: { entry_ref: issuance.reference },
+      headers: NAVIGATION_HEADERS,
+    )
 
     assert_response :see_other
     assert_equal new_auth_app_verification_setup_path(ri: "jp"), URI.parse(response.location).request_uri
-  end
-
-  test "an admission issued for the app surface is refused on the com host" do
-    actor = Client.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE,
-    )
-    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    existing_session_count = VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-
-    post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
-
-    assert_response :bad_request
-    assert_equal existing_session_count,
-                 VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
-    assert_equal "pending", issuance.transaction.reload.status
   end
 
   test "the entry page is refused once the Base session behind the ceremony is revoked" do
@@ -451,7 +438,10 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
     token.revoke!
 
     get auth_app_verification_path(ri: "jp")

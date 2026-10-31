@@ -51,6 +51,12 @@ export async function readCookie(name: string): Promise<string | null> {
   return cookieValue(await cookieJar().get(name));
 }
 
+/** A same-name ambiguity is not a usable value. */
+export async function readUniqueCookie(name: string): Promise<string | null> {
+  const matches = (await cookieJar().getAll()).filter((cookie) => cookie.name === name);
+  return matches.length === 1 ? cookieValue(matches[0]) : null;
+}
+
 /**
  * Calls back with a cookie's new value whenever it changes, and with null when it is deleted.
  * Returns an unsubscribe function.

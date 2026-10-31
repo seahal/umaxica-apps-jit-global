@@ -57,7 +57,10 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
     end
   end
 
-  test "continues after one event fails and leaves it retryable" do
+  test "continues to the next batch after one event fails and leaves it retryable" do
+    batch_size = ClientPasskeyAuditOutbox.where(acknowledged_at: nil).count + 1
+
+    assert_operator batch_size, :<=, 500
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     first = register_passkey(actor, "first")
     second = register_passkey(actor, "second")
@@ -81,25 +84,89 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
       ),
     )
 
-    error = assert_raises(ArgumentError) { PasskeyAuditDeliveryJob.perform_now }
+    error = assert_raises(ArgumentError) { PasskeyAuditDeliveryJob.perform_now(batch_size: batch_size) }
     assert_equal "Passkey Chronicle event identity conflicts with its source", error.message
     assert_nil first_event.reload.acknowledged_at
     assert second_event.reload.acknowledged_at
     assert Chronicle.exists?(event_uuid: second_event.event_uuid)
   end
 
-  test "delivery after credential deletion preserves system actor and original occurrence time" do
-    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+  test "an unavailable APP source does not prevent ORG audit delivery" do
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    client_key = register_passkey(client, "source-unavailable")
+    client_event = ClientPasskeyAuditOutbox.find_by!(external_id: client_key.external_id)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     passkey = PasskeyRegistrationOperation.call!(
-      actor: actor, passkey_class: VisitorPasskey,
+      actor: operator, passkey_class: OperatorPasskey,
+      attributes: { webauthn_id: SecureRandom.uuid, public_key: "org-audit-source-isolation" },
+      audit: { event_type: "passkey.registered.settings", surface: "org", actor_ref: operator.public_id },
+    )
+    event = OperatorPasskeyAuditOutbox.find_by!(external_id: passkey.external_id)
+    unavailable = ->(*) { raise ActiveRecord::ConnectionNotEstablished, "injected APP source outage" }
+
+    ClientPasskeyAuditOutbox.stub(:where, unavailable) do
+      assert_raises(ActiveRecord::ConnectionNotEstablished) { PasskeyAuditDeliveryJob.perform_now(batch_size: 1) }
+    end
+
+    assert_nil client_event.reload.acknowledged_at
+    assert_not Chronicle.exists?(event_uuid: client_event.event_uuid)
+    assert_predicate event.reload.acknowledged_at, :present?
+    assert_equal 1, Chronicle.where(event_uuid: event.event_uuid).count
+    PasskeyAuditDeliveryJob.perform_now(batch_size: 1)
+
+    assert_predicate client_event.reload.acknowledged_at, :present?
+    assert_equal 1, Chronicle.where(event_uuid: client_event.event_uuid).count
+    assert_equal 1, Chronicle.where(event_uuid: event.event_uuid).count
+  end
+
+  test "refuses forged authoritative metadata and continues delivery on each surface" do
+    [
+      [Client, ClientPasskey, ClientPasskeyAuditOutbox, "app", SecurityModeConfigurable::NORMAL],
+      [Operator, OperatorPasskey, OperatorPasskeyAuditOutbox, "org", SecurityModeConfigurable::ADVANCED],
+    ].each do |actor_class, passkey_class, outbox_class, surface, security_mode|
+      actor = actor_class.create!(security_mode_id: security_mode)
+      %w(surface external_id actor_ref).each do |reserved_key|
+        first = PasskeyRegistrationOperation.call!(
+          actor: actor, passkey_class: passkey_class,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "forged-metadata-key" },
+          audit: { event_type: "passkey.registered.settings", surface: surface },
+        )
+        second = PasskeyRegistrationOperation.call!(
+          actor: actor, passkey_class: passkey_class,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "valid-metadata-key" },
+          audit: { event_type: "passkey.registered.settings", surface: surface },
+        )
+        invalid = outbox_class.find_by!(external_id: first.external_id)
+        valid = outbox_class.find_by!(external_id: second.external_id)
+        outbox_class.where(id: invalid.id).update_all(metadata: { reserved_key => "forged-reference" })
+
+        assert_raises(ArgumentError) { PasskeyAuditDeliveryJob.perform_now(batch_size: 1) }
+        assert_nil invalid.reload.acknowledged_at
+        assert_not Chronicle.exists?(event_uuid: invalid.event_uuid)
+        assert valid.reload.acknowledged_at
+        assert Chronicle.exists?(event_uuid: valid.event_uuid)
+
+        outbox_class.where(id: invalid.id).update_all(metadata: {})
+        PasskeyAuditDeliveryJob.perform_now(batch_size: 1)
+
+        assert invalid.reload.acknowledged_at
+      end
+    end
+  end
+
+  test "delivery after credential deletion preserves system actor and original occurrence time" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    passkey = PasskeyRegistrationOperation.call!(
+      actor: actor, passkey_class: ClientPasskey,
       attributes: { webauthn_id: SecureRandom.uuid, public_key: "system-purge-key" },
+      audit: { event_type: "passkey.registered.settings", surface: "app" },
     )
     external_id = passkey.external_id
-    occurred_at = VisitorPasskey.database_now - 1.hour
+    occurred_at = ClientPasskey.database_now - 1.hour
     event = nil
-    VisitorPasskey.transaction do
+    ClientPasskey.transaction do
       event = PasskeyAuditOutbox.record_for!(
-        passkey: passkey, event_type: "passkey.purged", surface: "com",
+        passkey: passkey, event_type: "passkey.purged", surface: "app",
         actor_ref: nil, occurred_at: occurred_at,
       )
       passkey.destroy!
@@ -109,9 +176,9 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
 
     audit = Chronicle.find_by!(event_uuid: event.event_uuid)
 
-    assert_not VisitorPasskey.exists?(external_id: external_id)
+    assert_not ClientPasskey.exists?(external_id: external_id)
     assert_equal external_id, audit.metadata.fetch("external_id")
-    assert_equal "com", audit.metadata.fetch("surface")
+    assert_equal "app", audit.metadata.fetch("surface")
     assert_not audit.metadata.key?("actor_ref")
     assert_equal event.occurred_at, audit.occurred_at
     assert event.reload.acknowledged_at
@@ -139,6 +206,52 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
       PasskeyAuditDeliveryJob.perform_now
     end
     assert event.reload.acknowledged_at
+  end
+
+  test "refuses a matching UUID with conflicting Chronicle actor or subject" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    passkey = register_passkey(actor, "conflicting-actor")
+    event = ClientPasskeyAuditOutbox.find_by!(external_id: passkey.external_id)
+    policy = ChronicleRecordPolicy.retention_policy_for(action: event.event_type)
+    audit = Chronicle.create!(
+      event_uuid: event.event_uuid, action: event.event_type, result: "succeeded",
+      occurred_at: event.occurred_at, request_id: event.operation_ref,
+      metadata: { "surface" => "app", "external_id" => event.external_id.to_s,
+                  "actor_ref" => actor.public_id, "reason_code" => "settings_registration" },
+      actor_type: "Client", actor_id: actor.id, changeset: {}, chronicle_retention_policy: policy,
+      erasable_at: ChronicleRecordPolicy.erasable_at_for(policy: policy, occurred_at: event.occurred_at),
+    )
+
+    assert_raises(ArgumentError) { PasskeyAuditDeliveryJob.perform_now }
+    assert_nil event.reload.acknowledged_at
+    audit.update!(actor_type: nil, actor_id: nil, subject_type: "Client", subject_id: actor.id)
+    assert_raises(ArgumentError) { PasskeyAuditDeliveryJob.perform_now }
+    assert_nil event.reload.acknowledged_at
+  end
+
+  test "ORG conflicting Chronicle actor stays pending while a later event is delivered" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    passkeys = 2.times.map do
+      PasskeyRegistrationOperation.call!(
+        actor: actor, passkey_class: OperatorPasskey,
+        attributes: { webauthn_id: SecureRandom.uuid, public_key: "org-audit-conflict-key" },
+        audit: { event_type: "passkey.registered.settings", surface: "org", actor_ref: actor.public_id },
+      )
+    end
+    first, second = passkeys.map { |passkey| OperatorPasskeyAuditOutbox.find_by!(external_id: passkey.external_id) }
+    policy = ChronicleRecordPolicy.retention_policy_for(action: first.event_type)
+    Chronicle.create!(
+      event_uuid: first.event_uuid, action: first.event_type, result: "succeeded",
+      occurred_at: first.occurred_at, request_id: first.operation_ref,
+      metadata: { "surface" => "org", "external_id" => first.external_id, "actor_ref" => actor.public_id },
+      actor_type: "Operator", actor_id: actor.id, changeset: {}, chronicle_retention_policy: policy,
+      erasable_at: ChronicleRecordPolicy.erasable_at_for(policy: policy, occurred_at: first.occurred_at),
+    )
+
+    assert_raises(ArgumentError) { PasskeyAuditDeliveryJob.perform_now(batch_size: 1) }
+    assert_nil first.reload.acknowledged_at
+    assert_predicate second.reload.acknowledged_at, :present?
+    assert Chronicle.exists?(event_uuid: second.event_uuid)
   end
 
   private

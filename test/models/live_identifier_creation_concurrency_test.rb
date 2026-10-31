@@ -9,8 +9,6 @@ class LiveIdentifierCreationConcurrencyTest < ActiveSupport::TestCase
   [
     [Client, ClientEmail, :user_id, ClientStatus::ACTIVE, "app", "email", ClientEmailHistory],
     [Client, ClientTelephone, :user_id, ClientStatus::ACTIVE, "app", "telephone", ClientTelephoneHistory],
-    [Visitor, VisitorEmail, :visitor_id, VisitorStatus::ACTIVE, "com", "email", VisitorEmailHistory],
-    [Visitor, VisitorTelephone, :visitor_id, VisitorStatus::ACTIVE, "com", "telephone", VisitorTelephoneHistory],
     [Operator, OperatorEmail, :staff_id, OperatorStatus::ACTIVE, "org", "email", OperatorEmailHistory],
     [Operator, OperatorTelephone, :staff_id, OperatorStatus::ACTIVE, "org", "telephone", OperatorTelephoneHistory],
   ].each do |owner_model, model, owner_key, owner_status, realm, channel, history_model|

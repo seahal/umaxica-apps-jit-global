@@ -11,7 +11,8 @@ Core rules:
   it with `authorize :actor, through: :current_actor`.
 - Every policy inherits from `ApplicationPolicy < ActionPolicy::Base` and defaults to deny-all. An
   action is forbidden unless its predicate explicitly returns true.
-- `ApplicationPolicy` provides ownership, role, JWT scope, and app/org/com surface helpers.
+- `ApplicationPolicy` provides ownership, role and JWT scope helpers for the app and org actor
+  types. The anonymous `com` surface binds no policy actor and authorizes no credential action.
 
 Related implementation:
 
@@ -48,7 +49,7 @@ authorize :actor, through: :current_actor
 `app/controllers/concerns/actor_support.rb`. Within a policy:
 
 - `actor` is the `Actor::Context`.
-- `user` is the concrete Client, Operator, or Visitor derived from the actor, or nil when anonymous.
+- `user` is the concrete Client or Operator derived from the actor, or nil when anonymous.
 - `record` is the resource being authorized.
 
 ## ApplicationPolicy Helpers
@@ -109,7 +110,7 @@ end
 
 Important points:
 
-- Branch explicitly on the Client, Operator, or Visitor actor type.
+- Branch explicitly on the Client or Operator actor type.
 - Check ownership explicitly with `owner?`.
 - Define scopes with Action Policy's `relation_scope`, not a Pundit `Scope` class.
 
@@ -121,13 +122,13 @@ Call `authorize!(record, to: :action?)`. Because a `before_action` cannot pass t
 directly, this application conventionally registers a named wrapper method:
 
 ```ruby
-class Base::Com::Identity::EmailsController < ...
+class Base::App::Identity::EmailsController < ...
   before_action :authorize_emails!, only: :index
 
   private
 
   def authorize_emails!
-    authorize!(VisitorEmail, to: :index?)
+    authorize!(ClientEmail, to: :index?)
   end
 end
 ```

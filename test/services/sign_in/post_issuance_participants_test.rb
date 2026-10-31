@@ -189,29 +189,21 @@ module SignIn
       assert_equal "//evil.example/path", cycle.return_to
     end
 
-    test "checkpoint and selector participants work for visitor and operator cycles" do
-      [
-        [VisitorSignInFlow, create_visitor],
-        [OperatorSignInFlow, create_operator],
-      ].each do |cycle_class, actor|
-        cycle = create_cycle(actor, cycle_class: cycle_class, status_name: "CHECKPOINT_PENDING")
+    test "checkpoint and selector participants work for operator cycles" do
+      cycle_class, actor = [OperatorSignInFlow, create_operator]
+      cycle = create_cycle(actor, cycle_class: cycle_class, status_name: "CHECKPOINT_PENDING")
 
-        SignInCheckpointParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
-        SignInSelectorParticipant.new(cycle: cycle.reload, actor: actor).auto_commit_single!
-        cycle.reload.complete_sign_in!
+      SignInCheckpointParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
+      SignInSelectorParticipant.new(cycle: cycle.reload, actor: actor).auto_commit_single!
+      cycle.reload.complete_sign_in!
 
-        assert_predicate cycle.reload, :sign_in_completed?
-      end
+      assert_predicate cycle.reload, :sign_in_completed?
     end
 
     private
 
     def create_client
       Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
-    end
-
-    def create_visitor
-      Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
     end
 
     def create_operator

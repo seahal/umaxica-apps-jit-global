@@ -20,12 +20,21 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal configuration.hash, same.hash
   end
 
-  test "actor preferences track explicit fields hashes and cookie input forms" do
-    preference = Actor::Preference.new(explicit_fields: [:language])
-    same = Actor::Preference.new(explicit_fields: ["language"])
+  test "actor preferences decode the realm snapshot and cookie input forms" do
+    preference = Actor::Preference.from_jwt(
+      "language" => "en", "region" => "us", "timezone" => "Etc/UTC", "theme" => "dark",
+      "currency" => "usd", "date_format" => "us", "time_format" => "12", "motion" => "reduced",
+      "density" => "compact", "page_size" => "infinity",
+    )
+    same = Actor::Preference.from_jwt(
+      "language" => "en", "region" => "us", "timezone" => "Etc/UTC", "theme" => "dark",
+      "currency" => "usd", "date_format" => "us", "time_format" => "12", "motion" => "reduced",
+      "density" => "compact", "page_size" => "infinity",
+    )
 
-    assert preference.explicit?(:language)
-    assert_predicate preference, :language_explicit?
+    assert_equal "en", preference.language
+    assert_equal "us", preference.region
+    assert_equal "dr", preference.theme
     assert_equal preference, same
     assert_equal preference.hash, same.hash
 
@@ -158,8 +167,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal "self_service", created_attributes[:context]["reason_code"]
     assert_not created_attributes[:context].key?("forbidden")
     assert_equal ClientOccurrence, WithdrawalOccurrenceRecording.occurrence_class_for(subject)
-    assert_equal VisitorOccurrence, WithdrawalOccurrenceRecording.occurrence_class_for(Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
-    assert_equal "com", WithdrawalOccurrenceRecording.surface_for(Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
   end
 
   test "session limit transaction creates finds and completes every remaining state" do
@@ -300,19 +307,9 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_predicate notification, :terminal?
   end
 
-  test "dbsc model mappings and downgrade use each model's fixed reference classes" do
-    assert_equal AppPreferenceBindingMethod, AppPreference.dbsc_binding_method_class
-    assert_equal AppPreferenceDbscStatus, AppPreference.dbsc_status_class
+  test "dbsc model mappings and downgrade use auth token reference classes" do
     assert_equal ClientTokenBindingMethod, ClientToken.dbsc_binding_method_classes.fetch("ClientToken")
     assert_equal ClientTokenDbscStatus, ClientToken.dbsc_status_classes.fetch("ClientToken")
-
-    preference = AppPreference.new(dbsc_status_id: AppPreferenceDbscStatus::PENDING)
-    updates = []
-    preference.stub(:update!, ->(attributes) { updates << attributes }) do
-      preference.downgrade_dbsc_status_to_nothing!
-    end
-
-    assert_equal({ dbsc_status_id: AppPreferenceDbscStatus::NOTHING }, updates.last)
   end
 
   test "sign in flow recognizes legacy states and advances to return" do
@@ -337,32 +334,22 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
 
     assert_kind_of ActiveRecord::Relation, ClientStepUpCeremonyTransaction.purgeable_at(now)
     assert_equal OpBaseOrgRecord, OperatorStepUpCeremonyTransaction.connection_owner
-    assert_equal OpBaseComRecord, VisitorStepUpCeremonyTransaction.connection_owner
   end
 
   test "small public model APIs and reference defaults are covered by model tests" do
-    VisitorTokenBindingMethod.ensure_defaults!
-    ComPreferenceBindingMethod.ensure_defaults!
     AppPreferenceChronicleEvent.ensure_defaults!
     ComPreferenceChronicleEvent.ensure_defaults!
     OrgPreferenceChronicleEvent.ensure_defaults!
 
-    assert_equal VisitorTokenBindingMethod::DEFAULTS.sort,
-                 VisitorTokenBindingMethod.where(id: VisitorTokenBindingMethod::DEFAULTS).pluck(:id).sort
     assert_predicate OperatorSecretCredential.generate_raw_secret_credential, :present?
     assert_equal :operator, OperatorEmail.new.promotional_unsubscribe_scope
-    assert_equal :visitor, VisitorEmail.new.promotional_unsubscribe_scope
-    assert_equal "visitor-email", VisitorEmail.new(public_id: "visitor-email").to_param
     assert_equal "public", Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "public").to_param
     assert_equal "nothing", AppPreference.new.adult_content_gate
     assert_equal "nothing", ClientPreference.new.adult_content_gate
     assert_not ClientSecretCredential.new.available_at?(at: Client.database_now)
   end
 
-  test "email lookup and ceremony candidate validation cover valid and invalid shapes" do
-    assert_kind_of ActiveRecord::Relation, VisitorEmail.with_address("visitor@example.test")
-    assert_kind_of ActiveRecord::Relation, VisitorEmail.with_address(nil)
-
+  test "identity social ceremony candidate validation covers valid and invalid shapes" do
     valid = IdentitySocialCeremonyCandidate.new(
       auth_hash: {
         "principal" => {

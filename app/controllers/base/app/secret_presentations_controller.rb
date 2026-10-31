@@ -21,7 +21,7 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
       actor_context: context,
       token: current_session_token, issuance: @issuance,
     )
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/app/secret_presentations/create", layout: false, locals: {
       confirmation_url: base_app_secret_issuance_path(@issuance.public_id),
       cancel_url: base_app_secret_issuance_path(@issuance.public_id),
@@ -38,5 +38,13 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
     render plain: t("base.app.secrets.payload_unavailable"), status: :gone
   rescue ClientSecretPresentationIssuer::Denied
     render plain: t("errors.messages.invalid_request"), status: :forbidden
+  end
+
+  private
+
+  def step_up_requirement(scope:, **options)
+    return super(scope: scope, **options.merge(resource_ref: @issuance.public_id)) if @issuance
+
+    super
   end
 end

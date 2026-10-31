@@ -6,8 +6,8 @@ require "test_helper"
 class IdentityPasskeyCeremonyReplayStoreTest < ActiveSupport::TestCase
   test "for returns stores for known surfaces and rejects an unknown surface" do
     assert_kind_of IdentityPasskeyCeremonyReplayStore, IdentityPasskeyCeremonyReplayStore.for(:app)
-    assert_kind_of IdentityPasskeyCeremonyReplayStore, IdentityPasskeyCeremonyReplayStore.for(:com)
     assert_kind_of IdentityPasskeyCeremonyReplayStore, IdentityPasskeyCeremonyReplayStore.for(:org)
+
     assert_raises(IdentityPasskeyCeremonyContract::Error) do
       IdentityPasskeyCeremonyReplayStore.for(:invalid)
     end

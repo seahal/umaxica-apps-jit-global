@@ -11,7 +11,7 @@ class IdentityStepUpCeremonyFreshnessRevoker
   end
 
   def call!
-    unless token.is_a?(ClientToken) || token.is_a?(VisitorToken) || token.is_a?(OperatorToken)
+    unless token.is_a?(ClientToken) || token.is_a?(OperatorToken)
       raise ArgumentError, "unsupported step-up token"
     end
 

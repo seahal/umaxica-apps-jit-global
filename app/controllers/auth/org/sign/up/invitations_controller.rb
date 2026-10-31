@@ -12,6 +12,7 @@ module Auth
           include ::MinimumResponseBudget
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_up
 
           before_action :start_minimum_response_budget, only: :create
           after_action :enforce_minimum_response_budget, only: :create

@@ -3,9 +3,9 @@
 ## Status
 
 **Accepted (2026-10-28, owner decision; `one.md` D-48 and R-AU-50 of the 2026-10 COM retirement
-cycle). Not implemented.** Replaces the age thresholds described in
-`docs/policy/signup-eligibility.md` once implemented; that document is updated in the implementing
-change, not here.
+cycle). Implemented (2026-10-30).** `SignUpEligibilityPolicy` now carries the one-day rule only,
+the under-age `HALTED` branch and the `.app` age-restricted copy are removed, and
+`docs/policy/signup-eligibility.md` describes the implemented contract.
 
 **Amended (2026-10-28, owner decision):** decision 7 classifies the Preference adult-content gate as
 a dormant, browser-scoped setting of the same kind as cookie consent.
@@ -68,9 +68,11 @@ this machinery, an age threshold at sign-up no longer serves its original purpos
 
 ## Consequences
 
-- `SignUpEligibilityPolicy` no longer carries per-surface age thresholds of 16 and 13. Whether `.org`
-  receives an explicit policy entry or relies only on the birthdate validation is decided in the
-  implementing design.
+- `SignUpEligibilityPolicy` no longer carries per-surface age thresholds of 16 and 13.
+  Implemented (2026-10-30): it is the shared one-day rule under `eligible?(birthdate, surface:)`
+  for `.app` and `.org`; an unsupported surface still raises. The `.org` invitation eligibility
+  stays an independent AND-partner of this rule; its own invitation flow remains the place that
+  refuses an invited applicant, and `.org` collects no sign-up birthdate today.
 - The under-age refusal path and its "16th birthday" copy are replaced: the only refusal left is a
   birthdate of today or later.
 - The date boundary must be defined explicitly (service timezone date, as in the current age

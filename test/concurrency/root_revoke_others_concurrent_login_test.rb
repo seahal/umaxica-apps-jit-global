@@ -75,6 +75,7 @@ class RootRevokeOthersConcurrentLoginTest < ActiveSupport::TestCase
     device_session_ids = ClientToken.where(id: root_ids).where.not(device_session_id: nil).pluck(:device_session_id)
     ClientToken.where(id: root_ids).delete_all
     ClientDeviceSession.where(id: device_session_ids).delete_all
+    ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: @login_flow.id).delete_all if @login_flow
     ClientSignInFlow.where(id: @login_flow&.id).delete_all
     Client.where(id: @actor&.id).delete_all
     self.login_cooldown = @original_login_cooldown if @original_login_cooldown
@@ -118,7 +119,11 @@ class RootRevokeOthersConcurrentLoginTest < ActiveSupport::TestCase
       loop do
         wait_event =
           OpBaseAppRecord.connection_pool.with_connection do |connection|
-            connection.select_value("SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(revoker_pid)}")
+            connection.uncached do
+              connection.select_value(
+                "SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(revoker_pid)}",
+              )
+            end
           end
         break if wait_event == "Lock"
 

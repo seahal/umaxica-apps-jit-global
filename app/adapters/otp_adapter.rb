@@ -11,10 +11,8 @@ class OtpAdapter
   def self.for(surface:, channel:)
     case [surface.to_sym, channel.to_sym]
     when [:app, :email] then OtpEmailNotifierAdapter.new(Notify::App::OtpNotifier, surface: :app)
-    when [:com, :email] then OtpEmailNotifierAdapter.new(Notify::Com::OtpNotifier, surface: :com)
     when [:org, :email] then OtpEmailNotifierAdapter.new(Notify::Org::OtpNotifier, surface: :org)
     when [:app, :telephone],
-         [:com, :telephone],
          [:org, :telephone] then OtpTelephoneAdapter.new(surface: surface)
     else
       raise ArgumentError, "Unknown OTP delivery channel: #{surface}/#{channel}"

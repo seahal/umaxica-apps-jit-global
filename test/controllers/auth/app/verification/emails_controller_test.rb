@@ -6,6 +6,8 @@ require "test_helper"
 # Admission, read-only GET and code issuance are covered by AuthStepUpAdmissionTest; these cases
 # cover code submission over HTTP and method admission.
 class Auth::App::Verification::EmailsControllerTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
 
   fixtures :client_statuses
@@ -65,7 +67,10 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
     transaction = issuance.transaction
     record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
     # The delivered code is seeded through the ticket's own API; delivery itself is covered by the
@@ -88,6 +93,21 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
     assert_nil token.reload.last_step_up_at
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
+
+    get auth_app_verification_handoff_path(ri: "jp")
+
+    assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_select 'meta[name="referrer"][content="strict-origin"]'
+    form = response.parsed_body.at_css("form")
+
+    assert_equal auth_app_verification_handoff_path(ri: "jp"), form["action"]
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    post form["action"], params: fields
+
+    assert_response :see_other
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(response.location).host
+    assert_nil token.reload.last_step_up_at
   end
 
   # Partitions of the submitted code: a wrong six-digit code, and codes that are not six digits
@@ -147,7 +167,10 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
     transaction = issuance.transaction
     record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
     # The delivered code is seeded through the ticket's own API; delivery itself is covered by the
@@ -226,7 +249,10 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    https!
+    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+
+    assert_response :see_other
     transaction = issuance.transaction
 
     get new_auth_app_verification_email_path(ri: "jp")

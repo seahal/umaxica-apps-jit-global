@@ -4,7 +4,6 @@
 class IdentityStepUpCeremonyReplayStore
   MODEL_BY_SURFACE = {
     "app" => ClientStepUpCeremonyTransaction,
-    "com" => VisitorStepUpCeremonyTransaction,
     "org" => OperatorStepUpCeremonyTransaction,
   }.freeze
 

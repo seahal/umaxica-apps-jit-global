@@ -27,7 +27,7 @@ class IdentityStepUpCeremonyRefusalCodeTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
+  [ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
     {
       "consumed" => "transaction_already_completed",
       "canceled" => "transaction_canceled",

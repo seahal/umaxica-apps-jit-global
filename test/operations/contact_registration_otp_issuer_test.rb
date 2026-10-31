@@ -4,7 +4,43 @@ require "test_helper"
 
 # Boolean assertions prevent disclosure of code and binding material.
 class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
+  test "registration OTP issuance refuses a token rebound after it was read" do
+    %i(email telephone).each do |channel|
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
+      token.rotate_refresh_token!
+      contact =
+        if channel == :email
+          actor.client_emails.create!(raw_address: "issuance-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1")
+        else
+          actor.client_telephones.create!(
+            raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
+            confirm_policy: "1", confirm_using_mfa: "1",
+          )
+        end
+      issuer, flow_model, source =
+        if channel == :email
+          [EmailCredentialRegistrationOtpIssuer, ClientEmailCeremonyTransaction, { email: contact }]
+        else
+          [TelephoneCredentialRegistrationOtpIssuer, ClientTelephoneCeremonyTransaction, { telephone: contact }]
+        end
+      stale_token = ClientToken.find(token.id)
+      replacement = ClientToken.create!(authentication_epoch: 0, user: actor)
+      new_device = replacement.device_session_record!
+      ClientToken.find(token.id).update!(device_session_id: new_device.id)
+      new_device.update!(current_refresh_token_id: token.id)
+      before = contact.reload.attributes
+
+      assert_no_difference -> { flow_model.count } do
+        result = issuer.call(actor: actor, token: stale_token, browser_nonce: SecureRandom.urlsafe_base64(32), **source)
+
+        assert_equal :unavailable, result.status
+      end
+      assert_equal before, contact.reload.attributes
+    end
+  end
+
+  %w(app).each do |surface|
     %i(email telephone).each do |channel|
       test "#{surface} #{channel} issuance persists the original ceremony browser root and candidate facts" do
         actor, token, contact, flow_model =
@@ -25,22 +61,6 @@ class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
               end
             [owner, root, candidate, (channel == :email) ? ClientEmailCeremonyTransaction :
               ClientTelephoneCeremonyTransaction,]
-          when ["com", :email], ["com", :telephone]
-            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-            candidate =
-              if channel == :email
-                owner.visitor_emails.create!(
-                  raw_address: "registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
-                )
-              else
-                owner.visitor_telephones.create!(
-                  raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-                  confirm_policy: "1", confirm_using_mfa: "1",
-                )
-              end
-            [owner, root, candidate, (channel == :email) ? VisitorEmailCeremonyTransaction :
-              VisitorTelephoneCeremonyTransaction,]
           end
         token.rotate_refresh_token!
         nonce = SecureRandom.urlsafe_base64(32)

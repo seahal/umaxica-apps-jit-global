@@ -22,7 +22,6 @@ module EmailValidation
     owner_association =
       case identity_email_model.name
       when ClientEmail.name then :user
-      when VisitorEmail.name then :visitor
       else raise ArgumentError, "unsupported identity email model"
       end
     result =

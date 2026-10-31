@@ -1,0 +1,8 @@
+# BL-19 APP Passkey options rate limit
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`.
+- The worktree contained uncommitted changes affecting this result.
+- A new public HTTP test creates and confirms an actual APP sign-in Admission, loads the admitted entry and submits six Passkey options requests. `PARALLEL_WORKERS=1 bin/rails test test/controllers/auth/authentication_rate_limit_test.rb -n '/admitted APP Passkey options/'` passed: 1 run, 3 assertions, 0 failures, 0 errors, 0 skips. The sixth response was 429 with `Retry-After: 60`.
+- The older baseline-listed test in the same file previously returned 400 rather than 429; it was not changed or rerun in this slice, and its exact rejection source remains unverified. The new test establishes the indicated valid-admission path, not all rate-limit keys, phases, or failure paths.
+- The test was subsequently strengthened to provide a valid Turnstile response and assert that each of the first five requests reached the input-validation response (422), followed by the sixth 429. The strengthened test passed: 1 run, 8 assertions, 0 failures and 0 errors.
+- The obsolete baseline test was subsequently rewritten under its original test ID using the confirmed-admission sequence, preserving its response-body and non-disclosure header assertions and adding checks for the first five input-validation responses. The redundant newly added test and obsolete helper were consolidated into that test. The full `test/controllers/auth/authentication_rate_limit_test.rb` passed: 2 runs, 16 assertions, 0 failures, 0 errors, 0 skips. RuboCop passed on the file, and scoped `git diff --check` passed. The original 400's precise internal guard was not separately instrumented.

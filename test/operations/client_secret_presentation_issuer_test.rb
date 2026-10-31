@@ -3,6 +3,60 @@
 require "test_helper"
 
 class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
+  test "a revoked device cannot prepare a Secret presentation" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    token.device_session_record!.revoke!
+
+    assert_no_difference ["ClientSecretCredential.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretPresentationIssuer::Denied) do
+        ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+      end
+    end
+    assert_nil issuance.reload.encrypted_payload
+  end
+
+  test "a superseded device token cannot deliver a prepared Secret presentation" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+    device = token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference ["ClientSecretCredential.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretPresentationIssuer::Denied) do
+        ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance)
+      end
+    end
+    assert_nil issuance.reload.presented_at
+    assert_predicate issuance.encrypted_payload, :present?
+  end
+
   test "manual presentation generates exactly the reserved set once and storage declaration activates it" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
@@ -17,6 +71,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     assert_difference("ClientSecretCredential.count", 1) do
       ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
       values = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance)
@@ -51,6 +106,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
       issuance = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
       )
+      token.reload.update!(last_step_up_resource_ref: issuance.public_id)
       ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
       candidate_ids = ClientSecretCredential.where(issuance_id: issuance.id).pluck(:public_id)
       issuance.reload.update!(encrypted_payload: payload)
@@ -82,6 +138,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
 
       assert_nil candidate.confirmed_at
       assert_not_nil candidate.discard_at
+      token.reload.update!(last_step_up_at: ClientToken.database_now, last_step_up_resource_ref: nil)
       replacement = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
       )
@@ -107,6 +164,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
         issuance = ClientSecretManualReservationIssuer.call!(
           actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
         )
+        token.reload.update!(last_step_up_resource_ref: issuance.public_id)
         ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
         { context: context, token: token, issuance: issuance.reload }
       end
@@ -153,6 +211,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     issuance.reload
     key = Rails.application.key_generator.generate_key(
@@ -193,6 +252,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     other = ClientToken.create!(authentication_epoch: 0, user: actor)
     [other, token].each do |browser|
       token.update!(last_step_up_at: nil) if browser == token

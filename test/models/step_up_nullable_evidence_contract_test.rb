@@ -4,7 +4,7 @@ require "test_helper"
 
 class StepUpNullableEvidenceContractTest < ActiveSupport::TestCase
   TRANSACTIONS = [
-    ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction,
+    ClientStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction,
   ].freeze
 
   TRANSACTIONS.each do |model|
@@ -27,23 +27,20 @@ class StepUpNullableEvidenceContractTest < ActiveSupport::TestCase
     end
   end
 
-  %i(app com org).each do |surface|
+  %i(app org).each do |surface|
     test "#{surface} token authority revocation clears boolean evidence to nil without revoking root token" do
       token =
         case surface
         when :app
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
-        when :com
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           OperatorToken.create!(authentication_epoch: 0, staff: actor, discard_at: 1.day.from_now)
         end
       token.update!(last_step_up_user_verified: true, last_step_up_full_reauthentication: false)
       original_status = token.attributes.slice(
-        "user_token_status_id", "visitor_token_status_id",
+        "user_token_status_id",
         "staff_token_status_id",
       )
       original_deadline = token.reload.discard_at
@@ -53,7 +50,7 @@ class StepUpNullableEvidenceContractTest < ActiveSupport::TestCase
       assert_nil token.reload.last_step_up_user_verified
       assert_nil token.last_step_up_full_reauthentication
       assert_equal original_status,
-                   token.attributes.slice("user_token_status_id", "visitor_token_status_id", "staff_token_status_id")
+                   token.attributes.slice("user_token_status_id", "staff_token_status_id")
       assert_equal original_deadline, token.discard_at
       assert_predicate token, :persisted?
     end

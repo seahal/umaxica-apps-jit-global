@@ -3,6 +3,8 @@
 class ClientSecretNameCommitter
   class Denied < StandardError; end
 
+  class DependencyFailure < StandardError; end
+
   class InvalidName < ArgumentError; end
 
   class << self
@@ -12,17 +14,13 @@ class ClientSecretNameCommitter
       validate_name!(name)
       validate_binding!(actor_context, token, credential)
 
-      # Ticket is read/locked only. Its outer transaction keeps the session lock
-      # until the source Zenith mutation and outbox have committed together.
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            actor_context.subject.with_lock do
-              rename!(actor_context, token, credential, name)
-            end
-          end
+      AppZenithRecord.connected_to(role: :writing) do
+        actor_context.subject.with_lock do
+          rename!(actor_context, token, credential, name)
         end
       end
+    rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+      raise DependencyFailure, "Secret name storage is unavailable: #{e.class}"
     end
 
     private
@@ -48,8 +46,6 @@ class ClientSecretNameCommitter
       actor = actor_context.subject
       raise Denied, "Secret rename actor is unavailable" unless actor.login_allowed?
 
-      session, requirement = verify_session!(actor, token)
-
       owned = ClientSecretCredential.lock.find_by(
         id: credential.id, client_id: actor.id, public_id: credential.public_id,
       )
@@ -58,20 +54,34 @@ class ClientSecretNameCommitter
         raise Denied, "Secret rename credential is unavailable"
       end
 
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          device = token.device_session_record!
+          device.with_lock do
+            raise Denied, "Secret rename device is unavailable" unless device.usable? && device.user_id == actor.id
+
+            session, requirement = verify_session!(actor, token, owned)
+            unless session.device_session_id == device.id && device.current_refresh_token_id == session.id
+              raise Denied, "Secret rename session binding changed"
+            end
+
+            session.consume_step_up_evidence!(requirement: requirement)
+          end
+        end
+      end
+
       owned.update!(name: name)
       ClientSecretAuditOutbox.record!(
         actor_context: actor_context, client_ref: actor.public_id, credential_ref: owned.public_id,
         operation_ref: SecureRandom.uuid, occurred_at: ClientSecretCredential.database_now,
         event_name: "secret.renamed",
       )
-      # adr/authentication-security-mode.md D3: the Step-Up is spent with the rename it authorized.
-      session.consume_step_up_evidence!(requirement: requirement)
       owned
     rescue TokenStatusManagement::StepUpEvidenceUnavailable => e
       raise Denied, e.message
     end
 
-    def verify_session!(actor, token)
+    def verify_session!(actor, token, credential)
       locked_token = ClientToken.lock.find_by(id: token.id, user_id: actor.id, public_id: token.public_id)
       raise Denied, "Secret rename session is unavailable" unless locked_token
 
@@ -82,7 +92,7 @@ class ClientSecretNameCommitter
         full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
         session_binding: locked_token.public_id, token_binding: locked_token.public_id,
         require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+        actor_ref: actor.public_id, resource_ref: credential.public_id, tenant_ref: nil,
       )
       unless locked_token.active_status?(now) &&
           StepUpResolver.call(token: locked_token, requirement: requirement, now: now).satisfied?

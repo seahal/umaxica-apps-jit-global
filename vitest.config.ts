@@ -16,10 +16,9 @@ const nodeSpecs = [
   "gait/pages/base/app/groups/index.test.tsx",
   "gait/features/preferences/preference_index.test.tsx",
   "gait/features/landing/root_landing.test.tsx",
-  "gait/features/auth/auth_com_screens.test.tsx",
+  "gait/features/auth/auth_shared_screens.test.tsx",
   "gait/pages/base/app/identity/identity_pages.test.tsx",
   "gait/features/dashboards/warp_dashboard.test.tsx",
-  "gait/features/base_com/base_com_identity_pages.test.tsx",
   "gait/features/auth/session/sign_out_screens.test.tsx",
   "gait/features/auth/dashboard/surface_dashboard.test.tsx",
   "gait/features/identity/activity_index.test.tsx",
@@ -27,7 +26,6 @@ const nodeSpecs = [
   "gait/pages/palm/app/sign_outs/show.test.tsx",
   "gait/features/preferences/preference_screens.test.tsx",
   "gait/features/auth/signin/signin_screens.test.tsx",
-  "gait/features/auth/auth_com_signup_screens.test.tsx",
   "gait/features/auth/verification/verification_screens.test.tsx",
 ].map((path) => fileURLToPath(new URL(`./${path}`, import.meta.url)));
 

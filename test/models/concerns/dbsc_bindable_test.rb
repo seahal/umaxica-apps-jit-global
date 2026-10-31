@@ -109,8 +109,6 @@ class DbscBindableTest < ActiveSupport::TestCase
                  attribute_model(%w(user_token_binding_method_id)).dbsc_binding_method_attribute_name
     assert_equal :staff_token_binding_method_id,
                  attribute_model(%w(staff_token_binding_method_id)).dbsc_binding_method_attribute_name
-    assert_equal :visitor_token_binding_method_id,
-                 attribute_model(%w(visitor_token_binding_method_id)).dbsc_binding_method_attribute_name
   end
 
   test "resolves supported dbsc status attribute names in precedence order" do
@@ -119,8 +117,6 @@ class DbscBindableTest < ActiveSupport::TestCase
                  attribute_model(%w(user_token_dbsc_status_id)).dbsc_status_attribute_name
     assert_equal :staff_token_dbsc_status_id,
                  attribute_model(%w(staff_token_dbsc_status_id)).dbsc_status_attribute_name
-    assert_equal :visitor_token_dbsc_status_id,
-                 attribute_model(%w(visitor_token_dbsc_status_id)).dbsc_status_attribute_name
   end
 
   private

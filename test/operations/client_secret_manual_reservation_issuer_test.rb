@@ -3,6 +3,52 @@
 require "test_helper"
 
 class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
+  test "a revoked device cannot reserve a Secret issuance" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    token.device_session_record!.revoke!
+
+    assert_no_difference ["ClientSecretIssuance.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretManualReservationIssuer::Denied) do
+        ClientSecretManualReservationIssuer.call!(
+          actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+        )
+      end
+    end
+  end
+
+  test "a superseded device token cannot reserve a Secret issuance" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    device = token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference ["ClientSecretIssuance.count", "ClientSecretAuditOutbox.count"] do
+      assert_raises(ClientSecretManualReservationIssuer::Denied) do
+        ClientSecretManualReservationIssuer.call!(
+          actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+        )
+      end
+    end
+  end
+
   test "physically collected manual operation cannot reserve another batch on replay" do
     actor = clients(:one)
     token = client_tokens(:one)

@@ -15,7 +15,7 @@ class OpenapiRevisionContractTest < ActionDispatch::IntegrationTest
 
   SURFACE_HOSTS = {
     "app" => ENV.fetch("PRIVATE_CORE_SERVICE_URL"),
-    "com" => ENV.fetch("PRIVATE_CORE_CORPORATE_URL"),
+    "com" => ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
     "org" => ENV.fetch("PRIVATE_CORE_STAFF_URL"),
   }.freeze
 

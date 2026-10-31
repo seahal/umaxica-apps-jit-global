@@ -77,6 +77,17 @@ class SocialCallbackStateMatrixTest < ActiveSupport::TestCase
             end
 
           assert_equal expected_key, error.i18n_key
+          expected_reason =
+            case state
+            when "unknown" then :unregistered_subject
+            when "registered" then :already_registered_subject
+            when "unusable", "released", "unfinished", "revoked", "deleted" then nil
+            end
+          if expected_reason.nil?
+            assert_nil error.context[:verified_subject_reason]
+          else
+            assert_equal expected_reason, error.context[:verified_subject_reason]
+          end
           assert_nil identity.reload.last_authenticated_at if identity
         end
       end

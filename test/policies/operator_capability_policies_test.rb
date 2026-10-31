@@ -13,7 +13,6 @@ class OperatorCapabilityPoliciesTest < ActiveSupport::TestCase
   test "nil, client, and ungranted operator actors are denied every support and console rule" do
     [nil, clients(:one), @operator].each do |actor|
       assert_not SupportClientPolicy.new(clients(:one), user: actor).show?
-      assert_not SupportVisitorPolicy.new(visitors(:reserved_visitor), user: actor).revoke_sessions?
       assert_not OrgConsolePolicy.new(:org_console, user: actor).support?
       assert_not OperatorCapabilityGrantPolicy.new(OperatorCapabilityGrant, user: actor).index?
       assert_not EnforcementCasePolicy.new(AppEnforcementCase.new, user: actor).index?
@@ -47,24 +46,6 @@ class OperatorCapabilityPoliciesTest < ActiveSupport::TestCase
     assert_not SupportClientPolicy.new(clients(:one), user: @operator).revoke_sessions?
   end
 
-  test "the client policy rejects a visitor record even when the operator holds app capabilities" do
-    [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
-     OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
-      OperatorCapabilityGrant.create!(
-        operator: @operator,
-        granted_by_operator: @other,
-        origin: "grant",
-        capability: capability,
-        reason_code: "duty_assignment",
-        starts_at: 1.minute.ago,
-        expires_at: 1.day.from_now,
-      )
-    end
-
-    assert_predicate SupportClientPolicy.new(clients(:one), user: @operator), :revoke_sessions?
-    assert_not SupportClientPolicy.new(visitors(:reserved_visitor), user: @operator).show?
-  end
-
   test "enforcement capabilities are per realm and never reach org cases" do
     OperatorCapabilityGrant.bootstrap!(
       operator: @operator,
@@ -74,29 +55,10 @@ class OperatorCapabilityPoliciesTest < ActiveSupport::TestCase
     )
 
     assert_predicate EnforcementCasePolicy.new(AppEnforcementCase.new, user: @operator), :create?
-    assert_predicate EnforcementCasePolicy.new(ComEnforcementCase.new, user: @operator), :release?
     %i(index? show? create? approve? release? review_appeal?).each do |rule|
       assert_not EnforcementCasePolicy.new(OrgEnforcementCase.new, user: @operator).public_send(rule),
                  "org realm #{rule} must deny"
     end
-  end
-
-  test "an operator granted only app enforcement cannot act on com cases" do
-    [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, OperatorCapabilityGrant::ENFORCEMENT_APPLY_APP].each do |capability|
-      OperatorCapabilityGrant.create!(
-        operator: @operator,
-        granted_by_operator: @other,
-        origin: "grant",
-        capability: capability,
-        reason_code: "duty_assignment",
-        starts_at: 1.minute.ago,
-        expires_at: 1.day.from_now,
-      )
-    end
-
-    assert_predicate EnforcementCasePolicy.new(AppEnforcementCase.new, user: @operator), :create?
-    assert_not EnforcementCasePolicy.new(ComEnforcementCase.new, user: @operator).create?
-    assert_not EnforcementCasePolicy.new(ComEnforcementCase.new, user: @operator).index?
   end
 
   test "granting requires the grant capability, holding the delegated capability, and another target" do

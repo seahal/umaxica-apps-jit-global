@@ -6,6 +6,9 @@ class Auth::App::Edge::V0::Token::DbscController < ::Auth::App::ApplicationContr
 
   include SignDbscRegistrationEndpoint
 
+  # D-59: DBSC registration is not a browser Sign Entry.
+  sign_entry_classification! :excluded, reason: "edge token endpoint, not a sign entry"
+
   AUTHENTICATION_MODE = :deny_all
 
   declare_authentication_mode! :open

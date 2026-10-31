@@ -3,8 +3,7 @@
 require "test_helper"
 
 class CeremonyOtpOperationIsolationTest < ActiveSupport::TestCase
-  [ClientEmailCeremonyTransaction, VisitorEmailCeremonyTransaction,
-   OperatorEmailCeremonyTransaction,].each do |model|
+  [ClientEmailCeremonyTransaction,    OperatorEmailCeremonyTransaction,].each do |model|
     %w(recovery withdrawal).each do |operation|
       test "#{model.name} #{operation} email proof cannot become a signed registration permission" do
         transaction = model.create_transaction!(
@@ -38,8 +37,7 @@ class CeremonyOtpOperationIsolationTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephoneCeremonyTransaction, VisitorTelephoneCeremonyTransaction,
-   OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
     %w(recovery withdrawal).each do |operation|
       test "#{model.name} #{operation} telephone proof cannot become a signed registration permission" do
         transaction = model.create_transaction!(

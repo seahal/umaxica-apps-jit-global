@@ -1,0 +1,7 @@
+# Identity-stop receipt source-fact validation
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Substantial uncommitted worktree changes affected the implementation and tests.
+- Before the change, direct delivery treated changed APP actor, epoch cutoff or normalized cause as a duplicate, and the sweep hid a changed cutoff: 4 runs, 8 assertions, 4 failures.
+- Existing receipts are now checked against the authority stop's realm, actor public ID, all-roots scope, normalized cause and epoch cutoff as well as receipt type/time and source scope. The sweep batches the actor and authority-stop reads; an inconsistent receipt is processed through the existing reported-error path rather than silently skipped. No persisted fields were added.
+- `PARALLEL_WORKERS=1 bin/rails test test/operations/op_identity_event_invalidator_test.rb test/jobs/op_identity_event_sweep_job_test.rb test/models/op_inbound_receipt_uniqueness_test.rb test/services/administrative_access_lock_test.rb test/services/oidc_access_token_authenticator_test.rb`: 52 runs, 269 assertions, no failures, errors or skips. Scoped RuboCop passed. Tests include APP actor, cutoff, cause and scope conflicts, ORG cutoff conflict, and a sweep cutoff conflict.
+- The authority stop records a normalized cause, so different source reason strings mapped to the same cause cannot be distinguished by this comparison. Concurrent source mutation and duplicate workers, old production records, actual remote delivery and the full suite were not verified.

@@ -199,7 +199,6 @@ class AuthRedirectBulletinTest < ActiveSupport::TestCase
   test "Auth controllers resolve welcome URLs on their Base surface" do
     expectations = {
       Auth::App::ApplicationController => ["PUBLIC_BASE_SERVICE_URL", "www.umaxica.app"],
-      Auth::Com::ApplicationController => ["PUBLIC_BASE_CORPORATE_URL", "www.umaxica.com"],
       Auth::Org::ApplicationController => ["PUBLIC_BASE_STAFF_URL", "www.umaxica.org"],
     }
 

@@ -207,7 +207,6 @@ module TokenStatusManagement
       case name
       when "OperatorToken" then OperatorTokenStatus
       when "ClientToken" then ClientTokenStatus
-      when "VisitorToken" then VisitorTokenStatus
       else
         raise ArgumentError, "#{name} does not have token status model"
       end

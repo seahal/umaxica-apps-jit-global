@@ -1,0 +1,6 @@
+# Retired COM identity authority client entry
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had extensive uncommitted changes affecting this result.
+- `AvatarAuthorityClient::CLIENTS` retained a `base-com-ww`/visitor identity entry shared by the Membership and Org administration clients. Current controller source references to these clients and `MEMBERSHIP_SURFACE` are APP/ORG; COM anonymous Base controllers do not use them. Removed that entry, leaving APP and ORG. COM and unknown inputs now fail before an outbound request; no public COM content or anonymous Preference route was removed in this slice.
+- Before the change, `test/adapters/domain_authority_protocol_test.rb` passed three runs and 75 assertions. After adding APP/ORG construction checks and COM, missing, empty and unknown refusal cases for the three clients, it passed four runs and 91 assertions. RuboCop and scoped `git diff --check` passed.
+- The architecture page described retired COM identity registrations and `VisitorToken` as current; those statements were updated to match the inspected authority map. This slice does not establish all COM reference removal: `lib/runtime_role.rb` still lists `rp-base-com-ww`, and WU-A8's role/OP-chain transition remains open. The full suite was not repeated after this change.

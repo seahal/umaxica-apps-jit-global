@@ -49,9 +49,9 @@ class SignSecretRotateCoverageTest < ActiveSupport::TestCase
             max_failures: 2,
             not_before_at: 5.minutes.from_now,
             issued_at: Time.zone.local(2026, 1, 2, 3, 4, 5),
-            issued_by_type: "Visitor",
+            issued_by_type: "Client",
             issued_by_id: 123,
-            issued_by_ref: "visitor-123",
+            issued_by_ref: "client-123",
           )
 
         assert_equal :rotated_secret, result.secret_credential
@@ -70,9 +70,8 @@ class SignSecretRotateCoverageTest < ActiveSupport::TestCase
     assert_equal 3, captured_issue_kwargs[:max_uses]
     assert_equal 2, captured_issue_kwargs[:max_failures]
     assert_equal Time.zone.local(2026, 1, 2, 3, 4, 5), captured_issue_kwargs[:issued_at]
-    assert_equal "Visitor", captured_issue_kwargs[:issued_by_type]
     assert_equal 123, captured_issue_kwargs[:issued_by_id]
-    assert_equal "visitor-123", captured_issue_kwargs[:issued_by_ref]
+    assert_equal "client-123", captured_issue_kwargs[:issued_by_ref]
 
     assert_equal secret_credential, captured_revoke_kwargs[:secret_credential]
     assert_equal Time.zone.local(2026, 1, 2, 3, 4, 5), captured_revoke_kwargs[:now]

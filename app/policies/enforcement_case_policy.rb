@@ -57,7 +57,6 @@ class EnforcementCasePolicy < ApplicationPolicy
     read_capability, mutation_capability =
       case record
       when ::AppEnforcementCase then [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, app]
-      when ::ComEnforcementCase then [OperatorCapabilityGrant::ENFORCEMENT_READ_COM, com]
       else return false
       end
     return false unless operator_capability?(read_capability)

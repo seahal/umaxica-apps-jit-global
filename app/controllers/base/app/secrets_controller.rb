@@ -18,6 +18,8 @@ class Base::App::SecretsController < Base::App::ApplicationController
   rescue_from ClientSecretManualReservationIssuer::CapacityFull,
               ClientSecretIssuanceCountValue::ReservationConflict, with: :conflicting_secret_operation
   rescue_from ClientSecretNameCommitter::InvalidName, with: :invalid_secret_name
+  rescue_from ClientSecretNameCommitter::DependencyFailure, ClientSecretRevocationCommitter::DependencyFailure,
+              with: :secret_storage_unavailable
 
   public
 
@@ -66,10 +68,6 @@ class Base::App::SecretsController < Base::App::ApplicationController
     return redirect_to(base_app_secret_issuance_path(issuance.public_id), status: :see_other) if
       %i(confirmed pending_confirmation).include?(state)
 
-    ClientSecretPresentationIssuer.prepare!(
-      actor_context: secret_actor_context, token: current_session_token,
-      issuance: issuance,
-    )
     redirect_to(base_app_secret_issuance_path(issuance.public_id), status: :see_other)
   end
 
@@ -93,6 +91,15 @@ class Base::App::SecretsController < Base::App::ApplicationController
   end
 
   private
+
+  def step_up_requirement(scope:, **options)
+    if scope == "settings_secret_credential" && %w(edit update destroy).include?(action_name)
+      credential = current_client.client_secret_credentials.find_by!(public_id: params.expect(:id))
+      return super(scope: scope, **options.merge(resource_ref: credential.public_id))
+    end
+
+    super
+  end
 
   def load_secret
     @secret = current_client.client_secret_credentials.find_by!(public_id: params.expect(:id))
@@ -153,6 +160,10 @@ class Base::App::SecretsController < Base::App::ApplicationController
 
   def conflicting_secret_operation
     render plain: t("base.app.secrets.capacity_conflict"), status: :conflict
+  end
+
+  def secret_storage_unavailable
+    head :service_unavailable
   end
 
   def invalid_secret_name

@@ -7,6 +7,7 @@ class Auth::App::Verification::PasskeysController < ::Auth::App::ApplicationCont
   include AuthStepUpPasskeyCeremony
 
   AUTHENTICATION_MODE = :open
+  sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
   declare_authentication_mode! :open
 
   rate_limit to: 5, within: 1.minute, by: -> { request.remote_ip },

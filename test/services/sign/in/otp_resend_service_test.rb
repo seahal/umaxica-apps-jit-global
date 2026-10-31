@@ -10,13 +10,18 @@ module Sign
     class OtpResendServiceTest < ActiveSupport::TestCase
       include ActiveJob::TestHelper
 
+      skip_transactional_tests_for_database :op_base_app
+      skip_transactional_tests_for_database :occurrence
+
       setup do
         @ceremonies = {}
-        %i(app com).each do |surface|
+        @occurrence_body = nil
+        %i(app).each do |surface|
           admission = OidcTestEntry.issue!(
             surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
           )
-          model = (surface == :app) ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+          @admission = admission
+          model = ClientAuthCeremonySession
           @ceremonies[surface] = model.rotate_and_admit!(
             admission_purpose: "authentication_handoff",
             authorization_transaction_ref: admission.transaction.transaction_id,
@@ -24,10 +29,22 @@ module Sign
         end
       end
 
-      [[:app, Client, ClientEmail, :user_id],
-       [:com, Visitor, VisitorEmail, :visitor_id],].each do |surface, owner_class, model, owner_key|
+      teardown do
+        EmailOccurrence.where(body: @occurrence_body).delete_all if @occurrence_body
+        if @admission
+          ClientAuthAdmissionBinding.where(authorization_transaction_id: @admission.transaction.id).delete_all
+          @ceremonies.each_value(&:delete)
+          @admission.transaction.delete
+        end
+      end
+
+      [[:app, Client, ClientEmail, :user_id]].each do |surface, owner_class, model, owner_key|
         test "#{surface} resend preserves independent candidates and delivers only to the effective owner" do
           address = "resend-candidates-#{SecureRandom.hex(8)}@example.test"
+          candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+          assert_not EmailOccurrence.exists?(body: candidate_body)
+          @occurrence_body = candidate_body
           candidates =
             2.times.map do
               owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
@@ -69,7 +86,7 @@ module Sign
         end
       end
 
-      %i(app com).each do |surface|
+      %i(app).each do |surface|
         { before_expiry: -1.second, at_expiry: 0.seconds, after_expiry: 1.second }.each do |label, offset|
           test "#{surface} resend state #{label} honors its absolute deadline" do
             freeze_time do
@@ -192,10 +209,15 @@ module Sign
       end
 
       test "unknown email resend records a rate-limit event without revealing account existence" do
+        address = "unknown-resend-#{SecureRandom.hex(8)}@example.test"
+        candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+        assert_not EmailOccurrence.exists?(body: candidate_body)
+        @occurrence_body = candidate_body
         ceremony = @ceremonies.fetch(:app)
-        ceremony.issue_email_otp!(contact: nil, destination: "unknown-resend@example.test")
+        ceremony.issue_email_otp!(contact: nil, destination: address)
         state = SignInOtpResendState.issue(
-          kind: :email, target: "unknown-resend@example.test", surface: :app,
+          kind: :email, target: address, surface: :app,
           browser_binding: ceremony.sid_digest, contact: nil,
         )
         result = nil
@@ -215,8 +237,145 @@ module Sign
         assert_match "purpose=in", EmailOccurrence.order(:id).last.memo
       end
 
+      test "occurrence write failure after issuance keeps the new challenge and does not enqueue" do
+        address = "occurrence-failure-#{SecureRandom.hex(8)}@example.test"
+        ceremony = @ceremonies.fetch(:app)
+        ceremony.issue_email_otp!(contact: nil, destination: address)
+        generation = ceremony.reload.email_otp_context.fetch("generation")
+        state = SignInOtpResendState.issue(
+          kind: :email, target: address, surface: :app, browser_binding: ceremony.sid_digest, contact: nil,
+        )
+        failure = ->(**) { raise ActiveRecord::ConnectionNotEstablished }
+        result = nil
+
+        Rails.error.stub(:report, ->(*, **) { }) do
+          EmailOccurrence.stub(:create!, failure) do
+            assert_no_enqueued_jobs do
+              result = SignInOtpResender.new(
+                kind: :email, state:, surface: :app, browser_binding: ceremony.sid_digest, ceremony:,
+              ).call
+            end
+          end
+        end
+
+        assert_equal :service_unavailable, result.status
+        assert_not_equal generation, ceremony.reload.email_otp_context.fetch("generation")
+        assert_nil EmailOccurrence.find_by(body: OccurrenceHmac.digest(kind: :email, body: address))
+      end
+
+      test "cancelled challenge does not create a resend occurrence" do
+        address = "cancelled-occurrence-#{SecureRandom.hex(8)}@example.test"
+        ceremony = @ceremonies.fetch(:app)
+        ceremony.issue_email_otp!(contact: nil, destination: address)
+        state = SignInOtpResendState.issue(
+          kind: :email, target: address, surface: :app, browser_binding: ceremony.sid_digest, contact: nil,
+        )
+
+        assert ceremony.cancel_email_otp_challenge!
+        cancelled = ceremony.reload.email_otp_context.deep_dup
+        result = SignInOtpResender.new(
+          kind: :email, state:, surface: :app, browser_binding: ceremony.sid_digest, ceremony:,
+        ).call
+
+        assert_equal :bad_request, result.status
+        assert_nil EmailOccurrence.find_by(body: OccurrenceHmac.digest(kind: :email, body: address))
+        assert_withheld { cancelled == ceremony.reload.email_otp_context }
+      end
+
+      [" ", "junk", "purpose=in issued=0", "purpose=in issued=1,", "purpose=in issued=1,0",
+       "purpose=in issued=1 invalid",].each do |invalid_memo|
+        test "corrupt resend history #{invalid_memo.inspect} cannot reset the cooldown" do
+          address = "corrupt-history-#{SecureRandom.hex(8)}@example.test"
+          candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+          assert_not EmailOccurrence.exists?(body: candidate_body)
+          @occurrence_body = candidate_body
+          ceremony = @ceremonies.fetch(:app)
+          ceremony.issue_email_otp!(contact: nil, destination: address)
+          original = ceremony.reload.email_otp_context.deep_dup
+          state = SignInOtpResendState.issue(
+            kind: :email, target: address, surface: :app, browser_binding: ceremony.sid_digest, contact: nil,
+          )
+          occurrence = EmailOccurrence.create!(
+            body: OccurrenceHmac.digest(kind: :email, body: address), memo: invalid_memo,
+          )
+          before = occurrence.reload.attributes
+
+          Rails.error.stub(:report, ->(*, **) { }) do
+            assert_no_enqueued_jobs do
+              assert_raises(SignInOtpResender::InvalidHistory) do
+                SignInOtpResender.new(
+                  kind: :email, state:, surface: :app, browser_binding: ceremony.sid_digest, ceremony:,
+                ).call
+              end
+            end
+          end
+
+          assert_withheld { original == ceremony.reload.email_otp_context }
+          assert_withheld { before == occurrence.reload.attributes }
+        end
+      end
+
+      { before: -Rational(1, 1_000_000), at: 0, after: Rational(1, 1_000_000) }.each do |boundary, offset|
+        test "locked sign-in resend checks the old OTP deadline #{boundary} expiry" do
+          address = "locked-deadline-#{SecureRandom.hex(8)}@example.test"
+          ceremony = @ceremonies.fetch(:app)
+          ceremony.issue_email_otp!(contact: nil, destination: address)
+          previous = ceremony.reload.email_otp_context.deep_dup
+          deadline = Time.iso8601(previous.fetch("expires_at"))
+
+          result =
+            ClientAuthCeremonySession.stub(:database_now, deadline + offset) do
+              ceremony.issue_email_otp!(
+                contact: nil, destination: address, expected_generation: previous.fetch("generation"),
+              )
+            end
+
+          if boundary == :before
+            assert_nil result
+            assert_not_equal previous.fetch("generation"), ceremony.reload.email_otp_context.fetch("generation")
+          else
+            assert_same false, result
+            assert_withheld { previous == ceremony.reload.email_otp_context }
+          end
+        end
+      end
+
+      test "locked sign-in resend cannot overwrite a replaced generation" do
+        address = "locked-generation-#{SecureRandom.hex(8)}@example.test"
+        ceremony = @ceremonies.fetch(:app)
+        ceremony.issue_email_otp!(contact: nil, destination: address)
+        previous_generation = ceremony.reload.email_otp_context.fetch("generation")
+        ceremony.issue_email_otp!(contact: nil, destination: address)
+        replacement = ceremony.reload.email_otp_context.deep_dup
+
+        assert_same false, ceremony.issue_email_otp!(
+          contact: nil, destination: address, expected_generation: previous_generation,
+        )
+        assert_withheld { replacement == ceremony.reload.email_otp_context }
+      end
+
+      test "locked sign-in resend cannot revive a cancelled real-contact challenge" do
+        address = "locked-cancel-#{SecureRandom.hex(8)}@example.test"
+        owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+        contact = owner.client_emails.create!(address:, confirm_policy: "1").tap(&:finalize_binding!)
+        ceremony = @ceremonies.fetch(:app)
+        ceremony.issue_email_otp!(contact:, destination: address)
+        generation = ceremony.reload.email_otp_context.fetch("generation")
+
+        assert ceremony.cancel_email_otp_challenge!
+        cancelled = ceremony.reload.email_otp_context.deep_dup
+
+        assert_same false, ceremony.issue_email_otp!(contact:, destination: address, expected_generation: generation)
+        assert_withheld { cancelled == ceremony.reload.email_otp_context }
+      end
+
       test "a dummy resend state cannot adopt an effective binding created afterward" do
         address = "dummy-before-binding-#{SecureRandom.hex(8)}@example.test"
+        candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+        assert_not EmailOccurrence.exists?(body: candidate_body)
+        @occurrence_body = candidate_body
         ceremony = @ceremonies.fetch(:app)
         ceremony.issue_email_otp!(contact: nil, destination: address)
         state = SignInOtpResendState.issue(
@@ -240,9 +399,14 @@ module Sign
       end
 
       test "known email resend refreshes Ticket challenge, preserves identifier state and uses the email adapter" do
+        address = "known-resend-#{SecureRandom.hex(8)}@example.test"
+        candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+        assert_not EmailOccurrence.exists?(body: candidate_body)
+        @occurrence_body = candidate_body
         email = ClientEmail.create!(
           user: clients(:one),
-          address: "known-resend@example.test",
+          address: address,
           confirm_policy: "1",
           user_email_status_id: ClientEmailStatus::VERIFIED,
         ).tap(&:finalize_binding!)
@@ -290,9 +454,14 @@ module Sign
       end
 
       test "known email resend does not reset failed OTP attempts" do
+        address = "known-resend-attempts-#{SecureRandom.hex(8)}@example.test"
+        candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+        assert_not EmailOccurrence.exists?(body: candidate_body)
+        @occurrence_body = candidate_body
         email = ClientEmail.create!(
           user: clients(:one),
-          address: "known-resend-attempts@example.test",
+          address: address,
           confirm_policy: "1",
           user_email_status_id: ClientEmailStatus::VERIFIED,
         ).tap(&:finalize_binding!)
@@ -326,6 +495,10 @@ module Sign
 
       test "a failed delivery still consumes the resend slot" do
         address = "failed-resend-#{SecureRandom.hex(4)}@example.test"
+        candidate_body = OccurrenceHmac.digest(kind: :email, body: address)
+
+        assert_not EmailOccurrence.exists?(body: candidate_body)
+        @occurrence_body = candidate_body
         email = ClientEmail.create!(
           user: clients(:one),
           address: address,
@@ -377,72 +550,6 @@ module Sign
         assert_match(/purpose=in issued=/, occurrence.memo)
         assert_equal 1, delivery_attempts
         assert_withheld { source_generation == email.reload.attributes.slice(*source_generation.keys) }
-      end
-
-      test "corporate resend selects the visitor email and corporate adapter" do
-        VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-        address = "corporate-resend-#{SecureRandom.hex(4)}@example.test"
-        email = VisitorEmail.create!(
-          visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE),
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-        ).tap(&:finalize_binding!)
-        ceremony = @ceremonies.fetch(:com)
-        ceremony.issue_email_otp!(contact: email, destination: email.address)
-        source_generation = email.reload.attributes
-        state = SignInOtpResendState.issue(
-          kind: :email, target: email.address, surface: :com,
-          browser_binding: ceremony.sid_digest, contact: email,
-        )
-        delivery = nil
-        requested_surface = nil
-        adapter = Minitest::Mock.new
-        adapter.expect(:deliver, nil) { |**arguments|
-          delivery = arguments
-          true
-        }
-
-        OtpAdapter.stub(
-          :for,
-          lambda do |surface:, channel:|
-            requested_surface = surface
-
-            assert_equal :email, channel
-            adapter
-          end,
-        ) do
-          result = SignInOtpResender.new(
-            kind: :email, state:, surface: :com, browser_binding: ceremony.sid_digest,
-            ceremony:,
-          ).call
-
-          assert_equal :ok, result.status
-        end
-
-        assert_equal :com, requested_surface
-        assert_equal email, delivery.fetch(:record)
-        assert_equal :sign_in, delivery.fetch(:purpose)
-        assert_withheld { source_generation == email.reload.attributes.slice(*source_generation.keys) }
-        adapter.verify
-      end
-
-      test "a resend state is bound to its surface" do
-        ceremony = @ceremonies.fetch(:com)
-        state = SignInOtpResendState.issue(
-          kind: :email, target: "surface-bound@example.test", surface: :app,
-          browser_binding: ceremony.sid_digest, contact: nil,
-        )
-
-        result = SignInOtpResender.new(
-          kind: :email, state:, surface: :com, browser_binding: ceremony.sid_digest,
-          ceremony:,
-        ).call
-
-        assert_equal :bad_request, result.status
-        assert_not result.resendable
       end
     end
   end

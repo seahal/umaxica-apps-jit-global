@@ -11,7 +11,7 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        step_up only: %i(update destroy), scope: "settings_totp"
+        step_up only: %i(show update destroy), scope: "settings_totp"
 
         public
 
@@ -32,6 +32,7 @@ module Base
         def new
           authorize!(ClientTotpCredential, to: :new?)
           apply_base_browser_continuation_headers!
+          response.headers["Referrer-Policy"] = "strict-origin"
           restart_binding = base_registration_restart_binding!(scope: "settings_totp", method: :totp)
           render "base/shared/credential_registration", layout: false,
                                                         locals: {
@@ -77,12 +78,14 @@ module Base
             actor: current_client, token: current_session_token, credential: @totp,
             title: totp_params[:title],
           )
-          redirect_to(base_app_identity_totp_path(@totp.public_id, ri: params[:ri]), status: :see_other)
+          redirect_to(base_app_identity_totps_path(ri: params[:ri]), status: :see_other)
         rescue IdentityTotpNameCommitter::InvalidTitle => e
           render inertia: "base/app/identity/totps/show", props: show_page_props(error: e.message),
                  status: :unprocessable_content
         rescue IdentityTotpNameCommitter::Denied
           render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
+        rescue IdentityTotpNameCommitter::DependencyFailure
+          head :service_unavailable
         rescue ActiveRecord::RecordInvalid, ActionController::ParameterMissing
           render inertia: "base/app/identity/totps/show", props: show_page_props,
                  status: :unprocessable_content
@@ -91,15 +94,26 @@ module Base
         def destroy
           find_totp
           authorize!(@totp)
-          IdentityCredentialRemovalCommitter.call!(
+          removed = IdentityCredentialRemovalCommitter.call!(
             actor: current_client, credential: @totp, current_session: current_session, request: request,
           )
+          return render plain: t("errors.messages.invalid_request"), status: :unprocessable_content unless removed
+
           redirect_to(base_app_identity_totps_path(ri: params[:ri]), status: :see_other)
         rescue ArgumentError, ActiveRecord::RecordInvalid
           redirect_to(base_app_identity_totp_path(@totp.public_id, ri: params[:ri]), status: :see_other)
         end
 
         private
+
+        def step_up_requirement(scope:, **options)
+          if scope == "settings_totp" && %w(show update destroy).include?(action_name)
+            credential = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
+            return super(scope: scope, **options.merge(resource_ref: credential.public_id))
+          end
+
+          super
+        end
 
         def totp_registration_requirement(token)
           StepUpRequirement.new(

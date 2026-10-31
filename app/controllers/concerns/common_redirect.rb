@@ -32,7 +32,7 @@ module CommonRedirect
     uri = URI.parse(url.to_s)
     if uri.host.nil?
       redirect_to(url, allow_other_host: false, **)
-    elsif uri.is_a?(URI::HTTP) && uri.host == request.host && uri.userinfo.blank?
+    elsif request_origin_url?(url)
       redirect_to(uri.request_uri, allow_other_host: false, **)
     else
       redirect_to_jump_url(url, preserve_query_keys: preserve_query_keys, **)
@@ -108,11 +108,7 @@ module CommonRedirect
   end
 
   def request_origin_url?(url)
-    uri = URI.parse(url.to_s)
-    uri.is_a?(URI::HTTP) && uri.userinfo.nil? &&
-      uri.scheme.casecmp?(request.scheme) && uri.host.to_s.casecmp?(request.host) && uri.port == request.port
-  rescue URI::InvalidURIError
-    false
+    RedirectOriginValue.same_origin?(target: url, origin: request.base_url)
   end
 
   def safe_jump_preserved_query_keys(url)

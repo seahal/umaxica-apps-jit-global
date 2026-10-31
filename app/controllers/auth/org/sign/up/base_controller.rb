@@ -13,13 +13,13 @@ module Auth
           # Note: AuthenticationOperator is NOT included here for unauthenticated sign-up
           include ::PreferenceGlobal
 
-          include ::PreferenceAdoption
 
           include ::ActorSupport
 
           include ::Finisher
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_up
 
           allow_browser versions: :modern
 

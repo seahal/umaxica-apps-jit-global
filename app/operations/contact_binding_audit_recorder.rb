@@ -7,7 +7,7 @@ class ContactBindingAuditRecorder
 
     def call!(actor_context:, actor:, contact:, operation_ref:, event_name:)
       model, kind, owner_id = source_for(contact)
-      validate_actor_context!(model, owner_id, actor, contact, actor_context)
+      validate_actor_context!(owner_id, actor, contact, actor_context)
       fact_matches = (event_name == "finalized" && contact.binding_effective?) ||
         (event_name == "released" && contact.binding_released?)
       raise ArgumentError, "Contact audit does not match its committed binding fact" unless fact_matches
@@ -25,20 +25,17 @@ class ContactBindingAuditRecorder
       case contact
       when ClientEmail then [ClientContactAuditOutbox, "email", contact.user_id]
       when ClientTelephone then [ClientContactAuditOutbox, "telephone", contact.user_id]
-      when VisitorEmail then [VisitorContactAuditOutbox, "email", contact.visitor_id]
-      when VisitorTelephone then [VisitorContactAuditOutbox, "telephone", contact.visitor_id]
       else raise ArgumentError, "unsupported Contact audit subject"
       end
     end
 
-    def validate_actor_context!(model, owner_id, actor, contact, actor_context)
-      expected_actor = (model == ClientContactAuditOutbox) ? Client : Visitor
-      unless actor.is_a?(expected_actor) && actor.persisted? && contact.persisted? && owner_id == actor.id
+    def validate_actor_context!(owner_id, actor, contact, actor_context)
+      unless actor.is_a?(Client) && actor.persisted? && contact.persisted? && owner_id == actor.id
         raise ArgumentError, "Contact audit owner mismatch"
       end
 
-      expected_tld = (model == ClientContactAuditOutbox) ? :app : :com
-      expected_role = (model == ClientContactAuditOutbox) ? :client : :visitor
+      expected_tld = :app
+      expected_role = :client
       valid_context = actor_context.is_a?(ActorValuesContext) && actor_context.tld == expected_tld &&
         ((actor_context.actor_type == expected_role && actor_context.subject == actor) ||
          (actor_context.unauthenticated? && actor_context.subject.equal?(Unauthenticated.instance)))

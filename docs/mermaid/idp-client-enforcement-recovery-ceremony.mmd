@@ -12,6 +12,7 @@ stateDiagram-v2
     REVOKED --> REVOKED: revoke!
     note right of ACTIVE
         consume!/revoke! lack source/expiry guards.
+        Recovery completion locks and checks ACTIVE before consume!.
         TTL is a predicate; EXPIRED setter UNKNOWN.
         Authentication proof does not issue a normal session.
     end note

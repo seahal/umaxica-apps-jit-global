@@ -275,21 +275,6 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
   end
 
-  test "cancelling on the com host leaves the app ceremony untouched" do
-    establish_pending_mfa_via_email!
-
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
-    delete auth_com_sign_in_challenge_path(ri: "jp")
-
-    assert_response :see_other
-
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    get mfa_challenge_path
-
-    assert_response :success
-    assert_predicate ClientSignInFlow.where(principal_id: @user.id).order(:id).last, :sign_in_mfa_pending?
-  end
-
   private
 
   # An OIDC-parent flow exists only after primary authentication; a PRIMARY binding to that

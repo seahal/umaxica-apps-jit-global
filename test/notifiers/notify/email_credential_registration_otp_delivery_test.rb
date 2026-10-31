@@ -3,7 +3,7 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpDeliveryTest < ActiveJob::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} registration Notifier encrypts random code and delivers only its live generation" do
       actor, token, email, notifier =
         case surface
@@ -21,13 +21,6 @@ class EmailCredentialRegistrationOtpDeliveryTest < ActiveJob::TestCase
             raw_address: "registration-job-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
           )
           [owner, root, candidate, Notify::Org::OtpNotifier]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_emails.create!(
-            raw_address: "registration-job-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-          )
-          [owner, root, candidate, Notify::Com::OtpNotifier]
         end
       token.rotate_refresh_token!
       issued = EmailCredentialRegistrationOtpIssuer.call(

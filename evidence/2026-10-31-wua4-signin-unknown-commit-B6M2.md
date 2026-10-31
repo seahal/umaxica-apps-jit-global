@@ -1,0 +1,6 @@
+# Sign-in resend lost occurrence commit acknowledgement
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had substantial uncommitted changes affecting the tested implementation.
+- A non-transactional real-contact test commits the occurrence transaction, disconnects the connection, and injects `PG::ConnectionBad` before the caller receives success. The service returns 503, keeps the new Auth generation and the committed occurrence, and does not call the injected delivery adapter. The test suppresses the redundant rollback call on the already committed, disconnected backend; it does not reproduce a real network outage.
+- `PARALLEL_WORKERS=1 bin/rails test test/concurrency/sign_in_otp_resend_serialization_test.rb test/concurrency/auth_email_otp_owner_lock_test.rb test/services/sign/in/otp_resend_service_test.rb test/services/sign_in_otp_resender_failures_test.rb test/controllers/auth/app/web/v0/in/email/otps_controller_test.rb`: 55 runs, 279 assertions, no failures, errors or skips. Scoped RuboCop passed after a formatting correction.
+- Initial injections without suppressing that rollback raised a PostgreSQL no-transaction warning, so they did not establish the intended result. Caller-owned outer transactions, real transport, other commit-failure modes and the full suite remain unverified or unresolved.

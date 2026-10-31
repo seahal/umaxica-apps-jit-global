@@ -3,17 +3,15 @@
 require "test_helper"
 
 class EffectiveEntryIntentTest < ActionDispatch::IntegrationTest
-  %w(app com).each do |surface|
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+  # Only the app realm has public sign-up, so it is the sole entry-intent realm.
+  %w(app).each do |surface|
     [nil, "create"].each do |prompt|
       %i(continuation redemption).each do |phase|
         test "#{surface} #{prompt || "ordinary"} admission refuses the other intent at #{phase} without consumption" do
           protection = ActionController::Base.allow_forgery_protection
           ActionController::Base.allow_forgery_protection = true
-          host, client_id, resource_type =
-            case surface
-            when "app" then [ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app-jp", "client"]
-            when "com" then [ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com-jp", "visitor"]
-            end
+          host, client_id, resource_type = ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app-jp", "client"
           transaction = OidcAuthorizationTransactionCoordinator.issue!(
             surface: surface, intent: "authentication",
             params: {
@@ -44,7 +42,7 @@ class EffectiveEntryIntentTest < ActionDispatch::IntegrationTest
 
           if phase == :continuation
             before = binding.attributes
-            browser.get(wrong_path, params: fields)
+            browser.get(wrong_path, params: fields, headers: NAVIGATION_HEADERS)
 
             assert_equal 303, browser.response.status
             assert_equal "/ceremony_bindings", URI.parse(browser.response.location).path
@@ -58,19 +56,23 @@ class EffectiveEntryIntentTest < ActionDispatch::IntegrationTest
           binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
 
           before = binding.reload.attributes
-          browser.get(wrong_path, params: fields)
+          browser.get(wrong_path, params: fields, headers: NAVIGATION_HEADERS)
 
           assert_equal 400, browser.response.status
           assert_equal before, binding.reload.attributes
           assert_not_predicate binding, :redeemed?
 
-          browser.get(valid_path, params: fields)
+          browser.get(valid_path, params: fields, headers: NAVIGATION_HEADERS)
 
           assert_equal 303, browser.response.status
           assert_predicate binding.reload, :redeemed?
 
           # Once admitted, a page name or query parameter cannot reinterpret the same ceremony.
-          browser.get(wrong_path, params: { ri: "jp", prompt: (prompt == "create") ? "login" : "create" })
+          browser.get(
+            wrong_path,
+            params: { ri: "jp", prompt: (prompt == "create") ? "login" : "create" },
+            headers: { "Referer" => "https://#{host}#{wrong_path}" },
+          )
 
           assert_equal 400, browser.response.status
           assert_equal "pending", transaction.reload.status

@@ -4,7 +4,7 @@ require "test_helper"
 
 # Boolean comparisons keep OTP secrets and challenge digests out of assertion failure output.
 class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} issuance and resend stay on their admitted flow without rotating Contact OTP" do
       # Only rate-counter expiry follows the travelled request clock. All limits
       # remain active; the shared OTP verification budget still uses real Valkey.
@@ -23,14 +23,6 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
             [actor, actor.client_emails.create!(
               address:, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
             ).tap(&:finalize_binding!),]
-          else
-            actor = Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL,
-              id: SecureRandom.random_number(1 << 60), status_id: VisitorStatus::ACTIVE,
-            )
-            [actor, actor.visitor_emails.create!(
-              address:, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-            ).tap(&:finalize_binding!),]
           end
         source_generation = contact.attributes.slice(
           "otp_private_key", "otp_counter", "otp_expires_at", "otp_last_sent_at",
@@ -45,7 +37,6 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
               admission_intent = "sign_in"
               admission_host = {
                 "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
                 "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
               }.fetch(admission_surface)
               admission_browser.host!(admission_host)
@@ -101,7 +92,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         assert_not_equal ceremonies.first.id, ceremonies.last.id
         # An OIDC-parent primary phase has no sign-in flow, so neither browser sends a phase binding.
         flow_bindings = [nil, nil]
-        host = (surface == "app") ? ENV.fetch("PUBLIC_AUTH_SERVICE_URL") : ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+        host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         codes = []
         edit_props = []
@@ -184,7 +175,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
             }
           end
         end
-        resend_key = (surface == "app") ? "otp_resend" : "resend"
+        resend_key = "otp_resend"
         first_resend = edit_props.first.fetch(resend_key)
         second_resend = edit_props.last.fetch(resend_key)
         second_before = ceremonies.last.reload.email_otp_context.deep_dup
@@ -240,8 +231,8 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           }, headers:,
         )
 
-        # APP preserves its Found response; COM explicitly uses See Other after verification.
-        assert_equal((surface == "app") ? 302 : 303, browsers.first.response.status)
+        # APP preserves its Found response after verification.
+        assert_equal 302, browsers.first.response.status
         assert_withheld { ceremonies.first.reload.email_otp_context.fetch("verified_at").present? }
         assert_nil ceremonies.last.reload.email_otp_context.fetch("verified_at")
         assert_equal actor.public_id, ceremonies.first.email_otp_context.fetch("owner_ref")

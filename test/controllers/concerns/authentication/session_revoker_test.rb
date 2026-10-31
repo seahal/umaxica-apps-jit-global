@@ -27,14 +27,12 @@ class AuthenticationSessionRevokerTest < ActiveSupport::TestCase
     end
   end
 
-  test "tokens_for returns the matching token relation for each resource type" do
+  test "tokens_for returns the matching token relation for client and staff resource types" do
     user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     staff = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 2)
-    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 3)
 
     assert_equal ClientToken.where(user_id: 1).to_sql, AuthenticationSessionRevoker.tokens_for(user).to_sql
     assert_equal OperatorToken.where(staff_id: 2).to_sql, AuthenticationSessionRevoker.tokens_for(staff).to_sql
-    assert_equal VisitorToken.where(visitor_id: 3).to_sql, AuthenticationSessionRevoker.tokens_for(visitor).to_sql
   end
 
   test "tokens_for rejects unsupported resource types" do

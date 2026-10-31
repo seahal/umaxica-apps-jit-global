@@ -460,6 +460,12 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     predecessor = exchange_issued_code(issue_code!).token_response.fetch(:refresh_token)
     successor = refresh_with(predecessor).token_response.fetch(:refresh_token)
     grant = OidcRefreshTokenIssuer.resolve(refresh_token: successor, resource_type: "client").usage
+    sibling = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: @user_session_token, oidc_client_id: "warp-app-jp",
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: "other-browser",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    sibling_refresh = sibling.issue_refresh_token!
 
     reused = refresh_with(predecessor)
 
@@ -467,6 +473,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_predicate grant.reload.revoked_at, :present?
     assert_equal "invalid_grant", refresh_with(successor).error, "the whole family is revoked, successor included"
     assert_predicate @user_session_token.reload, :active_status?, "the OP Root Session stays intact"
+    assert_nil sibling.reload.revoked_at
+    assert_predicate OidcRefreshTokenIssuer.call(
+      refresh_token: sibling_refresh, resource_type: "client", client_id: "warp-app-jp",
+    ), :success?
   end
 
   test "D-25: an unknown verifier for an existing grant and a garbage token revoke nothing" do
@@ -474,11 +484,25 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     grant = OidcRefreshTokenIssuer.resolve(refresh_token: current, resource_type: "client").usage
     public_id, = ClientToken.parse_refresh_token(current)
     forged = ClientToken.build_refresh_token(public_id, SecureRandom.urlsafe_base64(32))
+    sibling = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: @user_session_token, oidc_client_id: "warp-app-jp",
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: "other-browser",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    sibling_refresh = sibling.issue_refresh_token!
+    unknown_id = PublicId.generate
+    assert_not OpAppGrant.exists?(public_id: unknown_id)
+    unknown = ClientToken.build_refresh_token(unknown_id, SecureRandom.urlsafe_base64(32))
 
     assert_equal "invalid_grant", refresh_with(forged).error
     assert_equal "invalid_grant", refresh_with("not-a-refresh-token").error
+    assert_not_predicate OidcRefreshTokenIssuer.call(refresh_token: unknown, resource_type: "client"), :success?
     assert_nil grant.reload.revoked_at
     assert_predicate refresh_with(current), :success?
+    assert_nil sibling.reload.revoked_at
+    assert_predicate OidcRefreshTokenIssuer.call(
+      refresh_token: sibling_refresh, resource_type: "client", client_id: "warp-app-jp",
+    ), :success?
   end
 
   test "refresh grant rejects a different registered client without rotating the usage" do
@@ -2427,166 +2451,9 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "openid profile email", usage.oidc_scope
   end
 
-  test "exchanges valid visitor code for tokens with VisitorToken" do
-    visitor = create_visitor!
-    visitor_session_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find!("core-com-jp")
-    com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
-    visitor_secret_credential = "test_secret_credential_for_core_com"
 
-    code_record = issue_code!(
-      client_id: "core-com-jp",
-      redirect_uri: com_redirect_uri,
-      resource: visitor,
-      session_token: visitor_session_token,
-    )
 
-    result =
-      with_authenticated_com_client(visitor_secret_credential, client_id: "core-com-jp") do
-        OidcTokenExchangeCoordinator.call(
-          grant_type: "authorization_code",
-          code: code_record.code,
-          redirect_uri: com_redirect_uri,
-          client_id: "core-com-jp",
-          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-          client_assertion: "test-visitor-client-assertion",
-          token_endpoint_uri: "https://log.umaxica.com/oauth/token",
-          code_verifier: @code_verifier,
-          expected_resource_type: "visitor",
-        )
-      end
 
-    assert_predicate result, :success?
-    assert_predicate result.token_response[:access_token], :present?
-    assert_predicate result.token_response[:refresh_token], :present?
-    assert_equal "Bearer", result.token_response[:token_type]
-  end
-
-  test "refreshes a visitor RP session without changing auth_time" do
-    visitor = visitors(:reserved_visitor)
-    visitor_session_token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor,
-      authentication_event_at: Time.utc(
-        2026, 1, 2, 3, 4, 5,
-      ),
-    )
-    com_client = OidcClientRegistry.find!("core-com-jp")
-    com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
-    code_record = issue_code!(
-      client_id: "core-com-jp",
-      redirect_uri: com_redirect_uri,
-      resource: visitor,
-      session_token: visitor_session_token,
-    )
-
-    initial_result =
-      OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-com-jp" && assertion.present? && token_url.present? },
-      ) do
-        OidcTokenExchangeCoordinator.call(
-          grant_type: "authorization_code",
-          code: code_record.code,
-          redirect_uri: com_redirect_uri,
-          client_id: "core-com-jp",
-          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-          client_assertion: "test-visitor-client-assertion",
-          token_endpoint_uri: "https://log.umaxica.com/oauth/token",
-          code_verifier: @code_verifier,
-          expected_resource_type: "visitor",
-        )
-      end
-
-    refreshed_result =
-      OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-com-jp" && assertion.present? && token_url.present? },
-      ) do
-        OidcTokenExchangeCoordinator.call(
-          grant_type: "refresh_token",
-          refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-com-jp",
-          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-          client_assertion: "test-visitor-refresh-assertion",
-          token_endpoint_uri: "https://log.umaxica.com/oauth/token",
-          expected_resource_type: "visitor",
-        )
-      end
-
-    assert_predicate refreshed_result, :success?
-    payload = JWT.decode(refreshed_result.token_response.fetch(:id_token), nil, false).first
-
-    assert_equal visitor_session_token.authentication_event_at.to_i, payload.fetch("auth_time")
-  end
-
-  test "creates visitor token record for com client" do
-    visitor = create_visitor!
-    visitor_session_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find("core-com-jp")
-    com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
-    visitor_secret_credential = "test_secret_credential_for_core_com"
-
-    code_record = issue_code!(
-      client_id: "core-com-jp",
-      redirect_uri: com_redirect_uri,
-      resource: visitor,
-      session_token: visitor_session_token,
-    )
-
-    assert_no_difference "VisitorToken.count" do
-      assert_difference "OpComGrant.count", 1 do
-        with_authenticated_com_client(visitor_secret_credential) do
-          OidcTokenExchangeCoordinator.call(
-            grant_type: "authorization_code",
-            code: code_record.code,
-            redirect_uri: com_redirect_uri,
-            client_id: "core-com-jp",
-            client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-            client_assertion: "test-visitor-client-assertion",
-            token_endpoint_uri: "https://log.umaxica.com/oauth/token",
-            code_verifier: @code_verifier,
-            expected_resource_type: "visitor",
-          )
-        end
-      end
-    end
-  end
-
-  test "records visitor RP connection" do
-    visitor = create_visitor!
-    visitor_session_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find("core-com-jp")
-    visitor_secret_credential = "test_secret_credential_for_core_com"
-    code_record = issue_code!(
-      client_id: "core-com-jp",
-      redirect_uri: com_client.redirect_uris_by_realm.fetch("visitor").first,
-      resource: visitor,
-      session_token: visitor_session_token,
-    )
-
-    with_authenticated_com_client(visitor_secret_credential) do
-      OidcTokenExchangeCoordinator.call(
-        grant_type: "authorization_code",
-        code: code_record.code,
-        redirect_uri: com_client.redirect_uris_by_realm.fetch("visitor").first,
-        client_id: "core-com-jp",
-        client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-        client_assertion: "test-visitor-client-assertion",
-        token_endpoint_uri: "https://log.umaxica.com/oauth/token",
-        code_verifier: @code_verifier,
-        expected_resource_type: "visitor",
-      )
-    end
-
-    connection = VisitorOidcConnection.find_by!(visitor_id: visitor.id, client_id: "core-com-jp")
-    usage = OpComGrant.order(:created_at).last
-
-    assert_equal "openid profile email", connection.scope
-    assert_equal visitor_session_token.id, usage.visitor_token_id
-    assert_equal "core-com-jp", usage.oidc_client_id
-    assert_equal "openid profile email", usage.oidc_scope
-  end
 
   # --- DPoP token exchange tests ---
 
@@ -3163,16 +3030,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     )
   end
 
-  def create_visitor!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::NOTHING)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-  end
-
   # Stub ClientRegistry.authenticate to bypass secret_credential resolution in tests
   def exchange_issued_code(code_record)
     with_authenticated_client do
@@ -3215,16 +3072,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  def with_authenticated_com_client(_secret_credential, client_id: "core-com-jp", &block)
-    OidcClientRegistry.stub(
-      :authenticate_assertion, ->(cid, assertion, token_url:) {
-                                 cid == client_id && assertion.present? && token_url.present?
-                               },
-    ) do
-      block.call
-    end
-  end
-
   def with_oidc_client_secret_credentials(overrides)
     creds = Rails.app.creds
     fetch = ->(key, default: nil) { overrides.fetch(key, default) }
@@ -3235,7 +3082,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   def visitor_account(overrides = {})
-    OidcClientRegistry::VisitorAccount.new(
+    OidcClientRegistry::ClientConfiguration.new(
       client_id: "test_client",
       client_secret: "secret",
       redirect_uris: ["https://client.example/auth/callback"],

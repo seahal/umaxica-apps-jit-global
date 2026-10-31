@@ -11,16 +11,12 @@ module Security
 
       AUTHENTICATED_SURFACE_CONTROLLERS = [
         Auth::App::ApplicationController,
-        Auth::Com::ApplicationController,
         Auth::Org::ApplicationController,
         Base::App::ApplicationController,
-        Base::Com::ApplicationController,
         Base::Org::ApplicationController,
         Core::App::ApplicationController,
-        Core::Com::ApplicationController,
         Core::Org::ApplicationController,
         Warp::App::ApplicationController,
-        Warp::Com::ApplicationController,
         Warp::Org::ApplicationController,
       ].freeze
 

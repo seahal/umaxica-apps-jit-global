@@ -11,8 +11,6 @@ class AcceptanceWu13AuthorizeUnrelatedParamsTest < ActionDispatch::IntegrationTe
     [
       ["app", ENV.fetch("PUBLIC_VISA_SERVICE_URL"), "core-app-jp", "client",
        ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding,],
-      ["com", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), "core-com-jp", "visitor",
-       VisitorOidcAuthorizationTransaction, VisitorAuthAdmissionBinding,],
       ["org", ENV.fetch("PUBLIC_VISA_STAFF_URL"), "core-org-jp", "operator",
        OperatorOidcAuthorizationTransaction, OperatorAuthAdmissionBinding,],
     ].each do |surface, host, client_id, realm, transaction_class, binding_class|
@@ -51,7 +49,7 @@ class AcceptanceWu13AuthorizeUnrelatedParamsTest < ActionDispatch::IntegrationTe
     end
 
     expected =
-      %w(app com org).flat_map do |surface|
+      %w(app org).flat_map do |surface|
         %i(cancellation_ref switch_handoff).map do |parameter|
           [surface, parameter, 400, 0, 0, nil]
         end

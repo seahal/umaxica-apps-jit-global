@@ -241,14 +241,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     def sign_org_selector_path(**attrs) = "/org/selector?#{attrs.compact.to_query}"
   end
 
-  class ComHarness < Harness
-    undef_method :sign_app_selector_path
-
-    def sign_in_sequence_surface = :com
-
-    def sign_com_selector_path(**attrs) = "/com/selector?#{attrs.compact.to_query}"
-  end
-
   class LocatorHarness < Harness
     attr_accessor :surface
 
@@ -274,7 +266,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   test "sign_in_session_limit_path names the Base limitation page of each surface and refuses an unknown one" do
     assert_equal "/sign/in/limitation?ri=jp", @harness.sign_in_session_limit_path
     assert_equal "/sign/in/limitation?ri=jp", OrgHarness.new.sign_in_session_limit_path
-    assert_equal "/sign/in/limitation?ri=jp", ComHarness.new.sign_in_session_limit_path
 
     unknown = Harness.new
     unknown.define_singleton_method(:sign_in_sequence_surface) { :net }
@@ -297,7 +288,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_equal "/selector?pt=pt%3Atarget&ri=jp", fallback.sign_in_selector_path(pt: "target")
 
     assert_equal "/org/selector?pt=pt%3Atarget&ri=jp", OrgHarness.new.sign_in_selector_path(pt: "target")
-    assert_equal "/com/selector?pt=pt%3Atarget&ri=jp", ComHarness.new.sign_in_selector_path(pt: "target")
   end
 
   test "sign-in helper paths canonicalize invalid region input" do
@@ -503,10 +493,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
         security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: ClientStatus::ACTIVE,
       ),
        ClientSignInFlow, :pending_login_user_id,],
-      [:com, Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE,
-      ),
-       VisitorSignInFlow, :pending_login_visitor_id,],
       [:org, Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE),
        OperatorSignInFlow, :pending_login_staff_id,],
     ].each do |surface, actor, cycle_class, pending_key|
@@ -898,10 +884,8 @@ class AuthenticationSequenceGateExtraCoverageTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private

@@ -19,6 +19,7 @@ module Auth
         include ::SignInPhaseBindingControllerSupport
 
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :parent_intent
 
         # Login intent doesn't require auth; link/step-up intents are checked
         # in require_social_link_step_up! and prepare_social_auth_intent!.

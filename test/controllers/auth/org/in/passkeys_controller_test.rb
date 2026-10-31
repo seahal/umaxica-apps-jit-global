@@ -14,6 +14,8 @@ require "base64"
 # these URLs is Emergency Access, and its tests live in
 # test/controllers/auth/org/in/emergency/passkeys_controller_test.rb.
 class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   include OrgEntraFirstStageHelper
 
   fixtures :operators, :operator_statuses, :operator_passkeys, :operator_passkey_statuses
@@ -81,7 +83,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -136,7 +138,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -294,7 +296,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -352,7 +354,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -402,7 +404,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -452,7 +454,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -519,7 +521,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -595,7 +597,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -653,7 +655,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -717,7 +719,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -771,7 +773,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -834,7 +836,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!
@@ -885,7 +887,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
         assert_response :see_other
         follow_redirect!

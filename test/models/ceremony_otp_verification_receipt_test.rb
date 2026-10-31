@@ -5,10 +5,8 @@ require "test_helper"
 class CeremonyOtpVerificationReceiptTest < ActiveSupport::TestCase
   [
     [ClientEmailCeremonyTransaction, "email"],
-    [VisitorEmailCeremonyTransaction, "email"],
     [OperatorEmailCeremonyTransaction, "email"],
     [ClientTelephoneCeremonyTransaction, "telephone"],
-    [VisitorTelephoneCeremonyTransaction, "telephone"],
     [OperatorTelephoneCeremonyTransaction, "telephone"],
   ].each do |model, channel|
     test "#{model.name} receipt never outlives its parent at sixty second lifetime neighbors" do

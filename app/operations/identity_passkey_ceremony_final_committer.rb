@@ -9,11 +9,6 @@ class IdentityPasskeyCeremonyFinalCommitter
       owner_association: :client_passkeys,
       audit_event_id: ClientChronicleEvent::PASSKEY_REGISTERED,
     },
-    "com" => {
-      record_class: VisitorPasskey,
-      owner_key: :visitor_id,
-      owner_association: :visitor_passkeys,
-    },
     "org" => {
       record_class: OperatorPasskey,
       owner_key: :staff_id,

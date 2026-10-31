@@ -25,6 +25,7 @@ module Auth
           include ::AuthenticationModeSwitchGuard
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_in
 
           prepend_before_action :require_sign_in_ceremony_admission!
           ensure_fqdn_gate_first!

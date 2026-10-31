@@ -14,6 +14,25 @@ class OutboundSmsAuditTest < ActiveSupport::TestCase
     end
   end
 
+  test "a queue refusal raises and records failure without claiming enqueue" do
+    enqueued = Chronicle.where(action: "notification.delivery.sms.enqueued")
+    failed = Chronicle.where(action: "notification.delivery.sms.enqueue_failed")
+
+    assert_no_difference -> { enqueued.count } do
+      assert_difference -> { failed.count }, 1 do
+        OutboundSms.stub(:provider, Object.new) do
+          Outbound::SmsDeliveryJob.stub(:perform_later, false) do
+            assert_raises(ActiveJob::EnqueueError) do
+              OutboundSms.deliver_later(to: "+819012345678", title: "Verification", body: "code")
+            end
+          end
+        end
+      end
+    end
+
+    assert_equal "ActiveJob::EnqueueError", failed.order(:created_at).last.reason
+  end
+
   test "records provider acceptance without recipient or message content" do
     response = OutboundProviderResponse.accepted(
       provider: :test,

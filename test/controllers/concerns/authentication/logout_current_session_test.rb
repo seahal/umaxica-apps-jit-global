@@ -17,8 +17,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   end
 
   # Test double for a token whose class has no sign-out-flow / device-session
-  # mapping (i.e. not ClientToken/VisitorToken/OperatorToken) but is already
-  # revoked.
+  # mapping (i.e. not ClientToken/OperatorToken) but is already revoked.
   class RevokedUnmappedToken
     def revoked?
       true
@@ -332,26 +331,11 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     end
   end
 
-  test "records visitor and operator root stops in their own realms" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      public_id: "v#{SecureRandom.hex(10)}", status_id: VisitorStatus::ACTIVE,
-    )
-    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
-    visitor_token.rotate_refresh_token!
+  test "records operator root stops in its own realm" do
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     operator_token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
     operator_token.rotate_refresh_token!
 
-    assert_difference -> { OpComAuthorityStop.count }, 1 do
-      AuthenticationLogoutCurrentSession.call(
-        cause: "browser_logout",
-        resource: visitor,
-        token_class: VisitorToken,
-        session_public_id: visitor_token.public_id,
-        reason: "visitor_logout",
-      )
-    end
     assert_difference -> { OpOrgAuthorityStop.count }, 1 do
       AuthenticationLogoutCurrentSession.call(
         cause: "browser_logout",
@@ -362,12 +346,9 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
       )
     end
 
-    visitor_stop = OpComAuthorityStop.find_by!(authority_evidence_ref: "visitor_logout")
     operator_stop = OpOrgAuthorityStop.find_by!(authority_evidence_ref: "operator_logout")
 
-    assert_equal "browser_logout", visitor_stop.cause_name
     assert_equal "browser_logout", operator_stop.cause_name
-    assert OpComAuthorityStopRootTarget.exists?(stop: visitor_stop, root: visitor_token)
     assert OpOrgAuthorityStopRootTarget.exists?(stop: operator_stop, root: operator_token)
   end
 

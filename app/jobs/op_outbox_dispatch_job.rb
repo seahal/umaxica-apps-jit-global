@@ -15,7 +15,6 @@ class OpOutboxDispatchJob < ApplicationJob
 
   REALMS = [
     { realm: "app", participant_class: OpAppAuthorityStopParticipant },
-    { realm: "com", participant_class: OpComAuthorityStopParticipant },
     { realm: "org", participant_class: OpOrgAuthorityStopParticipant },
   ].freeze
   BATCH_SIZE = 50

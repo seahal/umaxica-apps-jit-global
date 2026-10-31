@@ -19,7 +19,6 @@ class OutboundChannelSuspensionTest < ActiveSupport::TestCase
     assert_not OutboundChannelSuspension.new(flipper: StubFlipper.new({})).suspended?(:sms)
     assert_not OutboundChannelSuspension.new(flipper: StubFlipper.new({})).suspended?(:email)
     assert_not OutboundChannelSuspension.new(flipper: StubFlipper.new({})).suspended?(:promotional_email)
-    assert_not OutboundChannelSuspension.new(flipper: StubFlipper.new({})).suspended?(:push)
   end
 
   test "an enabled feature suspends only its own channel" do
@@ -27,22 +26,6 @@ class OutboundChannelSuspensionTest < ActiveSupport::TestCase
 
     assert suspension.suspended?(:sms)
     assert_not suspension.suspended?(:email)
-    assert_not suspension.suspended?(:push)
-  end
-
-  test "suspending push leaves the email and sms channels running" do
-    suspension = OutboundChannelSuspension.new(flipper: StubFlipper.new(outbound_push_suspended: true))
-
-    assert suspension.suspended?(:push)
-    assert_not suspension.suspended?(:sms)
-    assert_not suspension.suspended?(:email)
-    assert_not suspension.suspended?(:promotional_email)
-  end
-
-  test "suspending email leaves push running" do
-    suspension = OutboundChannelSuspension.new(flipper: StubFlipper.new(outbound_email_suspended: true))
-
-    assert_not suspension.suspended?(:push)
   end
 
   test "suspending email also suspends promotional email" do

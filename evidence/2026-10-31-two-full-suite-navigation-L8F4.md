@@ -1,0 +1,7 @@
+# Full Rails suite after Auth navigation guard
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained substantial uncommitted changes affecting the run.
+- `PARALLEL_WORKERS=1 bin/rails test` completed in 878.25 seconds: 16,765 runs, 161,351 assertions, 278 failures, 131 errors, no skips (exit 1; seed 54824). Local log: `/tmp/two-full-suite-20261031-nav-guard.log`.
+- Comparing distinct reported names by method against `plans/2026-10-28-baseline-failing-tests.md` yielded 72 names outside the baseline; 69 did not occur by method in `/tmp/two-full-suite-20261031-current.log`. The lists are `/tmp/two-full-suite-20261031-nav-outside-baseline.txt` and `/tmp/two-full-suite-20261031-nav-new-vs-prior.txt`. A name comparison does not establish cause.
+- Many new failures involved test requests lacking the navigation headers required by the guard. Several affected test files and a shared sign-up redirect helper were edited while the suite ran, after its test classes had loaded. Consequently this run is not verification of those later edits. A focused retest is underway and no result is claimed here.
+- The JWKS separation case also failed; its cause in this run is not established. Two Passkey deadline cases that appeared in the preceding full-run output again returned 201 instead of 409. A separate Minitest clock-stub mechanism was observed; see `evidence/2026-10-31-passkey-deadline-clock-stub-P9S4.md`.

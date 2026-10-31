@@ -29,12 +29,12 @@ class RealmIdentifierEncryptionTest < ActiveSupport::TestCase
     email = ActiveRecord::Encryption.encryptor.encrypt("global@example.com")
     telephone = ActiveRecord::Encryption.encryptor.encrypt("+819012345678")
 
-    [ClientEmail, VisitorEmail, OperatorEmail].each do |model|
+    [ClientEmail, OperatorEmail].each do |model|
       assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
         model.type_for_attribute("address").deserialize(email)
       end
     end
-    [ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
+    [ClientTelephone, OperatorTelephone].each do |model|
       assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
         model.type_for_attribute("number").deserialize(telephone)
       end
@@ -71,59 +71,31 @@ class RealmIdentifierEncryptionTest < ActiveSupport::TestCase
     end
   end
 
-  test "APP COM and ORG email ciphertext is readable only by its owning realm" do
+  test "APP and ORG email ciphertext is readable only by its owning realm" do
     app = ClientEmail.new(address: "realm-encryption@example.com").ciphertext_for("address")
-    com = VisitorEmail.new(address: "realm-encryption@example.com").ciphertext_for("address")
     org = OperatorEmail.new(address: "realm-encryption@example.com").ciphertext_for("address")
 
     assert_equal "realm-encryption@example.com", ClientEmail.type_for_attribute("address").deserialize(app)
-    assert_equal "realm-encryption@example.com", VisitorEmail.type_for_attribute("address").deserialize(com)
     assert_equal "realm-encryption@example.com", OperatorEmail.type_for_attribute("address").deserialize(org)
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      VisitorEmail.type_for_attribute("address").deserialize(app)
-    end
     assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
       OperatorEmail.type_for_attribute("address").deserialize(app)
     end
     assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      ClientEmail.type_for_attribute("address").deserialize(com)
-    end
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      OperatorEmail.type_for_attribute("address").deserialize(com)
-    end
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
       ClientEmail.type_for_attribute("address").deserialize(org)
-    end
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      VisitorEmail.type_for_attribute("address").deserialize(org)
     end
   end
 
-  test "APP COM and ORG telephone ciphertext is readable only by its owning realm" do
+  test "APP and ORG telephone ciphertext is readable only by its owning realm" do
     app = ClientTelephone.new(number: "+819012345678").ciphertext_for("number")
-    com = VisitorTelephone.new(number: "+819012345678").ciphertext_for("number")
     org = OperatorTelephone.new(number: "+819012345678").ciphertext_for("number")
 
     assert_equal "+819012345678", ClientTelephone.type_for_attribute("number").deserialize(app)
-    assert_equal "+819012345678", VisitorTelephone.type_for_attribute("number").deserialize(com)
     assert_equal "+819012345678", OperatorTelephone.type_for_attribute("number").deserialize(org)
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      VisitorTelephone.type_for_attribute("number").deserialize(app)
-    end
     assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
       OperatorTelephone.type_for_attribute("number").deserialize(app)
     end
     assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      ClientTelephone.type_for_attribute("number").deserialize(com)
-    end
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      OperatorTelephone.type_for_attribute("number").deserialize(com)
-    end
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
       ClientTelephone.type_for_attribute("number").deserialize(org)
-    end
-    assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
-      VisitorTelephone.type_for_attribute("number").deserialize(org)
     end
   end
 end

@@ -7,7 +7,6 @@ class AcceptanceWu02ClientAssertionAudienceTest < ActionDispatch::IntegrationTes
 
   REALMS = [
     { surface: :app, client_id: "core-app-jp", resource_type: "client", base_namespace: "BASE_APP" },
-    { surface: :com, client_id: "core-com-jp", resource_type: "visitor", base_namespace: "BASE_COM" },
     { surface: :org, client_id: "core-org-jp", resource_type: "operator", base_namespace: "BASE_ORG" },
   ].freeze
 

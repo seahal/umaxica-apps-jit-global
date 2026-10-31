@@ -15,8 +15,8 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     host! @host
   end
 
-  test "GET show without access jwt returns default theme sy" do
-    cookies.delete(PreferenceCookieName.access)
+  test "GET show without a Preference JWT returns default theme sy" do
+    cookies.delete(PreferenceCookieName.anonymous_jwt)
 
     get auth_app_api_v0_preferences_theme_path, as: :json
 
@@ -26,11 +26,11 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
 
   test "GET show returns theme from preference jwt without writing a theme cookie" do
     token = encode_preference_jwt(
-      preferences: { "ct" => "dr" },
+      preferences: { "theme" => "dark" },
       host: @host,
       public_id: "pref-app-public-id",
     )
-    cookies[PreferenceCookieName.access(surface: :app)] = token
+    cookies[PreferenceCookieName.anonymous_jwt] = token
 
     with_preference_jwt_keys(host: @host) do
       get auth_app_api_v0_preferences_theme_path, as: :json
@@ -43,71 +43,44 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     assert_nil response.headers["Set-Cookie"]
   end
 
-  test "PATCH update sets theme cookie and returns updated theme" do
+  test "PATCH cannot change the Preference theme on the read-only Auth host" do
     token = encode_preference_jwt(
-      preferences: { "ct" => "sy" },
+      preferences: { "theme" => "system" },
       host: @host,
       public_id: "pref-app-public-id",
     )
-    cookies[PreferenceCookieName.access(surface: :app)] = token
+    cookies[PreferenceCookieName.anonymous_jwt] = token
 
     with_preference_jwt_keys(host: @host) do
       patch auth_app_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
     end
 
-    assert_response :ok
-    assert_equal "dr", response.parsed_body["theme"]
-    set_cookie = response.headers["Set-Cookie"].to_s
-
-    assert_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=dr"
+    assert_response :forbidden
+    assert_nil response.headers["Set-Cookie"]
   end
 
-  test "PATCH update from an anonymous visitor with no preference cookie still persists a record" do
-    option_class = PreferenceClassRegistry.option_class("App", :theme)
-    option_class.ensure_defaults! if option_class.respond_to?(:ensure_defaults!)
+  test "PATCH cannot create Preference state for an anonymous visitor on Auth" do
+    cookies.delete(PreferenceCookieName.anonymous_jwt)
 
-    assert_difference -> { AppPreference.count }, 1 do
-      with_preference_jwt_keys(host: @host) do
-        patch auth_app_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
-      end
-    end
-
-    assert_response :ok
-    assert_equal "dr", response.parsed_body["theme"]
-    preference = AppPreference.includes(:app_preference_theme).order(:created_at).last
-
-    assert_equal option_class::DARK, preference.app_preference_theme.option_id
-  end
-
-  test "PATCH update persists the theme to the preference record so a reload keeps it" do
-    preference = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      expires_at: PreferenceBase::REFRESH_TOKEN_TTL.from_now,
-    )
-    option_class = PreferenceClassRegistry.option_class("App", :theme)
-    option_class.ensure_defaults! if option_class.respond_to?(:ensure_defaults!)
-    AppPreferenceTheme.create!(preference: preference, option_id: option_class::SYSTEM)
-    cookies[PreferenceCookieName.access(surface: :app)] = encode_preference_jwt(
-      preferences: { "ct" => "sy" }, host: @host, public_id: preference.public_id,
-    )
-
-    with_preference_jwt_keys(host: @host) do
+    assert_no_difference -> { AppPreference.count } do
       patch auth_app_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
     end
 
-    assert_response :ok
-    assert_equal option_class::DARK, preference.reload.app_preference_theme.option_id
+    assert_response :forbidden
+    assert_nil response.headers["Set-Cookie"]
   end
 
   private
 
   def encode_preference_jwt(preferences:, host:, public_id:, preference_type: "AppPreference")
-    jti = "test-jti-#{SecureRandom.uuid}"
+    preference = AppPreference.find_by(public_id:)
+    jti = preference&.jti || "test-jti-#{SecureRandom.uuid}"
+    defaults = SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first)
     token = nil
 
     with_preference_jwt_keys(host: host) do
       token = PreferenceToken.encode(
-        preferences,
+        defaults.merge(preferences),
         host: host,
         preference_type: preference_type,
         public_id: public_id,
@@ -201,15 +174,6 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest
     ClientPasskeyStatus.find_or_create_by!(id: ClientPasskeyStatus::ACTIVE)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
   def ensure_user_token_reference_records!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
@@ -224,29 +188,6 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -257,13 +198,6 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest
   def satisfy_staff_verification(token, scope: nil)
     _verification, raw_token = OperatorVerification.issue_for_token!(token: token)
     cookies[OperatorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
     mark_token_step_up_satisfied_for_test(token, scope: scope)
     true
   end
@@ -356,7 +290,6 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")

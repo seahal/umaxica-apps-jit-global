@@ -7,13 +7,6 @@ class PublicIdNullOnlyBackfillOperationTest < ActiveSupport::TestCase
     targets = [
       [ClientPreference,
        ClientPreference.create!(user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)),],
-      [VisitorPreference,
-       VisitorPreference.create!(
-         visitor: Visitor.create!(
-           security_mode_id: SecurityModeConfigurable::NORMAL,
-           status_id: VisitorStatus::ACTIVE,
-         ),
-       ),],
       [OperatorPreference,
        OperatorPreference.create!(
          staff: Operator.create!(

@@ -3,13 +3,14 @@
 
 require "test_helper"
 
-# D-153 / D-160 (4): every first-party RP serves one generic interruption page.
+# D-153 / D-160 (4): every first-party RP serves one generic interruption page. two.md WU-3 removes
+# the corporate RPs, which no longer own an Auth interruption page.
 class RpSignInterruptionTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   HOSTS = %w(
-    www.umaxica.app www.umaxica.com www.umaxica.org jp.umaxica.app jp.umaxica.com jp.umaxica.org
-    www-jp.umaxica.app www-jp.umaxica.com www-jp.umaxica.org palm-jp.umaxica.app tech.umaxica.org edit.umaxica.org
+    www.umaxica.app www.umaxica.org jp.umaxica.app jp.umaxica.org
+    www-jp.umaxica.app www-jp.umaxica.org palm-jp.umaxica.app tech.umaxica.org edit.umaxica.org
   ).freeze
 
   test "the interruption page answers 200 no-store with the fixed text on every RP" do

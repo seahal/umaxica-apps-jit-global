@@ -10,14 +10,12 @@ class IdentityEmailCeremonyTransactionPurgerTest < ActiveSupport::TestCase
 
     stale_app = create_email_tx!(ClientEmailCeremonyTransaction, expires_at: now - retention - 1.hour)
     fresh_app = create_email_tx!(ClientEmailCeremonyTransaction, expires_at: now + 1.hour)
-    stale_com = create_email_tx!(VisitorEmailCeremonyTransaction, expires_at: now - retention - 2.hours)
     stale_org = create_email_tx!(OperatorEmailCeremonyTransaction, expires_at: now - retention - 3.hours)
 
     result = IdentityEmailCeremonyTransactionPurger.new(now: now, retention_period: retention, batch_size: 1).call
 
-    assert_equal({ app: 1, com: 1, org: 1 }, result)
+    assert_equal({ app: 1, org: 1 }, result)
     assert_nil ClientEmailCeremonyTransaction.find_by(id: stale_app.id)
-    assert_nil VisitorEmailCeremonyTransaction.find_by(id: stale_com.id)
     assert_nil OperatorEmailCeremonyTransaction.find_by(id: stale_org.id)
     assert ClientEmailCeremonyTransaction.exists?(fresh_app.id)
   end
@@ -28,7 +26,7 @@ class IdentityEmailCeremonyTransactionPurgerTest < ActiveSupport::TestCase
 
     result = IdentityEmailCeremonyTransactionPurger.new(now: now, retention_period: 30.days).call
 
-    assert_equal({ app: 0, com: 0, org: 0 }, result)
+    assert_equal({ app: 0, org: 0 }, result)
   end
 
   private

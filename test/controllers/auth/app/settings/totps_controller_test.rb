@@ -164,7 +164,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -176,9 +175,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
+    https!
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -258,7 +256,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -270,27 +267,27 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
+    https!
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
     candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
-    initial_image_digest = Digest::SHA256.hexdigest(props.fetch("qr_code_image"))
+    initial_image = props.fetch("qr_code_image")
+    initial_image_digest = Digest::SHA256.hexdigest(initial_image)
     initial_deadline = candidate.expires_at
     initial_ref = candidate.ref
     parent_deadline = issuance.transaction.expires_at
     2.times do
       assert_no_difference("IdentityTotpCeremonyCandidate.count") do
-        post auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+        post auth_app_settings_totps_enrollment_path(ri: "jp")
         follow_redirect!
       end
       page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
@@ -303,6 +300,15 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil session[:private_key]
     assert_nil session[:totp_enrollment]
     assert_nil token.reload.last_step_up_at
+
+    token.device_session_record!.revoke!
+    get new_auth_app_settings_totp_path(ri: "jp")
+
+    assert_includes [400, 401, 403], response.status
+    assert_not_includes response.body, candidate.private_key
+    assert_not_includes response.body, initial_image
+    assert_nil candidate.reload.last_otp_at
+    assert_equal "pending", issuance.transaction.reload.status
   end
 
   test "canceling admission requires a new Base permission and a new candidate" do
@@ -350,7 +356,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -423,7 +428,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -498,7 +502,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -566,7 +569,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -645,7 +647,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -706,13 +707,11 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "com and org hosts do not serve a TOTP enrollment" do
-    %w(PUBLIC_AUTH_CORPORATE_URL PUBLIC_AUTH_STAFF_URL).each do |key|
-      host = ENV.fetch(key)
+  test "staff host does not serve a TOTP enrollment" do
+    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
 
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path("http://#{host}/settings/totps/enrollment", method: :post)
-      end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{host}/settings/totps/enrollment", method: :post)
     end
   end
 
@@ -761,7 +760,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -845,7 +843,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -937,7 +934,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1023,7 +1019,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1101,7 +1096,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1209,7 +1203,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1221,15 +1214,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
+    https!
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1242,7 +1234,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          :authenticity_token => csrf,
           :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
           "cf-turnstile-response" => "test-only",
         }
@@ -1254,7 +1245,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
-    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_app_settings_totps_handoff_path(ri: "jp")
     raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
@@ -1315,7 +1306,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1429,7 +1419,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1536,7 +1525,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1630,7 +1618,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1720,7 +1707,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1818,7 +1804,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_auth_host = {
           "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -1897,7 +1882,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -1952,7 +1936,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end

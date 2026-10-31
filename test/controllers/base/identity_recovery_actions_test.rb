@@ -157,89 +157,100 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     assert_not AppEnforcementCase.in_force.exists?(id: enforcement_case.id)
   end
 
-  test "com appeal submission records the appeal and returns to the recovery page" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  test "app recovery completion refuses a Case whose effective time changes before commit" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
+    ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
+    ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
+    ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
+    ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
+    client = Client.create!(
+      status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
-    email = VisitorEmail.create!(
-      visitor: visitor, address: "recovery-appeal-visitor@example.test", confirm_policy: "1",
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    email = ClientEmail.create!(
+      user: client, address: "recovery-changed-case@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    enforcement_case = ComEnforcementCase.create!(
+    enforcement_case = AppEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
-      principal_public_id: visitor.public_id, applied_by_operator_public_id: "recovery-test-operator",
+      principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
     EnforcementCaseApplyOperation.call(
       enforcement_case: enforcement_case,
       actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
     )
     assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      post base_com_identity_recovery_session_url(ri: "jp", host: host),
+      post base_app_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
     payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
     code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
-    post base_com_identity_recovery_session_url(ri: "jp", host: host),
+    post base_app_identity_recovery_session_url(ri: "jp", host: host),
          params: { pass_code: code }
 
-    assert_difference("ComEnforcementAppeal.count", 1) do
-      post base_com_identity_recovery_appeals_url(ri: "jp", host: host),
-           params: {
-             appeal: {
-               enforcement_case_id: enforcement_case.public_id,
-               reason_code: "new_information",
-               statement: "appeal statement for the corporate enforcement case",
-             },
-           }
+    end_case = EnforcementCaseEndOperation.method(:call)
+    change_before_commit =
+      lambda do |**arguments|
+        AppEnforcementCase.find(enforcement_case.id).update!(effective_at: 1.hour.from_now)
+        end_case.call(**arguments)
+      end
+    EnforcementCaseEndOperation.stub(:call, change_before_commit) do
+      post base_app_identity_recovery_completion_url(ri: "jp", host: host),
+           params: { enforcement_case_id: enforcement_case.public_id }
     end
 
-    assert_response :see_other
+    assert_response :not_found
+    assert_nil enforcement_case.reload.ended_at
   end
 
-  test "com recovery completion ends the security lock and returns to sign-in" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  test "app recovery completion refuses a ceremony revoked before commit" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
+    ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
+    ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
+    ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
+    ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
+    client = Client.create!(
+      status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
-    email = VisitorEmail.create!(
-      visitor: visitor, address: "recovery-completion-visitor@example.test", confirm_policy: "1",
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    email = ClientEmail.create!(
+      user: client, address: "recovery-revoked-ceremony@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    enforcement_case = ComEnforcementCase.create!(
+    enforcement_case = AppEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
-      principal_public_id: visitor.public_id, applied_by_operator_public_id: "recovery-test-operator",
+      principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
     EnforcementCaseApplyOperation.call(
       enforcement_case: enforcement_case,
       actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
     )
     assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
-      post base_com_identity_recovery_session_url(ri: "jp", host: host),
+      post base_app_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
     payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
     code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
-    post base_com_identity_recovery_session_url(ri: "jp", host: host),
+    post base_app_identity_recovery_session_url(ri: "jp", host: host),
          params: { pass_code: code }
 
-    post base_com_identity_recovery_completion_url(ri: "jp", host: host),
-         params: { enforcement_case_id: enforcement_case.public_id }
+    end_case = EnforcementCaseEndOperation.method(:call)
+    change_before_commit =
+      lambda do |**arguments|
+        ClientEnforcementRecoveryCeremony.find_by!(client_id: client.id).revoke!
+        end_case.call(**arguments)
+      end
+    EnforcementCaseEndOperation.stub(:call, change_before_commit) do
+      post base_app_identity_recovery_completion_url(ri: "jp", host: host),
+           params: { enforcement_case_id: enforcement_case.public_id }
+    end
 
-    assert_response :see_other
-    assert_not ComEnforcementCase.in_force.exists?(id: enforcement_case.id)
+    assert_response :not_found
+    assert_nil enforcement_case.reload.ended_at
   end
 
   test "app appeal submission without a recovery ceremony is sent back to the entry point" do

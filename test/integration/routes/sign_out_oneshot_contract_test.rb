@@ -8,14 +8,11 @@ class SignOutOneshotContractTest < ActionDispatch::IntegrationTest
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     cases = [
       [hosts.core_service.host, "core/app/sign/outs"],
-      [hosts.core_corporate.host, "core/com/sign/outs"],
       [hosts.core_staff.host, "core/org/sign/outs"],
       [hosts.warp_service.host, "warp/app/sign/outs"],
-      [hosts.warp_corporate.host, "warp/com/sign/outs"],
       [hosts.warp_staff.host, "warp/org/sign/outs"],
       [hosts.edit_staff.host, "edit/org/sign/outs"],
       [hosts.base_service.host, "base/app/sign_outs"],
-      [hosts.base_corporate.host, "base/com/sign_outs"],
       [hosts.base_staff.host, "base/org/sign_outs"],
       [hosts.palm_service.host, "palm/app/sign/out/completions"],
       [hosts.tech_staff.host, "tech/org/sign/out/completions"],
@@ -36,10 +33,8 @@ class SignOutOneshotContractTest < ActionDispatch::IntegrationTest
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     browser_rp_hosts = [
       hosts.core_service.host,
-      hosts.core_corporate.host,
       hosts.core_staff.host,
       hosts.warp_service.host,
-      hosts.warp_corporate.host,
       hosts.warp_staff.host,
       hosts.edit_staff.host,
       hosts.palm_service.host,

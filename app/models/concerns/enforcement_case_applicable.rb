@@ -115,7 +115,7 @@ module EnforcementCaseApplicable
   def requires_approval?
     return true if break_glass?
     # A Case's principal is always the realm's own principal_class -- an org
-    # Case's principal is always an Operator, never a Client or Visitor -- so
+    # Case's principal is always an Operator, never a Client -- so
     # this is a realm check, not a per-row lookup (D12: any permanent_ban
     # targeting an Operator requires approval).
     return true if kind == "permanent_ban" && (visibility == "hidden" || self.class.principal_class == ::Operator)
@@ -139,8 +139,7 @@ module EnforcementCaseApplicable
   def revoke_method_sessions!
     return unless persisted?
 
-    principal = self.class.principal_class.find_by(public_id: principal_public_id)
-    return unless principal
+    principal = self.class.principal_class.find_by!(public_id: principal_public_id)
 
     authentication_method_effects.where(ended_at: nil).find_each do |effect|
       next unless METHOD_REVOKING_EFFECTS.include?(effect.effect)

@@ -6,14 +6,17 @@
 class SignInOtpResender
   include EmailOtpResponseTiming
 
+  class InvalidHistory < StandardError; end
+
+  class OpenTransaction < StandardError; end
+
   KIND = "email"
   SURFACES = SignInOtpResendState::SURFACES.map(&:to_sym).freeze
-  EMAIL_MODELS = { app: ClientEmail, com: VisitorEmail }.freeze
+  EMAIL_MODELS = { app: ClientEmail }.freeze
   BASE_SECONDS = 30
   EMAIL_CAP_SECONDS = 15.minutes.to_i
   INVALID_RETRY_AFTER = 30
   MAX_HISTORY = 30
-  STATUS_ID_CACHE = Concurrent::Map.new
 
   Response = Struct.new(:status, :resendable, :retry_after, keyword_init: true)
 
@@ -29,8 +32,7 @@ class SignInOtpResender
     @state = state
     @browser_binding = browser_binding
     @ceremony = ceremony
-    expected = (@surface == :app) ? ClientAuthCeremonySession : VisitorAuthCeremonySession
-    return if @ceremony.is_a?(expected) && @ceremony.sid_digest == @browser_binding
+    return if @ceremony.is_a?(ClientAuthCeremonySession) && @ceremony.sid_digest == @browser_binding
 
     raise ArgumentError, "sign-in resend ceremony does not match surface and browser"
 
@@ -44,13 +46,21 @@ class SignInOtpResender
     return invalid_response if normalized_target.blank?
 
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    occurrence = find_or_create_occurrence!(occurrence_hmac(normalized_target))
-    blocked_response = reserve_resend!(occurrence)
-    return blocked_response if blocked_response.present?
+    if ClientAuthCeremonySession.lease_connection.transaction_open? ||
+        EmailOccurrence.lease_connection.transaction_open?
+      raise OpenTransaction, "sign-in OTP resend requires ownership of Auth and occurrence transactions"
+    end
 
-    return invalid_response unless issue_and_send!(normalized_target, parsed)
+    response, delivery = issue_and_record!(normalized_target, parsed)
+    return response if response
 
+    deliver!(delivery) if delivery
     Response.new(status: :ok, resendable: true, retry_after: 0)
+  rescue OpenTransaction, ActiveJob::EnqueueError, ActiveRecord::ConnectionNotEstablished, ActiveRecord::ConnectionFailed,
+         ActiveRecord::ConnectionTimeoutError, ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked,
+         PG::ConnectionBad => e
+    Rails.error.report(e, handled: true, context: { service: "otp_resend", kind: @kind })
+    Response.new(status: :service_unavailable, resendable: false, retry_after: 0)
   rescue StandardError => e
     Rails.error.report(e, handled: false, context: { service: "otp_resend", kind: @kind })
     raise
@@ -77,53 +87,61 @@ class SignInOtpResender
     OccurrenceHmac.digest(kind: @kind, body: normalized_target)
   end
 
-  # Reserve the resend slot before provider I/O. The unique body index makes the
-  # first row creation race-safe; the row lock serializes subsequent evaluations.
-  # A failed provider call therefore cannot be used by concurrent requests to
-  # bypass the cooldown, while the external provider is never called under the
-  # occurrence database lock.
-  def reserve_resend!(occurrence)
-    occurrence.with_lock do
-      decision_time = occurrence.class.database_now
-      issued_timestamps = parse_issued_history(occurrence.memo)
+  # Serialize the decision even when no occurrence exists. The OTP commit must
+  # precede the occurrence write, and delivery must follow the occurrence commit.
+  def issue_and_record!(normalized_target, parsed)
+    body = occurrence_hmac(normalized_target)
+    EmailOccurrence.transaction do
+      key = Digest::SHA256.digest("sign_in:email_otp_resend:#{body}").unpack1("q>")
+      EmailOccurrence.lease_connection.execute("SELECT pg_advisory_xact_lock(#{key.to_i})")
+      occurrence = EmailOccurrence.find_by(body: body)
+      decision_time = EmailOccurrence.database_now
+      issued_timestamps = parse_issued_history(occurrence&.memo)
       policy = SignInOtpResendPolicy.new(base_seconds: BASE_SECONDS, cap_seconds: EMAIL_CAP_SECONDS)
       decision = policy.evaluate(issued_timestamps: issued_timestamps, now: decision_time)
 
-      if decision.resendable
-        updated_history = (issued_timestamps + [decision_time]).last(MAX_HISTORY)
-        log_issued!(occurrence: occurrence, issued_timestamps: updated_history)
-        nil
-      else
+      unless decision.resendable
         log_blocked!(
           occurrence: occurrence, issued_timestamps: issued_timestamps,
           retry_after: decision.retry_after,
         )
-        Response.new(
+        next [Response.new(
           status: :too_many_requests, resendable: false,
           retry_after: decision.retry_after,
-        )
+        ), nil,]
       end
+
+      issued = issue!(normalized_target, parsed)
+      next [invalid_response, nil] unless issued
+
+      occurrence ||= find_or_create_occurrence!(body)
+      updated_history = (issued_timestamps + [EmailOccurrence.database_now]).last(MAX_HISTORY)
+      log_issued!(occurrence: occurrence, issued_timestamps: updated_history)
+      [nil, issued.fetch(:delivery)]
     end
   end
 
   def parse_issued_history(memo)
-    return [] if memo.blank?
+    return [] if memo.nil?
+    return [] if memo.empty?
 
-    raw = memo.to_s[/issued=([0-9,]+)/, 1]
-    return [] if raw.blank?
+    match = /\Apurpose=in issued=([1-9][0-9]*(?:,[1-9][0-9]*)*)(?: retry_after=[0-9]+)?\z/.match(memo)
+    raise InvalidHistory, "invalid sign-in resend history" unless match
 
-    raw.split(",").filter_map do |value|
-      seconds = Integer(value.to_s, 10)
-      Time.zone.at(seconds) if seconds.positive?
-    end
+    match[1].split(",").map { |value| Time.zone.at(Integer(value, 10)) }
   end
 
-  def issue_and_send!(normalized_target, parsed)
+  def issue!(normalized_target, parsed)
     if parsed.fetch(:contact_mode) == "fake"
       return false unless @ceremony.email_otp_challenge_current?(contact: nil)
 
-      @ceremony.issue_email_otp!(contact: nil, destination: normalized_target)
-      return true
+      generation = @ceremony.email_otp_context.fetch("generation")
+      result = @ceremony.issue_email_otp!(
+        contact: nil, destination: normalized_target, expected_generation: generation,
+      )
+      return false if result == false
+
+      return { delivery: nil }
     end
     return false unless parsed.fetch(:contact_mode) == "real"
 
@@ -132,22 +150,29 @@ class SignInOtpResender
 
     return false unless @ceremony.email_otp_challenge_current?(contact: target)
 
-    owner_id = (@surface == :app) ? target.user_id : target.visitor_id
+    owner_id = target.user_id
     return false unless owner_id.to_s.rjust(20, "0") == parsed.fetch(:owner_ref) &&
       target.binding_finalized_at.utc.iso8601(6) == parsed.fetch(:binding_fact) &&
       target.address_digest == IdentifierBlindIndex.bidx_for_email(normalized_target, realm: @surface)
 
-    otp_code = @ceremony.issue_email_otp!(contact: target, destination: normalized_target)
-    return true if otp_code.nil?
+    generation = @ceremony.email_otp_context.fetch("generation")
+    otp_code = @ceremony.issue_email_otp!(
+      contact: target, destination: normalized_target, expected_generation: generation,
+    )
+    return false if otp_code == false
+    return { delivery: nil } if otp_code.nil?
 
+    { delivery: { target: target, otp_code: otp_code, generation: @ceremony.email_otp_context.fetch("generation") } }
+  end
+
+  def deliver!(delivery)
     OtpAdapter
       .for(surface: @surface, channel: :email)
       .deliver(
-        record: target, otp_code: otp_code, purpose: :sign_in,
+        record: delivery.fetch(:target), otp_code: delivery.fetch(:otp_code), purpose: :sign_in,
         auth_ceremony_session_ref: @ceremony.id.to_s,
-        auth_email_otp_generation: @ceremony.email_otp_context.fetch("generation"),
+        auth_email_otp_generation: delivery.fetch(:generation),
       )
-    true
   end
 
   def log_issued!(occurrence:, issued_timestamps:)
@@ -177,27 +202,11 @@ class SignInOtpResender
 
   class << self
     def email_issued_status_id
-      status_id_for(EmailOccurrenceStatus, :ACTIVE)
+      EmailOccurrenceStatus.find_or_create_by!(id: EmailOccurrenceStatus::ACTIVE).id
     end
 
     def email_blocked_status_id
-      status_id_for(EmailOccurrenceStatus, :NOTHING)
-    end
-
-    private
-
-    def status_id_for(status_class, key)
-      STATUS_ID_CACHE.compute_if_absent(status_class) { Concurrent::Map.new }
-        .compute_if_absent(key) do
-          status_id =
-            case status_class.name
-            when "EmailOccurrenceStatus"
-              { ACTIVE: EmailOccurrenceStatus::ACTIVE, NOTHING: EmailOccurrenceStatus::NOTHING }.fetch(key)
-            else
-              raise KeyError, "Unsupported occurrence status class: #{status_class.name}"
-            end
-          status_class.find_or_create_by!(id: status_id).id
-        end
+      EmailOccurrenceStatus.find_or_create_by!(id: EmailOccurrenceStatus::NOTHING).id
     end
   end
 end

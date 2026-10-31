@@ -13,7 +13,7 @@ require "test_helper"
 
 class OrgPreferenceTimezoneOptionTest < ActiveSupport::TestCase
   setup do
-    OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::NOTHING)
+    OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::ACTIVE)
   end
 
   test "ensure_defaults! creates default timezone options" do

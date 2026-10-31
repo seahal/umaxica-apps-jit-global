@@ -80,8 +80,6 @@ module AuthorizationAudit
         create_user_authorization_audit(actor, log_data)
       elsif actor.is_a?(Operator)
         create_staff_authorization_audit(actor, log_data)
-      elsif defined?(Visitor) && actor.is_a?(Visitor)
-        create_visitor_authorization_audit(actor, log_data)
       end
     end
   end
@@ -134,34 +132,6 @@ module AuthorizationAudit
     )
   end
 
-  def create_visitor_authorization_audit(visitor, log_data)
-    audit = ClientChronicle.new(
-      actor: visitor,
-      actor_id: visitor.id,
-      actor_type: visitor.class.name,
-      subject_id: visitor.id.to_s,
-      subject_type: visitor.class.name,
-      event_id: ClientChronicleEvent::AUTHORIZATION_FAILED,
-      ip_address: log_data[:ip_address],
-      occurred_at: log_data[:timestamp],
-    )
-    audit.context = { request_id: log_data[:request_id],
-                      trace_id: log_data[:trace_id], }.compact if audit.respond_to?(:context=)
-    audit.save!
-  rescue ActiveRecord::RecordInvalid => e
-    # ActiveRecord::RecordInvalid#message quotes the offending values, and
-    # "error_message" is not matched by ObservabilityRedactor::SENSITIVE_KEY_PATTERN,
-    # so it would reach the log unredacted. Attribute names carry the same
-    # diagnostic value without the values themselves.
-    Rails.logger.info(
-      JitLogEvent.format(
-        "authorization.audit.visitor_creation_failed",
-        error_class: e.class.name,
-        invalid_attributes: e.record&.errors&.attribute_names,
-      ),
-    )
-  end
-
   def authorization_audit_actor
     legacy_actor = current_client_or_staff
 
@@ -194,7 +164,6 @@ module AuthorizationAudit
 
     # Try current_operator (for Operator controllers)
     return current_operator if respond_to?(:current_operator) && current_operator
-    return current_visitor if respond_to?(:current_visitor) && current_visitor
 
     nil
   end

@@ -56,16 +56,16 @@ class AuthorityOwnerResourceScopeQueryTest < ActiveSupport::TestCase
   end
 
   test "rejects a principal from another surface" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH,
     )
 
     assert_raises(ArgumentError) do
       AuthorityOwnerResourceScopeQuery.call(
         surface: :app,
         resource_kind: :client_persona,
-        principal: visitor,
+        principal: operator,
       ).to_a
     end
   end

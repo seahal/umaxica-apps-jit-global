@@ -12,28 +12,57 @@ class ClientSecretAuditDeliveryJob < ApplicationJob
       raise ArgumentError, "Secret audit delivery requires bounded batching and finite retention"
     end
 
+    first_failure = nil
     AppZenithRecord.connected_to(role: :writing) do
-      ClientSecretAuditOutbox.where(delivered_at: nil).order(:id).limit(batch_size).each do |event|
-        event.with_lock do
-          next if event.delivered_at
+      upper_id = ClientSecretAuditOutbox.where(delivered_at: nil).maximum(:id)
+      return unless upper_id
 
-          chronicle = persist_chronicle!(event)
-          unless chronicle.action == event.event_name && chronicle.request_id == event.operation_ref &&
-              chronicle.metadata == metadata_for(event) && chronicle.occurred_at == event.occurred_at &&
-              chronicle.result == "succeeded" && chronicle.reason == event.reason &&
-              chronicle.actor_type == event.actor_type && chronicle.actor_id == event.actor_id &&
-              chronicle.subject_type == "Client" && chronicle.subject_id == event.actor_id && chronicle.changeset == {}
-            raise ArgumentError, "Secret Chronicle event identity conflicts with its source"
+      cursor = nil
+      delivered_count = 0
+      loop do
+        scope = ClientSecretAuditOutbox.where(delivered_at: nil, id: ..upper_id).order(:id)
+        scope = scope.where("id > ?", cursor) if cursor
+        events = scope.limit(batch_size).to_a
+        break if events.empty?
+
+        events.each do |event|
+          break if delivered_count >= batch_size
+
+          begin
+            delivered_count += 1 if deliver_event!(event, retention_seconds)
+          rescue StandardError => e
+            first_failure ||= e
+            Rails.error.report(e, handled: false, context: { job: self.class.name, event_id: event.event_id })
           end
-
-          now = ClientSecretAuditOutbox.database_now
-          event.update!(delivered_at: now, discard_at: now, purge_eligible_at: now + retention_seconds.seconds)
         end
+        break if delivered_count >= batch_size
+
+        cursor = events.last.id
       end
     end
+    raise first_failure if first_failure
   end
 
   private
+
+  def deliver_event!(event, retention_seconds)
+    event.with_lock do
+      return false if event.delivered_at
+
+      chronicle = persist_chronicle!(event)
+      unless chronicle.action == event.event_name && chronicle.request_id == event.operation_ref &&
+          chronicle.metadata == metadata_for(event) && chronicle.occurred_at == event.occurred_at &&
+          chronicle.result == "succeeded" && chronicle.reason == event.reason &&
+          chronicle.actor_type == event.actor_type && chronicle.actor_id == event.actor_id &&
+          chronicle.subject_type == "Client" && chronicle.subject_id == event.actor_id && chronicle.changeset == {}
+        raise ArgumentError, "Secret Chronicle event identity conflicts with its source"
+      end
+
+      now = ClientSecretAuditOutbox.database_now
+      event.update!(delivered_at: now, discard_at: now, purge_eligible_at: now + retention_seconds.seconds)
+      true
+    end
+  end
 
   def metadata_for(event)
     { "client_ref" => event.client_ref,

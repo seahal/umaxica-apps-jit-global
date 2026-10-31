@@ -23,6 +23,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     get edit_core_app_sign_out_url(ri: "jp")
 
     assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
     assert_select "form[action*=?][method=?]", core_app_sign_out_path, "post"
     assert_select "form[action='#{core_app_sign_out_path}'] input[name=_method][value=delete]", count: 0
     assert_predicate token.reload, :currently_usable?
@@ -214,6 +215,8 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     post core_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
     assert_response :unprocessable_content
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_includes response.headers["Cache-Control"], "no-store"
     assert_predicate token.reload, :currently_usable?
     assert_predicate @rp_session.reload, :active?
     assert_not_includes response.body, I18n.t("sign.shared.sign_out.completed_title")
@@ -337,10 +340,8 @@ class Core::App::Sign::OutsControllerTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private

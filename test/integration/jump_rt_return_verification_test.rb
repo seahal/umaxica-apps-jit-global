@@ -80,6 +80,21 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  test "a signed return with a source path is rejected without redirecting" do
+    app_origin = acme_app_origin
+    https!
+    token = sign_return_token(
+      aud: app_origin,
+      src: "#{JumpRtSurface.issuer_origin("AUTH_APP")}/unexpected",
+      url: "#{app_origin}/?ok=1",
+    )
+    prime_jump_jwks_cache
+    get "#{app_origin}/", params: { ok: "1", rt: token }
+
+    assert_response :bad_request
+    assert_nil response.location
+  end
+
   test "rejected jump return logs do not include the rt token" do
     app_origin = acme_app_origin
     https!
@@ -104,27 +119,27 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   # removes rt and re-enters the same request URL on the receiving host. A downstream redirect
   # parameter carried through Jump is never followed by the return step itself.
   test "a verified Jump return does not follow a downstream redirect parameter off the receiving host" do
-    origin = "https://auth.umaxica.com"
+    origin = "https://auth.umaxica.org"
     url = "#{origin}/?redirect_uri=https%3A%2F%2Fevil.example%2Fcb&ri=us"
-    token = sign_return_token(aud: origin, src: "https://www.umaxica.com", url: url)
+    token = sign_return_token(aud: origin, src: "https://www.umaxica.org", url: url)
     prime_jump_jwks_cache
-    host! "auth.umaxica.com"
+    host! "auth.umaxica.org"
     https!
     get "/", params: { redirect_uri: "https://evil.example/cb", ri: "us", rt: token }
 
     assert_response :see_other
     location = URI.parse(response.location)
 
-    assert_equal "auth.umaxica.com", location.host
+    assert_equal "auth.umaxica.org", location.host
     assert_equal "https://evil.example/cb", Rack::Utils.parse_nested_query(location.query).fetch("redirect_uri")
     assert_not_includes Rack::Utils.parse_nested_query(location.query).keys, "rt"
   end
 
   test "a Jump return whose source edge is not approved is rejected even with a valid signature" do
-    origin = "https://auth.umaxica.com"
+    origin = "https://auth.umaxica.org"
     token = sign_return_token(aud: origin, src: "https://jp.umaxica.com", url: "#{origin}/?ri=us")
     prime_jump_jwks_cache
-    host! "auth.umaxica.com"
+    host! "auth.umaxica.org"
     https!
     get "/", params: { ri: "us", rt: token }
 
@@ -132,10 +147,10 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   end
 
   test "a verified Jump return redirects to the signed target with order and repeated pairs intact" do
-    origin = "https://auth.umaxica.com"
-    token = sign_return_token(aud: origin, src: "https://www.umaxica.com", url: "#{origin}/?ri=us&tag=b&tag=a&q=a%2Bb")
+    origin = "https://auth.umaxica.org"
+    token = sign_return_token(aud: origin, src: "https://www.umaxica.org", url: "#{origin}/?ri=us&tag=b&tag=a&q=a%2Bb")
     prime_jump_jwks_cache
-    host! "auth.umaxica.com"
+    host! "auth.umaxica.org"
     https!
     get "/?ri=us&tag=b&rt=#{token}&tag=a&q=a%2Bb"
 
@@ -150,10 +165,10 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     "a duplicated reserved parameter" => "ri=us&tag=b&tag=a&next=%%2Fevil&next=%%2Fevil&rt=%<token>s",
   }.each do |label, query_format|
     test "a Jump-signed return with #{label} is rejected" do
-      origin = "https://auth.umaxica.com"
-      token = sign_return_token(aud: origin, src: "https://www.umaxica.com", url: "#{origin}/?ri=us&tag=b&tag=a")
+      origin = "https://auth.umaxica.org"
+      token = sign_return_token(aud: origin, src: "https://www.umaxica.org", url: "#{origin}/?ri=us&tag=b&tag=a")
       prime_jump_jwks_cache
-      host! "auth.umaxica.com"
+      host! "auth.umaxica.org"
       https!
       get "/?#{format(query_format, token: token)}"
 
@@ -162,7 +177,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   end
 
   test "a request whose only return token key is nested is rejected before the normal flow" do
-    host! "auth.umaxica.com"
+    host! "auth.umaxica.org"
     https!
     get "/?rt%5B%5D=a.b.c"
 
@@ -173,8 +188,8 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_includes Auth::App::ApplicationController.ancestors, JumpRtReturnVerification
   end
 
-  test "Auth com org and Palm reject invalid returns before their normal flow" do
-    %w(auth.umaxica.com auth.umaxica.org palm-jp.umaxica.app).each do |host|
+  test "Auth org and Palm reject invalid returns before their normal flow" do
+    %w(auth.umaxica.org palm-jp.umaxica.app).each do |host|
       host! host
       https!
       get "/", params: { rt: "not-a-jwt" }
@@ -183,8 +198,8 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "Auth com org and Palm verify Base returns and clean the return token" do
-    %w(auth.umaxica.com auth.umaxica.org palm-jp.umaxica.app).each do |host|
+  test "Auth org and Palm verify Base returns and clean the return token" do
+    %w(auth.umaxica.org palm-jp.umaxica.app).each do |host|
       origin = "https://#{host}"
       base = "https://www.umaxica.#{host.split(".").last}"
       token = sign_return_token(aud: origin, src: base, url: "#{origin}/?ri=us&ok=1")
@@ -376,10 +391,8 @@ class JumpRtReturnVerificationTest
   SURFACE_ROUTE_PREFIX_MAP = {
     "sign_app_" => "auth_app_",
     "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
     "acme_app_" => "base_app_",
     "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
   }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
 
   private

@@ -52,9 +52,14 @@ module BasePreferenceIndexPage
 
   # Dashboard 404s for a guest and Home 404s for a member
   # (adr/home-dashboard-authentication-boundary.md), so the return target follows the session.
+  # The anonymous com surface has no dashboard and overrides the destination.
   def preference_index_return_path
-    destination = logged_in? ? "dashboard" : "root"
+    destination = preference_index_return_destination
     public_send("#{preference_route_authority}_#{preference_surface_key}_#{destination}_path")
+  end
+
+  def preference_index_return_destination
+    logged_in? ? "dashboard" : "root"
   end
 
   def preference_index_screen_helper_name(screen)

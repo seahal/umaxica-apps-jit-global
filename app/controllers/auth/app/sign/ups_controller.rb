@@ -13,6 +13,7 @@ module Auth
         # `admit_or_render_sign_ceremony!`, which itself refuses a new Sign from an
         # authenticated browser. Matches the sibling InsController policy.
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :sign_up
 
         declare_authentication_mode! :open
 

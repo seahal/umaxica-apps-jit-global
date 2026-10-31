@@ -9,6 +9,11 @@ stateDiagram-v2
     pending --> approved: approve
     pending --> rejected: reject
     approved --> executed: execute
+    note right of approved
+        Deactivation checks for another capability-eligible
+        operator, including status and withdrawal state;
+        OP stop delivery follows actor transaction commit.
+    end note
     rejected --> [*]
     executed --> [*]
     cancelled --> [*]

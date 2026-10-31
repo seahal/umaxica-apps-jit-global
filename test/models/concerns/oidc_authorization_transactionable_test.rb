@@ -21,7 +21,6 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   teardown do
     [
       ClientOidcAuthorizationTransaction,
-      VisitorOidcAuthorizationTransaction,
       OperatorOidcAuthorizationTransaction,
     ].each do |transaction_class|
       transaction_class.where("login_challenge LIKE ?", "#{@transaction_prefix}-%").delete_all
@@ -75,7 +74,6 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   test "OIDC admission expiry uses PostgreSQL microsecond neighbors before at and after each deadline" do
     [
       [ClientOidcAuthorizationTransaction, "app"],
-      [VisitorOidcAuthorizationTransaction, "com"],
       [OperatorOidcAuthorizationTransaction, "org"],
     ].each do |model, surface|
       deadline = Time.utc(2026, 10, 4, 6, 0, 0, 500_000)
@@ -117,7 +115,6 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   test "OIDC opaque result validation rejects malformed generations and all effective deadline boundaries" do
     [
       [ClientOidcAuthorizationTransaction, "app"],
-      [VisitorOidcAuthorizationTransaction, "com"],
       [OperatorOidcAuthorizationTransaction, "org"],
     ].each do |model, surface|
       now = Time.utc(2026, 10, 4, 6, 1, 0, 500_000)
@@ -195,9 +192,10 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   end
 
   test "retries a generated OIDC transaction reference collision at the database boundary" do
+    boundary_id = "a#{SecureRandom.hex(8)}#{SecureRandom.random_number(100)}".ljust(21, "0")
     existing = create_transaction(ClientOidcAuthorizationTransaction, surface: "app", unique: "collision-existing")
-    existing.update!(transaction_id: "a" * 21)
-    generated = ["a" * 21, "b" * 21]
+    existing.update!(transaction_id: boundary_id)
+    generated = [boundary_id, "b" * 21]
 
     transaction =
       PublicId.stub(:generate, -> { generated.shift }) do
@@ -236,11 +234,11 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   test "register_authentication! and consume! advance the transaction state" do
     now = Time.zone.local(2026, 6, 19, 14, 0, 0)
     authentication_event_at = now - 5.minutes
-    transaction = create_transaction(VisitorOidcAuthorizationTransaction, surface: "com")
+    transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
 
     travel_to now do
       transaction = transaction.register_authentication!(
-        actor_ref: "visitor-1",
+        actor_ref: "client-1",
         session_ref: "session-1",
         auth_method: "pwd",
         acr: "",
@@ -249,7 +247,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
 
       assert_predicate transaction, :authenticated?
       assert_equal "aal1", transaction.acr
-      assert_equal "visitor-1", transaction.actor_ref
+      assert_equal "client-1", transaction.actor_ref
       assert_equal authentication_event_at, transaction.authenticated_at
 
       transaction = transaction.consume!(now: now)
@@ -323,7 +321,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   end
 
   test "concurrent authentication results have exactly one winner" do
-    transaction = create_transaction(VisitorOidcAuthorizationTransaction, surface: "com")
+    transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
     ready = Queue.new
     release = Queue.new
     results = Queue.new
@@ -332,11 +330,11 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     threads =
       Array.new(2) do |index|
         Thread.new do
-          VisitorOidcAuthorizationTransaction.connection_pool.with_connection do
+          ClientOidcAuthorizationTransaction.connection_pool.with_connection do
             ready << true
             release.pop
-            VisitorOidcAuthorizationTransaction.find(transaction.id).register_authentication!(
-              actor_ref: "visitor-#{index}",
+            ClientOidcAuthorizationTransaction.find(transaction.id).register_authentication!(
+              actor_ref: "client-#{index}",
               session_ref: "session-#{index}",
               auth_method: "passkey",
               acr: "aal2",
@@ -360,13 +358,13 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_equal 1, outcomes.count("authorization transaction is not pending"), outcomes.inspect
     assert_predicate transaction.reload, :authenticated?
 
-    assert_includes %w(visitor-0 visitor-1), transaction.actor_ref
+    assert_includes %w(client-0 client-1), transaction.actor_ref
   end
 
   test "concurrent authorization grant redemption has exactly one winner" do
-    transaction = create_transaction(VisitorOidcAuthorizationTransaction, surface: "com")
+    transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
     transaction.register_authentication!(
-      actor_ref: "visitor-concurrent",
+      actor_ref: "client-concurrent",
       session_ref: nil,
       auth_method: "passkey",
       acr: "aal2",
@@ -381,8 +379,8 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     threads =
       2.times.map do
         Thread.new do
-          VisitorOidcAuthorizationTransaction.connection_pool.with_connection do
-            results << VisitorOidcAuthorizationTransaction.find(transaction.id).claim_authorization_grant!
+          ClientOidcAuthorizationTransaction.connection_pool.with_connection do
+            results << ClientOidcAuthorizationTransaction.find(transaction.id).claim_authorization_grant!
           end
         rescue StandardError => e
           results << e
@@ -400,8 +398,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   test "transaction surface must match the owning class" do
     {
       ClientOidcAuthorizationTransaction => "org",
-      OperatorOidcAuthorizationTransaction => "com",
-      VisitorOidcAuthorizationTransaction => "app",
+      OperatorOidcAuthorizationTransaction => "app",
     }.each do |transaction_class, invalid_surface|
       transaction = transaction_class.new(surface: invalid_surface)
 

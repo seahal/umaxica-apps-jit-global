@@ -194,6 +194,9 @@ tests; when they disagree, report the discrepancy instead of choosing one silent
 
 When documentation conflicts with existing code, agents **MUST** follow the implementation patterns
 in the existing code and list every discrepancy found in the final response.
+An Accepted ADR records an intended contract, not evidence that the implementation satisfies it.
+Identify a conflict with that contract explicitly and resolve it within the user's authorization;
+do not silently treat the current implementation as proof that the ADR has been fulfilled.
 
 Report only claims supported by results from the current session. State failed, skipped, blocked,
 and unverified checks plainly. Lead with the outcome; keep responses proportional to the task. Do

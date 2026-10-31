@@ -106,7 +106,6 @@ class ProcessorErasureNotificationJob < ApplicationJob
   def notification_class_for(surface)
     case surface.to_s
     when "app" then ClientProcessorErasureNotification
-    when "com" then VisitorProcessorErasureNotification
     else
       raise ArgumentError, "unsupported processor erasure surface: #{surface.inspect}"
     end
@@ -117,9 +116,6 @@ class ProcessorErasureNotificationJob < ApplicationJob
     when ClientProcessorErasureNotification
       request = notification.association(:client_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
       request.association(:client).tap { |owner| owner.reset_scope }.scope.take!
-    when VisitorProcessorErasureNotification
-      request = notification.association(:visitor_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
-      request.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
     else
       raise ArgumentError, "unsupported processor notification: #{notification.class.name}"
     end
@@ -129,8 +125,6 @@ class ProcessorErasureNotificationJob < ApplicationJob
     case notification
     when ClientProcessorErasureNotification
       notification.association(:client_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
-    when VisitorProcessorErasureNotification
-      notification.association(:visitor_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
     else
       raise ArgumentError, "unsupported processor notification: #{notification.class.name}"
     end

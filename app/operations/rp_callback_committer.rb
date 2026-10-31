@@ -10,9 +10,9 @@
 #
 # 1. Lock or create the anchor for (issuer, realm, client_id, sid). A revoked anchor is a logout
 #    tombstone and is never reopened, so a late callback cannot resurrect a logged-out sid.
-# 2. Resolve the immutable identity binding for the verified subject, creating the local principal
-#    on first sight. There is no email or Global-ID linking.
-# 3. Fill the anchor's identity binding once; a filled anchor must match.
+# 2. Check an existing anchor's identity before creating any other principal or binding.
+# 3. Resolve the verified subject's immutable binding, creating a local principal on first sight;
+#    fill an unbound anchor once. There is no email or Global-ID linking.
 # 4. Create the single live local session for that anchor.
 class RpCallbackCommitter
   Result =
@@ -48,13 +48,18 @@ class RpCallbackCommitter
         anchor = lock_anchor!
         next result(:revoked) if anchor.revoked_at || absolute_expires_at <= now
 
-        identity_binding = resolve_identity_binding!
-        next result(:revoked) if identity_binding.principal.disabled_at
-
         if anchor.identity_binding_id.nil?
+          identity_binding = resolve_identity_binding!
+          next result(:revoked) if identity_binding.principal.disabled_at
+
           anchor.update!(identity_binding_id: identity_binding.id)
-        elsif anchor.identity_binding_id != identity_binding.id
-          next result(:binding_mismatch)
+        else
+          identity_binding = model(:IdentityBinding).includes(:principal).lock.find(anchor.identity_binding_id)
+          expected_identity = [issuer, cell.realm, cell.client_id, subject]
+          actual_identity = [identity_binding.issuer, identity_binding.realm, identity_binding.client_id,
+                             identity_binding.subject,]
+          next result(:binding_mismatch) unless actual_identity == expected_identity
+          next result(:revoked) if identity_binding.principal.disabled_at
         end
 
         next result(:already_enrolled) if live_session_for?(anchor)

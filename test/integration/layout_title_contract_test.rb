@@ -11,14 +11,12 @@ class LayoutTitleContractTest < ActiveSupport::TestCase
 
   CANONICAL_LAYOUTS = {
     "app/views/layouts/auth/app/application.html.erb" => "APP",
-    "app/views/layouts/auth/com/application.html.erb" => "COM",
     "app/views/layouts/auth/org/application.html.erb" => "ORG",
     "app/views/layouts/base/app/application.html.erb" => "APP",
     "app/views/layouts/base/app/inertia.html.erb" => "APP",
     "app/views/layouts/base/com/application.html.erb" => "COM",
     "app/views/layouts/base/org/application.html.erb" => "ORG",
     "app/views/layouts/core/app/application.html.erb" => "APP",
-    "app/views/layouts/core/com/application.html.erb" => "COM",
     "app/views/layouts/core/org/application.html.erb" => "ORG",
     "app/views/layouts/warp/app/application.html.erb" => "APP",
     "app/views/layouts/warp/com/application.html.erb" => "COM",

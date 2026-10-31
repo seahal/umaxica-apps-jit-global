@@ -40,29 +40,34 @@
 class ClientPreference < AppPrincipalRecord
   include ::PublicId
   include ::PreferenceExplicitFields
+  include ::ActorPreferenceExplicitDisplay
+
+  ACTIVE_STATUS_ID = ClientPreferenceStatus::ACTIVE
+  RETIRED_STATUS_ID = ClientPreferenceStatus::RETIRED
 
   DESTROY_DEPENDENT_ASSOCIATIONS = %i(
-    user_preference_language user_preference_timezone user_preference_region user_preference_theme
+    client_preference_language client_preference_timezone client_preference_region client_preference_theme
     client_preference_currency client_preference_date_format client_preference_time_format
     client_preference_motion client_preference_density client_preference_page_size
     client_preference_adult_content_gate
   ).freeze
 
-  belongs_to :user, class_name: "Client", inverse_of: :user_preference
+  belongs_to :client, class_name: "Client", foreign_key: :client_id, inverse_of: :client_preference
+  belongs_to :client_preference_status, foreign_key: :status_id, inverse_of: :client_preferences
 
-  has_one :user_preference_language, class_name: "ClientPreferenceLanguage",
+  has_one :client_preference_language, class_name: "ClientPreferenceLanguage",
                                      foreign_key: :preference_id,
                                      inverse_of: :preference,
                                      dependent: :destroy
-  has_one :user_preference_timezone, class_name: "ClientPreferenceTimezone",
+  has_one :client_preference_timezone, class_name: "ClientPreferenceTimezone",
                                      foreign_key: :preference_id,
                                      inverse_of: :preference,
                                      dependent: :destroy
-  has_one :user_preference_region, class_name: "ClientPreferenceRegion",
+  has_one :client_preference_region, class_name: "ClientPreferenceRegion",
                                    foreign_key: :preference_id,
                                    inverse_of: :preference,
                                    dependent: :destroy
-  has_one :user_preference_theme, class_name: "ClientPreferenceTheme",
+  has_one :client_preference_theme, class_name: "ClientPreferenceTheme",
                                   foreign_key: :preference_id,
                                   inverse_of: :preference,
                                   dependent: :destroy
@@ -95,19 +100,39 @@ class ClientPreference < AppPrincipalRecord
           inverse_of: :preference,
           dependent: :destroy
 
-  validates :user_id, uniqueness: true
-  validates :consented, inclusion: { in: [true, false] }
-  validates :functional, inclusion: { in: [true, false] }
-  validates :performant, inclusion: { in: [true, false] }
-  validates :targetable, inclusion: { in: [true, false] }
-  after_initialize :set_defaults
+  attribute :status_id, default: ACTIVE_STATUS_ID
+  validates :client_id, presence: true
+  validates :status_id, inclusion: { in: ClientPreferenceStatus::DEFAULTS }
+  validates :public_id, presence: true, uniqueness: true
+  validate :retired_status_cannot_be_reactivated, on: :update
   before_destroy :preload_dependent_associations, prepend: true
 
-  def adult_content_gate
-    client_preference_adult_content_gate&.option&.name || "nothing"
+  def retire!
+    with_lock do
+      raise PreferenceLifecycle::InvalidTransition, "only an active Preference can be retired" unless
+        status_id == ACTIVE_STATUS_ID
+
+      update!(status_id: RETIRED_STATUS_ID)
+    end
   end
 
   private
+
+  def actor_preference_child_for(field)
+    case field
+    when "language" then client_preference_language
+    when "timezone" then client_preference_timezone
+    when "region" then client_preference_region
+    when "theme" then client_preference_theme
+    when "currency" then client_preference_currency
+    when "date_format" then client_preference_date_format
+    when "time_format" then client_preference_time_format
+    when "motion" then client_preference_motion
+    when "density" then client_preference_density
+    when "page_size" then client_preference_page_size
+    else raise ArgumentError, "unsupported actor preference field: #{field.inspect}"
+    end
+  end
 
   def preload_dependent_associations
     ActiveRecord::Associations::Preloader.new(
@@ -115,12 +140,9 @@ class ClientPreference < AppPrincipalRecord
     ).call
   end
 
-  def set_defaults
-    return unless new_record?
+  def retired_status_cannot_be_reactivated
+    return unless status_id_in_database == RETIRED_STATUS_ID && status_id == ACTIVE_STATUS_ID
 
-    self.consented = false if consented.nil?
-    self.functional = false if functional.nil?
-    self.performant = false if performant.nil?
-    self.targetable = false if targetable.nil?
+    errors.add(:status_id, :invalid)
   end
 end

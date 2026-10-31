@@ -1,0 +1,6 @@
+# WU-7 com issued-expiry validity
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- Added a lifecycle predicate requiring active status and a supplied time strictly before `last_issued_expires_at`. Com write authorization, setting reads, consent/Web Push reads and display-cookie rebuilding use it instead of the legacy `discard_at` accessibility predicate. Presented JWT expiry is still separately checked where required. Legacy retention columns and writers remain.
+- Before the change, four com request files passed: 60 runs, 470 assertions. The first expanded run after the change passed 89 runs and 852 assertions. A new model boundary test initially errored because Ruby did not provide `Integer#microsecond`; after using a rational microsecond, the final model and four request files passed: 84 runs, 531 assertions, zero failures, errors or skips. Coverage includes before, at and after expiry, missing time and retired status.
+- RuboCop passed for the eight checked application and model-test files. The state inventory was updated. This does not establish removal of legacy retention columns, purge, separate realm keys, concurrent transactions or the full suite; no migration was run.

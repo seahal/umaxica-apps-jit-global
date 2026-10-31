@@ -18,9 +18,8 @@
     { connection: "rp_core_app", env_prefix: "RP_CORE_APP", database: "development_rp_core_app_db", client_id: "core-app-jp" },
     { connection: "rp_warp_app", env_prefix: "RP_WARP_APP", database: "development_rp_warp_app_db", client_id: "warp-app-jp" },
     { connection: "rp_palm_app", env_prefix: "RP_PALM_APP", database: "development_rp_palm_app_db", client_id: "palm-app-jp" },
-    { connection: "rp_base_com", env_prefix: "RP_BASE_COM", database: "development_rp_base_com_db", client_id: "base-com-ww" },
-    { connection: "rp_core_com", env_prefix: "RP_CORE_COM", database: "development_rp_core_com_db", client_id: "core-com-jp" },
-    { connection: "rp_warp_com", env_prefix: "RP_WARP_COM", database: "development_rp_warp_com_db", client_id: "warp-com-jp" },
+
+
     { connection: "rp_base_org", env_prefix: "RP_BASE_ORG", database: "development_rp_base_org_db", client_id: "base-org-ww" },
     { connection: "rp_core_org", env_prefix: "RP_CORE_ORG", database: "development_rp_core_org_db", client_id: "core-org-jp" },
     { connection: "rp_warp_org", env_prefix: "RP_WARP_ORG", database: "development_rp_warp_org_db", client_id: "warp-org-jp" },
@@ -93,23 +92,6 @@ development:
     host: replica
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
-  com_zenith:
-    !!merge <<: *development_default
-    database: development_com_zenith_db
-    host: primary
-    migrations_paths:
-      - db/com_principals_migrate
-      - db/com_zenith_migrate
-    schema_dump: com_zenith_structure.sql
-  com_zenith_replica:
-    !!merge <<: *development_default
-    replica: true
-    database: development_com_zenith_db
-    host: replica
-    migrations_paths:
-      - db/com_principals_migrate
-      - db/com_zenith_migrate
-    schema_dump: com_zenith_structure.sql
   app_zenith:
     !!merge <<: *development_default
     database: development_app_zenith_db
@@ -207,17 +189,6 @@ development:
     database: development_op_base_org_db
     host: replica
     migrations_paths: db/op_base_org_migrate
-  op_base_com:
-    !!merge <<: *development_default
-    database: development_op_base_com_db
-    host: primary
-    migrations_paths: db/op_base_com_migrate
-  op_base_com_replica:
-    !!merge <<: *development_default
-    replica: true
-    database: development_op_base_com_db
-    host: replica
-    migrations_paths: db/op_base_com_migrate
   op_base_app:
     !!merge <<: *development_default
     database: development_op_base_app_db
@@ -266,17 +237,6 @@ development:
     database: development_org_signal_db
     host: replica
     migrations_paths: db/org_signals_migrate
-  com_signal:
-    !!merge <<: *development_default
-    database: development_com_signal_db
-    host: primary
-    migrations_paths: db/com_signals_migrate
-  com_signal_replica:
-    !!merge <<: *development_default
-    replica: true
-    database: development_com_signal_db
-    host: replica
-    migrations_paths: db/com_signals_migrate
   queue:
     !!merge <<: *development_default
     pool: 5
@@ -352,21 +312,6 @@ test:
     database: test_publishing_replica_db
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
-  com_zenith:
-    !!merge <<: *test_default
-    database: test_com_zenith_db
-    migrations_paths:
-      - db/com_principals_migrate
-      - db/com_zenith_migrate
-    schema_dump: com_zenith_structure.sql
-  com_zenith_replica:
-    !!merge <<: *test_default
-    replica: true
-    database: test_com_zenith_replica_db
-    migrations_paths:
-      - db/com_principals_migrate
-      - db/com_zenith_migrate
-    schema_dump: com_zenith_structure.sql
   app_zenith:
     !!merge <<: *test_default
     database: test_app_zenith_db
@@ -450,16 +395,6 @@ test:
     database: test_op_base_org_replica_db
     migrations_paths: db/op_base_org_migrate
     schema_dump: op_base_org_structure.sql
-  op_base_com:
-    !!merge <<: *test_default
-    database: test_op_base_com_db
-    migrations_paths: db/op_base_com_migrate
-  op_base_com_replica:
-    !!merge <<: *test_default
-    replica: true
-    database: test_op_base_com_replica_db
-    migrations_paths: db/op_base_com_migrate
-    schema_dump: op_base_com_structure.sql
   op_base_app:
     !!merge <<: *test_default
     database: test_op_base_app_db
@@ -502,16 +437,6 @@ test:
     database: test_org_signal_replica_db
     migrations_paths: db/org_signals_migrate
     schema_dump: org_signal_structure.sql
-  com_signal:
-    !!merge <<: *test_default
-    database: test_com_signal_db
-    migrations_paths: db/com_signals_migrate
-  com_signal_replica:
-    !!merge <<: *test_default
-    replica: true
-    database: test_com_signal_replica_db
-    migrations_paths: db/com_signals_migrate
-    schema_dump: com_signal_structure.sql
   queue:
     !!merge <<: *test_default
     # A manually started isolated Solid Queue worker needs one execution
@@ -586,31 +511,6 @@ production:
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
-  com_zenith:
-    !!merge <<: *default
-    database: production_com_zenith_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= production_value.call("NEON_PGHOST") %>
-    username: <%= production_value.call("NEON_PGUSER") %>
-    password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths:
-      - db/com_principals_migrate
-      - db/com_zenith_migrate
-    schema_dump: com_zenith_structure.sql
-  com_zenith_replica:
-    !!merge <<: *default
-    replica: true
-    database: production_com_zenith_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= production_value.call("NEON_REPLICA_PGHOST") %>
-    username: <%= production_value.call("NEON_REPLICA_PGUSER") %>
-    password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>
-    sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
-    channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
-    migrations_paths:
-      - db/com_principals_migrate
-      - db/com_zenith_migrate
-    schema_dump: com_zenith_structure.sql
   app_zenith:
     !!merge <<: *default
     database: production_app_zenith_db
@@ -783,25 +683,6 @@ production:
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
     migrations_paths: db/op_base_org_migrate
-  op_base_com:
-    !!merge <<: *default
-    database: production_op_base_com_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= production_value.call("NEON_PGHOST") %>
-    username: <%= production_value.call("NEON_PGUSER") %>
-    password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/op_base_com_migrate
-  op_base_com_replica:
-    !!merge <<: *default
-    replica: true
-    database: production_op_base_com_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= production_value.call("NEON_REPLICA_PGHOST") %>
-    username: <%= production_value.call("NEON_REPLICA_PGUSER") %>
-    password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>
-    sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
-    channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
-    migrations_paths: db/op_base_com_migrate
   op_base_app:
     !!merge <<: *default
     database: production_op_base_app_db
@@ -882,25 +763,6 @@ production:
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
     migrations_paths: db/org_signals_migrate
-  com_signal:
-    !!merge <<: *default
-    database: production_com_signal_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= production_value.call("NEON_PGHOST") %>
-    username: <%= production_value.call("NEON_PGUSER") %>
-    password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/com_signals_migrate
-  com_signal_replica:
-    !!merge <<: *default
-    replica: true
-    database: production_com_signal_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= production_value.call("NEON_REPLICA_PGHOST") %>
-    username: <%= production_value.call("NEON_REPLICA_PGUSER") %>
-    password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>
-    sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
-    channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
-    migrations_paths: db/com_signals_migrate
   storage:
     !!merge <<: *default
     database: production_storage_db

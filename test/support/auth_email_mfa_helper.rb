@@ -24,7 +24,6 @@ module AuthEmailMfaHelper
     ceremony =
       case surface.to_sym
       when :app then ClientAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
-      when :com then VisitorAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
       else raise ArgumentError, "unsupported MFA email surface"
       end
 
@@ -38,15 +37,10 @@ module AuthEmailMfaHelper
       headers: headers,
     )
 
-    assert_response((surface.to_sym == :com) ? :see_other : :found)
+    assert_response :found
     assert_equal URI.parse(challenge_path).path, URI.parse(response.location).path
 
-    cycle_class, principal_id =
-      if surface.to_sym == :app
-        [ClientSignInFlow, email_record.user_id]
-      else
-        [VisitorSignInFlow, email_record.visitor_id]
-      end
+    cycle_class, principal_id = [ClientSignInFlow, email_record.user_id]
     cycle = cycle_class.where(principal_id: principal_id).order(id: :desc).first
     remember_sign_in_mfa_binding!(cycle, surface)
   end

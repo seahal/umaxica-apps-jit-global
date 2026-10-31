@@ -300,4 +300,14 @@ class Actor::PreferenceTest < ActiveSupport::TestCase
     assert_predicate updated.cookie, :targetable?
     assert_equal "v2", updated.cookie.consent_version
   end
+
+  test "browser state is explicit and survives cookie replacement" do
+    original = Actor::Preference.new
+    enabled = original.with_browser_state(cookie: Actor::Preference::NULL_COOKIE, web_push: "enabled")
+
+    assert_equal "disabled", original.web_push
+    assert_equal "enabled", enabled.with_cookie(Actor::Preference::NULL_COOKIE).web_push
+    assert_not_equal original, enabled
+    assert_raises(ArgumentError) { Actor::Preference.new(web_push: "unknown") }
+  end
 end

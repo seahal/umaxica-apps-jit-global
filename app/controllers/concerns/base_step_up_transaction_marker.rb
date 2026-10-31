@@ -35,7 +35,6 @@ module BaseStepUpTransactionMarker
     previous =
       case token
       when ClientToken then ClientToken.find_by(public_id: session_ref)
-      when VisitorToken then VisitorToken.find_by(public_id: session_ref)
       when OperatorToken then OperatorToken.find_by(public_id: session_ref)
       end
     return false unless previous
@@ -44,7 +43,6 @@ module BaseStepUpTransactionMarker
     actor_match =
       case [previous, actor]
       in [ClientToken, Client] then previous.user_id == actor.id
-      in [VisitorToken, Visitor] then previous.visitor_id == actor.id
       in [OperatorToken, Operator] then previous.staff_id == actor.id
       else false
       end

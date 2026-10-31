@@ -5,21 +5,17 @@ require "test_helper"
 class SignOtpCeremonyMalformedCodeTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-    [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
-    [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
   ].each do |owner_model, contact_model, owner_key, flow_model, surface, channel|
     test "#{surface} #{channel} malformed code partitions refuse without consuming or changing proof" do
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
+        status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       destination =
         (channel == :email) ? "malformed-#{SecureRandom.hex(8)}@example.test" :

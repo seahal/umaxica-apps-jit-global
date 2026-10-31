@@ -1,14 +1,10 @@
 # typed: false
 # frozen_string_literal: true
 
-# The HTTP contract of the browser theme and cookie-consent endpoints
-# (`/api/v0/preferences/{theme,cookie}`), shared by every family that serves them on its own host.
-#
-# Preference credentials are host-only cookies (adr/cookie-domain-scope-by-surface.md), so each
-# family answers these endpoints for its own host rather than one host answering for all. What they
-# share is this adapter: media types, cache policy, and how a refused request is reported. The
-# preference read/update itself stays in PreferenceWebThemeEndpoint / PreferenceWebCookieEndpoint;
-# nothing here reads or writes a preference.
+# The HTTP contract for the browser theme and cookie-consent endpoints
+# (`/api/v0/preferences/{theme,cookie}`). Base owns interactive writes; Auth, Core, and Warp expose
+# read-only responses on their own hosts. This concern supplies media types, cache policy, and
+# refusal responses. Preference reads and writes stay in the web preference endpoint concerns.
 #
 # Opt in from the concrete controller, after its last inherited `prepend_before_action`:
 #
@@ -17,7 +13,7 @@
 #
 # Request order once declared (docs/reference/api-design-standards.md, "Content negotiation"):
 #
-#   FQDN availability gate -> no-store -> 406 -> 415 -> rate limit, CSRF, preference hydration ...
+#   FQDN availability gate -> no-store -> 406 -> 415 -> rate limit, CSRF, mutation authority ...
 #
 # The negotiation filters are registered by ApiContentNegotiation when it is included. Declaring
 # them again with `prepend_before_action` moves them, it does not add a second copy: ActiveSupport
@@ -30,7 +26,7 @@
 #   DefaultNoStore policy root re-prepends `:apply_default_no_store` after `preference_browser_api!`;
 # - uses `protect_from_forgery ... with: :exception`, so a refused token raises.
 #
-# See adr/preference-browser-transport-family-capability.md.
+# See adr/preference-realm-jwt-and-host-bound-browser-binding.md.
 module PreferenceBrowserApi
   extend ActiveSupport::Concern
 
@@ -70,10 +66,19 @@ module PreferenceBrowserApi
     render_problem(:csrf_verification_failed)
   end
 
-  # A presented preference access token minted for another host or audience. A missing token is not
+  # A presented Preference JWT minted for another host or audience. A missing token is not
   # this case: the endpoints are open, and anonymous visitors keep their existing behavior.
   def render_preference_browser_api_foreign_token
     render_problem(:authentication_required)
+  end
+
+  def require_preference_browser_writer!
+    family, surface = controller_path.split("/", 3)
+    controls = PreferenceBrowserControlsRegistry.fetch(family:, surface:)
+    return true if controls.theme_endpoint_path && controls.cookie_endpoint_path
+
+    render_problem(:authorization_denied)
+    false
   end
 
   # `pointers` are RFC 6901 JSON Pointers into the request body.

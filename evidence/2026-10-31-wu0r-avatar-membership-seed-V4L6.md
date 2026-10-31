@@ -1,0 +1,7 @@
+# Avatar and organizational reference reconstruction
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained extensive uncommitted changes affecting this result.
+- A read-only local development inspection confirmed the selected Avatar role, permission, ownership, membership and Handle status tables, organizational status tables and `member_statuses` exist. The first ten selected tables have ID-only rows; `member_statuses` also has required `created_at` and `updated_at` columns.
+- Added fixed-ID seed replay for those ten ID-only catalogs and the timestamped Member status catalog. The Member insertion sets both timestamps and leaves existing IDs unchanged. No Avatar relationship, permission assignment, or person record is created by this slice.
+- The actual reference seed fragment ran twice against temporary tables inside rolled-back local transactions across nine connections; all 117 inspected catalog sets matched their declared IDs. After guarding that each target was a `development_*` database on local `10.89.0.3`, the fragment ran twice successfully against the nine local development databases. Existing fixed IDs were retained and missing fixed IDs, if any, were inserted. The normal Rails development boot can also run its existing Preference reference initializer.
+- RuboCop and scoped `git diff --check` passed. Full `db:seed`, fresh database reconstruction, relationship data and every other reference catalog remain unverified. Production and Neon were not touched.

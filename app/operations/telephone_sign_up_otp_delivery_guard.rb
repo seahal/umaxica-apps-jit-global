@@ -8,9 +8,9 @@ class TelephoneSignUpOtpDeliveryGuard
       raise ArgumentError, "Telephone signup delivery requires a transport block" unless block_given?
 
       owner, pending_status = components(flow, telephone, transaction)
-      flow.with_lock do
-        owner.with_lock do
-          telephone.with_lock do
+      owner.with_lock do
+        telephone.with_lock do
+          flow.with_lock do
             session_ref = Digest::SHA256.hexdigest(
               JSON.generate(
                 ["telephone_sign_up", flow.public_id,
@@ -23,7 +23,8 @@ class TelephoneSignUpOtpDeliveryGuard
               next false unless transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
                 transaction.session_ref == session_ref && transaction.actor_ref == owner.public_id &&
                 transaction.telephone_candidate_ref == telephone.public_id &&
-                transaction.normalized_number_digest == telephone.number_digest
+                transaction.normalized_number_digest == telephone.number_digest &&
+                transaction.expires_at == flow.expires_at
               next false unless destination.is_a?(String) && destination.encoding.ascii_compatible? &&
                 destination.valid_encoding? &&
                 IdentifierBlindIndex.bidx_for_telephone(
@@ -49,12 +50,6 @@ class TelephoneSignUpOtpDeliveryGuard
         end
 
         [Client.find(telephone.user_id), ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-      when VisitorSignUpFlow
-        unless telephone.is_a?(VisitorTelephone) && transaction.is_a?(VisitorTelephoneCeremonyTransaction)
-          raise ArgumentError, "COM signup delivery requires its own Telephone ceremony"
-        end
-
-        [Visitor.find(telephone.visitor_id), VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Telephone signup delivery realm"
       end
     end
@@ -64,7 +59,6 @@ class TelephoneSignUpOtpDeliveryGuard
       owner_id =
         case telephone
         when ClientTelephone then telephone.user_id
-        when VisitorTelephone then telephone.visitor_id
         else raise ArgumentError, "unsupported Telephone signup candidate"
         end
       !flow.sign_up_terminal? && flow.expires_at > now && !flow.lapsed?(now) &&

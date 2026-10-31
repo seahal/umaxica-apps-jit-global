@@ -8,11 +8,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
 
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
-    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     TurnstileVerifierStub.challenge_enabled = true
@@ -28,8 +24,6 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
   [
     [:app, "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", ClientSignUpFlow, ClientEmail,
      ClientContactAuditOutbox, :client_email,],
-    [:com, "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", VisitorSignUpFlow, VisitorEmail,
-     VisitorContactAuditOutbox, :visitor_email,],
   ].each do |surface, base_host_key, auth_host_key, flow_class, contact_class, outbox, scope|
     %i(complete otp_ticket_failure_retry otp_guardrail_failure_retry otp_checkpoint_failure_retry
        otp_requirement_failure_retry expired_before_locked_decision suspended_owner ticket_failure_retry
@@ -117,7 +111,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
 
         assert_not_nil delivery_job
         delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
-        transaction_class = (surface == :app) ? ClientEmailCeremonyTransaction : VisitorEmailCeremonyTransaction
+        transaction_class = ClientEmailCeremonyTransaction
         transaction = transaction_class.find_by!(transaction_id: delivery.fetch(:sign_up_email_transaction_ref))
         code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
@@ -195,7 +189,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         assert_equal 200, browser.response.status
         csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
         if outcome == :suspended_owner
-          owner_class = (surface == :app) ? Client : Visitor
+          owner_class = Client
           owner_class.find(flow.principal_id).update!(deactivated_at: owner_class.database_now)
         end
         decision_time = flow_class.database_now
@@ -244,12 +238,6 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
             }
             committed_at = contact.binding_finalized_at
             committed_intent = outbox.find_by!(operation_ref: flow.public_id)
-            if surface == :com
-              recovery_ids = VisitorSecretCredential.where(visitor_id: flow.principal_id).order(:id).pluck(:id)
-              reveal_ids = SecurityOneTimeReveal.where(
-                actor_type: "Visitor", actor_id: flow.principal_id, purpose: "visitor.recovery_secret_credential",
-              ).order(:id).pluck(:id)
-            end
 
             assert_predicate flow.reload, :sign_up_checkpoint_pending?
             case outcome
@@ -264,7 +252,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
             when :ticket_failure_released_binding
               contact.release_binding!
             when :ticket_failure_suspended_owner
-              owner_class = (surface == :app) ? Client : Visitor
+              owner_class = Client
               owner_class.find(flow.principal_id).update!(deactivated_at: owner_class.database_now)
             when :ticket_failure_expired_flow
               decision_time = flow.expires_at
@@ -323,26 +311,14 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         assert_nil intent.actor_ref
         assert_nil intent.acknowledged_at
         if outcome == :ticket_failure_retry
-          owner_class = (surface == :app) ? Client : Visitor
+          owner_class = Client
 
           assert_equal [committed_at, [committed_intent.id], "1990-01-15"], [
             contact.binding_finalized_at,
             outbox.where(operation_ref: flow.public_id).pluck(:id),
             owner_class.find(flow.principal_id).birthdate,
           ]
-          if surface == :com
-            assert_equal [10, recovery_ids, reveal_ids], [
-              VisitorSecretCredential.where(visitor_id: flow.principal_id).count,
-              VisitorSecretCredential.where(visitor_id: flow.principal_id).order(:id).pluck(:id),
-              SecurityOneTimeReveal.where(
-                actor_type: "Visitor", actor_id: flow.principal_id, purpose: "visitor.recovery_secret_credential",
-              ).order(:id).pluck(:id),
-            ]
-            return_to = VisitorSignInFlow.where(principal_id: flow.principal_id).order(:id).last&.return_to
 
-            assert return_to.present? && URI.parse(return_to).path == "/identity/recovery-secret",
-                   "reconciled COM signup must retain its original recovery distribution destination"
-          end
         end
       end
       # rubocop:enable Minitest/MultipleAssertions

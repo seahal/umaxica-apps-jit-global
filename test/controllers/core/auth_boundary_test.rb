@@ -19,15 +19,6 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       client_id: "core-app-jp",
     },
     {
-      host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", BOOT_HOSTS.core_corporate.host),
-      controller: "core/com/oidc/callbacks",
-      sign_out_controller: "core/com/sign/outs",
-      acme_host: BOOT_HOSTS.acme_corporate.host,
-      jwt_issuer_id: "surface:CORE_COM",
-      resource_type: "visitor",
-      client_id: "core-com-jp",
-    },
-    {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", BOOT_HOSTS.core_staff.host),
       controller: "core/org/oidc/callbacks",
       sign_out_controller: "core/org/sign/outs",
@@ -111,7 +102,6 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
     session_class, association =
       case surface.fetch(:resource_type)
       when "operator" then [OpOrgGrant, :operator_token]
-      when "visitor" then [OpComGrant, :visitor_token]
       else [OpAppGrant, :client_token]
       end
     rp_session = session_class.create!(
@@ -150,17 +140,6 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       staff = operators(:one)
       token = OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
       [staff, token, OperatorToken]
-    when "visitor"
-      VisitorStatus.ensure_defaults!
-      VisitorVisibility.ensure_defaults!
-      visitor = Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL,
-        id: 9_116_000_000_000 + SecureRandom.random_number(1_000_000),
-        status_id: VisitorStatus::ACTIVE,
-        visibility_id: VisitorVisibility::VISITOR,
-      )
-      token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      [visitor, token, VisitorToken]
     else
       user = clients(:one)
       token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)

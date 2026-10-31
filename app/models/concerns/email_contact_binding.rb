@@ -29,7 +29,6 @@ module EmailContactBinding
       key, pending, verified =
         case self
         when ClientEmail then [:user_email_status_id, ClientEmailStatus::UNVERIFIED, ClientEmailStatus::VERIFIED]
-        when VisitorEmail then [:visitor_email_status_id, VisitorEmailStatus::UNVERIFIED, VisitorEmailStatus::VERIFIED]
         else raise ArgumentError, "unsupported registration Contact"
         end
       raise ArgumentError, "registration candidate is not pending" unless self[key] == pending
@@ -142,7 +141,6 @@ module EmailContactBinding
     owner, status_column, suspended =
       case self
       when ClientEmail then [Client.find(user_id), :user_email_status_id, ClientEmailStatus::SUSPENDED]
-      when VisitorEmail then [Visitor.find(visitor_id), :visitor_email_status_id, VisitorEmailStatus::SUSPENDED]
       else raise ArgumentError, "unsupported withdrawal email"
       end
     owner.with_lock do
@@ -171,9 +169,6 @@ module EmailContactBinding
     in [ClientEmail, ClientSignUpFlow]
       [Client.find(user_id), ClientEmailCeremonyTransaction, :user_email_status_id,
        ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, ClientEmailStatus::VERIFIED_WITH_SIGN_UP, "app",]
-    in [VisitorEmail, VisitorSignUpFlow]
-      [Visitor.find(visitor_id), VisitorEmailCeremonyTransaction, :visitor_email_status_id,
-       VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP, "com",]
     else raise ArgumentError, "unsupported Email signup binding realm"
     end
   end
@@ -207,7 +202,6 @@ module EmailContactBinding
     owner =
       case [self, transaction]
       in [ClientEmail, ClientEmailCeremonyTransaction] then user
-      in [VisitorEmail, VisitorEmailCeremonyTransaction] then visitor
       else raise ArgumentError, "unsupported Email registration ceremony realm"
       end
     transaction.normalized_email_digest == address_digest && transaction.email_otp_verified_evidence?(

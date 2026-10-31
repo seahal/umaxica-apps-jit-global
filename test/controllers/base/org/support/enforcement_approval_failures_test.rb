@@ -304,7 +304,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
     assert_not EnforcementEvent.exists?(case_public_id: @pending.public_id)
   end
 
-  test "failure in the lock after the state change commits marks the Case failed and keeps the approver" do
+  test "failure in the lock after the state change commits keeps the Case active and keeps the approver" do
     lock_fails = ->(**) { raise ActiveRecord::RecordInvalid, Client.new(security_mode_id: SecurityModeConfigurable::NORMAL) }
 
     AdministrativeAccessLock.stub(:lock!, lock_fails) do
@@ -384,7 +384,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
     assert_response :unprocessable_content
     @pending.reload
 
-    assert_equal "failed", @pending.state, "a Case whose apply started is never returned to pending"
+    assert_equal "active", @pending.state, "the committed security decision remains active"
     assert_equal @operator_b.public_id, @pending.approved_by_operator_public_id
   end
 

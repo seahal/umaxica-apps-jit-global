@@ -4,7 +4,7 @@ require "test_helper"
 
 # Fact comparisons must not disclose decrypted identifiers or credential material on failure.
 class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
-  %w(app com).each do |realm|
+  %w(app).each do |realm|
     %w(email telephone).each do |channel|
       test "#{realm} #{channel} scoped maintenance preserves binding and refuses direct writes and peer execution" do
         model, owner, owner_key, identifier, digest_column, audit_model =
@@ -15,24 +15,12 @@ class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
             ), :user_id,
              { raw_address: "maintenance-#{SecureRandom.hex(8)}@example.test" }, :address_digest,
              ClientIdentifierRotationAudit,]
-          when ["com", "email"]
-            [VisitorEmail, Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-            ), :visitor_id,
-             { raw_address: "maintenance-#{SecureRandom.hex(8)}@example.test" }, :address_digest,
-             VisitorIdentifierRotationAudit,]
           when ["app", "telephone"]
             [ClientTelephone, Client.create!(
               security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
             ), :user_id,
              { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
              :number_digest, ClientIdentifierRotationAudit,]
-          when ["com", "telephone"]
-            [VisitorTelephone, Visitor.create!(
-              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-            ), :visitor_id,
-             { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
-             :number_digest, VisitorIdentifierRotationAudit,]
           end
         record = model.create!(identifier.merge(owner_key => owner.id, :confirm_policy => true))
         desired_digest = SecureRandom.hex(32)

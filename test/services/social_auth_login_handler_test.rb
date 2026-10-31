@@ -17,7 +17,8 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
     end
 
   test "L1: an unknown subject is refused on sign-in and becomes a pending sign-up on sign-up" do
-    assert_raises(SocialAuth::UnauthorizedError) { decide("unknown-#{SecureRandom.hex(4)}", sign_up_entry: false) }
+    error = assert_raises(SocialAuth::UnauthorizedError) { decide("unknown-#{SecureRandom.hex(4)}", sign_up_entry: false) }
+    assert_equal :unregistered_subject, error.context[:verified_subject_reason]
     result = decide("unknown-#{SecureRandom.hex(4)}", sign_up_entry: true)
 
     assert result[:pending_social_signup]
@@ -32,6 +33,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
     error = assert_raises(SocialAuth::ConflictError) { decide(identity.subject, sign_up_entry: true) }
 
     assert_equal "errors.social_auth.identity_conflict", error.i18n_key
+    assert_equal :already_registered_subject, error.context[:verified_subject_reason]
   end
 
   test "L3: a linked Client that cannot sign in is handed to Sign In, which refuses it" do
@@ -40,6 +42,8 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
 
     assert_equal client, decide(identity.subject, sign_up_entry: false)[:user]
     assert_not client.login_allowed?
+    error = assert_raises(SocialAuth::ConflictError) { decide(identity.subject, sign_up_entry: true) }
+    assert_nil error.context[:verified_subject_reason]
   end
 
   test "L4: an identity without its Client raises the invariant error with a FATAL event" do
@@ -69,6 +73,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       error = assert_raises(SocialAuth::UnauthorizedError) { decide(identity.subject, sign_up_entry:) }
 
       assert_equal "errors.social_auth.pending_social_signup_invalid_state", error.i18n_key
+      assert_nil error.context[:verified_subject_reason]
     end
   end
 
@@ -81,9 +86,11 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
         )
 
         [false, true].each do |sign_up_entry|
-          assert_raises(SocialAuth::UnauthorizedError) do
-            decide(identity.subject, provider:, sign_up_entry:)
-          end
+          error =
+            assert_raises(SocialAuth::UnauthorizedError) do
+              decide(identity.subject, provider:, sign_up_entry:)
+            end
+          assert_nil error.context[:verified_subject_reason]
         end
       end
     end
@@ -129,6 +136,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       end
 
     assert_equal "errors.social_auth.identity_conflict", error.i18n_key
+    assert_nil error.context[:verified_subject_reason]
   end
 
   private

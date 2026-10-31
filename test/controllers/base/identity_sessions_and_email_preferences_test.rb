@@ -3,15 +3,12 @@
 
 require "test_helper"
 
-# Session inspection and revocation on the corporate identity surface, and the
-# email-preference update on the app identity surface, including its Turnstile
+# Email-preference update on the app identity surface, including its Turnstile
 # rejection branch.
 class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_email_statuses,
            :client_token_kinds, :client_token_statuses, :client_token_binding_methods,
-           :client_token_dbsc_statuses,
-           :visitors, :visitor_statuses, :visitor_token_kinds, :visitor_token_statuses,
-           :visitor_token_binding_methods, :visitor_token_dbsc_statuses
+           :client_token_dbsc_statuses
 
   setup do
     TurnstileVerifierStub.challenge_enabled = true
@@ -21,164 +18,6 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
-  end
-
-  test "com session detail page describes a session the visitor owns" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    host! host
-    visitor = visitors(:reserved_visitor)
-    token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
-    other_session = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
-    BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
-    BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
-    access_token = AuthenticationToken.encode(
-      visitor, host: host, session_public_id: token.public_id,
-               resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    begin
-      rp_cookie_pairs =
-        begin
-          rp_host = host
-          rp_token = token
-          rp_client = OidcClientRegistry.find!("base-com-ww")
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if @base_browser_rp_credentials[rp_key] ||
-              (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OpComGrant.exists?(
-                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                )))
-            unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = OpComGrant.create!(
-                authentication_epoch: 0,
-                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                visitor, host: rp_host, resource_type: "visitor",
-                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                         subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: rp_client.client_id,
-              )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            [
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ]
-          else
-            []
-          end
-        end
-      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
-    end
-
-    get base_com_identity_session_url(other_session.public_id, ri: "jp", host: host),
-        headers: {
-          "Authorization" => "Bearer #{access_token}",
-          "Client-Agent" => "Mozilla/5.0",
-          "Host" => host,
-          "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-        }
-
-    assert_response :success
-  end
-
-  test "com session revocation revokes another session and keeps the current one" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    host! host
-    visitor = visitors(:reserved_visitor)
-    token = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
-    other_session = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
-    BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
-    BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
-    access_token = AuthenticationToken.encode(
-      visitor, host: host, session_public_id: token.public_id,
-               resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    begin
-      rp_cookie_pairs =
-        begin
-          rp_host = host
-          rp_token = token
-          rp_client = OidcClientRegistry.find!("base-com-ww")
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if @base_browser_rp_credentials[rp_key] ||
-              (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OpComGrant.exists?(
-                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                )))
-            unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = OpComGrant.create!(
-                authentication_epoch: 0,
-                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                visitor, host: rp_host, resource_type: "visitor",
-                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                         subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: rp_client.client_id,
-              )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            [
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ]
-          else
-            []
-          end
-        end
-      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
-    end
-
-    delete base_com_identity_session_url(other_session.public_id, ri: "jp", host: host),
-           headers: {
-             "Authorization" => "Bearer #{access_token}",
-             "Client-Agent" => "Mozilla/5.0",
-             "Host" => host,
-             "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-           }
-
-    assert_response :see_other
-    assert_predicate other_session.reload, :revoked?
-    assert_not token.reload.revoked?
   end
 
   test "app email preference update saves the new notification setting" do
@@ -209,7 +48,7 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
       phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
       ttl: 15.minutes, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
       token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
-      resource_ref: nil, tenant_ref: nil,
+      resource_ref: email.public_id, tenant_ref: nil,
     )
     nonce = SecureRandom.urlsafe_base64(32)
     issuance = BaseStepUpAdmissionIssuer.call!(
@@ -296,6 +135,22 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
 
     assert_not_nil token.reload.last_step_up_at
     assert_equal token.id, token.device_session.current_refresh_token_id
+    failure = ->(**) { raise IdentityEmailPreferenceCommitter::DependencyFailure, "injected storage failure" }
+    IdentityEmailPreferenceCommitter.stub(:call!, failure) do
+      patch base_app_identity_email_url(email.public_id, ri: "jp", host: host),
+            params: { user_email: { notifiable: "1" } },
+            headers: {
+              "Authorization" => "Bearer #{access_token}",
+              "Client-Agent" => "Mozilla/5.0",
+              "Host" => host,
+              "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+            }
+
+      assert_response :service_unavailable
+      assert_not email.reload.notifiable?
+      assert_not_nil token.reload.last_step_up_at
+    end
+
     patch base_app_identity_email_url(email.public_id, ri: "jp", host: host),
           params: { user_email: { notifiable: "1" } },
           headers: {
@@ -306,6 +161,7 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
           }
 
     assert_response :see_other
+    assert_equal base_app_identity_emails_path, URI.parse(response.location).path
     assert_predicate email.reload, :notifiable?
   end
 
@@ -337,7 +193,7 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
       phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
       ttl: 15.minutes, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
       token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
-      resource_ref: nil, tenant_ref: nil,
+      resource_ref: email.public_id, tenant_ref: nil,
     )
     nonce = SecureRandom.urlsafe_base64(32)
     issuance = BaseStepUpAdmissionIssuer.call!(

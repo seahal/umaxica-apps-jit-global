@@ -7,6 +7,8 @@ require "webauthn/fake_client"
 # Restricted Mode cannot initiate, complete, or reuse ordinary step-up authority.
 # HTTP cases use the Base admission contract without Auth root credentials.
 class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   fixtures :operators, :operator_tokens
 
   setup do
@@ -83,7 +85,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
         admission_issuance
       end
     record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!
@@ -320,7 +322,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
         )
         admission_issuance
       end
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!
@@ -374,7 +376,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
         )
         admission_issuance
       end
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!

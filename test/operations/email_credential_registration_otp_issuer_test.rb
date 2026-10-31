@@ -3,12 +3,11 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} Email registration bounds its ceremony within the default Root lifetime" do
       owner_model, root_model, email_model, owner_key, active_status =
         case surface
         when "app" then [Client, ClientToken, ClientEmail, :user_id, ClientStatus::ACTIVE]
-        when "com" then [Visitor, VisitorToken, VisitorEmail, :visitor_id, VisitorStatus::ACTIVE]
         when "org" then [Operator, OperatorToken, OperatorEmail, :staff_id, OperatorStatus::ACTIVE]
         end
       actor = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: active_status)
@@ -47,14 +46,6 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
           owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
           root = OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now)
           candidate = owner.staff_emails.create!(
-            raw_address: "verify-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-            otp_attempts_count: 1,
-          )
-          [owner, root, candidate]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_emails.create!(
             raw_address: "verify-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
           )
@@ -105,14 +96,6 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
             otp_attempts_count: 1,
           )
           [owner, root, candidate, ClientEmailCeremonyTransaction]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_emails.create!(
-            raw_address: "email-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-            otp_attempts_count: 1,
-          )
-          [owner, root, candidate, VisitorEmailCeremonyTransaction]
         when "org"
           owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
           root = OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now)
@@ -124,7 +107,7 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
         end
       token.rotate_refresh_token!
       original = email.attributes.slice(
-        "public_id", "address_digest", "number_digest", "user_id", "visitor_id", "staff_id",
+        "public_id", "address_digest", "number_digest", "user_id", "staff_id",
       )
       nonce = SecureRandom.urlsafe_base64(32)
       issued = EmailCredentialRegistrationOtpIssuer.call(actor: actor, token: token, email: email, browser_nonce: nonce)

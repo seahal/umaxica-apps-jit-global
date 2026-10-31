@@ -94,6 +94,8 @@ module SignOutInertiaPages
 
   # An unverified or incomplete continuation must not present a successful completion in any realm.
   def render_oidc_rp_logout_unavailable
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Referrer-Policy"] = "strict-origin"
     render inertia: sign_out_page_component("unavailable"),
            props: sign_out_unavailable_props,
            status: :unprocessable_content

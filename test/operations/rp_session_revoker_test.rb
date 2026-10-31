@@ -144,30 +144,6 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     assert_predicate other_session.reload, :revoked?
   end
 
-  test "browser_session scope revokes a visitor session's RP Sessions and the visitor token" do
-    visitor_root = VisitorToken.create!(
-      authentication_epoch: 0,
-      visitor: Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      ),
-    )
-    visitor_session = OpComGrant.create!(
-      authentication_epoch: 0,
-      visitor_token: visitor_root,
-      oidc_client_id: "core-com-jp",
-      oidc_scope: "openid profile",
-      refresh_token_expires_at: 1.hour.from_now,
-    )
-
-    result = RpSessionRevoker.call(
-      scope: :browser_session, record: visitor_root, cause: "browser_logout",
-      authority_evidence_ref: "test",
-    )
-
-    assert_equal 1, result.revoked_count
-    assert_predicate visitor_session.reload, :revoked?
-    assert_predicate visitor_root.reload, :revoked?
-  end
 
   test "browser_session scope revokes an operator session's RP Sessions and the operator token" do
     operator_root = OperatorToken.create!(

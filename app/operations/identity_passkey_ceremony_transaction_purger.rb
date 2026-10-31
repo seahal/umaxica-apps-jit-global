@@ -4,7 +4,6 @@
 class IdentityPasskeyCeremonyTransactionPurger
   MODELS = {
     "app" => ClientPasskeyCeremonyTransaction,
-    "com" => VisitorPasskeyCeremonyTransaction,
     "org" => OperatorPasskeyCeremonyTransaction,
   }.freeze
 

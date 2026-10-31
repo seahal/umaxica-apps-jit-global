@@ -13,10 +13,11 @@ module AuthorizationTokenClaims
     issued_at_seconds = timestamp_value(issued_at)
     expires_at_seconds = timestamp_value(expires_at || (issued_at + access_token_ttl))
     context = AuthenticationContextValue.for(authentication_context.presence || AuthenticationContextValue::NORMAL_KEY)
-    # Session capabilities narrow the token's authorization scopes; they never
-    # add one. An Emergency session therefore carries a subset of what the same
-    # Operator would receive normally, and DB role membership stays the
-    # authority for everything the subset still permits.
+    # Session capabilities never widen the actor's ordinary scopes: a Standby
+    # session carries the same claims as the same Operator would receive
+    # normally and the fail-closed unknown context keeps no capability-named
+    # scope, while DB role membership plus each operation's Step-Up gate stay
+    # the authority for what the token permits.
     scopes_value = context.constrain_scopes(scopes || resolve_scopes(resource_type, resource))
 
     payload = {

@@ -9,6 +9,7 @@ module Auth
           module Telephone
             class BirthdatesController < ::Auth::App::Sign::Up::Check::Email::BirthdatesController
               AUTHENTICATION_MODE = :guest
+              sign_entry_classification! :sign_up
 
               private
 

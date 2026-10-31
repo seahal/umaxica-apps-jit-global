@@ -26,6 +26,30 @@ class IdentityStepUpEmailCodeIssuerTest < ActiveSupport::TestCase
     clear_enqueued_jobs
   end
 
+  [false, true].each do |superseded|
+    test "a #{superseded ? "superseded" : "revoked"} device cannot issue an Email Step-Up code" do
+      device = @token.device_session_record!
+      if superseded
+        replacement = ClientToken.create!(authentication_epoch: 0, user: @actor, device_session: device)
+        device.update!(current_refresh_token_id: replacement.id)
+      else
+        device.revoke!
+      end
+
+      assert_nil @credential.step_up_otp_last_issued_at
+
+      assert_no_enqueued_jobs only: StepUpEmailDeliveryJob do
+        assert_raises(IdentityStepUpEmailCodeIssuer::Unavailable) do
+          IdentityStepUpEmailCodeIssuer.call!(
+            actor: @actor, credential: @credential, transaction: @transaction, session_record: @record,
+          )
+        end
+      end
+      assert_equal 0, @record.reload.email_code_generation
+      assert_nil @credential.reload.step_up_otp_last_issued_at
+    end
+  end
+
   test "issuing queues only encrypted code and immediate resend preserves failures and generation" do
     @credential.update!(step_up_otp_failures: 3)
     assert_enqueued_jobs 1, only: StepUpEmailDeliveryJob do

@@ -35,6 +35,7 @@ module Auth
         include ::AuthenticationModeSwitchGuard
 
         AUTHENTICATION_MODE = :guest
+        sign_entry_classification! :parent_intent
 
         # The callback GET is a cross-site redirect from Microsoft; region/
         # localization canonicalization before_actions would otherwise

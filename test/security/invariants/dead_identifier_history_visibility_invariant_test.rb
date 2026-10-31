@@ -15,7 +15,7 @@ module Security
 
       %w(Email Telephone).each do |channel|
         test "#{channel} dead history has no ordinary product rendering API or MCP reference" do
-          model_names = %w(Client Visitor Operator).map { |realm| "#{realm}#{channel}History" }
+          model_names = %w(Client Operator).map { |realm| "#{realm}#{channel}History" }
           table_names = model_names.map { |name| name.constantize.table_name }
           forbidden_reference = Regexp.union(*model_names, *table_names, "IdentifierHistoryFingerprintVerifier")
           offenders =

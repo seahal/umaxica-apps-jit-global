@@ -17,14 +17,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     ClientTelephoneStatus.ensure_defaults!
     ClientPasskeyStatus.ensure_defaults!
 
-    VisitorStatus.ensure_defaults!
-    VisitorMfaStatus.ensure_defaults!
-    VisitorVisibility.ensure_defaults!
-    VisitorSignUpFlowStatus.ensure_defaults!
-    VisitorSignUpFlowCleanupStatus.ensure_defaults!
-    VisitorEmailStatus.ensure_defaults!
-    VisitorTelephoneStatus.ensure_defaults!
-    VisitorPasskeyStatus.ensure_defaults!
   end
 
   test "returns unsupported cycles unchanged" do
@@ -78,35 +70,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
       assert_not ClientExternalIdentity.exists?(identity.id)
       assert_operator user.reload.discard_at, :>=, now
     end
-  end
-
-  test "schedules visitor email cleanup and actor retention" do
-    now = Time.current.change(usec: 0)
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    email = VisitorEmail.create!(
-      visitor: visitor,
-      address: "cleanup-#{SecureRandom.hex(4)}@example.com",
-      confirm_policy: true,
-      visitor_email_status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    cycle = build_visitor_cycle(
-      principal_id: visitor.id,
-      status_id: VisitorSignUpFlowStatus::CANCELLED,
-      cleanup_status_id: VisitorSignUpFlowCleanupStatus::PENDING,
-      pending_contact_type: "email",
-      pending_contact_id: email.id,
-    )
-
-    SignUpArtifactCleanup.call(cycle: cycle, now: now)
-
-    assert_equal VisitorSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
-    assert_equal VisitorEmailStatus::DELETED, email.reload.visitor_email_status_id
-    assert_operator email.reload.discard_at, :>=, now
-    assert_operator email.reload.purge_eligible_at, :>, email.reload.discard_at
-    assert_operator visitor.reload.discard_at, :>=, now
   end
 
   test "cleanup worker claims a real terminal flow and completes its tenth attempt" do
@@ -186,46 +149,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     assert_operator user.reload.discard_at, :>=, now
   end
 
-  test "visitor pending telephone cleanup updates the phone and pending passkey" do
-    now = Time.current.change(usec: 0)
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    telephone = VisitorTelephone.create!(
-      visitor: visitor,
-      raw_number: "+12345670002",
-      confirm_policy: true,
-      visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    pending_passkey = VisitorPasskey.new(
-      visitor: visitor,
-      webauthn_id: "pending-#{SecureRandom.hex(8)}",
-      external_id: SecureRandom.uuid,
-      public_key: "pending-public-key",
-      sign_count: 0,
-      description: "pending passkey",
-      status_id: VisitorPasskeyStatus::ACTIVE,
-    )
-    pending_passkey.save!(validate: false)
-    cycle = build_visitor_cycle(
-      principal_id: visitor.id,
-      status_id: VisitorSignUpFlowStatus::CANCELLED,
-      cleanup_status_id: VisitorSignUpFlowCleanupStatus::PENDING,
-      entry_method: "telephone",
-      pending_contact_type: "telephone",
-      pending_contact_id: telephone.id,
-      pending_passkey_registration_id: pending_passkey.id,
-    )
-
-    SignUpArtifactCleanup.call(cycle: cycle, now: now)
-
-    assert_equal VisitorSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
-    assert_equal VisitorTelephoneStatus::DELETED, telephone.reload.visitor_telephone_status_id
-    assert_raises(ActiveRecord::RecordNotFound) { pending_passkey.reload }
-    assert_operator visitor.reload.discard_at, :>=, now
-  end
-
   private
 
   def build_client_cycle(attrs = {})
@@ -239,20 +162,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
         expires_at: 15.minutes.from_now,
         entry_method: "google",
       }.merge(attrs).merge(auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)),
-    )
-  end
-
-  def build_visitor_cycle(attrs = {})
-    VisitorSignUpFlow.create!(
-      {
-        principal_id: 456,
-        status_id: VisitorSignUpFlowStatus::CHECKPOINT_PENDING,
-        step: "checkpoint",
-        nonce_digest: VisitorSignUpFlow.digest_nonce("nonce"),
-        issued_at: Time.current,
-        expires_at: 15.minutes.from_now,
-        entry_method: "email",
-      }.merge(attrs).merge(auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow)),
     )
   end
 

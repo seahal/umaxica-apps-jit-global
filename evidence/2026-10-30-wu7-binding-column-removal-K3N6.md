@@ -1,0 +1,8 @@
+# WU-7 legacy binding column removal
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked worktree changes affected the result.
+- The owner explicitly requested the destructive migration. The scoped execution ticket is `plans/2026-10-30-wu7-binding-column-execution-ticket.md`. Before execution `test_com_setting_db` contained two cookie rows, zero non-null legacy digests and zero browser-binding rows. A pre-change dump was created and listed; restore was not rehearsed.
+- Under the test process lock, `RAILS_ENV=test bin/rails db:migrate:up:com_setting VERSION=20261030211212` completed successfully against local `test_com_setting_db`. The migration holds an exclusive table lock before checking for existing digest values and removing the column. Rails reported 0.0019 seconds for the migration; this is not a production lock-duration estimate.
+- A subsequent schema query found the legacy column and its index absent, with two cookie rows retained. The new browser-binding table was not removed. No production, Neon, or development migration was executed.
+- Before and after migration, `PARALLEL_WORKERS=1 bin/rails test test/integration/anonymous_com_web_push_api_test.rb test/models/com_preference_browser_binding_test.rb` passed: 15 runs, 135 assertions, zero failures, errors or skips each time. The migration file passed RuboCop after formatting-only corrections.
+- The populated legacy digest refusal path, recovery restore, generated schema parity, remaining section 4.3 changes, and full suite were not verified. The existing `db/com_setting_structure.sql` contains prior staged and unstaged work and was not overwritten.

@@ -6,9 +6,9 @@ module SignInOtpResendState
   # Email is the only sign-in OTP channel; SMS OTP is not an accepted sign-in
   # proof, so a telephone state must never be mintable.
   KIND = "email"
-  # A resend state is bound to one authentication surface so it cannot be
-  # replayed against the other surface's email model and delivery policy.
-  SURFACES = %w(app com).freeze
+  # A resend state is bound to the authentication surface's email model and
+  # delivery policy.
+  SURFACES = %w(app).freeze
   TTL = 30.minutes
   ENCRYPTOR_CACHE = Concurrent::Map.new
 
@@ -22,8 +22,7 @@ module SignInOtpResendState
       raise ArgumentError, "unsupported sign-in OTP resend surface: #{surface}"
     end
 
-    expected_model = (surface_name == "app") ? ClientEmail : VisitorEmail
-    unless contact.nil? || contact.is_a?(expected_model)
+    unless contact.nil? || contact.is_a?(ClientEmail)
       raise ArgumentError, "resend Contact does not match surface"
     end
 
@@ -84,7 +83,7 @@ module SignInOtpResendState
 
     raise ArgumentError, "resend state requires an effective Contact" unless contact.binding_effective?
 
-    owner_id = contact.is_a?(ClientEmail) ? contact.user_id : contact.visitor_id
+    owner_id = contact.user_id
     {
       "contact_mode" => "real",
       "contact_ref" => contact.public_id.to_s,

@@ -13,7 +13,6 @@ module Auth
       webauthn_surface :org
       include ::Session
       include ::PreferenceGlobal
-      include ::PreferenceAdoption
       include ::SignSignupObservability
       include ::AuthenticationOperator
       include ::SignErrorResponses
@@ -26,6 +25,7 @@ module Auth
       include ::AuthCeremonyContext
       include ::AuthAdmissionCurfewGate
       include ::SignInPathRefusal
+      include ::SignEntryClassification
       include ::SignEntrySentryEnforcement
       include SurfaceRouteAliasHelper
       include ::ActorSupport

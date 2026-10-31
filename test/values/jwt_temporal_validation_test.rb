@@ -263,6 +263,42 @@ class JwtTemporalValidationTest < ActiveSupport::TestCase
     end
   end
 
+  test "separated RP logout rejects empty and reversed token validity intervals" do
+    travel_to Time.utc(2026, 10, 22, 12) do
+      now = Time.current.to_i
+      issuer = "https://base.example/app"
+      key = OpenSSL::PKey::EC.generate("secp384r1")
+      jwk = JitSecurityJwtJwk.export_public(key, kid: "interval-key")
+      jwks = OidcOpJwksClient.new(
+        jwks_uri: "https://base.example/.well-known/jwks.json", fetcher: -> { { "keys" => [jwk] } },
+      )
+      payload = {
+        "iss" => issuer,
+        "aud" => ["core-app-jp"],
+        "exp" => now + 120,
+        "iat" => now,
+        "sid" => "session",
+        "jti" => "jti",
+        "events" => { OidcOpLogoutTokenVerifier::EVENT => {} },
+      }
+      [
+        [{ "iat" => now + 6, "exp" => now + 5 }, false],
+        [{ "iat" => now + 5, "exp" => now + 5 }, false],
+        [{ "iat" => now, "exp" => now + 1 }, true],
+        [{ "iat" => now, "exp" => now + 300 }, true],
+        [{ "iat" => now, "exp" => now + 301 }, false],
+        [{ "iat" => now + 0.25, "exp" => now + 1.25 }, true],
+      ].each do |overrides, accepted|
+        token = JWT.encode(payload.merge(overrides), key, "ES384", { typ: "logout+jwt", kid: "interval-key" })
+        result = OidcOpLogoutTokenVerifier.new(
+          logout_token: token, client_id: "core-app-jp", issuer: issuer, jwks_client: jwks,
+        ).call
+
+        assert_equal accepted, result.success?, overrides.inspect
+      end
+    end
+  end
+
   test "client assertions enforce the fixed thirty second iat boundary" do
     travel_to Time.utc(2026, 10, 22, 12) do
       now = Time.current

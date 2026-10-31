@@ -4,7 +4,6 @@
 class IdentitySecretCredentialCeremonyReplayStore
   MODELS = {
     "app" => ClientSecretCredentialCeremonyTransaction,
-    "com" => VisitorSecretCredentialCeremonyTransaction,
     "org" => OperatorSecretCredentialCeremonyTransaction,
   }.freeze
 

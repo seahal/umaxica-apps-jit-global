@@ -13,6 +13,18 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
 
   teardown { Flipper.disable(RetentionPurgeJob::FEATURE_NAME) }
 
+  test "generic retention preserves com preferences and their audit history" do
+    preference = com_preferences(:one)
+    audit = com_preference_chronicles(:one)
+    preference.update!(last_issued_at: 433.days.ago, last_issued_expires_at: 33.days.ago)
+    audit.update!(created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+
+    RetentionPurgeJob.perform_now
+
+    assert_predicate ComPreference.where(id: preference.id), :exists?
+    assert_predicate ComPreferenceChronicle.where(id: audit.id), :exists?
+  end
+
   test "Avatar purge deferral preserves encrypted moniker history" do
     handle = Handle.create!(
       handle: "purge-avatar-#{SecureRandom.hex(4)}",
@@ -262,12 +274,11 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     last_purge = events.rindex { |event| event.is_a?(Array) && event.first == :purge }
 
     assert_operator events.index([:query, :app]), :>, last_purge
-    assert_operator events.index([:query, :com]), :>, last_purge
     assert_equal 1, logged.length
     event = JSON.parse(logged.fetch(0))
 
     assert_equal "sign_up.stuck_registrations.report_failed", event.fetch("event")
-    assert_equal ["app", "com"], event.dig("data", "failures").map { |failure| failure.fetch("surface") }
+    assert_equal ["app"], event.dig("data", "failures").map { |failure| failure.fetch("surface") }
     assert event.dig("data", "failures").all? { |failure| failure.fetch("error_class") == "ActiveRecord::QueryCanceled" }
   end
 
@@ -407,32 +418,9 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     assert_operator email.discard_at, :<=, Time.current
   end
 
-  test "purges a COM sign-up Flow after cleanup is complete" do
-    VisitorSignUpFlowStatus.ensure_defaults!
-    VisitorSignUpFlowCleanupStatus.ensure_defaults!
-    flow = VisitorSignUpFlow.create!(
-      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow),
-      status_id: VisitorSignUpFlowStatus::CANCELLED,
-      step: "cancelled",
-      nonce_digest: VisitorSignUpFlow.digest_nonce("retention-complete-com"),
-      issued_at: 2.hours.ago,
-      expires_at: 90.minutes.ago,
-      entry_method: "email",
-      cleanup_status_id: VisitorSignUpFlowCleanupStatus::COMPLETED,
-      cleanup_completed_at: 80.minutes.ago,
-    )
-    flow.update_columns(discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
-
-    RetentionPurgeJob.perform_now
-
-    assert_not VisitorSignUpFlow.exists?(flow.id)
-  end
-
-  test "retains APP and COM capped sign-up Flows and reports them before cleanup completes" do
+  test "retains APP capped sign-up Flows and reports them before cleanup completes" do
     ClientSignUpFlowStatus.ensure_defaults!
     ClientSignUpFlowCleanupStatus.ensure_defaults!
-    VisitorSignUpFlowStatus.ensure_defaults!
-    VisitorSignUpFlowCleanupStatus.ensure_defaults!
     app_client = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
@@ -457,31 +445,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
       cleanup_status_id: ClientSignUpFlowCleanupStatus::FAILED,
       cleanup_attempts_count: SignUpArtifactCleanup::MAX_CLEANUP_ATTEMPTS,
     )
-    com_visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    com_email = VisitorEmail.create!(
-      visitor: com_visitor,
-      raw_address: "retention-cap-com-#{SecureRandom.hex(6)}@example.com",
-      confirm_policy: true,
-      visitor_email_status_id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
-    )
-    com_flow = VisitorSignUpFlow.create!(
-      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow),
-      principal_id: com_visitor.id,
-      pending_contact_type: "email",
-      pending_contact_id: com_email.id,
-      entry_method: "email",
-      status_id: VisitorSignUpFlowStatus::CANCELLED,
-      step: "cancelled",
-      nonce_digest: VisitorSignUpFlow.digest_nonce("retention-cap-com"),
-      issued_at: 2.hours.ago,
-      expires_at: 90.minutes.ago,
-      cleanup_status_id: VisitorSignUpFlowCleanupStatus::FAILED,
-      cleanup_attempts_count: SignUpArtifactCleanup::MAX_CLEANUP_ATTEMPTS,
-    )
-    [app_flow, com_flow].each do |flow|
+    [app_flow].each do |flow|
       flow.update_columns(discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
     end
     logged = []
@@ -491,13 +455,9 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     end
 
     assert ClientSignUpFlow.exists?(app_flow.id)
-    assert VisitorSignUpFlow.exists?(com_flow.id)
     assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, app_client.reload.status_id
-    assert_equal VisitorStatus::UNVERIFIED_WITH_SIGN_UP, com_visitor.reload.status_id
     assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, app_email.reload.user_email_status_id
-    assert_equal VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP, com_email.reload.visitor_email_status_id
     assert_equal SignUpArtifactCleanup::MAX_CLEANUP_ATTEMPTS, app_flow.reload.cleanup_attempts_count
-    assert_equal SignUpArtifactCleanup::MAX_CLEANUP_ATTEMPTS, com_flow.reload.cleanup_attempts_count
 
     report_event = logged.filter_map do |message|
       event = JSON.parse(message.to_s)
@@ -507,13 +467,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     end.fetch(0)
     groups = report_event.dig("data", "groups").index_by { |group| group.fetch("surface") }
 
-    assert_equal ["app", "com"], groups.keys.sort
+    assert_equal ["app"], groups.keys.sort
     assert_equal "cleanup_attempts_exhausted", groups.fetch("app").fetch("case")
-    assert_equal "cleanup_attempts_exhausted", groups.fetch("com").fetch("case")
     assert_equal app_flow.public_id, groups.dig("app", "registrations", 0, "flow_public_id")
-    assert_equal com_flow.public_id, groups.dig("com", "registrations", 0, "flow_public_id")
     assert_not_includes report_event.to_json, app_email.address
-    assert_not_includes report_event.to_json, com_email.address
   end
 
   test "retention purge registers client sign-up flows and tokens independently" do
@@ -523,23 +480,18 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     assert_includes models, ClientToken
   end
 
-  test "retention purge registers visitor sign-up flows and tokens independently" do
-    models = RetentionPurgeJob::RETAINABLE_MODELS
-
-    assert_includes models, VisitorSignUpFlow
-    assert_includes models, VisitorToken
-  end
-
-  # Every Retainable model must be registered with RetentionPurgeJob so the
+  # Every generally purgeable Retainable model must be registered with RetentionPurgeJob so the
   # worker actually purges its rows. Forgetting to add a new model is silent --
   # `purge_eligible_at` ticks past forever with no one cleaning up. Compare against
   # the Retainable.registry that models populate on `included`.
-  test "all Retainable-including models are registered in RETAINABLE_MODELS" do
+  test "all generally purgeable Retainable models are registered in RETAINABLE_MODELS" do
     # Force eager load so every Retainable include block runs and registers.
     Rails.application.eager_load!
 
+    # Com preference history needs lifecycle-specific audit and hold checks before deletion.
+    specialized_models = [ComPreference, ComPreferenceChronicle]
     missing =
-      (Retainable.registry - RetentionPurgeJob::RETAINABLE_MODELS).reject do |model|
+      (Retainable.registry - RetentionPurgeJob::RETAINABLE_MODELS - specialized_models).reject do |model|
         model.name.to_s.match?(/\A(?:CycleBaseTest|RetainableTest|SecretCredentialConcernTest)::/) ||
           !model.table_exists?
       end

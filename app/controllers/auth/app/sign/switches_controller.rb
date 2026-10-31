@@ -10,6 +10,7 @@ module Auth
         include ::SignEntryExit
 
         AUTHENTICATION_MODE = :open
+        sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
         declare_authentication_mode! :open
 
         public
@@ -24,10 +25,23 @@ module Auth
 
           # Validate before ending the ceremony so a refused Switch leaves the user where they were.
           BaseAuthAdmissionCoordinator.validate_switch_request!(transaction:, target:)
-          ceremony.cancel!
-          handoff = BaseAuthAdmissionCoordinator.issue_switch_handoff!(
-            transaction: transaction, ceremony_session: ceremony.reload, target: target,
-          )
+          handoff =
+            ClientAuthCeremonySession.writing_connection do
+              ClientAuthCeremonySession.transaction do
+                locked_parent = ClientOidcAuthorizationTransaction.lock.find(transaction.id)
+                ceremony.with_lock do
+                  BaseAuthAdmissionCoordinator.validate_switch_request!(transaction: locked_parent, target: target)
+                  if sign_entry_ceremony_progressed?(ceremony)
+                    raise AuthCeremonySession::InvalidTransition, "auth ceremony has progressed"
+                  end
+
+                  ceremony.cancel!
+                  BaseAuthAdmissionCoordinator.issue_switch_handoff!(
+                    transaction: locked_parent, ceremony_session: ceremony, target: target,
+                  )
+                end
+              end
+            end
           redirect_to_jump_url(
             visa_app_oidc_switch_url(
               switch_handoff: handoff, ri: params[:ri], host: visa_authority_host, protocol: "https",

@@ -37,11 +37,17 @@
         <li><%= link_to t("sign.org.preferences.footer.preference"), base_org_preference_url(ri: current_region_identifier, host: base_rp_host) %></li>
       </ul>
     </nav>
-    <aside aria-label="<%= t("ui_presentation.navigation.preferences") %>">
-      <% preference_controls = PreferenceBrowserControlsRegistry.fetch(family: "auth", surface: "org") %>
-      <%= render "layouts/shared/footer_cookie_controls", scope: :org, endpoint_url: preference_controls.cookie_endpoint_path, base_host: base_rp_host %>
-      <%= render "layouts/shared/footer_theme_controls", scope: :org, endpoint_url: preference_controls.theme_endpoint_path %>
-    </aside>
+    <% preference_controls = PreferenceBrowserControlsRegistry.fetch(family: "auth", surface: "org") %>
+    <% if preference_controls.cookie_endpoint_path || preference_controls.theme_endpoint_path %>
+      <aside aria-label="<%= t("ui_presentation.navigation.preferences") %>">
+        <% if preference_controls.cookie_endpoint_path %>
+          <%= render "layouts/shared/footer_cookie_controls", scope: :org, endpoint_url: preference_controls.cookie_endpoint_path, base_host: base_rp_host %>
+        <% end %>
+        <% if preference_controls.theme_endpoint_path %>
+          <%= render "layouts/shared/footer_theme_controls", scope: :org, endpoint_url: preference_controls.theme_endpoint_path %>
+        <% end %>
+      </aside>
+    <% end %>
     <div>
       <%= render "layouts/shared/copyright" %>
     </div>

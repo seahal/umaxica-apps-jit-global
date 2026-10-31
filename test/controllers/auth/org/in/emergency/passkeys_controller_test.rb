@@ -14,6 +14,8 @@ require "base64"
 class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::IntegrationTest
   include OrgEntraFirstStageHelper
 
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   fixtures :operators, :operator_statuses, :operator_passkeys, :operator_passkey_statuses,
            :operator_token_binding_methods, :operator_token_kinds, :operator_token_statuses,
            :operator_token_dbsc_statuses
@@ -62,7 +64,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       cookies,
       "#{cookie_name}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}/"),
     )
-    get auth_org_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
+    get auth_org_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!
@@ -225,7 +227,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
         admission_form = response.parsed_body.at_css("form")
         raise RuntimeError, "Auth admission continuation is missing" unless admission_form
 
@@ -287,7 +289,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
           cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }, headers: NAVIGATION_HEADERS
         admission_form = response.parsed_body.at_css("form")
         raise RuntimeError, "Auth admission continuation is missing" unless admission_form
 

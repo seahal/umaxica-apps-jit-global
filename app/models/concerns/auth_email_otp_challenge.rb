@@ -5,16 +5,19 @@
 module AuthEmailOtpChallenge
   public
 
-  def issue_email_otp!(contact:, destination:)
+  def issue_email_otp!(contact:, destination:, expected_generation: nil)
     digest = IdentifierBlindIndex.bidx_for_email(destination, realm: email_otp_surface)
     raise ArgumentError, "email destination required" if digest.blank?
 
-    with_email_otp_parent_lock do |parent, now|
-      if email_otp_context&.fetch("verified_at")
-        raise AuthCeremonySession::InvalidTransition, "email authentication proof is already verified"
-      end
+    with_email_otp_contact_lock(contact) do |locked|
+      with_email_otp_parent_lock(refuse_unavailable: expected_generation.present?) do |parent, _now|
+        if expected_generation && !email_otp_reissuable?(locked, digest, expected_generation)
+          return false
+        end
+        if email_otp_context&.fetch("verified_at")
+          raise AuthCeremonySession::InvalidTransition, "email authentication proof is already verified"
+        end
 
-      with_email_otp_contact_lock(contact) do |locked|
         now = self.class.database_now
         unless active?(now: now) && email_otp_parent_pending?(parent, now)
           raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
@@ -43,18 +46,16 @@ module AuthEmailOtpChallenge
   def verify_email_otp!(code:)
     return email_otp_refusal(:invalid_code) unless well_formed_email_otp_code?(code)
 
-    with_email_otp_parent_lock do |parent, now|
-      context = email_otp_context
-      return email_otp_refusal(:missing_challenge) if context.nil?
-      raise ArgumentError, "unsupported email OTP context" unless context.fetch("version") == 1
-      return email_otp_refusal(:binding_mismatch) unless email_otp_scope_current?(context)
-      return email_otp_refusal(:missing_challenge) if context["cancelled_at"]
+    snapshot = email_otp_contact_snapshot
+    with_email_otp_contact_lock(snapshot) do |locked|
+      with_email_otp_parent_lock do |parent, _now|
+        context = email_otp_context
+        return email_otp_refusal(:missing_challenge) if context.nil?
+        raise ArgumentError, "unsupported email OTP context" unless context.fetch("version") == 1
+        return email_otp_refusal(:binding_mismatch) unless email_otp_scope_current?(context)
+        return email_otp_refusal(:missing_challenge) if context["cancelled_at"]
+        return email_otp_refusal(:binding_unavailable) unless email_otp_snapshot_matches?(context, locked)
 
-      contact =
-        email_otp_contact_model.find_by(public_id: context.fetch("contact_ref")) if context.fetch("mode") == "real"
-      return email_otp_refusal(:binding_unavailable) if context.fetch("mode") == "real" && contact.nil?
-
-      with_email_otp_contact_lock(contact) do |locked|
         now = self.class.database_now
         return email_otp_refusal(:expired) unless active?(now: now) && email_otp_parent_pending?(parent, now)
         return email_otp_refusal(:binding_unavailable) unless email_otp_binding_current?(context, locked)
@@ -98,16 +99,17 @@ module AuthEmailOtpChallenge
   # The mailer opts into the final delivery boundary. Owner, parent and continuity
   # locks serialize reissue/release/verification with the actual transport call.
   def with_email_otp_delivery!(generation:, code:, destination:)
-    with_email_otp_parent_lock(refuse_unavailable: true) do |parent, _now|
-      context = email_otp_context
-      return false unless context && email_otp_scope_current?(context) && context.fetch("mode") == "real"
-      return false if context["cancelled_at"]
-      return false unless context.fetch("generation") == generation && context.fetch("verified_at").nil?
+    snapshot = email_otp_contact_snapshot
+    return false unless snapshot
 
-      contact = email_otp_contact_model.find_by(public_id: context.fetch("contact_ref"))
-      return false if contact.nil?
+    with_email_otp_contact_lock(snapshot) do |locked|
+      with_email_otp_parent_lock(refuse_unavailable: true) do |parent, _now|
+        context = email_otp_context
+        return false unless context && email_otp_scope_current?(context) && context.fetch("mode") == "real"
+        return false unless email_otp_snapshot_matches?(context, locked)
+        return false if context["cancelled_at"]
+        return false unless context.fetch("generation") == generation && context.fetch("verified_at").nil?
 
-      with_email_otp_contact_lock(contact) do |locked|
         now = self.class.database_now
         return false unless active?(now: now) && email_otp_parent_pending?(parent, now)
         return false unless email_otp_binding_current?(context, locked) && !locked.locked?
@@ -127,6 +129,32 @@ module AuthEmailOtpChallenge
   end
 
   private
+
+  def email_otp_reissuable?(contact, digest, generation)
+    context = email_otp_context
+    context && email_otp_scope_current?(context) && context.fetch("generation") == generation &&
+      !context["cancelled_at"] && !context.fetch("verified_at") && email_otp_snapshot_matches?(context, contact) &&
+      email_otp_binding_current?(context, contact) && context.fetch("destination_digest") == digest &&
+      Time.iso8601(context.fetch("expires_at")) > self.class.database_now
+  end
+
+  # This first read is only a lock target. The locked parent context is checked again before use.
+  def email_otp_contact_snapshot
+    context = self.class.writing_connection { self.class.find(id).email_otp_context }
+    return unless context && context.fetch("mode") == "real"
+
+    email_otp_contact_model.connection_class_for_self.connected_to(role: :writing) do
+      email_otp_contact_model.find_by(public_id: context.fetch("contact_ref"))
+    end
+  end
+
+  def email_otp_snapshot_matches?(context, contact)
+    case context.fetch("mode")
+    when "real" then contact.present? && contact.public_id == context.fetch("contact_ref")
+    when "fake" then contact.nil?
+    else false
+    end
+  end
 
   def well_formed_email_otp_code?(code)
     code.is_a?(String) && code.valid_encoding? && code.match?(/\A[0-9]{6}\z/)
@@ -228,8 +256,6 @@ module AuthEmailOtpChallenge
     case self
     when ClientAuthCeremonySession
       ClientOidcAuthorizationTransaction.find_by(transaction_id: authorization_transaction_ref)
-    when VisitorAuthCeremonySession
-      VisitorOidcAuthorizationTransaction.find_by(transaction_id: authorization_transaction_ref)
     else raise ArgumentError, "unsupported email authentication surface"
     end
   end
@@ -244,7 +270,6 @@ module AuthEmailOtpChallenge
   def email_otp_surface
     case self
     when ClientAuthCeremonySession then "app"
-    when VisitorAuthCeremonySession then "com"
     else raise ArgumentError, "unsupported email authentication surface"
     end
   end
@@ -252,7 +277,6 @@ module AuthEmailOtpChallenge
   def email_otp_contact_model
     case self
     when ClientAuthCeremonySession then ClientEmail
-    when VisitorAuthCeremonySession then VisitorEmail
     else raise ArgumentError, "unsupported email authentication surface"
     end
   end
@@ -261,8 +285,6 @@ module AuthEmailOtpChallenge
     case contact
     when ClientEmail
       contact.association(:user).tap { |owner| owner.reset_scope }.scope.take
-    when VisitorEmail
-      contact.association(:visitor).tap { |owner| owner.reset_scope }.scope.take
     else raise ArgumentError, "unsupported email authentication Contact"
     end
   end

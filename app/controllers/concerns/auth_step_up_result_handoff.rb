@@ -8,6 +8,7 @@ module AuthStepUpResultHandoff
     return unless load_result_ceremony_context!
     return render_invalid_step_up_context! unless @step_up_ceremony_transaction.verified?
 
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "auth/shared/oidc_authorization_handoff", layout: ceremony_result_layout,
                                                      locals: { completion_url: ceremony_result_create_path,
                                                                ri: params[:ri], }

@@ -9,16 +9,12 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-    [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
-    [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
   ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
     test "#{surface} #{channel} signup failure budget survives another candidate flow and browser" do
       destination =
@@ -33,7 +29,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
         2.times.map do |index|
           owner = owner_class.create!(
             security_mode_id: SecurityModeConfigurable::NORMAL,
-            status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
+            status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
           )
           contact = contact_class.create!(
             owner_key => owner.id, :confirm_policy => "1",
@@ -94,16 +90,14 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     end
   end
 
-  test "released signup bindings cannot issue or consume retained proof in either channel or realm" do
+  test "released signup bindings cannot issue or consume retained proof in either channel" do
     [
       [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
       [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-      [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
-      [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
     ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
       owner = owner_class.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
+        status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       contact = contact_class.create!(
         owner_key => owner.id, :confirm_policy => "1",
@@ -149,16 +143,14 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     end
   end
 
-  test "signup refuses another Identity candidate without consuming its original proof in both channels and realms" do
+  test "signup refuses another Identity candidate without consuming its original proof in both channels" do
     [
       [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
       [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-      [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
-      [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
     ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
       owner = owner_class.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::UNVERIFIED_WITH_SIGN_UP,
+        status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       )
       foreign = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = contact_class.create!(
@@ -203,10 +195,9 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     end
   end
 
-  test "terminal or expired signup cannot issue or consume proof in either Email realm" do
+  test "terminal or expired signup cannot issue or consume proof for the app Email model" do
     [
       [Client, ClientEmail, :user_id, ClientSignUpFlow, ClientStatus::UNVERIFIED_WITH_SIGN_UP],
-      [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, VisitorStatus::UNVERIFIED_WITH_SIGN_UP],
     ].each do |owner_class, email_class, owner_key, flow_class, owner_status|
       %i(cancelled expired).each do |condition|
         owner = owner_class.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: owner_status)

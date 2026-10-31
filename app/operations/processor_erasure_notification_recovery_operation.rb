@@ -50,7 +50,6 @@ class ProcessorErasureNotificationRecoveryOperation
   def subject_for(record)
     case record
     when ClientProcessorErasureNotification then record.client_privacy_request.client
-    when VisitorProcessorErasureNotification then record.visitor_privacy_request.visitor
     else raise ArgumentError, "unsupported processor notification: #{record.class.name}"
     end
   end
@@ -58,7 +57,6 @@ class ProcessorErasureNotificationRecoveryOperation
   def privacy_request_for(record)
     case record
     when ClientProcessorErasureNotification then record.client_privacy_request
-    when VisitorProcessorErasureNotification then record.visitor_privacy_request
     else raise ArgumentError, "unsupported processor notification: #{record.class.name}"
     end
   end

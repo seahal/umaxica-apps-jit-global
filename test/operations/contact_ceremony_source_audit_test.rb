@@ -3,14 +3,13 @@
 require "test_helper"
 
 class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
-  uses_transaction :test_concurrent_signed_email_finalization_keeps_one_effective_destination_in_app_and_com
-  uses_transaction :test_concurrent_signed_telephone_finalization_keeps_one_effective_destination_in_app_and_com
-  uses_transaction :test_concurrent_signed_finalization_keeps_one_effective_Contact_per_actor_in_both_realms
+  uses_transaction :test_concurrent_signed_email_finalization_keeps_one_effective_destination
+  uses_transaction :test_concurrent_signed_telephone_finalization_keeps_one_effective_destination
+  uses_transaction :test_concurrent_signed_finalization_keeps_one_effective_Contact_per_actor
 
-  test "concurrent signed email finalization keeps one effective destination in app and com" do
+  test "concurrent signed email finalization keeps one effective destination" do
     [
       [Client, ClientEmail, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app"],
-      [Visitor, VisitorEmail, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com"],
     ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface|
       actors = []
       contacts = []
@@ -61,7 +60,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
               actor = actor_class.find(actor_id)
               transaction = transaction_class.find(transaction_id)
               context = ActorValuesContext.empty.with(
-                subject: actor, actor_type: (surface == "app") ? :client : :visitor,
+                subject: actor, actor_type: :client,
                 tld: surface.to_sym, surface: :base,
               )
               IdentityEmailCeremonyFinalCommitter.call!(
@@ -97,10 +96,9 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
     end
   end
 
-  test "concurrent signed telephone finalization keeps one effective destination in app and com" do
+  test "concurrent signed telephone finalization keeps one effective destination" do
     [
       [Client, ClientTelephone, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app"],
-      [Visitor, VisitorTelephone, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com"],
     ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface|
       actors = []
       contacts = []
@@ -151,7 +149,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
               actor = actor_class.find(actor_id)
               transaction = transaction_class.find(transaction_id)
               context = ActorValuesContext.empty.with(
-                subject: actor, actor_type: (surface == "app") ? :client : :visitor,
+                subject: actor, actor_type: :client,
                 tld: surface.to_sym, surface: :base,
               )
               IdentityTelephoneCeremonyFinalCommitter.call!(
@@ -187,13 +185,10 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
     end
   end
 
-  test "concurrent signed finalization keeps one effective Contact per actor in both realms" do
+  test "concurrent signed finalization keeps one effective Contact per actor" do
     [
       [Client, ClientEmail, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app", :email],
-      [Visitor, VisitorEmail, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com", :email],
       [Client, ClientTelephone, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app",
-       :telephone,],
-      [Visitor, VisitorTelephone, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com",
        :telephone,],
     ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface, kind|
       actor = create_test_actor(actor_class)
@@ -261,7 +256,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
               current_actor = actor_class.find(actor.id)
               transaction = transaction_class.find(transaction_id)
               context = ActorValuesContext.empty.with(
-                subject: current_actor, actor_type: (surface == "app") ? :client : :visitor,
+                subject: current_actor, actor_type: :client,
                 tld: surface.to_sym, surface: :base,
               )
               finalizer =
@@ -306,7 +301,6 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
   test "a signed email result cannot substitute another candidate of the same Ticket owner" do
     [
       [Client, ClientEmail, :user_id, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, "app"],
-      [Visitor, VisitorEmail, :visitor_id, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
       owner = create_test_actor(owner_class)
       original = contact_class.create!(
@@ -318,7 +312,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
         :confirm_policy => "1",
       )
       context = ActorValuesContext.empty.with(
-        subject: owner, actor_type: (surface == "app") ? :client : :visitor, tld: surface.to_sym, surface: :base,
+        subject: owner, actor_type: :client, tld: surface.to_sym, surface: :base,
       )
       now = transaction_class.database_now
       parent = transaction_class.create_transaction!(
@@ -358,13 +352,12 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
   test "a signed telephone result cannot substitute another candidate of the same Ticket owner" do
     [
       [Client, ClientTelephone, :user_id, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, "app"],
-      [Visitor, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
       owner = create_test_actor(owner_class)
       original = contact_class.create!(owner_key => owner.id, :number => "+819012345684", :confirm_policy => "1")
       substitute = contact_class.create!(owner_key => owner.id, :number => "+819012345685", :confirm_policy => "1")
       context = ActorValuesContext.empty.with(
-        subject: owner, actor_type: (surface == "app") ? :client : :visitor, tld: surface.to_sym, surface: :base,
+        subject: owner, actor_type: :client, tld: surface.to_sym, surface: :base,
       )
       now = transaction_class.database_now
       parent = transaction_class.create_transaction!(
@@ -449,15 +442,14 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
     assert_not ClientContactAuditOutbox.exists?(operation_ref: parent.transaction_id)
   end
 
-  test "real signed telephone results commit one Source intent and reconcile exact retries in app and com" do
+  test "real signed telephone results commit one Source intent and reconcile exact retries" do
     [
       [Client, ClientTelephone, :user_id, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, "app"],
-      [Visitor, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
       actor = create_test_actor(owner_class)
       contact = contact_class.create!(owner_key => actor.id, :number => "+819012345683", :confirm_policy => "1")
       context = ActorValuesContext.empty.with(
-        subject: actor, actor_type: (surface == "app") ? :client : :visitor, tld: surface.to_sym, surface: :base,
+        subject: actor, actor_type: :client, tld: surface.to_sym, surface: :base,
       )
       now = transaction_class.database_now
       parent = transaction_class.create_transaction!(
@@ -510,7 +502,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
     owner = create_test_actor(Client)
     contact = ClientEmail.create!(user_id: owner.id, address: "audit-facts@example.test", confirm_policy: "1")
     [
-      [ActorValuesContext.empty.with(subject: owner, actor_type: :visitor, tld: :app, surface: :base),
+      [ActorValuesContext.empty.with(subject: owner, actor_type: :operator, tld: :app, surface: :base),
        "actor context does not match Contact audit owner",],
       [ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base),
        "Contact audit does not match its committed binding fact",],
@@ -527,24 +519,6 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       assert_equal message, error.message
       assert_not ClientContactAuditOutbox.exists?(contact_ref: contact.public_id)
     end
-  end
-
-  test "unauthenticated signup audit retains its owner without inventing an authenticated actor" do
-    owner = create_test_actor(Visitor)
-    contact = VisitorEmail.create!(visitor_id: owner.id, address: "anonymous-audit@example.test", confirm_policy: "1")
-    context = ActorValuesContext.empty.with(tld: :com, surface: :sign)
-    event =
-      VisitorEmail.transaction do
-        contact.finalize_binding!
-        ContactBindingAuditRecorder.call!(
-          actor_context: context, actor: owner, contact: contact,
-          operation_ref: SecureRandom.uuid, event_name: "finalized",
-        )
-      end
-
-    assert_equal owner.public_id, event.owner_ref
-    assert_equal contact.public_id, event.contact_ref
-    assert_nil event.actor_ref
   end
 
   test "audit attribution refuses an actor from a different explicit context before Contact mutation" do
@@ -566,10 +540,9 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
     assert_not ClientContactAuditOutbox.exists?(contact_ref: contact.public_id)
   end
 
-  test "real signed email result commits a Source audit intent in app and com without Chronicle delivery" do
+  test "real signed email result commits a Source audit intent without Chronicle delivery" do
     [
       [Client, ClientEmail, :user_id, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, "app"],
-      [Visitor, VisitorEmail, :visitor_id, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
       actor = create_test_actor(owner_class)
       contact = contact_class.create!(
@@ -602,7 +575,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
           IdentityEmailCeremonyFinalCommitter.call!(
             result_token: signed_result, actor: actor,
             actor_context: ActorValuesContext.empty.with(
-              subject: actor, actor_type: (surface == "app") ? :client : :visitor,
+              subject: actor, actor_type: :client,
               tld: surface.to_sym, surface: :base,
             ),
             session_ref: parent.session_ref, surface: surface, now: now,
@@ -623,7 +596,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
         retried = IdentityEmailCeremonyFinalCommitter.call!(
           result_token: signed_result, actor: actor,
           actor_context: ActorValuesContext.empty.with(
-            subject: actor, actor_type: (surface == "app") ? :client : :visitor,
+            subject: actor, actor_type: :client,
             tld: surface.to_sym, surface: :base,
           ),
           session_ref: parent.session_ref, surface: surface, now: now,
@@ -641,7 +614,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
         issuer_id: IdentityEmailCeremonyContract.sign_issuer_id(surface), now: now,
       )
       context = ActorValuesContext.empty.with(
-        subject: actor, actor_type: (surface == "app") ? :client : :visitor, tld: surface.to_sym, surface: :base,
+        subject: actor, actor_type: :client, tld: surface.to_sym, surface: :base,
       )
       error =
         assert_raises(IdentityEmailCeremonyContract::Error) do

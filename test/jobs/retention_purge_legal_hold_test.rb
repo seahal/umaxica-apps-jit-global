@@ -24,25 +24,6 @@ class RetentionPurgeLegalHoldTest < ActiveJob::TestCase
     assert_predicate ClientOccurrence.where(event_type: "privacy_erasure.blocked_by_legal_hold"), :exists?
   end
 
-  test "active hold blocks visitor purge and records occurrence" do
-    visitor = create_visitor
-    visitor.update_columns(
-      withdrawal_started_at: 40.days.ago,
-      deactivated_at: 39.days.ago,
-      discard_at: 39.days.ago,
-      purge_eligible_at: 1.day.ago,
-    )
-    VisitorRetentionHold.create!(visitor: visitor, reason_code: "legal_hold")
-    privacy_request = VisitorPrivacyRequest.create!(visitor: visitor)
-
-    RetentionPurgeJob.perform_now(batch_size: 10)
-
-    assert_nil visitor.reload.terminated_at
-    assert_equal VisitorPrivacyRequest.status_id_for("BLOCKED_BY_LEGAL_HOLD"), privacy_request.reload.status_id
-    assert_predicate VisitorOccurrence.where(event_type: "withdrawal.purge_skipped_by_hold"), :exists?
-    assert_predicate VisitorOccurrence.where(event_type: "privacy_erasure.blocked_by_legal_hold"), :exists?
-  end
-
   private
 
   def create_client
@@ -54,18 +35,6 @@ class RetentionPurgeLegalHoldTest < ActiveJob::TestCase
       visibility_id: ClientVisibility::USER,
       security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
-    )
-  end
-
-  def create_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    Visitor.create!(
-      status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
   end
 end

@@ -15,9 +15,7 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     host! @host
     https!
     TurnstileVerifierStub.challenge_enabled = true
@@ -386,12 +384,6 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
       nonce_digest: ClientSignUpFlow.digest_nonce("other-nonce"), issued_at: Time.current,
       expires_at: 10.minutes.from_now,
     )
-    visitor_flow = VisitorSignUpFlow.create!(
-      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow),
-      status_id: VisitorSignUpFlowStatus::CONTACT_PENDING, step: "contact", entry_method: "email",
-      nonce_digest: VisitorSignUpFlow.digest_nonce("visitor-nonce"), issued_at: Time.current,
-      expires_at: 10.minutes.from_now,
-    )
     bindings = {
       "missing" => nil,
       "empty" => "",
@@ -399,7 +391,7 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
       "nul byte" => "a\u0000b",
       "malformed" => "not-a-signed-binding",
       "another flow" => SignFlowBindingCodec.encode(flow: other_flow, surface: :app),
-      "another surface" => SignFlowBindingCodec.encode(flow: visitor_flow, surface: :com),
+      "another surface" => SignFlowBindingCodec.encode(flow: other_flow, surface: :com),
     }
 
     bindings.each do |label, binding|

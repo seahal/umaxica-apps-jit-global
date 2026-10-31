@@ -5,8 +5,6 @@ require "test_helper"
 class SessionLimitResolutionUniquenessTest < ActiveSupport::TestCase
   SURFACES = [
     [Client, ClientStatus::ACTIVE, ClientVisibility::USER, ClientSignInFlow, ClientSessionLimitResolutionTransaction],
-    [Visitor, VisitorStatus::ACTIVE, VisitorVisibility::VISITOR, VisitorSignInFlow,
-     VisitorSessionLimitResolutionTransaction,],
     [Operator, OperatorStatus::ACTIVE, OperatorVisibility::STAFF, OperatorSignInFlow,
      OperatorSessionLimitResolutionTransaction,],
   ].freeze

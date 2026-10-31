@@ -163,12 +163,6 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/auth/com/sign/outs_controller.rb",
-          line: /allow_other_host: true,/,
-          reason: "Auth com sign-out uses only the configured Base com route for the fixed authority handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/ups_controller.rb",
           line: /\A\s*allow_other_host: true,\s*\z/,
           reason: "Auth app sign-up sends authenticated browsers to the reviewed Base dashboard host.",
@@ -236,14 +230,6 @@ module Security
           target: "base_app_verification_cancellation_url",
           reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
         },
-        "app/controllers/auth/com/ceremony_bindings_controller.rb" => {
-          target: "ceremony_binding_confirmation_url",
-          reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
-        },
-        "app/controllers/auth/com/verification/cancellations_controller.rb" => {
-          target: "base_com_verification_cancellation_url",
-          reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
-        },
         "app/controllers/auth/org/ceremony_bindings_controller.rb" => {
           target: "ceremony_binding_confirmation_url",
           reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
@@ -254,10 +240,6 @@ module Security
         },
         "app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb" => {
           target: "base_app_sign_show_url",
-          reason: "A refused local ceremony returns to the configured neutral Base entry.",
-        },
-        "app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb" => {
-          target: "base_com_sign_show_url",
           reason: "A refused local ceremony returns to the configured neutral Base entry.",
         },
       }.freeze
@@ -271,22 +253,12 @@ module Security
           reason: "Current auth app controller records assurance metadata from the decoded token boundary.",
         },
         {
-          path: "app/controllers/auth/com/application_controller.rb",
-          line: /Actor\.authn\.access_claims/,
-          reason: "Current auth com controller records assurance metadata from the decoded token boundary.",
-        },
-        {
           path: "app/controllers/auth/org/application_controller.rb",
           line: /Actor\.authn\.access_claims/,
           reason: "Current auth org controller records assurance metadata from the decoded token boundary.",
         },
         {
           path: "app/controllers/visa/app/oauth/authorizations_controller.rb",
-          line: /Actor\.authn\.access_claims/,
-          reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
-        },
-        {
-          path: "app/controllers/visa/com/oauth/authorizations_controller.rb",
           line: /Actor\.authn\.access_claims/,
           reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
         },

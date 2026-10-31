@@ -3,15 +3,15 @@
 require "test_helper"
 
 class SignUpAdmissionOwnershipTest < ActionDispatch::IntegrationTest
+  # Only the app realm has public sign-up, so it is the sole ownership realm.
   [
     [:app, "client", ClientSignUpFlow, ClientAuthAdmissionBinding, ClientAuthCeremonySession, ClientToken],
-    [:com, "visitor", VisitorSignUpFlow, VisitorAuthAdmissionBinding, VisitorAuthCeremonySession, VisitorToken],
   ].each do |surface, realm, flow_class, binding_class, ceremony_class, token_class|
     %i(foreign_hint foreign_url wrong_nonce).each do |attack|
       test "#{surface} #{attack} refuses the request without changing either admitted registration" do
         protection = ActionController::Base.allow_forgery_protection
         ActionController::Base.allow_forgery_protection = true
-        host = (surface == :app) ? ENV.fetch("PUBLIC_AUTH_SERVICE_URL") : ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+        host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         contexts =
           2.times.map do
             client_id = "core-#{surface}-jp"

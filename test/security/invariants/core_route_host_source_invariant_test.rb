@@ -8,8 +8,9 @@ class CoreRouteHostSourceInvariantTest < ActiveSupport::TestCase
     source = Rails.root.join("config/routes/core.rb").read
 
     assert_includes source, "boot_config.fetch(:hosts).core_service.host"
-    assert_includes source, "boot_config.fetch(:hosts).core_corporate.host"
     assert_includes source, "boot_config.fetch(:hosts).core_staff.host"
+    # The corporate BFF host is retired with the corporate identity surface.
+    assert_no_match(/core_corporate/, source)
     assert_no_match(/PUBLIC_CORE_(?:SERVICE|CORPORATE|STAFF)_URL/, source)
     assert_no_match(/core\.(?:app|com|org)\.localhost/, source)
   end

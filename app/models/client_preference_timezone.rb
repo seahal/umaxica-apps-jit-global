@@ -23,7 +23,7 @@
 #  fk_user_preference_timezones_on_preference_id  (preference_id => client_preferences.id)
 #
 class ClientPreferenceTimezone < AppPrincipalRecord
-  belongs_to :preference, class_name: "ClientPreference", inverse_of: :user_preference_timezone
+  belongs_to :preference, class_name: "ClientPreference", inverse_of: :client_preference_timezone
   belongs_to :option,
              class_name: "ClientPreferenceTimezoneOption",
              inverse_of: :client_preference_timezones

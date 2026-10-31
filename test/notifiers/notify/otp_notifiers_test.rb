@@ -10,13 +10,11 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
 
   SURFACE_NOTIFIERS = {
     app: Notify::App::OtpNotifier,
-    com: Notify::Com::OtpNotifier,
     org: Notify::Org::OtpNotifier,
   }.freeze
 
   SURFACE_SENDERS = {
     app: "otp@umaxica.app",
-    com: "otp@umaxica.com",
     org: "otp@umaxica.org",
   }.freeze
 
@@ -27,6 +25,19 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
 
   teardown do
     Flipper.disable(:outbound_email_suspended)
+  end
+
+  test "APP and ORG OTP notifications raise when the delivery job is refused" do
+    refused_job = Object.new
+    refused_job.define_singleton_method(:perform_later) { |*_, **_| false }
+
+    SURFACE_NOTIFIERS.each do |surface, notifier|
+      record = create_otp_email_record(surface, address: "refused-#{surface}@example.test")
+
+      OtpNotifierEmailDeliveryJob.stub(:set, refused_job) do
+        assert_raises(ActiveJob::EnqueueError) { notifier.issue(record: record, otp_code: "123456") }
+      end
+    end
   end
 
   test "issue enqueues one noticed email delivery for the app surface" do
@@ -136,7 +147,7 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
   end
 
   # Regression guard for the surface boundary: an app OTP must never leave through
-  # the com or org sender, and vice versa.
+  # the org sender, and vice versa.
   test "each surface notifier reaches only its own mailer" do
     SURFACE_NOTIFIERS.each do |surface, notifier|
       ActionMailer::Base.deliveries.clear

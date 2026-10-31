@@ -8,7 +8,6 @@ class Acme::AccountQuotaPolicyTest < ActiveSupport::TestCase
   setup do
     ClientIdentityState.ensure_defaults!
     OperatorIdentityState.ensure_defaults!
-    VisitorIdentityState.ensure_defaults!
   end
 
   test "allows when there are no accounts" do

@@ -3,10 +3,12 @@
 require "test_helper"
 
 class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   self.fixture_table_names = []
 
-  test "deactivated client creates erasure request through withdrawal ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+  test "withdrawal ceremony cannot submit a privacy erasure request or create side effects" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     client = create_client
     client.update!(
@@ -17,50 +19,47 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
     )
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
     cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
-
-    assert_difference -> { ClientPrivacyRequest.count }, 1 do
-      post base_app_identity_privacy_erasure_url(ri: "jp", host: host), headers: browser_headers
-    end
-
-    assert_response :see_other
-    request_record = ClientPrivacyRequest.order(:created_at).last
-
-    assert_equal "erasure", request_record.request_kind
-    assert_equal "self_service", request_record.request_source
-    assert_equal "unknown", request_record.jurisdiction
-    assert_predicate request_record.response_due_at, :present?
-    assert_equal client.id, request_record.client_id
-    assert_predicate ClientOccurrence.where(event_type: "privacy_erasure.requested"), :exists?
-  end
-
-  test "deactivated visitor creates erasure request through withdrawal ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    host! host
-    visitor = create_visitor
-    visitor.update!(
-      withdrawal_started_at: 2.hours.ago,
-      deactivated_at: 90.minutes.ago,
-      discard_at: 31.days.from_now,
-      purge_eligible_at: 31.days.from_now,
+    valid_preference = PreferenceToken.encode(
+      { "theme" => "system", "language" => "ja", "timezone" => "Asia/Tokyo" },
+      host: host, preference_type: "AppPreference", public_id: PublicId.generate,
+      jti: JitSecurityJwtJtiGenerator.generate,
     )
-    ceremony = VisitorWithdrawalCeremony.issue!(subject: visitor, request: ActionDispatch::TestRequest.create)
-    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
 
-    assert_difference -> { VisitorPrivacyRequest.count }, 1 do
-      post base_com_identity_privacy_erasure_url(ri: "jp", host: host), headers: browser_headers
+    assert_predicate PreferenceToken.decode(valid_preference, host: host), :present?
+
+    writes = []
+    record_write =
+      lambda do |*_args, payload|
+        operation = payload.fetch(:sql).lstrip[/\A(?:INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i]
+        writes << "#{operation.upcase} #{payload[:name]}" if operation
+      end
+
+    ActiveSupport::Notifications.subscribed(record_write, "sql.active_record") do
+      assert_no_enqueued_jobs do
+        assert_no_difference [-> { ClientPrivacyRequest.count }, -> { ClientProcessorErasureNotification.count },
+                              -> { ClientOccurrence.count },] do
+          post base_app_identity_privacy_erasure_url(ri: "jp", host: host), headers: browser_headers
+
+          assert_response :forbidden
+
+          cookies[PreferenceCookieName.anonymous_jwt] = "invalid"
+          post base_app_identity_privacy_erasure_url(ri: "jp", host: host), headers: browser_headers
+
+          assert_response :forbidden
+
+          cookies[PreferenceCookieName.anonymous_jwt] = valid_preference
+          post base_app_identity_privacy_erasure_url(ri: "jp", host: host), headers: browser_headers
+
+          assert_response :forbidden
+        end
+      end
     end
 
-    assert_response :see_other
-    request_record = VisitorPrivacyRequest.order(:created_at).last
-
-    assert_equal "erasure", request_record.request_kind
-    assert_equal "self_service", request_record.request_source
-    assert_equal visitor.id, request_record.visitor_id
-    assert_predicate VisitorOccurrence.where(event_type: "privacy_erasure.requested"), :exists?
+    assert_empty writes
   end
 
   test "received client erasure request is cancelled on recovery" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     client = create_client
     client.update!(
@@ -81,7 +80,7 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
   end
 
   test "processing client erasure request blocks recovery" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     client = create_client
     client.update!(
@@ -124,18 +123,6 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
       visibility_id: ClientVisibility::USER,
       security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
-    )
-  end
-
-  def create_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    Visitor.create!(
-      status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
   end
 end

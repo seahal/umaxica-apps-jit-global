@@ -16,15 +16,6 @@ class SensitiveReasonNoteEncryptionTest < ActiveSupport::TestCase
       admin_locked_reason_note: marker,
     )
 
-    visitor = visitors(:reserved_visitor)
-    visitor.update!(
-      access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED,
-      admin_locked_at: Time.current,
-      admin_locked_by_operator_id: operator.id,
-      admin_locked_reason_code: "security_incident",
-      admin_locked_reason_note: marker,
-    )
-
     target_operator = operators(:two)
     target_operator.update!(
       access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED,
@@ -48,16 +39,13 @@ class SensitiveReasonNoteEncryptionTest < ActiveSupport::TestCase
     )
 
     app_case = create_enforcement_case(AppEnforcementCase, client.public_id, operator.public_id, marker)
-    com_case = create_enforcement_case(ComEnforcementCase, visitor.public_id, operator.public_id, marker)
     org_case = create_enforcement_case(OrgEnforcementCase, target_operator.public_id, operator.public_id, marker)
 
     [
       [client, "clients", :admin_locked_reason_note],
-      [visitor, "visitors", :admin_locked_reason_note],
       [target_operator, "operators", :admin_locked_reason_note],
       [access_event, "account_access_events", :reason_note],
       [app_case, "app_enforcement_cases", :reason_note],
-      [com_case, "com_enforcement_cases", :reason_note],
       [org_case, "org_enforcement_cases", :reason_note],
     ].each do |record, table_name, column_name|
       assert_equal marker, record.reload.public_send(column_name)

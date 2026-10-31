@@ -23,12 +23,10 @@ info:
 
     ## Preferences
 
-    `/api/v0/preferences/{cookie,theme}` is a host-local browser API served on several first-party
-    hosts of this surface (Base, Auth, Core, and Warp), each listed in the path's `servers`. Each
-    host reads and writes its own host-only preference credentials, so a browser calls only the
-    origin it is on; the endpoints are not for cross-origin use. The Auth host serves them only as
-    display-preference transport for its ceremony pages
-    (adr/preference-browser-transport-family-capability.md).
+    `/api/v0/preferences/{cookie,theme,web_push}` is a browser API served by Base on this
+    surface, listed in the path's `servers`. Base uses a same-TLD preference token and a host-only browser binding for consent and Web Push;
+    a browser calls only the origin it is on; the endpoints are not for cross-origin
+    use. The com surface is anonymous: Auth, Core, and Warp serve no preference API on com hosts.
 
     The text operational endpoints -- `GET /health`, `GET /health/{startup,liveness,readiness}`,
     and `GET /revision` -- are absent because they are not JSON: they render `text/plain` and do
@@ -38,14 +36,15 @@ info:
     ## Hosts
 
     `servers` appears only where a host is real, public, and knowable from the repository. The
-    Core session paths carry one, and the preference paths list every host that serves them. The health and revision endpoints carry none because they are blocked
-    at the edge. The content and Palm paths carry none because their hosts are supplied by
-    deployment environment variables, and the docs and news content editions have no production
-    host at all.
+    preference paths list every host that serves them. The health and revision endpoints carry none
+    because they are blocked at the edge. The content and Palm paths carry none because their hosts
+    are supplied by deployment environment variables, and the docs and news content editions have no
+    production host at all.
 
     ## Errors
 
-    Errors use RFC 9457 Problem Details (`application/problem+json`). Problem `type` values are
+    Most errors use RFC 9457 Problem Details (`application/problem+json`). Duplicate preference
+    cookie names are rejected with an empty 400 response. Problem `type` values are
     the stable identifiers clients branch on; `title` and `detail` are human-readable and may
     change. Two extension members are defined: `request_id` and `errors`.
 
@@ -58,10 +57,8 @@ tags:
   - name: Health
     description: >-
       Machine-readable health aggregate and deployment revision. Blocked at the edge, JSON only.
-  - name: Session
-    description: Core browser BFF session and token lifecycle, authenticated by first-party cookie.
   - name: Preferences
-    description: Cookie-consent and color-theme JSON endpoints under `/api/v0/preferences`.
+    description: Cookie-consent, color-theme and Web Push JSON endpoints under `/api/v0/preferences`.
   - name: Content
     description: Read-only published documentation, help, news, and info entries.
 
@@ -72,14 +69,11 @@ paths:
   /api/v0/revision.json:
     $ref: "shared/paths/api-v0-revision.yml"
 
-  /api/v0/session:
-    $ref: "com/paths/session.yml"
-
-  /api/v0/token/refresh:
-    $ref: "com/paths/token-refresh.yml"
-
   /api/v0/preferences/cookie:
     $ref: "com/paths/preferences-cookie.yml"
+
+  /api/v0/preferences/web_push:
+    $ref: "com/paths/preferences-web-push.yml"
 
   /api/v0/preferences/theme:
     $ref: "com/paths/preferences-theme.yml"
@@ -89,8 +83,3 @@ paths:
 
   /api/v0/entries/{public_id}:
     $ref: "shared/paths/entry.yml"
-
-components:
-  securitySchemes:
-    coreBrowserCookie:
-      $ref: "shared/components.yml#/securitySchemes/coreBrowserCookie"

@@ -7,10 +7,8 @@
 class AuthAdmissionBindingPurger
   PARENT_BINDINGS = {
     ClientOidcAuthorizationTransaction => [ClientAuthAdmissionBinding, :authorization_transaction_id],
-    VisitorOidcAuthorizationTransaction => [VisitorAuthAdmissionBinding, :authorization_transaction_id],
     OperatorOidcAuthorizationTransaction => [OperatorAuthAdmissionBinding, :authorization_transaction_id],
     ClientStepUpCeremonyTransaction => [ClientAuthAdmissionBinding, :step_up_ceremony_transaction_id],
-    VisitorStepUpCeremonyTransaction => [VisitorAuthAdmissionBinding, :step_up_ceremony_transaction_id],
     OperatorStepUpCeremonyTransaction => [OperatorAuthAdmissionBinding, :step_up_ceremony_transaction_id],
   }.freeze
 
@@ -99,7 +97,6 @@ class AuthAdmissionBindingPurger
     flow_class =
       case binding
       when ClientAuthAdmissionBinding then ClientSignUpFlow
-      when VisitorAuthAdmissionBinding then VisitorSignUpFlow
       when OperatorAuthAdmissionBinding then return true
       else raise ArgumentError, "unsupported sign-up admission owner"
       end

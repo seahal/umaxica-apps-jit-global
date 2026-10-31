@@ -16,16 +16,6 @@ class OpaqueResultTransportTest < ActionDispatch::IntegrationTest
       visa_host_fallback: "visa.app.localhost",
     },
     {
-      auth_host_env: "PUBLIC_AUTH_CORPORATE_URL",
-      auth_route: "auth/com/sign/oidc_handoffs",
-      auth_host_fallback: "auth.com.localhost",
-      visa_host_env: "PUBLIC_VISA_CORPORATE_URL",
-      visa_result_route: "visa/com/oidc/results",
-      visa_cancellation_route: "visa/com/oidc/cancellations",
-      visa_switch_route: "visa/com/oidc/switches",
-      visa_host_fallback: "visa.com.localhost",
-    },
-    {
       auth_host_env: "PUBLIC_AUTH_STAFF_URL",
       auth_route: "auth/org/sign/oidc_handoffs",
       auth_host_fallback: "auth.org.localhost",

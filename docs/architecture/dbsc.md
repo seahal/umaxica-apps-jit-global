@@ -6,14 +6,9 @@
 > `sign/id` is ceremony-only. Existing sign-side physical tables/models do not imply sign-side
 > authority.
 
-## Preference registration advertisement
-
-Preference DBSC registration is advertised only on hosts with a Preference DBSC endpoint.
-Core app/com/org bases name their canonical `/api/v0/preferences/dbsc` path; Auth, Base and other
-families without that endpoint do not advertise registration or issue an unused challenge.
-Token DBSC routes do not substitute for Preference DBSC. Host-only credentials and existing
-bound-credential validation remain unchanged. See
-[response nondisclosure](../../adr/credential-response-nondisclosure.md).
+This document covers authentication-token DBSC only. Preference DBSC and Preference refresh
+credentials are retired; see [Preference architecture](preference.md). Their removal does not
+change authentication-token DBSC or refresh behavior.
 
 ## Specification
 
@@ -57,8 +52,8 @@ malformed escapes, control characters, non-ASCII strings, lists and trailing inp
 Controllers parse HTTP fields exactly once. The registration/verification services and
 `DbscProofVerifier` receive decoded strings, not HTTP field syntax.
 
-Both token and preference refresh endpoints compare the decoded identifier with the existing
-record before issuing a challenge. A missing record returns 401, malformed identifier syntax
+The token refresh endpoint compares the decoded identifier with the existing record before issuing
+a challenge. A missing record returns 401, malformed identifier syntax
 returns 400, and an unknown or unregistered identifier returns 403 without changing the challenge
 or setting a cookie. `Sec-Secure-Session-Id` is preferred over existing alternate field names.
 `DbscHeaderSerializer` quotes and escapes every registration/challenge string separately; the

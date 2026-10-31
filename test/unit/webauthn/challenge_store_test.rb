@@ -136,7 +136,7 @@ module Webauthn
       id = @store.issue!(challenge: "raw-challenge", purpose: :authentication, **APP_BINDING)
 
       assert_raises(Webauthn::ChallengeStore::ChallengeBindingMismatchError) do
-        @store.consume!(id, purpose: :authentication, **APP_BINDING.merge(surface: :com))
+        @store.consume!(id, purpose: :authentication, **APP_BINDING.merge(surface: :org))
       end
     end
 

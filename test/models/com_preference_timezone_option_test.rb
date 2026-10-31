@@ -13,7 +13,7 @@ require "test_helper"
 
 class ComPreferenceTimezoneOptionTest < ActiveSupport::TestCase
   setup do
-    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::NOTHING)
+    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::ACTIVE)
   end
 
   test "ensure_defaults! creates default timezone options" do
@@ -34,7 +34,11 @@ class ComPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "has many com_preference_timezones" do
     option = ComPreferenceTimezoneOption.create!(id: 99)
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     timezone = ComPreferenceTimezone.create!(preference: preference, option: option)
 
     assert_includes option.com_preference_timezones, timezone
@@ -42,7 +46,11 @@ class ComPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = ComPreferenceTimezoneOption.create!(id: 99)
-    preference = ComPreference.create!
+    preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     ComPreferenceTimezone.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

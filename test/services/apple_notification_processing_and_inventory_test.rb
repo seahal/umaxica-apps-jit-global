@@ -35,21 +35,14 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
     assert_equal [], result.phishing_resistant_methods, "no surface issues a phishing-resistant method yet"
   end
 
-  test "each principal kind is counted through the contact table its own surface owns" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
+  test "the operator surface counts contacts through the table its own surface owns" do
     operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
     )
 
-    visitor_result = AuthenticationCredentialInventory.call(visitor)
     operator_result = AuthenticationCredentialInventory.call(operator)
 
-    assert_equal visitor, visitor_result.actor
-    assert_empty visitor_result.contact_identifiers
     assert_equal operator, operator_result.actor
     # The staff surface keeps no contact identifier of its own, so the count is
     # zero rather than read from another surface's table.

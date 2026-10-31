@@ -44,7 +44,46 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
   test "an anchor bound to one subject never accepts another subject" do
     commit(subject: "subject-a", sid: "sid-1")
 
-    assert_equal :binding_mismatch, commit(subject: "subject-b", sid: "sid-1").outcome
+    assert_no_difference ["RpCoreAppPrincipal.count", "RpCoreAppIdentityBinding.count", "RpCoreAppSession.count"] do
+      assert_equal :binding_mismatch, commit(subject: "subject-b", sid: "sid-1").outcome
+    end
+
+    commit(subject: "subject-b", sid: "sid-2")
+    assert_no_difference ["RpCoreAppPrincipal.count", "RpCoreAppIdentityBinding.count", "RpCoreAppSession.count"] do
+      assert_equal :binding_mismatch, commit(subject: "subject-b", sid: "sid-1").outcome
+    end
+  end
+
+  test "an ORG anchor refuses a different subject without creating local records" do
+    cell = RpCellBinding.fetch("rp_core_org")
+    arguments = {
+      cell: cell, issuer: "https://www.umaxica.org", sid: "org-sid-1", absolute_expires_at: 1.hour.from_now,
+    }
+
+    assert_predicate RpCallbackCommitter.call(**arguments, subject: "operator-a"), :success?
+
+    assert_no_difference ["RpCoreOrgPrincipal.count", "RpCoreOrgIdentityBinding.count", "RpCoreOrgSession.count"] do
+      assert_equal :already_enrolled, RpCallbackCommitter.call(**arguments, subject: "operator-a").outcome
+      assert_equal :binding_mismatch, RpCallbackCommitter.call(**arguments, subject: "operator-b").outcome
+    end
+  end
+
+  test "every RP cell refuses a different subject for an existing anchor without local writes" do
+    %w(
+      base-app-ww core-app-jp warp-app-jp palm-app-jp
+      base-org-ww core-org-jp warp-org-jp edit-org-ww tech-org-ww
+    ).each do |client_id|
+      cell = RpCellBinding.for_client(client_id)
+      issuer = (cell.realm == "app") ? "https://www.umaxica.app" : "https://www.umaxica.org"
+      models = %w(Principal IdentityBinding Session).map { |name| "#{cell.record_prefix}#{name}".constantize }
+      arguments = { cell: cell, issuer: issuer, sid: "matrix-sid", absolute_expires_at: 1.hour.from_now }
+
+      assert_predicate RpCallbackCommitter.call(**arguments, subject: "subject-a"), :success?, client_id
+      counts = models.map(&:count)
+
+      assert_equal :binding_mismatch, RpCallbackCommitter.call(**arguments, subject: "subject-b").outcome, client_id
+      assert_equal counts, models.map(&:count), client_id
+    end
   end
 
   test "a logged-out sid is a tombstone that a late callback cannot reopen" do
@@ -75,6 +114,17 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
       assert_raises(ArgumentError) { commit(:subject => "s", :sid => "x", field => "") }
     end
     assert_equal 0, RpCoreAppOpSessionBinding.count
+  end
+
+  test "a subject above the identity length limit rolls back the local callback" do
+    [254, 255].each do |length|
+      assert_predicate commit(subject: "s" * length, sid: "valid-#{length}"), :success?
+    end
+
+    assert_no_difference ["RpCoreAppOpSessionBinding.count", "RpCoreAppPrincipal.count",
+                          "RpCoreAppIdentityBinding.count", "RpCoreAppSession.count",] do
+      assert_raises(ActiveRecord::RecordInvalid) { commit(subject: "s" * 256, sid: "too-long") }
+    end
   end
 
   test "callback selects its writer even when entered from a reading role" do

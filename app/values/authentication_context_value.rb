@@ -30,11 +30,15 @@ class AuthenticationContextValue
   # `emergency` is no longer accepted from a token: it resolves to UNKNOWN and denies.
   STANDBY_KEY = "standby"
 
-  # Capability vocabulary. These are session capabilities, never role grants:
-  # they can only narrow what the actor's DB roles already allow.
+  # Capability vocabulary. This is a session capability, never a role grant:
+  # it can only narrow what the actor's DB roles already allow.
   CAPABILITY_STEP_UP = "step_up"
-  CAPABILITY_ORG_READ = "read:org"
-  CAPABILITY_ORG_WRITE = "write:org"
+
+  # The scopes whose riding on a token is a capability-named privilege. A Standby
+  # token carries the same scopes as the same actor's Normal token (the
+  # restriction is the operation's Step-Up requirement, not the scp claim);
+  # an unrecognised context gets none of them, fail closed.
+  CAPABILITY_NAMED_SCOPES = %w(read:org write:org read:self write:self).freeze
 
   attr_reader :key, :capabilities
 
@@ -71,11 +75,14 @@ class AuthenticationContextValue
   REGISTRY = {
     NORMAL_KEY => new(
       NORMAL_KEY,
-      capabilities: [CAPABILITY_STEP_UP, CAPABILITY_ORG_READ, CAPABILITY_ORG_WRITE],
+      capabilities: [CAPABILITY_STEP_UP],
     ),
+    # Standby holds no Step-Up capability. Its issued scopes are the same as
+    # Normal's; the sensitive-operation boundary is each operation's Step-Up
+    # gate, never the scp claim.
     STANDBY_KEY => new(
       STANDBY_KEY,
-      capabilities: [CAPABILITY_ORG_READ],
+      capabilities: [],
     ),
   }.freeze
 
@@ -116,22 +123,24 @@ class AuthenticationContextValue
     from_claim(claims[CLAIM] || claims[CLAIM.to_sym])
   end
 
-  # Session capabilities constrain the authorization scopes a token carries;
-  # they never add one that the actor's ordinary scopes did not already grant.
+  # Session capabilities narrow the authorization scopes a token carries; they
+  # never add one that the actor's ordinary scopes did not already grant.
+  #
+  # A Standby session issues the same scopes as the same actor's Normal session:
+  # the scarce operations are withheld by their Step-Up gates, so filtering the
+  # scp claim would only split the boundary in two without narrowing anything
+  # further. An unrecognised context keeps no capability-named scope.
   def constrain_scopes(scopes)
-    return Array(scopes) if normal?
+    return Array(scopes) unless unknown?
 
-    Array(scopes).select do |scope|
-      !scope_capability_governed?(scope) || permits?(scope)
-    end
+    Array(scopes).reject { |scope| capability_named_scope?(scope) }
   end
 
   private
 
-  # Only the capability-named scopes are filtered. Structural scopes
-  # (`authenticated`, `domain:operator`) describe what the token is, not what it
-  # may do, and removing them would break audience/actor resolution.
-  def scope_capability_governed?(scope)
-    [CAPABILITY_ORG_READ, CAPABILITY_ORG_WRITE, "read:self", "write:self"].include?(scope.to_s)
+  def unknown? = !normal? && !standby?
+
+  def capability_named_scope?(scope)
+    CAPABILITY_NAMED_SCOPES.include?(scope.to_s)
   end
 end

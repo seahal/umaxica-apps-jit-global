@@ -120,6 +120,43 @@ describe("CookieBanner endpoint", () => {
 });
 
 describe("CookieBanner mount", () => {
+  test("a read-only com notice links to settings without reading or writing consent", async () => {
+    stubFetch(vi.fn());
+    consentBufferCookie("1");
+
+    await mount({
+      scope: "com",
+      endpoint_url: null,
+      settings_url: "https://www.umaxica.com/preference/cookie/edit",
+    });
+
+    expect(banner()?.querySelector("a")?.getAttribute("href")).toBe(
+      "https://www.umaxica.com/preference/cookie/edit",
+    );
+    expect(banner()?.querySelectorAll("button")).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("com shows the banner when a legacy consent cookie is present and the API fails", async () => {
+    consentBufferCookie("1");
+    stubFetch(vi.fn().mockRejectedValue(new Error("unavailable")));
+
+    await mount({ scope: "com" });
+
+    expect(banner()).not.toBeNull();
+  });
+
+  test("com hides the banner only when its own API confirms the browser binding", async () => {
+    consentBufferCookie("1");
+    stubFetch(
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ show_banner: false }) }),
+    );
+
+    await mount({ scope: "com" });
+
+    expect(banner()).toBeNull();
+  });
+
   test("renders nothing when the cookie screen already owns consent", async () => {
     stubFetch(vi.fn());
 

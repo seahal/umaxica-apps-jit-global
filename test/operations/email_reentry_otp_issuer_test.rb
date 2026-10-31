@@ -3,6 +3,21 @@
 require "test_helper"
 
 class EmailReentryOtpIssuerTest < ActiveJob::TestCase
+  test "APP reentry does not issue or enqueue for a released Email binding" do
+    email = ClientEmail.create!(
+      user: clients(:one), raw_address: "reentry-released-#{SecureRandom.hex(8)}@example.test",
+      confirm_policy: true, user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    email.release_binding!
+
+    assert_no_difference "ClientEmailCeremonyTransaction.count" do
+      assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+        assert_nil EmailReentryOtpIssuer.call(email: email, operation: "recovery", session_ref: SecureRandom.uuid)
+      end
+    end
+  end
+
   test "issuance rejects malformed browser references before proof timestamp or queue mutation" do
     email = ClientEmail.create!(
       user: clients(:one), raw_address: "reentry-nonce-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
@@ -25,20 +40,23 @@ class EmailReentryOtpIssuerTest < ActiveJob::TestCase
     assert unchanged
   end
 
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     operations = (surface == "org") ? %w(recovery) : %w(recovery withdrawal)
     operations.each do |operation|
       test "#{surface} #{operation} issuance stores proof only on its ceremony and queues encrypted generation" do
         email_model, transaction_model, owner_key, owner =
           case surface
           when "app" then [ClientEmail, ClientEmailCeremonyTransaction, :user_id, clients(:one)]
-          when "com" then [VisitorEmail, VisitorEmailCeremonyTransaction, :visitor_id, visitors(:reserved_visitor)]
           when "org" then [OperatorEmail, OperatorEmailCeremonyTransaction, :staff_id, operators(:one)]
           end
         email = email_model.create!(
           owner_key => owner.id, :raw_address => "reentry-issuer-#{SecureRandom.hex(8)}@example.test",
           :confirm_policy => true, :otp_attempts_count => 1,
         )
+        if surface == "app"
+          email.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+          email.finalize_binding!
+        end
         before = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at", "otp_attempts_count")
         browser_ref = SecureRandom.uuid
         transaction = nil
@@ -98,7 +116,9 @@ class EmailReentryOtpIssuerTest < ActiveJob::TestCase
     owner = clients(:one)
     email = owner.client_emails.create!(
       raw_address: "reentry-collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     collision = "a" * 21
     existing_session = SecureRandom.uuid
     ClientEmailCeremonyTransaction.create_transaction!(
@@ -123,7 +143,9 @@ class EmailReentryOtpIssuerTest < ActiveJob::TestCase
     owner = clients(:one)
     email = owner.client_emails.create!(
       raw_address: "reentry-grant-collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     collision = "i" * 21
     ClientEmailCeremonyTransaction.create_transaction!(
       transaction_id: "j" * 21, grant_jti: collision, actor_ref: owner.public_id,

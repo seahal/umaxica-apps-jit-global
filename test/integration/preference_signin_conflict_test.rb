@@ -4,18 +4,16 @@
 require "test_helper"
 
 # A public, JS-readable display cookie must never win over the canonical
-# preference carried by the verified preference access token: it is a
+# preference carried by the verified Preference JWT: it is a
 # guest-safe fallback for when no valid token is present, not a truth source
 # a client can override once a real (DB-backed) preference exists.
 class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
   setup do
     https!
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
   end
 
-  THEME_COOKIE_KEY = -> { PreferenceBase::THEME_COOKIE_KEY }
-
-  test "theme read prefers the verified access token over a conflicting public display cookie" do
+  test "theme read prefers the verified Preference JWT over a conflicting public display cookie" do
     get edit_base_app_preference_theme_url(ri: "jp")
 
     assert_response :success
@@ -25,20 +23,27 @@ class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    # Simulate a tampered/self-reported public cookie disagreeing with the
-    # canonical (token-backed) preference that was just persisted as "dr".
-    cookies[THEME_COOKIE_KEY.call] = "sy"
+    # The display mirror is not a source of truth when a verified JWT exists.
+    token = cookies[PreferenceCookieName.anonymous_jwt]
+    conflicting_cookies = [
+      "#{PreferenceCookieName.anonymous_jwt}=#{Rack::Utils.escape(token)}",
+      "#{PreferenceCookieName.anonymous_experience}=#{Rack::Utils.escape('{"theme":"system"}')}",
+    ].join("; ")
 
-    get base_app_api_v0_preferences_theme_url(ri: "jp")
+    get base_app_api_v0_preferences_theme_url(ri: "jp"),
+        headers: { "Cookie" => conflicting_cookies, "HTTP_COOKIE" => conflicting_cookies }
 
     assert_response :success
     body = response.parsed_body
 
     assert_equal "dr", body["theme"],
-                 "the verified preference access token must win over a conflicting public cookie"
+                 "the verified Preference JWT must win over a conflicting display mirror"
+    repaired = JSON.parse(set_cookie_entries(PreferenceCookieName.anonymous_experience).sole.fetch(:value))
+
+    assert_equal "dark", repaired.fetch("theme")
   end
 
-  test "cookie consent read prefers the verified access token's recorded consent over a stale buffer cookie" do
+  test "cookie consent read prefers the verified Preference JWT's recorded consent over a conflicting display cookie" do
     get edit_base_app_preference_cookie_url(ri: "jp")
 
     assert_response :success
@@ -48,14 +53,19 @@ class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    cookies[PreferenceIoKeys::Cookies::CONSENTED] = "0"
+    token = cookies[PreferenceCookieName.anonymous_jwt]
+    conflicting_cookies = [
+      "#{PreferenceCookieName.anonymous_jwt}=#{Rack::Utils.escape(token)}",
+      "#{PreferenceCookieName.anonymous_experience}=#{Rack::Utils.escape('{}')}",
+    ].join("; ")
 
-    get base_app_api_v0_preferences_cookie_url(ri: "jp")
+    get base_app_api_v0_preferences_cookie_url(ri: "jp"),
+        headers: { "Cookie" => conflicting_cookies, "HTTP_COOKIE" => conflicting_cookies }
 
     assert_response :success
     body = response.parsed_body
 
     assert_not body["show_banner"],
-               "the verified preference access token's consent state must win over the stale buffer cookie"
+               "the stored consent decision must not come from a display mirror"
   end
 end

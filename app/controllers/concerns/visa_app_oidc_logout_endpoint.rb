@@ -11,7 +11,16 @@ module VisaAppOidcLogoutEndpoint
   include SignOidcLogout
   include ::SurfaceInertiaPage
 
+  PREFERENCE_WRITE_CONTEXT = {
+    surface_key: "visa/app",
+    realm: "app",
+    preference_model: AppPreference,
+    issuer_id: "preference_app",
+  }.freeze
+
   private
+
+  def preference_write_context = PREFERENCE_WRITE_CONTEXT
 
   def oidc_logout_completed_path(ri:, _sot: nil)
     visa_app_oidc_logout_completion_path(ri: ri)

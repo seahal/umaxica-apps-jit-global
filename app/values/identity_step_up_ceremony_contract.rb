@@ -30,7 +30,7 @@ module IdentityStepUpCeremonyContract
   module_function
 
   ALGORITHM = "ES384"
-  SURFACES = %w(app com org).freeze
+  SURFACES = %w(app org).freeze
   # Telephone OTP is deliberately absent: SMS is not an accepted step-up proof.
   METHODS = %w(passkey totp email_otp secret_credential).freeze
   # @deprecated AAL values remain only for signed/storage label validation and migration history;
@@ -40,25 +40,21 @@ module IdentityStepUpCeremonyContract
 
   SIGN_ISSUERS = {
     "app" => "https://log.umaxica.app",
-    "com" => "https://log.umaxica.com",
     "org" => "https://log.umaxica.org",
   }.freeze
 
   ACME_ISSUERS = {
     "app" => "https://www.umaxica.app",
-    "com" => "https://www.umaxica.com",
     "org" => "https://www.umaxica.org",
   }.freeze
 
   SIGN_AUDIENCES = {
     "app" => "https://log.umaxica.app/step-up-ceremony",
-    "com" => "https://log.umaxica.com/step-up-ceremony",
     "org" => "https://log.umaxica.org/step-up-ceremony",
   }.freeze
 
   ACME_AUDIENCES = {
     "app" => "https://www.umaxica.app/step-up-ceremony-result",
-    "com" => "https://www.umaxica.com/step-up-ceremony-result",
     "org" => "https://www.umaxica.org/step-up-ceremony-result",
   }.freeze
 

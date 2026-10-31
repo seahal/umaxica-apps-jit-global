@@ -6,7 +6,6 @@
 scope(module: :visa, as: :visa) do
   {
     app: :service,
-    com: :corporate,
     org: :staff,
   }.each do |surface_namespace, realm|
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)

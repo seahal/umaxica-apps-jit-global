@@ -1,0 +1,5 @@
+# WU-7 full Rails suite recheck
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Staged, unstaged and untracked work affected the run. `PARALLEL_WORKERS=1 bin/rails test` finished with exit 1: 16,313 runs, 156,192 assertions, 134 failures, 200 errors and zero skips. The raw output is transient at `/tmp/wu7-full-suite-final-20261030.log`.
+- Comparing failure and error names with `plans/2026-10-28-baseline-failing-tests.md`, including the baseline's colon-prefix names, found 19 distinct candidate identifiers outside the baseline. This is a name comparison, not a diagnosis of whether those cases are regressions. The prior run recorded 43 candidates by the same method.
+- The candidates include three database reconstruction checks, one cross-site preference API test that reported 200 instead of 403 on auth/app, and date-sensitive signup, social and admission cases. The unchanged local worktree has effectively empty non-com SQL dumps; no dump was overwritten in this run. WU-7 closure and zero baseline-external failures are not established.

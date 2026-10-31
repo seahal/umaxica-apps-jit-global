@@ -634,7 +634,7 @@ module SocialAuth
     )
     session[SOCIAL_LINK_COMPLETION_SESSION_KEY] = [candidate.ref, token.public_id]
     response.headers["Cache-Control"] = "private, no-store"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Referrer-Policy"] = "strict-origin"
     deny_framing!(form_action_self: true)
     render "auth/shared/social_link_completion", layout: false,
                                                  locals: { candidate_ref: candidate.ref, ri: params[:ri] }

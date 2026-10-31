@@ -15,11 +15,6 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       callback_controller: "core/app/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_CORE_CORPORATE_URL") },
-      controller: "core/com/sign/entries",
-      callback_controller: "core/com/oidc/callbacks",
-    },
-    {
       host: -> { ENV.fetch("PUBLIC_CORE_STAFF_URL") },
       controller: "core/org/sign/entries",
       callback_controller: "core/org/oidc/callbacks",
@@ -28,11 +23,6 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       host: -> { ENV.fetch("PUBLIC_WARP_SERVICE_URL") },
       controller: "warp/app/sign/entries",
       callback_controller: "warp/app/oidc/callbacks",
-    },
-    {
-      host: -> { ENV.fetch("PUBLIC_WARP_CORPORATE_URL") },
-      controller: "warp/com/sign/entries",
-      callback_controller: "warp/com/oidc/callbacks",
     },
     {
       host: -> { ENV.fetch("PUBLIC_WARP_STAFF_URL") },
@@ -50,11 +40,6 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       callback_controller: "base/app/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_BASE_CORPORATE_URL") },
-      controller: "base/com/sign/entries",
-      callback_controller: "base/com/oidc/callbacks",
-    },
-    {
       host: -> { ENV.fetch("PUBLIC_BASE_STAFF_URL") },
       controller: "base/org/sign/entries",
       callback_controller: "base/org/oidc/callbacks",
@@ -66,7 +51,6 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       family, surface = route.fetch(:controller).split("/")
       model, owner_class, root_class, owner_key, root_key, resource_type = {
         "app" => [OpAppGrant, Client, ClientToken, :user, :client_token, "client"],
-        "com" => [OpComGrant, Visitor, VisitorToken, :visitor, :visitor_token, "visitor"],
         "org" => [OpOrgGrant, Operator, OperatorToken, :staff, :operator_token, "operator"],
       }.fetch(surface)
       actor = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
@@ -157,10 +141,8 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
   test "first-party browser RPs have no obsolete OIDC authorization controller" do
     files = %w(
       app/controllers/core/app/oidc/authorizations_controller.rb
-      app/controllers/core/com/oidc/authorizations_controller.rb
       app/controllers/core/org/oidc/authorizations_controller.rb
       app/controllers/warp/app/oidc/authorizations_controller.rb
-      app/controllers/warp/com/oidc/authorizations_controller.rb
       app/controllers/warp/org/oidc/authorizations_controller.rb
       app/controllers/edit/org/oidc/authorizations_controller.rb
     )
@@ -171,7 +153,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
   end
 
   test "the core browser RPs still do not own a dashboard page" do
-    RP_ROUTES.first(3).each do |rp|
+    RP_ROUTES.select { |rp| rp.fetch(:controller).start_with?("core/") }.each do |rp|
       assert_raises(ActionController::RoutingError) do
         Rails.application.routes.recognize_path(
           "http://#{rp.fetch(:host).call}/dashboard",
@@ -424,12 +406,12 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
   test "an RP credential for another surface does not block the current RP" do
     host = RP_ROUTES.first.fetch(:host).call
     host!(host)
-    visitor = visitors(:reserved_visitor)
-    oidc_client = OidcClientRegistry.find!("core-com-jp")
+    operator = operators(:one)
+    oidc_client = OidcClientRegistry.find!("core-org-jp")
     access_token = AuthenticationTokenService.encode(
-      visitor,
+      operator,
       host: host,
-      resource_type: "visitor",
+      resource_type: "operator",
       session_public_id: "cross-surface-rp-entry-session",
       oidc_sid: "cross-surface-rp-entry-session",
       oidc_jti: SecureRandom.uuid,
@@ -438,7 +420,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       issuer: OidcIssuer.for_client(oidc_client),
       audiences: [oidc_client.aud],
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
-      subject: OidcSubject.for(visitor, resource_type: "visitor"),
+      subject: OidcSubject.for(operator, resource_type: "operator"),
       client_id: oidc_client.client_id,
     )
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token

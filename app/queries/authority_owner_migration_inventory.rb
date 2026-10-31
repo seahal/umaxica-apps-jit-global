@@ -37,24 +37,6 @@ class AuthorityOwnerMigrationInventory
       client_persona_authority_cutovers
       enterprise_authority_cutovers
     ),
-    com: %w(
-      visitor_authority_locks
-      individual_ownerships
-      individual_administration_grants
-      individual_delegation_grants
-      individual_usage_grants
-      individual_view_grants
-      company_ownerships
-      company_administration_grants
-      company_delegation_grants
-      company_view_grants
-      individual_ownership_transfer_requests
-      company_ownership_transfer_requests
-      individual_lifecycles
-      company_lifecycles
-      individual_authority_cutovers
-      company_authority_cutovers
-    ),
     org: %w(
       operator_authority_locks
       agent_ownerships
@@ -80,12 +62,10 @@ class AuthorityOwnerMigrationInventory
   RESOURCE_KIND_BY_CATEGORY = {
     account: {
       app: :client_persona,
-      com: :individual,
       org: :agent,
     },
     organization: {
       app: :enterprise,
-      com: :company,
       org: :bureau,
     },
   }.each_value(&:freeze).freeze
@@ -136,54 +116,6 @@ class AuthorityOwnerMigrationInventory
       authority_lock_class: ClientAuthorityLock,
       authority_lock_principal_foreign_key: :client_id,
       cutover_class: EnterpriseAuthorityCutover,
-      auto_backfill: false,
-      recommended_action: :manual_review,
-    },
-    {
-      surface: :com,
-      resource_kind: :individual,
-      resource_class: Individual,
-      lifecycle_class: IndividualLifecycle,
-      lifecycle_resource_foreign_key: :individual_id,
-      principal_class: Visitor,
-      identity_association: :visitor_identity,
-      identity_class: VisitorIdentity,
-      identity_active_status_id: VisitorIdentityState::ACTIVE,
-      principal_active_status_id: VisitorStatus::ACTIVE,
-      ownership_class: IndividualOwnership,
-      ownership_resource_foreign_key: :individual_id,
-      ownership_principal_foreign_key: :visitor_id,
-      ownership_principal_association: :visitor,
-      administration_association: :administration_grants,
-      administration_principal_association: :visitor,
-      authority_lock_class: VisitorAuthorityLock,
-      authority_lock_principal_foreign_key: :visitor_id,
-      cutover_class: IndividualAuthorityCutover,
-      auto_backfill: false,
-      recommended_action: :manual_review,
-    },
-    {
-      surface: :com,
-      resource_kind: :company,
-      resource_class: Company,
-      lifecycle_class: CompanyLifecycle,
-      lifecycle_resource_foreign_key: :company_id,
-      principal_class: Visitor,
-      membership_association: :individual_memberships,
-      membership_principal_association: :individual,
-      identity_association: :visitor_identity,
-      identity_class: VisitorIdentity,
-      identity_active_status_id: VisitorIdentityState::ACTIVE,
-      principal_active_status_id: VisitorStatus::ACTIVE,
-      ownership_class: CompanyOwnership,
-      ownership_resource_foreign_key: :company_id,
-      ownership_principal_foreign_key: :visitor_id,
-      ownership_principal_association: :visitor,
-      administration_association: :administration_grants,
-      administration_principal_association: :visitor,
-      authority_lock_class: VisitorAuthorityLock,
-      authority_lock_principal_foreign_key: :visitor_id,
-      cutover_class: CompanyAuthorityCutover,
       auto_backfill: false,
       recommended_action: :manual_review,
     },

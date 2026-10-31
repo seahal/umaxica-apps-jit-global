@@ -27,7 +27,6 @@ module OrgEnforcementCasePage
   def enforcement_case_path_for(enforcement_case)
     case enforcement_case
     when AppEnforcementCase then base_org_support_app_enforcement_case_path(enforcement_case.public_id)
-    when ComEnforcementCase then base_org_support_com_enforcement_case_path(enforcement_case.public_id)
     when OrgEnforcementCase then base_org_support_org_enforcement_case_path(enforcement_case.public_id)
     else raise ArgumentError, "unsupported enforcement case: #{enforcement_case.class.name}"
     end
@@ -36,7 +35,6 @@ module OrgEnforcementCasePage
   def enforcement_cases_path_for(enforcement_case)
     case enforcement_case
     when AppEnforcementCase then base_org_support_app_enforcement_cases_path
-    when ComEnforcementCase then base_org_support_com_enforcement_cases_path
     when OrgEnforcementCase then base_org_support_org_enforcement_cases_path
     else raise ArgumentError, "unsupported enforcement case: #{enforcement_case.class.name}"
     end
@@ -45,7 +43,6 @@ module OrgEnforcementCasePage
   def new_enforcement_approval_path_for(enforcement_case)
     case enforcement_case
     when AppEnforcementCase then new_base_org_support_app_enforcement_case_approval_path(enforcement_case.public_id)
-    when ComEnforcementCase then new_base_org_support_com_enforcement_case_approval_path(enforcement_case.public_id)
     else raise ArgumentError, "no approval screen for #{enforcement_case.class.name}"
     end
   end
@@ -53,7 +50,6 @@ module OrgEnforcementCasePage
   def new_enforcement_release_path_for(enforcement_case)
     case enforcement_case
     when AppEnforcementCase then new_base_org_support_app_enforcement_case_release_path(enforcement_case.public_id)
-    when ComEnforcementCase then new_base_org_support_com_enforcement_case_release_path(enforcement_case.public_id)
     else raise ArgumentError, "no release screen for #{enforcement_case.class.name}"
     end
   end
@@ -62,8 +58,6 @@ module OrgEnforcementCasePage
     case enforcement_case
     when AppEnforcementCase
       new_base_org_support_app_enforcement_case_appeal_review_path(enforcement_case.public_id)
-    when ComEnforcementCase
-      new_base_org_support_com_enforcement_case_appeal_review_path(enforcement_case.public_id)
     else raise ArgumentError, "no appeal review screen for #{enforcement_case.class.name}"
     end
   end

@@ -11,7 +11,7 @@ class CeremonySignedResultDeadlineTest < ActiveSupport::TestCase
     [:step_up, IdentityStepUpCeremonyResult, IdentityStepUpCeremonyContract],
     [:email, IdentityEmailCeremonyResult, IdentityEmailCeremonyContract],
   ].each do |family, result_class, contract|
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       [-1, 0, 1].each do |seconds|
         test "#{surface} #{family} signed result at deadline #{seconds} seconds accepts only future NumericDate" do
           decision_time = Time.zone.local(2026, 10, 7, 12)

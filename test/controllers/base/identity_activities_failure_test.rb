@@ -3,9 +3,7 @@
 
 require "test_helper"
 
-# The activity list is read from the chronicle store, which may be unavailable
-# independently of the surface. The page still renders, with an empty list,
-# rather than answering a 500 for a read-only screen.
+# Chronicle read failures must remain distinguishable from an empty activity history.
 class BaseIdentityActivitiesFailureTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -39,15 +37,13 @@ class BaseIdentityActivitiesFailureTest < ActiveSupport::TestCase
     end
   end
 
-  [Base::App::Identity::ActivitiesController, Base::Com::Identity::ActivitiesController,
-   Base::Org::Identity::ActivitiesController,].each do |klass|
-    test "#{klass.name} still renders the page with an empty list when the store is unavailable" do
+  [Base::App::Identity::ActivitiesController, Base::Org::Identity::ActivitiesController].each do |klass|
+    test "#{klass.name} reports unavailable when the store cannot be read" do
       harness = harness_for(klass)
 
       harness.index
 
-      assert_predicate harness.rendered.last.fetch(:inertia), :present?
-      assert_empty harness.rendered.last.fetch(:props).fetch(:activities)
+      assert_equal :service_unavailable, harness.rendered.last.fetch(:status)
     end
   end
 end

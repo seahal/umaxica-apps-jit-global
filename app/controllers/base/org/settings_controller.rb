@@ -1,0 +1,20 @@
+# typed: false
+# frozen_string_literal: true
+
+module Base
+  module Org
+    class SettingsController < Base::Org::ApplicationController
+      AUTHENTICATION_MODE = :private
+      declare_authentication_mode! :private
+
+      public
+
+      def show
+        # Closed for every operator: no authoritative settings data source is exposed here yet
+        # (adr/operator-capability-authorization.md, Not provided).
+        authorize!(:org_console, to: :settings?, with: OrgConsolePolicy)
+        head :not_implemented
+      end
+    end
+  end
+end

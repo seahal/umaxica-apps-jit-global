@@ -5,7 +5,6 @@ require "test_helper"
 class PublicIdNotNullContractTest < ActiveSupport::TestCase
   [
     ClientPreference,
-    VisitorPreference,
     OperatorPreference,
     ClientPasskey,
   ].each do |model|

@@ -22,6 +22,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
     reference = candidate.public_id
@@ -255,6 +256,35 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     ).count
   end
 
+  test "a conflicting Secret audit does not starve later pages" do
+    client = clients(:one)
+    context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
+    poison, later =
+      ClientSecretAuditOutbox.transaction do
+        [ClientSecretAuditOutbox.record!(
+          actor_context: context, client_ref: client.public_id, operation_ref: SecureRandom.uuid,
+          occurred_at: Client.database_now, event_name: "secret.issuance_started", reason: "manual", item_count: 1,
+        ), ClientSecretAuditOutbox.record!(
+          actor_context: context, client_ref: client.public_id, operation_ref: SecureRandom.uuid,
+          occurred_at: Client.database_now, event_name: "secret.issuance_started", reason: "manual", item_count: 1,
+        ),]
+      end
+    Chronicle.create!(
+      event_uuid: poison.event_id, action: poison.event_name, result: "succeeded", reason: "flow_canceled",
+      actor_type: "Client", actor_id: client.id, subject_type: "Client", subject_id: client.id,
+      chronicle_retention_policy: @security_policy, occurred_at: poison.occurred_at,
+      erasable_at: ChronicleRecordPolicy.erasable_at_for(policy: @security_policy, occurred_at: poison.occurred_at),
+      request_id: poison.operation_ref, metadata: {
+        "client_ref" => client.public_id, "actor_public_ref" => client.public_id, "item_count" => 1,
+      }, changeset: {},
+    )
+
+    assert_raises(ArgumentError) { ClientSecretAuditDeliveryJob.perform_now(batch_size: 1, retention_seconds: 60) }
+    assert_nil poison.reload.delivered_at
+    assert_predicate later.reload.delivered_at, :present?
+    assert_equal 1, Chronicle.where(event_uuid: later.event_id).count
+  end
+
   test "an existing Chronicle UUID with different immutable facts is not accepted as delivery" do
     policy = @security_policy
     client = clients(:one)
@@ -336,11 +366,20 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
     reference = credential.public_id
+    token.reload.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
+    )
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
     )

@@ -5,6 +5,7 @@ class Auth::Org::Verification::HandoffsController < ::Auth::Org::ApplicationCont
   include AuthStepUpResultHandoff
 
   AUTHENTICATION_MODE = :open
+  sign_entry_classification! :excluded, reason: "not a sign entry: ticket/re-verification ceremony or sign-out"
   declare_authentication_mode! :open
 
   private

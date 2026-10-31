@@ -1,0 +1,22 @@
+stateDiagram-v2
+    state "ACTIVE" as active
+    state "RETIRED" as retired
+
+    [*] --> active: first explicit Base save creates account preference
+    active --> retired: Base reset / locked actor setting transaction
+    retired --> [*]: historical account preference retained
+
+    note right of active
+      OperatorPreferenceStatus target IDs are ACTIVE=0
+      and RETIRED=1. Visa reads only explicit display
+      children from this account row and applies them
+      to the matching anonymous OrgPreference. It never
+      creates an account row during sign-in.
+    end note
+
+    note right of retired
+      A later explicit save creates a new active row;
+      this row is not reactivated. Legacy explicit_fields
+      provenance is not inferred. The schema cutover
+      migration is authored but unapproved and unapplied.
+    end note

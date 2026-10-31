@@ -7,9 +7,11 @@
 
 - `app`: end-user application; Palm is its browser relying party
 - `org`: staff and organization surface; Tech is its global operator relying party
-- `com`: public and corporate surface
-- `visa`: OpenID Provider and browser-bound authority for the three UMAXICA realms
-- `www`: Base browser relying party and identity/session-management surface for each realm
+- `com`: anonymous public and corporate surface; it serves public preference entry and
+  public read-only pages, with no credential, session, admission, or OIDC relying-party boundary
+- `visa`: OpenID Provider and browser-bound authority for the app and org realms
+- `www`: Base browser relying party and identity/session-management surface for the app and org
+  realms
 - `net`: network-facing surface supporting other TLDs (`app`/`com`/`org`), including
   cookie-authentication-less access
 - `dev`: support and status surface
@@ -17,9 +19,9 @@
 Multi-domain Rails application serving these audience surfaces. Routing is host-constrained, so
 domain and subdomain matter in both development and production.
 
-The OIDC authority is hosted by Visa (`visa.umaxica.app`, `.com`, `.org`). Base is the separate
-browser RP and identity/session surface (`www.umaxica.app`, `.com`, `.org`); its host-only cookies
-are never shared with Visa.
+The OIDC authority is hosted by Visa (`visa.umaxica.app`, `.org`). Base is the separate browser RP
+and identity/session surface (`www.umaxica.app`, `.org`); its host-only cookies are never shared
+with Visa. `www.umaxica.com` is the anonymous preference entry, not an identity or session surface.
 
 ## Stack
 
@@ -173,10 +175,10 @@ can use them; containers continue to use Compose DNS names. See
 | Surface                    | URL                                                                                                              |
 | :------------------------- | :--------------------------------------------------------------------------------------------------------------- |
 | Base                       | `http://base.{app,com,org}.localhost:3000`                                                                       |
-| Visa (OIDC authority)      | `http://visa.{app,com,org}.localhost:3000`                                                                       |
+| Visa (OIDC authority)      | `http://visa.{app,org}.localhost:3000`                                                                           |
 | Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                                                           |
-| Auth                       | `http://auth.{app,com,org}.localhost:3000`                                                                       |
-| Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                                                               |
+| Auth                       | `http://auth.{app,org}.localhost:3000`                                                                           |
+| Core                       | `http://core.{app,org,net,dev}.localhost:3000`                                                                   |
 | Warp / Palm / Tech         | `http://warp.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` / `http://tech.org.localhost:3000` |
 | Info / Help / Docs / News  | `http://{info,help,docs,news}.{app,com,org}.localhost:3000`                                                      |
 
@@ -188,7 +190,7 @@ Access, not Host Authorization, keeps the development listener non-public. See
 `research/implementation/2026-08-10-development-tunnel-access-verification.md` for the measured
 end-to-end evidence.
 
-`sign.{app,com,org}.localhost` resolves only when `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset.
+`sign.{app,org}.localhost` resolves only when `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset.
 Under Compose the canonical local names for the credential gateway are `auth.*`.
 
 ## Code Quality

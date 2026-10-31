@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # adr/operator-capability-authorization.md: landing pages of the org administration consoles. Each
-# console names its own fixed capability. Billing, audit, configuration, and system have no
+# console names its own fixed capability. Billing, audit, settings, and system have no
 # authoritative data source this application owns yet, so they stay closed for every operator.
 class OrgConsolePolicy < ApplicationPolicy
   public
@@ -23,7 +23,7 @@ class OrgConsolePolicy < ApplicationPolicy
     false
   end
 
-  def configuration?
+  def settings?
     false
   end
 

@@ -42,10 +42,33 @@ beforeEach(() => {
   systemPrefersDark.matches = false;
   document.documentElement.className = "";
   delete document.documentElement.dataset["theme"];
+  delete document.documentElement.dataset["edition"];
   document.body.innerHTML = "";
 });
 
 describe("applyThemeFromCookie", () => {
+  it("keeps the com theme from the experience projection on boot", async () => {
+    document.documentElement.dataset["edition"] = "com";
+    document.documentElement.dataset["theme"] = "dark";
+    const experience = {
+      theme: "dark",
+      timezone: "Asia/Tokyo",
+      currency: "jpy",
+      date_format: "iso",
+      time_format: "24",
+      motion: "standard",
+      density: "standard",
+      page_size: "infinity",
+    };
+    document.cookie = `__Secure-experience=${encodeURIComponent(JSON.stringify(experience))}; Secure; Path=/`;
+    setThemeCookie("li");
+
+    await applyThemeFromCookie();
+
+    expect(document.documentElement.dataset["theme"]).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+
   it("applies the dark theme for ct=dr", async () => {
     setThemeCookie("dr");
     await applyThemeFromCookie();

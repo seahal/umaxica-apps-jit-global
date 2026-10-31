@@ -5,6 +5,88 @@ require "test_helper"
 class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  test "a revoked device cannot finalize a verified TOTP enrollment" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
+    )
+    ClientStepUpSession.create!(
+      user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
+      step_up_ceremony_transaction_ref: transaction.transaction_id, discard_at: transaction.expires_at,
+    )
+    candidate = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "bootstrap_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    now = ClientStepUpCeremonyTransaction.database_now + 1.second
+    ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+      IdentityTotpEnrollmentVerificationCommitter.call!(
+        actor: actor, token: token, transaction: transaction, candidate_ref: candidate.ref,
+        code: ROTP::TOTP.new(candidate.private_key).at(now.to_i),
+      )
+      result = BaseAuthAdmissionCoordinator.issue_result!(
+        transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+      )
+      token.device_session_record!.revoke!
+
+      assert_no_difference "actor.client_totp_credentials.count" do
+        assert_raises(IdentityTotpCeremonyContract::Error) do
+          IdentityTotpEnrollmentFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, raw_result: result.code,
+          )
+        end
+      end
+      assert_not_predicate transaction.reload, :consumed?
+    end
+  end
+
+  test "a superseded device token cannot finalize a verified TOTP enrollment" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
+    )
+    ClientStepUpSession.create!(
+      user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
+      step_up_ceremony_transaction_ref: transaction.transaction_id, discard_at: transaction.expires_at,
+    )
+    candidate = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "bootstrap_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    now = ClientStepUpCeremonyTransaction.database_now + 1.second
+    ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+      IdentityTotpEnrollmentVerificationCommitter.call!(
+        actor: actor, token: token, transaction: transaction, candidate_ref: candidate.ref,
+        code: ROTP::TOTP.new(candidate.private_key).at(now.to_i),
+      )
+      result = BaseAuthAdmissionCoordinator.issue_result!(
+        transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+      )
+      device = token.device_session_record!
+      replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+      device.update!(current_refresh_token_id: replacement.id)
+
+      assert_no_difference "actor.client_totp_credentials.count" do
+        assert_raises(IdentityTotpCeremonyContract::Error) do
+          IdentityTotpEnrollmentFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, raw_result: result.code,
+          )
+        end
+      end
+      assert_not_predicate transaction.reload, :consumed?
+    end
+  end
+
   test "Base creates the confirmed credential once and retries return the same active credential without freshness" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)

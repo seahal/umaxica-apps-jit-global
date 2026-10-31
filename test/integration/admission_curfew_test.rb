@@ -78,14 +78,12 @@ class AdmissionCurfewTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "A06-4: APP, COM and ORG ceremony parents share the exact stored curfew" do
+  test "A06-4: APP and ORG ceremony parents share the exact stored curfew" do
     cases = [
       ["app", @binding.reload, @transaction.reload, ClientAuthCeremonySession],
     ]
 
     [
-      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-       VisitorAuthAdmissionBinding, VisitorAuthCeremonySession,],
       ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
        OperatorAuthAdmissionBinding, OperatorAuthCeremonySession,],
     ].each do |surface, client_id, realm, auth_host, binding_class, ceremony_class|

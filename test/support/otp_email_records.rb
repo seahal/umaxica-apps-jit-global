@@ -10,7 +10,6 @@ module OtpEmailRecords
   def create_otp_email_record(surface, address:)
     case surface.to_sym
     when :app then create_client_email(address: address)
-    when :com then create_visitor_email(address: address)
     when :org then create_operator_email(address: address)
     else raise ArgumentError, "unsupported otp email surface: #{surface}"
     end
@@ -24,17 +23,6 @@ module OtpEmailRecords
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-  end
-
-  def create_visitor_email(address:)
-    VisitorEmail.create!(
-      visitor_id: visitors(:reserved_visitor).id,
-      address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

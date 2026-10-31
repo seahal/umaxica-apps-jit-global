@@ -72,7 +72,7 @@ class ClientTest < ActiveSupport::TestCase
     oidc_connections client_memberships clients client_banners client_members client_member_discoveries
     client_member_observations client_member_revocations client_member_impersonations client_member_suspensions
     client_member_deletions owned_members client_bulletins rp_account authority_lock core_app_client_bridge
-    user_preference
+    client_preference
   ).freeze
 
   def setup

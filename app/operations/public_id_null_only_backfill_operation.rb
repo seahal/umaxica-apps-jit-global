@@ -7,7 +7,6 @@
 class PublicIdNullOnlyBackfillOperation
   TARGETS = [
     [ClientPreference, "index_client_preferences_on_public_id"],
-    [VisitorPreference, "index_visitor_preferences_on_public_id"],
     [OperatorPreference, "index_operator_preferences_on_public_id"],
     [ClientPasskey, "index_client_passkeys_on_public_id"],
   ].freeze

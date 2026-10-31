@@ -201,7 +201,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
     # Regression: if the JWT audience list does not include the request host,
     # validate_payload returns nil, clear_preference_auth_cookies! fires, and
     # both cookies disappear immediately after being written.
-    %w(www.umaxica.app www.umaxica.com www.umaxica.org).each do |host|
+    %w(www.umaxica.app www.umaxica.org).each do |host|
       audiences = [host]
       key_for = ->(kid) { (kid == "default") ? @public_key : nil }
 
@@ -238,12 +238,12 @@ class PreferenceTokenTest < ActiveSupport::TestCase
       logged_payload = nil
 
       Rails.logger.stub(:info, ->(message) { logged_payload = JSON.parse(message) }) do
-        assert_nil PreferenceToken.decode(token, host: "www.app.umaxica.com")
+        assert_nil PreferenceToken.decode(token, host: "www.app.umaxica.org")
       end
 
       assert_equal "jwt.anomaly.detected", logged_payload.fetch("event")
       assert_equal "APP_PREFERENCE_AUD_MISMATCH", logged_payload.dig("data", "reason_code")
-      assert_equal "www.app.umaxica.com", logged_payload.dig("data", "request_host")
+      assert_equal "www.app.umaxica.org", logged_payload.dig("data", "request_host")
       assert_equal ["app.umaxica.app"], logged_payload.dig("data", "aud")
       assert_equal "JWT::InvalidAudError", logged_payload.dig("data", "error_class")
     end
@@ -256,7 +256,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
 
       Rails.logger.stub(:info, ->(message) { logged_payload = JSON.parse(message) }) do
         assert_raises(PreferenceToken::AudienceMismatchError) do
-          PreferenceToken.decode(token, host: "www.app.umaxica.com", raise_on_audience_mismatch: true)
+          PreferenceToken.decode(token, host: "www.app.umaxica.org", raise_on_audience_mismatch: true)
         end
       end
 
@@ -292,7 +292,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
   end
 
   def with_audience_mismatch_jwt_config
-    audiences = ["app.umaxica.app", "www.app.umaxica.com"].freeze
+    audiences = ["app.umaxica.app", "www.app.umaxica.org"].freeze
     key_for = ->(kid) { (kid == "default") ? @public_key : nil }
 
     PreferenceJwtConfiguration.stub(:private_key, @private_key) do

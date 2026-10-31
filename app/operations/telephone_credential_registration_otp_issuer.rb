@@ -30,8 +30,6 @@ class TelephoneCredentialRegistrationOtpIssuer
       case [actor, token, telephone]
       in [Client, ClientToken, ClientTelephone]
         ["app", ClientTelephoneCeremonyTransaction, ClientTelephoneStatus::UNVERIFIED]
-      in [Visitor, VisitorToken, VisitorTelephone]
-        ["com", VisitorTelephoneCeremonyTransaction, VisitorTelephoneStatus::UNVERIFIED]
       in [Operator, OperatorToken, OperatorTelephone]
         ["org", OperatorTelephoneCeremonyTransaction, OperatorTelephoneStatus::UNVERIFIED]
       else raise ArgumentError, "unsupported Telephone credential registration realm"
@@ -45,7 +43,9 @@ class TelephoneCredentialRegistrationOtpIssuer
         return result(:unavailable)
       end
       return result(:locked) if telephone.locked?(now: source_now)
-      if telephone.otp_last_sent_at && telephone.otp_last_sent_at > source_now - TelephoneOtpPolicy::SEND_COOLDOWN
+
+      sent_at = telephone.otp_last_sent_at
+      if sent_at && sent_at != -Float::INFINITY && sent_at > source_now - TelephoneOtpPolicy::SEND_COOLDOWN
         return result(:rate_limited)
       end
 
@@ -124,7 +124,8 @@ class TelephoneCredentialRegistrationOtpIssuer
           telephone,
           source_now,
         ) && token.active_status?(ticket_now) &&
-        device_session.usable? && device_session.current_refresh_token_id == token.id
+        device_session.usable? && token.device_session_id == device_session.id &&
+        device_session.current_refresh_token_id == token.id
     end
 
     def owned_pending?(actor, token, telephone, pending_status, device_session)
@@ -132,9 +133,6 @@ class TelephoneCredentialRegistrationOtpIssuer
       when Client
         token.user_id == actor.id && device_session.user_id == actor.id && telephone.user_id == actor.id &&
           telephone.user_telephone_status_id == pending_status
-      when Visitor
-        token.visitor_id == actor.id && device_session.visitor_id == actor.id &&
-          telephone.visitor_id == actor.id && telephone.visitor_telephone_status_id == pending_status
       when Operator
         token.staff_id == actor.id && device_session.staff_id == actor.id && telephone.staff_id == actor.id &&
           telephone.staff_telephone_status_id == pending_status
@@ -143,13 +141,13 @@ class TelephoneCredentialRegistrationOtpIssuer
 
     def candidate_ref(telephone)
       case telephone
-      when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
+      when ClientTelephone, OperatorTelephone then telephone.public_id
       end
     end
 
     def source_pending?(telephone, now)
       case telephone
-      when ClientTelephone, VisitorTelephone
+      when ClientTelephone
         telephone.accessible?(now) && !telephone.binding_finalized_at && !telephone.binding_released?
       when OperatorTelephone then telephone.staff_telephone_status_id == OperatorTelephoneStatus::UNVERIFIED
       end

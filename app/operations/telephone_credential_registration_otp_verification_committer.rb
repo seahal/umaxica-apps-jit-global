@@ -18,8 +18,6 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
       case [actor, token, telephone, transaction]
       in [Client, ClientToken, ClientTelephone, ClientTelephoneCeremonyTransaction]
         ["app", ClientTelephoneStatus::UNVERIFIED]
-      in [Visitor, VisitorToken, VisitorTelephone, VisitorTelephoneCeremonyTransaction]
-        ["com", VisitorTelephoneStatus::UNVERIFIED]
       in [Operator, OperatorToken, OperatorTelephone, OperatorTelephoneCeremonyTransaction]
         ["org", OperatorTelephoneStatus::UNVERIFIED]
       else raise ArgumentError, "unsupported Telephone registration verification realm"
@@ -86,6 +84,7 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
     source_now = telephone.class.database_now
     source_owned? && actor.login_allowed? && actor.accessible?(source_now) && source_current?(source_now) &&
       token.active_status?(now) && token_device_session.usable? &&
+      token.device_session_id == token_device_session.id &&
       token_device_session.current_refresh_token_id == token.id && ticket_current?(now)
   end
 
@@ -93,8 +92,6 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
     case actor
     when Client
       token.user_id == actor.id && token_device_session.user_id == actor.id && telephone.user_id == actor.id
-    when Visitor
-      token.visitor_id == actor.id && token_device_session.visitor_id == actor.id && telephone.visitor_id == actor.id
     when Operator
       token.staff_id == actor.id && token_device_session.staff_id == actor.id && telephone.staff_id == actor.id
     end
@@ -113,7 +110,6 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
     pending =
       case telephone
       when ClientTelephone then telephone.user_telephone_status_id == pending_status
-      when VisitorTelephone then telephone.visitor_telephone_status_id == pending_status
       when OperatorTelephone then telephone.staff_telephone_status_id == pending_status
       end
     return result(:unavailable) unless pending && source_unfinalized?
@@ -165,13 +161,13 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
 
   def candidate_ref
     case telephone
-    when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
+    when ClientTelephone, OperatorTelephone then telephone.public_id
     end
   end
 
   def source_current?(now)
     case telephone
-    when ClientTelephone, VisitorTelephone then telephone.accessible?(now) && !telephone.binding_released?
+    when ClientTelephone then telephone.accessible?(now) && !telephone.binding_released?
     when OperatorTelephone
       [OperatorTelephoneStatus::UNVERIFIED, OperatorTelephoneStatus::VERIFIED].include?(telephone.staff_telephone_status_id)
     end
@@ -179,7 +175,7 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
 
   def source_unfinalized?
     case telephone
-    when ClientTelephone, VisitorTelephone then !telephone.binding_finalized_at
+    when ClientTelephone then !telephone.binding_finalized_at
     when OperatorTelephone then telephone.staff_telephone_status_id == pending_status
     end
   end

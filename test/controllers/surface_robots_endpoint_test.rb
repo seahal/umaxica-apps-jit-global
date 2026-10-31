@@ -4,15 +4,15 @@
 require "test_helper"
 
 # public_robots_routing_test.rb covers the base, core, acme and palm surfaces.
-# The Warp surfaces and the two corporate/staff auth surfaces answer /robots.txt
-# from their own controllers, and each of those is a separate crawl directive:
-# a surface that silently 404s here is one a crawler is free to index.
+# The Warp surfaces and the staff auth surface answer /robots.txt from their own
+# controllers, and each of those is a separate crawl directive: a surface that
+# silently 404s here is one a crawler is free to index. The corporate auth host no
+# longer serves any page, so it has no crawl directive to publish.
 class SurfaceRobotsEndpointTest < ActionDispatch::IntegrationTest
   SURFACE_HOSTS = {
     "warp_app" => "PUBLIC_WARP_SERVICE_URL",
     "warp_com" => "PUBLIC_WARP_CORPORATE_URL",
     "warp_org" => "PUBLIC_WARP_STAFF_URL",
-    "auth_com" => "PRIVATE_AUTH_CORPORATE_URL",
     "auth_org" => "PRIVATE_AUTH_STAFF_URL",
   }.freeze
 

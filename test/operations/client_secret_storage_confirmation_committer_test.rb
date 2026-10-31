@@ -3,7 +3,81 @@
 require "test_helper"
 
 class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
-  test "storage declaration activates the presented manual reservation and preserves the session" do
+  test "a superseded device token cannot authorize Secret storage confirmation" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    candidate = ClientSecretCredential.create!(
+      client: actor, issuance: issuance, name: "Storage target", password: SecureRandom.base58(32),
+    )
+    at = Client.database_now
+    ClientSecretAuditOutbox.transaction do
+      issuance.update!(presented_at: at)
+      ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: actor.public_id, credential_ref: candidate.public_id,
+        operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
+      )
+    end
+    device = token.device_session_record!
+    replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    end
+    assert_nil issuance.reload.confirmed_at
+    assert_nil candidate.reload.confirmed_at
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "a revoked device cannot authorize Secret storage confirmation" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    candidate = ClientSecretCredential.create!(
+      client: actor, issuance: issuance, name: "Storage target", password: SecureRandom.base58(32),
+    )
+    at = Client.database_now
+    ClientSecretAuditOutbox.transaction do
+      issuance.update!(presented_at: at)
+      ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: actor.public_id, credential_ref: candidate.public_id,
+        operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
+      )
+    end
+    token.device_session_record!.revoke!
+
+    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    end
+    assert_nil issuance.reload.confirmed_at
+    assert_nil candidate.reload.confirmed_at
+    assert_predicate token.reload.last_step_up_at, :present?
+  end
+
+  test "storage declaration activates the presented manual reservation and preserves the session" do # rubocop:disable Minitest/MultipleAssertions -- Checks the complete confirmation and idempotent replay contract.
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
     token.update!(
@@ -17,6 +91,7 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Stored value", password: raw,
@@ -30,6 +105,44 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
         operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
       )
     end
+    token.update!(last_step_up_resource_ref: nil)
+    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    end
+    assert_nil issuance.reload.confirmed_at
+    assert_predicate token.reload.last_step_up_at, :present?
+    token.update!(last_step_up_resource_ref: PublicId.generate)
+    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    end
+    assert_nil issuance.reload.confirmed_at
+    assert_predicate token.reload.last_step_up_at, :present?
+    token.update!(last_step_up_resource_ref: issuance.public_id)
+
+    observed_confirmation = :not_observed
+    observed_declarations = nil
+    observer =
+      lambda do |_name, _start, _finish, _id, event|
+        next unless event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_tokens"/i)
+
+        observed_confirmation = ClientSecretIssuance.find(issuance.id).confirmed_at
+        observed_declarations = ClientSecretAuditOutbox.where(
+          operation_ref: issuance.origin_operation_id, event_name: "secret.storage_declared",
+        ).count
+        raise TokenStatusManagement::StepUpEvidenceUnavailable, "injected OP consumption failure"
+      end
+
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
+        ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+      end
+    end
+    assert_nil observed_confirmation
+    assert_equal 0, observed_declarations
+    assert_nil issuance.reload.confirmed_at
+    assert_nil candidate.reload.confirmed_at
+    assert_predicate token.reload.last_step_up_at, :present?
+
     assert_difference("ClientSecretAuditOutbox.count", 2) do
       ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     end
@@ -52,8 +165,21 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up-again", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: issuance.public_id,
     )
     no_op_token = token.reload.attributes
+    %w(secret.storage_declared secret.created).each do |event_name|
+      ClientSecretAuditOutbox.transaction(requires_new: true) do
+        ClientSecretAuditOutbox.where(
+          operation_ref: issuance.origin_operation_id, event_name: event_name,
+        ).delete_all
+        assert_raises(ClientSecretStorageConfirmationCommitter::InvalidState) do
+          ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+        end
+        assert_equal no_op_token, token.reload.attributes
+        raise ActiveRecord::Rollback
+      end
+    end
     assert_no_difference("ClientSecretAuditOutbox.count") do
       ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     end
@@ -86,6 +212,7 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       client: actor, origin_operation_id: SecureRandom.uuid, origin: "passkey_registration", attempt_number: 1,
       planned_count: 2, browser_session_ref: token.public_id, expires_at: at + 1.minute, presented_at: at,
     )
+    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     # Prepare presentation evidence; registration and plaintext delivery are outside this boundary.
     candidates =
       2.times.map do |index|
@@ -116,6 +243,15 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
 
     assert_equal 0, counts.active_count
     assert_equal 2, counts.reserved_count
+    assert_nil token.reload.last_step_up_at
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: issuance.public_id,
+    )
     assert_difference("ClientSecretAuditOutbox.count", 3) do
       ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
     end
@@ -142,6 +278,7 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       issuance = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
       )
+      token.reload.update!(last_step_up_resource_ref: issuance.public_id)
       raw = SecureRandom.base58(32)
       candidate = ClientSecretCredential.create!(
         client: actor, issuance: issuance, name: "Pending value", password: raw,
@@ -203,6 +340,7 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       issuance = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
       )
+      token.reload.update!(last_step_up_resource_ref: issuance.public_id)
       raw = SecureRandom.base58(32)
       candidate = ClientSecretCredential.create!(
         client: actor, issuance: issuance, name: "Boundary value", password: raw,

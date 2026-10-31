@@ -78,14 +78,16 @@ module PreferenceSignScreenActions
 
   def edit_reset_preference_screen
     @preference = @preferences
+    @preference_confirmation = params[:confirm_reset]
   end
 
   def destroy_reset_preference_screen
     ensure_preference_access_token_audience_for_write!
-    @preference = @preferences
-    @preference.require_reset_confirmation(params[:confirm_reset])
+    @preference = @preferences || preference_class.new
+    @preference_confirmation = params[:confirm_reset]
+    @preference.errors.add(:confirm_reset, :accepted) unless @preference_confirmation == "1"
 
-    unless @preference.valid?(:reset)
+    if @preference_confirmation != "1"
       # Inertia treats any response with a 4xx status as a transport exception rather than a page,
       # so validation failures go back to the edit screen carrying the errors, which is the
       # protocol's own convention. The middleware turns this into a 303 for the DELETE.

@@ -10,6 +10,7 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
   rescue_from ClientSecretStorageConfirmationCommitter::Denied,
               ClientSecretManualIssuanceInvalidator::Denied,
               ClientSecretManualReattemptIssuer::Denied, with: :deny_secret_operation
+  rescue_from ClientSecretStorageConfirmationCommitter::DependencyFailure, with: :secret_storage_unavailable
   rescue_from ClientSecretManualReservationIssuer::CapacityFull,
               ClientSecretIssuanceCountValue::ReservationConflict, with: :conflicting_secret_operation
 
@@ -87,6 +88,12 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     )
   end
 
+  def step_up_requirement(scope:, **options)
+    return super(scope: scope, **options.merge(resource_ref: @issuance.public_id)) if @issuance
+
+    super
+  end
+
   def require_issuance_step_up
     require_step_up!(scope: (@issuance.origin == "manual") ? "settings_secret_credential" : "settings_passkey")
   end
@@ -115,6 +122,10 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
       event_name: "secret.issuance_canceled", reason: "payload_unavailable",
       occurred_at: @issuance.canceled_at, item_count: @issuance.planned_count,
     )
+  end
+
+  def secret_storage_unavailable
+    head :service_unavailable
   end
 
   def deny_secret_operation

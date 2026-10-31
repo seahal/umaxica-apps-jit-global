@@ -6,40 +6,90 @@ module PreferenceAccessTokenIssuer
 
   private
 
-  def issue_access_token_from(preference, rotate_jti: false)
-    rotate_preference_jti!(preference) if rotate_jti || preference.jti.blank?
-    payload = build_preferences_payload(preference)
-    write_public_option_cookies(payload)
+  # WU-7 section 4.1: the anonymous com write issues exactly the shared cookie set: the signed
+  # preference JWT, the JS-readable `language`, and the JS-readable display JSON (`experience`,
+  # everything except language). No item cookies, no refresh, no DBSC. The three share the com
+  # domain scope and the 400-day lifetime from the writing clock.
+  def prepare_anonymous_com_token(preference, payload, issued_at:)
+    unless SecurityJwtPreferenceTokenCodec.valid_anonymous_display_snapshot?(payload)
+      raise PreferenceBase::ResolutionError, "invalid anonymous preference snapshot"
+    end
+
+    display = PreferenceDisplayValue.new(payload)
+
+    raise PreferenceBase::ResolutionError, "preference issuance time is required" unless issued_at.acts_like?(:time)
+
     token = PreferenceToken.encode(
-      payload,
-      host: request.host,
-      preference_type: preference.class.name,
-      public_id: preference.public_id,
-      jti: preference.jti,
+      display.preferences,
+      host: request.host, preference_type: preference.class.name,
+      public_id: preference.public_id, jti: preference.jti,
       jwt_issuer_id: preference_jwt_issuer_id,
+      issued_at: issued_at,
     )
     return if token.blank?
 
-    cookies[access_token_cookie_name] =
-      preference_auth_cookie_options(expires_at: PreferenceBase::ACCESS_TOKEN_TTL.from_now).merge(
-        value: token,
+    decoded = PreferenceToken.decode(token, host: request.host, jwt_issuer_id: preference_jwt_issuer_id)
+    if decoded.blank?
+      Rails.logger.warn(
+        JitLogEvent.format(
+          "preference.access_token.self_verification_failed",
+          host: request.host, jwt_issuer_id: preference_jwt_issuer_id,
+          cookie_name: PreferenceCookieName.anonymous_jwt,
+        ),
       )
-    clear_legacy_preference_auth_cookies!
+      return nil
+    end
 
-    @preference_payload = PreferenceToken.decode(token, host: request.host, jwt_issuer_id: preference_jwt_issuer_id)
-    return if @preference_payload.present?
+    expires_at = Time.at(decoded.fetch("exp")).utc
+    validate_anonymous_com_cookie_sizes!(token, display, expires_at)
+    PreferenceWriteResult.new(token: token, decoded: decoded, display: display, expires_at: expires_at)
+  end
 
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "preference.access_token.self_verification_failed",
-        host: request.host,
-        jwt_issuer_id: preference_jwt_issuer_id,
-        cookie_name: access_token_cookie_name,
-      ),
-    )
-    clear_preference_auth_cookies!
-    @preference_refresh_failed = true
-    nil
+  def validate_anonymous_com_cookie_sizes!(token, display, expires_at)
+    cookies_to_issue = [
+      [PreferenceCookieName.anonymous_jwt, token, true],
+      [PreferenceIoKeys::Cookies::LANGUAGE, display.language, false],
+      [PreferenceCookieName.anonymous_experience, display.experience, false],
+    ]
+    cookies_to_issue.each do |name, value, httponly|
+      options = anonymous_com_cookie_options(expires_at: expires_at, httponly: httponly).merge(value: value)
+      header = Rack::Utils.set_cookie_header(name, options)
+      if header.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+        raise PreferenceBase::ResolutionError, "anonymous preference cookie exceeds size limit"
+      end
+    end
+  end
+
+  def emit_anonymous_com_token!(issuance)
+    expires_at = issuance.expires_at
+    cookies[PreferenceCookieName.anonymous_jwt] = anonymous_com_cookie_options(expires_at: expires_at)
+      .merge(value: issuance.token)
+    cookies[PreferenceIoKeys::Cookies::LANGUAGE] =
+      anonymous_com_cookie_options(expires_at: expires_at, httponly: false).merge(value: issuance.display.language)
+    cookies[PreferenceCookieName.anonymous_experience] =
+      anonymous_com_cookie_options(expires_at: expires_at, httponly: false).merge(value: issuance.display.experience)
+
+    @preference_payload = issuance.decoded
+  end
+
+  def anonymous_com_cookie_options(expires_at:, httponly: true)
+    {
+      domain: anonymous_com_cookie_domain,
+      path: "/",
+      secure: true,
+      httponly: httponly,
+      same_site: :lax,
+      expires: expires_at,
+    }.compact
+  end
+
+  # The realm-shared cookie scope: the registrable two-label domain of the request host. A
+  # single-label dev host (localhost) cannot carry a Domain attribute and stays host-only.
+  def anonymous_com_cookie_domain
+    labels = request.host.to_s.split(".")
+    return nil if labels.length < 3
+
+    ".#{labels.last(2).join(".")}"
   end
 
   def rotate_preference_jti!(preference)
@@ -49,6 +99,8 @@ module PreferenceAccessTokenIssuer
   end
 
   def preference_jwt_issuer_id
+    return "preference_#{preference_realm_name}" if anonymous_preference_claim_shape?(preference_class)
+
     namespace = preference_jwt_namespace
     namespace ? "surface:#{namespace}" : "preference"
   end

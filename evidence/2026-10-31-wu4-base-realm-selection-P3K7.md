@@ -1,0 +1,6 @@
+# Base identity-authority realm selection
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained extensive uncommitted changes affecting this result.
+- The Base authority host selector returned the APP origin for missing and unknown resource types and still accepted the retired visitor/customer identity realm. The inspected application consumers select client/operator through the authority client catalog, and the test transport explicitly enumerates those two types.
+- Added a public-boundary behavior case. Before the fix it failed because an invalid value did not raise (one run, four assertions). The selector now accepts `client`, `operator` and the existing `staff` alias and raises for missing, empty, false, unknown, visitor and customer values. The authority-adapter and OIDC subject tests passed ten runs and 119 assertions with no failures or errors.
+- Scoped `git diff --check` passed. RuboCop reported a pre-existing method-length offense in the separate host-family construction method, outside the edited selector. The COM anonymous host itself is retained; this change affects identity-authority selection only. The full suite was not repeated after the change.

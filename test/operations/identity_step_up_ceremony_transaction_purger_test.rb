@@ -187,7 +187,6 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     now = Time.current
     [
       [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession],
-      [VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession],
       [OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession],
     ].each do |parent_model, continuity_model|
       parent = parent_model.create_transaction!(

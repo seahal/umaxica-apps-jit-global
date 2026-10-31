@@ -8,6 +8,7 @@ stateDiagram-v2
     state "revoked" as revoked
     %% expired, canceled and revoked are absorbing terminal states.
     [*] --> pending
+    %% Passkey verification rechecks actor, credential and device before evidence.
     pending --> verified: record_verification! / record_registration_verification!
     verified --> verified: prepare_result_delivery!
     pending --> canceled: Base cancellation committer

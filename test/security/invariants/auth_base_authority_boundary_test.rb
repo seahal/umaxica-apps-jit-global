@@ -6,19 +6,16 @@ require "test_helper"
 class AuthBaseAuthorityBoundaryTest < ActiveSupport::TestCase
   AUTH_APPLICATION_CONTROLLERS = [
     Auth::App::ApplicationController,
-    Auth::Com::ApplicationController,
     Auth::Org::ApplicationController,
   ].freeze
 
   BASE_AUTHORITY_CONTROLLERS = [
     Base::App::AuthorityController,
-    Base::Com::AuthorityController,
     Base::Org::AuthorityController,
   ].freeze
 
   AUTH_SIGN_OUT_CONTROLLERS = [
     Auth::App::Sign::OutsController,
-    Auth::Com::Sign::OutsController,
     Auth::Org::Sign::OutsController,
   ].freeze
 
@@ -33,8 +30,7 @@ class AuthBaseAuthorityBoundaryTest < ActiveSupport::TestCase
   end
 
   test "Base self-RP controllers retain browser RP lifecycle and inherit no root authentication" do
-    [Base::App::ApplicationController, Base::Com::ApplicationController,
-     Base::Org::ApplicationController,].each do |controller|
+    [Base::App::ApplicationController, Base::Org::ApplicationController].each do |controller|
       assert_includes controller.ancestors, BrowserRpAuthentication, controller.name
       assert_not_includes controller.ancestors, AuthenticationBase, controller.name
     end

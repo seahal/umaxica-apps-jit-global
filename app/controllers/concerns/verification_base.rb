@@ -111,6 +111,7 @@ module VerificationBase
   end
 
   def require_step_up_unless_bootstrap!(scope:, **policy)
+    return false if reject_step_up_for_authentication_context!
     return true if step_up_bootstrap_unconfigured?
 
     require_step_up!(scope: scope, **policy)

@@ -6,8 +6,8 @@ require "prism"
 
 class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
   LIFECYCLE_CARRIERS = %w(
-    ClientSignInFlow VisitorSignInFlow OperatorSignInFlow
-    ClientSignUpFlow VisitorSignUpFlow OperatorSignUpFlow
+    ClientSignInFlow OperatorSignInFlow
+    ClientSignUpFlow OperatorSignUpFlow
   ).freeze
   TRANSITION_CONCERNS = %r{
     app/models/concerns/(flow_base|flow_sign_in|flow_sign_up|sign_flow|

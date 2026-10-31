@@ -6,41 +6,13 @@ require "test_helper"
 
 class DbscRecordAdapterTest < ActiveSupport::TestCase
   test "binding_method_attribute delegates to model metadata" do
-    assert_equal :binding_method_id, DbscRecordAdapter.binding_method_attribute(AppPreference.new)
     assert_equal :user_token_binding_method_id, DbscRecordAdapter.binding_method_attribute(ClientToken.new)
     assert_equal :staff_token_binding_method_id, DbscRecordAdapter.binding_method_attribute(OperatorToken.new)
-    assert_equal :visitor_token_binding_method_id, DbscRecordAdapter.binding_method_attribute(VisitorToken.new)
   end
 
   test "dbsc_status_attribute delegates to model metadata" do
-    assert_equal :dbsc_status_id, DbscRecordAdapter.dbsc_status_attribute(AppPreference.new)
     assert_equal :user_token_dbsc_status_id, DbscRecordAdapter.dbsc_status_attribute(ClientToken.new)
     assert_equal :staff_token_dbsc_status_id, DbscRecordAdapter.dbsc_status_attribute(OperatorToken.new)
-    assert_equal :visitor_token_dbsc_status_id, DbscRecordAdapter.dbsc_status_attribute(VisitorToken.new)
-  end
-
-  test "binding_method_class returns AppPreferenceBindingMethod" do
-    record = AppPreference.new
-
-    result = DbscRecordAdapter.binding_method_class(record)
-
-    assert_equal AppPreferenceBindingMethod, result
-  end
-
-  test "binding_method_class returns OrgPreferenceBindingMethod" do
-    record = OrgPreference.new
-
-    result = DbscRecordAdapter.binding_method_class(record)
-
-    assert_equal OrgPreferenceBindingMethod, result
-  end
-
-  test "binding_method_class returns ComPreferenceBindingMethod" do
-    record = ComPreference.new
-
-    result = DbscRecordAdapter.binding_method_class(record)
-
-    assert_equal ComPreferenceBindingMethod, result
   end
 
   test "binding_method_class returns ClientTokenBindingMethod" do
@@ -57,14 +29,6 @@ class DbscRecordAdapterTest < ActiveSupport::TestCase
     result = DbscRecordAdapter.binding_method_class(record)
 
     assert_equal OperatorTokenBindingMethod, result
-  end
-
-  test "dbsc_status_class returns AppPreferenceDbscStatus" do
-    record = AppPreference.new
-
-    result = DbscRecordAdapter.dbsc_status_class(record)
-
-    assert_equal AppPreferenceDbscStatus, result
   end
 
   test "binding_method_class raises for unsupported record" do

@@ -13,12 +13,17 @@ stateDiagram-v2
     draft --> pending_approval: controller requires approval
     draft --> active: apply operation
     pending_approval --> active: apply operation
-    active --> failed: RecordInvalid / RecordNotUnique side-effect failure
     draft --> closed: end operation
     pending_approval --> closed: end operation
     active --> closed: end operation
     failed --> closed: end operation
     ended --> closed: end operation
     active --> closed: EnforcementExpiryJob
-    active --> active: reconciliation
+    active --> active: retry principal lock and reconcile after state recheck
     closed --> closed: end reconcile / repeat
+    note right of pending_approval
+        Apply locks and rechecks persisted Case state.
+    end note
+    note right of active
+        Apply rechecks the Case under its principal lock.
+    end note

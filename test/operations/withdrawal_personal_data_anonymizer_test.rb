@@ -7,7 +7,7 @@ require "test_helper"
 class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  %w(app com).each do |realm|
+  %w(app).each do |realm|
     test "#{realm} withdrawal preserves original finalized identifiers until irreversible retention purge" do
       actor, email_model, telephone_model, owner_key, email_history, telephone_history =
         case realm
@@ -16,11 +16,6 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
             security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
           ), ClientEmail, ClientTelephone, :user_id,
            ClientEmailHistory, ClientTelephoneHistory,]
-        when "com"
-          [Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-          ), VisitorEmail, VisitorTelephone, :visitor_id,
-           VisitorEmailHistory, VisitorTelephoneHistory,]
         end
       now = actor.class.database_now
       original_address = "withdrawal-original-#{SecureRandom.hex(8)}@example.test"
@@ -73,9 +68,6 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
         when "app"
           [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
            ClientEmail, ClientTelephone, :user_id,]
-        when "com"
-          [Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE),
-           VisitorEmail, VisitorTelephone, :visitor_id,]
         end
       now = actor.class.database_now
       actor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
@@ -104,12 +96,6 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
             purge_eligible_at: 1.day.ago,
           ),
            ClientEmail, ClientTelephone, :user_id,]
-        when "com"
-          [Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago, discard_at: 2.days.ago,
-            purge_eligible_at: 1.day.ago,
-          ),
-           VisitorEmail, VisitorTelephone, :visitor_id,]
         end
       email = email_model.create!(
         owner_key => actor.id, :raw_address => "overdue-retirement-#{SecureRandom.hex(8)}@example.test",
@@ -135,9 +121,6 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
         when "app"
           [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
            ClientEmail, ClientTelephone, :user_id,]
-        when "com"
-          [Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE),
-           VisitorEmail, VisitorTelephone, :visitor_id,]
         end
       now = actor.class.database_now
       deadline = now + 5.minutes
@@ -226,42 +209,5 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
                  ClientSecretAuditOutbox.where(credential_ref: secret.public_id).order(:event_name).pluck(:event_name)
   ensure
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = previous_delay
-  end
-
-  test "retires persisted visitor credentials without fabricating dead identifier history" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-    now = Visitor.database_now
-    email = VisitorEmail.create!(
-      visitor: visitor, raw_address: "retired-visitor-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-    )
-    telephone = VisitorTelephone.create!(
-      visitor: visitor, raw_number: "+819012399926", confirm_policy: true, confirm_using_mfa: true,
-    )
-    email.finalize_binding!
-    email.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
-    [VisitorSecretCredentialStatus::ACTIVE, VisitorSecretCredentialStatus::REVOKED].each do |status|
-      VisitorSecretCredentialStatus.find_or_create_by!(id: status)
-    end
-    VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::LOGIN)
-    passkey = visitor.visitor_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "withdrawal-test-key",
-    )
-    secret = visitor.visitor_secret_credentials.create!(name: "Withdrawal", password: SecureRandom.base58(32))
-    visitor.reload
-    visitor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
-
-    assert_same visitor, WithdrawalPersonalDataAnonymizer.call(actor: visitor)
-    assert_not email.reload.attributes.key?("otp_private_key")
-    assert_not email.attributes.key?("otp_counter")
-    assert_equal VisitorEmailStatus::SUSPENDED, email.visitor_email_status_id
-    assert_not telephone.reload.attributes.key?("otp_private_key")
-    assert_not telephone.attributes.key?("otp_counter")
-    assert_equal VisitorTelephoneStatus::SUSPENDED, telephone.visitor_telephone_status_id
-    assert_equal VisitorPasskeyStatus::REVOKED, passkey.reload.status_id
-    assert_kind_of Time, passkey.discard_at
-    assert_equal VisitorSecretCredentialStatus::REVOKED, secret.reload.visitor_secret_credential_status_id
-    assert_kind_of Time, secret.discard_at
-    assert_empty VisitorEmailHistory.where(visitor_id: visitor.id)
-    assert_empty VisitorTelephoneHistory.where(visitor_id: visitor.id)
   end
 end

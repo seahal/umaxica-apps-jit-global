@@ -3,7 +3,7 @@
 require "test_helper"
 
 class CredentialRegistrationOtpSupersessionTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     %i(email telephone).each do |channel|
       %i(original foreign).each do |browser|
         test "#{surface} #{channel} reissuance #{browser} browser preserves isolated supersession authority" do
@@ -11,8 +11,6 @@ class CredentialRegistrationOtpSupersessionTest < ActiveSupport::TestCase
             case [surface, channel]
             when ["app", :email] then [Client, ClientToken, ClientEmail, :user_id, ClientStatus::ACTIVE]
             when ["app", :telephone] then [Client, ClientToken, ClientTelephone, :user_id, ClientStatus::ACTIVE]
-            when ["com", :email] then [Visitor, VisitorToken, VisitorEmail, :visitor_id, VisitorStatus::ACTIVE]
-            when ["com", :telephone] then [Visitor, VisitorToken, VisitorTelephone, :visitor_id, VisitorStatus::ACTIVE]
             when ["org", :email] then [Operator, OperatorToken, OperatorEmail, :staff_id, OperatorStatus::ACTIVE]
             when ["org", :telephone] then [Operator, OperatorToken, OperatorTelephone, :staff_id, OperatorStatus::ACTIVE]
             end

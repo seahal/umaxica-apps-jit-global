@@ -7,13 +7,12 @@ module Webauthn
   class RelyingPartyConfigTest < ActiveSupport::TestCase
     SURFACE_ENV_KEYS = %w(
       WEBAUTHN_APP_RP_ID WEBAUTHN_APP_ORIGIN
-      WEBAUTHN_COM_RP_ID WEBAUTHN_COM_ORIGIN
       WEBAUTHN_ORG_RP_ID WEBAUTHN_ORG_ORIGIN
       WEBAUTHN_RP_ID WEBAUTHN_ORIGIN
     ).freeze
 
     test "surface enumeration is closed and rejects unknown surfaces" do
-      assert_equal %i(app com org), Webauthn::Surface.all.map(&:key)
+      assert_equal %i(app org), Webauthn::Surface.all.map(&:key)
       assert_raises(Webauthn::Surface::UnknownSurfaceError) { Webauthn::Surface.for(:preview) }
     end
 
@@ -25,7 +24,6 @@ module Webauthn
     end
 
     test "resolver keeps surfaces separate" do
-      assert_equal "auth.umaxica.com", Webauthn::RelyingPartyConfigResolver.resolve(:com).rp_id
       assert_equal "auth.umaxica.org", Webauthn::RelyingPartyConfigResolver.resolve(:org).rp_id
     end
 
@@ -74,7 +72,6 @@ module Webauthn
       assert_not config.trusted_origin?("https://auth.umaxica.app:8443")
       assert_not config.trusted_origin?("https://preview.umaxica.app")
       assert_not config.trusted_origin?("https://evil.umaxica.app")
-      assert_not config.trusted_origin?("https://auth.umaxica.com")
       assert_not config.trusted_origin?("https://auth.umaxica.org")
       assert_not config.trusted_origin?("https://auth.umaxica.app.evil.example")
       assert_not config.trusted_origin?("not a uri")

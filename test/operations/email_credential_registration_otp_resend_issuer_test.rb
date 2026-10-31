@@ -3,27 +3,15 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
-  %w(app com).each do |surface|
-    test "#{surface} Email registration resend preserves the original deadline failures and browser" do
-      actor, token, email =
-        case surface
-        when "app"
-          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
-          candidate = owner.client_emails.create!(
-            raw_address: "registration-resend-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-            otp_attempts_count: 1,
-          )
-          [owner, root, candidate]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_emails.create!(
-            raw_address: "registration-resend-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-            otp_attempts_count: 1,
-          )
-          [owner, root, candidate]
-        end
+  %w(app).each do |surface|
+    test "app Email registration resend preserves the original deadline failures and browser" do
+      owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      root_token = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
+      email = owner.client_emails.create!(
+        raw_address: "registration-resend-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+        otp_attempts_count: 1,
+      )
+      actor, token = owner, root_token
       token.rotate_refresh_token!
       nonce = SecureRandom.urlsafe_base64(32)
       issued = EmailCredentialRegistrationOtpIssuer.call(actor: actor, token: token, email: email, browser_nonce: nonce)

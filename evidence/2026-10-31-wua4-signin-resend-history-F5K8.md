@@ -1,0 +1,6 @@
+# Sign-in resend history corruption
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. Substantial uncommitted worktree changes affected the tested implementation.
+- The resender no longer interprets a nonempty malformed occurrence memo as empty or partial resend history. It accepts the existing writer's complete `purpose=in issued=...` format and optional retry field, and preserves the existing empty-memo behavior. Invalid history raises a fixed-message error before issuance.
+- Six service-level malformed memo cases checked that the Auth challenge and occurrence remain unchanged and no job is enqueued. `PARALLEL_WORKERS=1 bin/rails test test/services/sign/in/otp_resend_service_test.rb test/services/sign/in/otp_resend_policy_test.rb test/concurrency/sign_in_otp_resend_serialization_test.rb test/controllers/auth/app/web/v0/in/email/otps_controller_test.rb`: 54 runs, 272 assertions, no failures, errors or skips. Scoped RuboCop passed after formatting fixes.
+- A read-only local test database query found 0 nonempty occurrence memos; this does not establish the shape of historical development or production records. HTTP presentation of corrupt state, caller-owned outer transactions, real delivery and the full suite were not verified.

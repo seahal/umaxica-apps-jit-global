@@ -7,6 +7,7 @@ module AuthCeremonyAdmission
   extend ActiveSupport::Concern
 
   include FrameDenyingContentSecurityPolicy
+  include BrowserNavigationRequest
   include AuthCeremonySidCookie
   include AuthCeremonyContext
   include StepUpCeremonyLogging
@@ -21,6 +22,8 @@ module AuthCeremonyAdmission
 
     return render_invalid_admission_request! if params[:admission].present?
     return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
+
+    return render_invalid_admission_request! if invalid_admission_navigation?
 
     if request.get? && admission_reference_param.present?
       return render_admission_reference!(expected_intent:)
@@ -49,12 +52,19 @@ module AuthCeremonyAdmission
     render_invalid_admission_request!
   end
 
+  def invalid_admission_navigation?
+    return false if admission_reference_param.blank? || (!request.get? && !request.head?)
+
+    !document_navigation_request?
+  end
+
   def render_admission_reference!(expected_intent:)
     binding = admission_binding_for_reference
     return render_invalid_admission_request! unless binding
+    return render_invalid_admission_request! if binding.redeemed? && !(binding.attached? && binding.confirmed?)
 
     authorization_parent = AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction)
-    unless authorization_parent.include?(binding.purpose)
+    unless authorization_parent.include?(binding.purpose) || binding.redeemed?
       BaseAuthAdmissionCoordinator.validate_admission_continuation!(
         binding:, surface: auth_ceremony_surface, expected_intent:,
       )
@@ -93,6 +103,11 @@ module AuthCeremonyAdmission
           locked_binding,
           raw_auth_sid,
         ) && auth_ceremony_matches_intent?(expected_intent)
+          if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+            BaseAuthAdmissionCoordinator.validate_admission_continuation!(
+              binding: locked_binding, surface: auth_ceremony_surface, expected_intent:, allow_redeemed: true,
+            )
+          end
           nil
         else
           _record, sid = admit_confirmed_binding!(locked_binding, raw_auth_sid:, expected_intent:)
@@ -257,7 +272,6 @@ module AuthCeremonyAdmission
   def auth_ceremony_admission_action_url(**query)
     case auth_ceremony_surface
     when "app" then auth_app_ceremony_bindings_path(**query)
-    when "com" then auth_com_ceremony_bindings_path(**query)
     when "org" then auth_org_ceremony_bindings_path(**query)
     else raise ArgumentError, "unsupported Auth ceremony surface"
     end
@@ -291,10 +305,10 @@ module AuthCeremonyAdmission
     case auth_ceremony_surface
     when "app"
       (path == "sign_up") ? auth_app_sign_up_path(**query) : auth_app_sign_in_path(**query)
-    when "com"
-      (path == "sign_up") ? auth_com_sign_up_path(**query) : auth_com_sign_in_path(**query)
-    else
+    when "org"
       (path == "sign_up") ? auth_org_sign_up_path(**query) : auth_org_sign_in_path(**query)
+    else
+      raise ArgumentError, "unsupported Auth ceremony surface"
     end
   end
 

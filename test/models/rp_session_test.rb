@@ -27,22 +27,6 @@ class RpSessionTest < ActiveSupport::TestCase
       parent_key: :operator_token_id,
       parent_label: :operator_token,
     },
-    {
-      name: "visitor",
-      model: OpComGrant,
-      root_model: VisitorToken,
-      root_builder: -> {
-        VisitorStatus.ensure_defaults!
-        VisitorVisibility.ensure_defaults!
-        visitor = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-          visibility_id: VisitorVisibility::VISITOR,
-        )
-        VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      },
-      parent_key: :visitor_token_id,
-      parent_label: :visitor_token,
-    },
   ].freeze
 
   CASES.each do |rp_session_case|

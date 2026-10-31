@@ -19,13 +19,11 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
 
   ROOT_SURFACES = [
     { host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), tld: "APP" },
-    { host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), tld: "COM" },
     { host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"), tld: "ORG" },
     { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), tld: "APP" },
     { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), tld: "COM" },
     { host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), tld: "ORG" },
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL"), tld: "APP" },
-    { host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL"), tld: "COM" },
     { host: ENV.fetch("PUBLIC_CORE_STAFF_URL"), tld: "ORG" },
     { host: ENV.fetch("PUBLIC_WARP_SERVICE_URL"), tld: "APP" },
     { host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL"), tld: "COM" },
@@ -92,13 +90,6 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
         page_title: -> { I18n.t("sign.app.authentication.new.page_title") },
       },
       {
-        host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        path: -> { auth_com_sign_in_path(ri: "jp") },
-        admission: %w(com sign_in),
-        tld: "COM",
-        page_title: -> { I18n.t("sign.com.authentication.new.page_title") },
-      },
-      {
         host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         path: -> { auth_org_sign_in_path(ri: "jp") },
         admission: %w(org sign_in),
@@ -122,7 +113,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
           fv5126 = admission_reference_for(*entry.fetch(:admission))
           fv5125 = :entry_ref
           fv5124 = {}
-          fv5123 = {}
+          fv5123 = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
           fv5122 = false
           fv5121 = nil
           fv5120 = nil
@@ -367,7 +358,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
           fv5062 = admission_reference_for("app", "sign_in")
           fv5061 = :entry_ref
           fv5060 = { ri: region }
-          fv5059 = {}
+          fv5059 = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
           fv5058 = false
           fv5057 = nil
           fv5056 = nil

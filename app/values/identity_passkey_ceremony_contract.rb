@@ -8,31 +8,27 @@ module IdentityPasskeyCeremonyContract
   module_function
 
   ALGORITHM = "ES384"
-  SURFACES = %w(app com org).freeze
+  SURFACES = %w(app org).freeze
   OPERATIONS = %w(registration).freeze
   LEEWAY = 30
 
   SIGN_ISSUERS = {
     "app" => "https://log.umaxica.app",
-    "com" => "https://log.umaxica.com",
     "org" => "https://log.umaxica.org",
   }.freeze
 
   ACME_ISSUERS = {
     "app" => "https://www.umaxica.app",
-    "com" => "https://www.umaxica.com",
     "org" => "https://www.umaxica.org",
   }.freeze
 
   SIGN_AUDIENCES = {
     "app" => "https://log.umaxica.app/passkey-ceremony",
-    "com" => "https://log.umaxica.com/passkey-ceremony",
     "org" => "https://log.umaxica.org/passkey-ceremony",
   }.freeze
 
   ACME_AUDIENCES = {
     "app" => "https://www.umaxica.app/passkey-ceremony-result",
-    "com" => "https://www.umaxica.com/passkey-ceremony-result",
     "org" => "https://www.umaxica.org/passkey-ceremony-result",
   }.freeze
 

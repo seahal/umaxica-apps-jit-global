@@ -43,6 +43,63 @@ module Base
 
       private
 
+      def step_up_requirement(scope:, **options)
+        if scope == "settings_email"
+          return_to = resolve_step_up_pt(params[:pt])
+          path = URI.parse(return_to).path if return_to.present?
+          match = %r{\A/identity/emails/([A-Za-z0-9_-]{21})/edit\z}.match(path.to_s)
+          if match
+            email = ClientEmail.find_by!(user_id: current_client.id, public_id: match[1])
+            return super(scope: scope, **options.merge(resource_ref: email.public_id))
+          end
+        end
+
+        if scope == "settings_totp"
+          return_to = resolve_step_up_pt(params[:pt])
+          path = URI.parse(return_to).path if return_to.present?
+          match = %r{\A/identity/totps/([A-Za-z0-9_-]{21})\z}.match(path.to_s)
+          if match
+            credential = current_client.client_totp_credentials.find_by!(public_id: match[1])
+            return super(scope: scope, **options.merge(resource_ref: credential.public_id))
+          end
+        end
+
+        target = additional_step_up_target(scope)
+        return super(scope: scope, **options.merge(resource_ref: target)) if target
+
+        super
+      end
+
+      def additional_step_up_target(scope)
+        return unless %w(settings_passkey settings_secret_credential settings_telephone).include?(scope)
+
+        return_to = resolve_step_up_pt(params[:pt])
+        path = URI.parse(return_to).path if return_to.present?
+        issuance_match = %r{\A/secret_issuances/([A-Za-z0-9_-]{21})\z}.match(path.to_s)
+        if issuance_match && %w(settings_passkey settings_secret_credential).include?(scope)
+          issuance = ClientSecretIssuance.find_by!(
+            public_id: issuance_match[1], client_id: current_client.id,
+            browser_session_ref: current_session_token.public_id, sign_up_flow_ref: nil,
+          )
+          expected_scope = (issuance.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
+          raise ActionController::BadRequest, "Secret issuance scope mismatch" unless scope == expected_scope
+
+          return issuance.public_id
+        end
+        case scope
+        when "settings_passkey"
+          match = %r{\A/identity/passkeys/([A-Za-z0-9_-]{21})\z}.match(path.to_s)
+          return current_client.client_passkeys.active.find_by!(public_id: match[1]).public_id if match
+        when "settings_secret_credential"
+          match = %r{\A/secrets/([A-Za-z0-9_-]{21})(?:/edit)?\z}.match(path.to_s)
+          return current_client.client_secret_credentials.find_by!(public_id: match[1]).public_id if match
+        when "settings_telephone"
+          match = %r{\A/identity/telephones/([A-Za-z0-9_-]{21})/edit\z}.match(path.to_s)
+          return current_client.client_telephones.find_by!(public_id: match[1]).public_id if match
+        end
+        nil
+      end
+
       def redirect_to_bootstrap_choice
         return if reject_step_up_for_authentication_context!
 

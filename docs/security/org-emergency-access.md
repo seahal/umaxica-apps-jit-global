@@ -68,6 +68,11 @@ Resourceful, and the same resource shape as the normal passkey ceremony
 There is deliberately **no** emergency sign-up route and **no** emergency sign-out route. Both modes
 terminate through the one canonical sign-out ceremony.
 
+The three Emergency entry controllers declare the `sign_in` classification and a fixed
+standby-only exception to the normal ORG Sign In stop. The exception is restricted to those named
+controllers and cannot be selected with a request parameter. Admission, credential eligibility and
+the existing rate, CSRF and verification controls still apply.
+
 ## Eligibility
 
 `OrgStandbyAccessPolicy.eligible?(operator)` is the single authoritative decision. It currently
@@ -211,14 +216,20 @@ by giving it a Step-Up gate, not by listing it in the capability layer.
 
 Two mechanisms carry the capability layer:
 
-1. **Scopes.** `AuthenticationContextValue#constrain_scopes` filters the token's `scp` claim. An
-   Emergency operator token carries `read:org` but not `write:org`. Structural scopes
-   (`authenticated`, `domain:operator`) are untouched. No policy currently reads `write:org`, so
-   this filter has no authorization effect today.
+1. **Scopes.** `AuthenticationContextValue#constrain_scopes` touches a token's `scp` claim only
+   for an unrecognised context, which keeps the structural scopes and loses every
+   capability-named scope. A Standby token issues exactly the same scopes as the same Operator's
+   Normal token (`authenticated`, `domain:operator`, `read:org`, `write:org`); withholding a
+   scarce operation happens at that operation's Step-Up gate, so the scp claim is not a second
+   place where the same restriction could drift apart.
 2. **An Action Policy pre-check.** `ApplicationPolicy` runs `deny_capability_restricted_context`
    before every rule. Normal and Emergency contexts pass it and meet the ordinary rule; it never
    widens a rule that denies. An unrecognised context fails it for every rule instead of falling
    through to Normal.
+
+`test/unit/security/authentication_context_operation_inventory_test.rb` compares Normal and
+Standby over every declared policy operation and holds both to the identical decision, so the
+context layer cannot silently become a second authorization vocabulary.
 
 The pre-check reads the context from the verified access-token claims that
 `AuthenticationBase#load_from_token` records and `ActorSupport#resolved_current_token` returns.

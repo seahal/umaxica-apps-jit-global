@@ -11,6 +11,96 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
+  test "reservation waits for device revocation and refuses after it commits" do
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    device_id = token.device_session_record!.id
+    operation_id = SecureRandom.uuid
+    locked = Queue.new
+    release = Queue.new
+    ready = Queue.new
+
+    revoker =
+      Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
+        OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+          OpBaseAppRecord.transaction do
+            device = ClientDeviceSession.lock.find(device_id)
+            locked << connection.select_value("SELECT pg_backend_pid()")
+            release.pop
+            device.revoke!
+          end
+        end
+      ensure
+        ActiveRecord::Base.connection_handler.clear_active_connections!
+      end
+
+    revoker_pid = Timeout.timeout(10) { locked.pop }
+    reserver =
+      Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
+        AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+          OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+            ready << connection.select_value("SELECT pg_backend_pid()")
+            owner = Client.find(actor.id)
+            context = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
+            ClientSecretManualReservationIssuer.call!(
+              actor_context: context, token: ClientToken.find(token.id), operation_id: operation_id,
+              expires_after: 1.minute,
+            )
+          end
+        end
+      rescue ClientSecretManualReservationIssuer::Denied => e
+        e.message
+      ensure
+        ActiveRecord::Base.connection_handler.clear_active_connections!
+      end
+
+    reserver_pid = Timeout.timeout(10) { ready.pop }
+    connection = OpBaseAppRecord.lease_connection
+    Timeout.timeout(10) do
+      loop do
+        waiting =
+          connection.uncached do
+            connection.select_value(
+              "SELECT #{Integer(revoker_pid)} = ANY(pg_blocking_pids(#{Integer(reserver_pid)}))",
+            )
+          end
+        break if waiting
+
+        sleep 0.01
+      end
+    end
+
+    assert_not_equal revoker_pid, reserver_pid
+    release << true
+
+    assert revoker.value!
+    assert_equal "Secret reservation device is unavailable", reserver.value!
+    assert_predicate OpBaseAppRecord.uncached { ClientDeviceSession.find(device_id) }, :revoked?
+    assert_empty ClientSecretIssuance.where(origin_operation_id: operation_id)
+    assert_empty ClientSecretAuditOutbox.where(operation_ref: operation_id)
+  ensure
+    release << true if release
+    revoker&.wait(10)
+    reserver&.wait(10)
+    if actor
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
+      ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      token&.destroy!
+      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+      destroy_test_client_after_cross_database_cleanup!(actor)
+    end
+  end
+
   test "separate writers serialize manual and registered Passkey reservations at eighteen nineteen and twenty" do
     [18, 19, 20].product([%i(manual manual), %i(manual passkey), %i(passkey passkey)]).each do |count, paths|
       actor = Client.create!(
@@ -286,6 +376,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     old = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: tokens.first, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
+    tokens.first.reload.update!(last_step_up_resource_ref: old.public_id)
     ready = Queue.new
     release = Queue.new
     ActiveRecord::Base.connection_handler.clear_active_connections!

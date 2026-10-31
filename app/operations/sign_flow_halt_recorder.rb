@@ -52,10 +52,9 @@ class SignFlowHaltRecorder
 
   private
 
-  # Visitors are recorded in the client chronicle, as every other visitor authentication event is.
   def audit_class
     case @subject
-    when Client, Visitor then ClientChronicle
+    when Client then ClientChronicle
     when Operator then OperatorChronicle
     else raise ArgumentError, "unsupported sign flow audit subject: #{@subject.class.name}"
     end
@@ -63,7 +62,7 @@ class SignFlowHaltRecorder
 
   def audit_event_id
     case @subject
-    when Client, Visitor then ClientChronicleEvent::SIGN_FLOW_HALTED
+    when Client then ClientChronicleEvent::SIGN_FLOW_HALTED
     when Operator then OperatorChronicleEvent::SIGN_FLOW_HALTED
     else raise ArgumentError, "unsupported sign flow audit subject: #{@subject.class.name}"
     end

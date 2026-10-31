@@ -47,8 +47,6 @@ class EmailCredentialRegistrationOtpIssuer
       case [actor, token, email]
       in [Client, ClientToken, ClientEmail]
         ["app", ClientEmailCeremonyTransaction, ClientEmailStatus::UNVERIFIED]
-      in [Visitor, VisitorToken, VisitorEmail]
-        ["com", VisitorEmailCeremonyTransaction, VisitorEmailStatus::UNVERIFIED]
       in [Operator, OperatorToken, OperatorEmail]
         ["org", OperatorEmailCeremonyTransaction, OperatorEmailStatus::UNVERIFIED]
       else raise ArgumentError, "unsupported Email credential registration realm"
@@ -147,7 +145,7 @@ class EmailCredentialRegistrationOtpIssuer
       ) && actor.login_allowed? && actor.accessible?(source_now) &&
         uncommitted_candidate?(email, source_now) &&
         token.active_status?(ticket_now) && device_session.usable? &&
-        device_session.current_refresh_token_id == token.id
+        token.device_session_id == device_session.id && device_session.current_refresh_token_id == token.id
     end
 
     def source_owned_pending?(actor, token, email, device_session, pending_status)
@@ -155,9 +153,6 @@ class EmailCredentialRegistrationOtpIssuer
       when Client
         token.user_id == actor.id && device_session.user_id == actor.id && email.user_id == actor.id &&
           email.user_email_status_id == pending_status
-      when Visitor
-        token.visitor_id == actor.id && device_session.visitor_id == actor.id && email.visitor_id == actor.id &&
-          email.visitor_email_status_id == pending_status
       when Operator
         token.staff_id == actor.id && device_session.staff_id == actor.id && email.staff_id == actor.id &&
           email.staff_email_status_id == pending_status
@@ -166,7 +161,7 @@ class EmailCredentialRegistrationOtpIssuer
 
     def uncommitted_candidate?(email, now)
       case email
-      when ClientEmail, VisitorEmail
+      when ClientEmail
         email.accessible?(now) && !email.binding_finalized_at && !email.binding_released?
       when OperatorEmail then email.staff_email_status_id == OperatorEmailStatus::UNVERIFIED
       else raise ArgumentError, "unsupported Email registration candidate"

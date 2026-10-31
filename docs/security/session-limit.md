@@ -6,8 +6,8 @@
 > `acme/www` and `sign/id` wording below must not be used to reintroduce a shared session or an
 > authority endpoint on Base; see `adr/visa-op-host.md`.
 
-This document records the session-limit behavior for sign-in flows across the `app`, `com`, and
-`org` surfaces.
+This document records the session-limit behavior for sign-in flows on the `app` and `org` surfaces.
+COM authentication has been retired.
 
 > **Waiting lease and resolution admission implemented (2026-10-16).** R2-WU01 stores the waiting
 > slot on each realm resolution, enforces one live actor lease with a database partial unique index,
@@ -23,7 +23,6 @@ has ordinary access. N is the realm's limit of full-access units.
 | Realm | N   | Full-access counts | Waiting unit | Sign-in refused |
 | ----- | --- | ------------------ | ------------ | --------------- |
 | `app` | 2   | 0, 1, 2            | 3rd sign-in  | 4th onward      |
-| `com` | 1   | 0, 1               | 2nd sign-in  | 3rd onward      |
 | `org` | 1   | 0, 1               | 2nd sign-in  | 3rd onward      |
 
 Decided under the actor lock on the writer, with the database clock:
@@ -57,7 +56,6 @@ unexpired, unrotated token rows. No restricted placeholder is issued
 | Surface | Actor      | Token model     | Active sessions | Model total-row ceiling |
 | ------- | ---------- | --------------- | --------------- | ----------------------- |
 | `app`   | `Client`   | `ClientToken`   | 2               | 3                       |
-| `com`   | `Visitor`  | `VisitorToken`  | 1               | 2                       |
 | `org`   | `Operator` | `OperatorToken` | 1               | 2                       |
 
 The total-row ceiling is the token model's create validation (`MAX_TOTAL_SESSIONS_*`); it remains
@@ -74,9 +72,9 @@ exists.
 ticket-database transaction:
 
 1. Below the limit, it commits one ACTIVE session and returns `status: :success`.
-2. At the limit, it writes nothing and returns `status: :session_limit_pending`. The sign-in flow
-   moves to `SESSION_LIMIT_PENDING` and is the only pending state; no token, cookie,
-   `current_resource`, or `LOGGED_IN` audit exists for the attempt.
+2. At the limit, it creates a pending resolution and returns `status: :session_limit_pending`.
+   The parent remains in `SESSION_ISSUANCE_PENDING`; no token, cookie, `current_resource`, or
+   `LOGGED_IN` audit exists for the attempt.
 
 An open resolution occupies the actor's waiting slot under the actor lock. R2-WU01 expires elapsed
 rows before a new claim and rejects a second live claim. R2-WU02 catches that named occupied-slot
@@ -93,7 +91,7 @@ result with HTTP 403; the existing flow and lease remain unchanged.
   and the OIDC resume above (`adr/sign-up-finalization-in-auth.md`).
 
 The show action is read-only. The existing Visa update path accepts PATCH/PUT to select a candidate
-and an explicit POST with `continue=1` to continue the same browser-bound flow. All three Visa
+and an explicit POST with `continue=1` to continue the same browser-bound flow. Both Visa
 limitation routes expose that POST mapping without adding a new action surface. Selection records a
 candidate; it does not revoke a session. The final `log_in` call obtains the actor, parent-flow and
 resolution locks in the canonical order and calls
@@ -108,9 +106,8 @@ existing sessions and waiting lease intact. Competing new login and continuation
 on the actor; the first eligible final commit wins, and no GET, polling or background request
 promotes a waiting flow.
 
-Cancelling fails only the waiting flow; no existing session is touched. com and org use the same
-ceremony at `/sign/in/limitation` on their Visa host (`Visa::Com::Sign::In::LimitationsController`,
-`Visa::Org::Sign::In::LimitationsController`).
+Cancelling fails only the waiting flow; no existing session is touched. ORG uses the corresponding
+ceremony at `/sign/in/limitation` on its Visa host (`Visa::Org::Sign::In::LimitationsController`).
 
 ## Sign-In Families
 
@@ -141,7 +138,6 @@ Token state is stored through the per-surface reference id, not through a token 
 column:
 
 - `ClientToken#user_token_status_id`
-- `VisitorToken#visitor_token_status_id`
 - `OperatorToken#staff_token_status_id`
 
 The current token-status ids reserve space between active and terminal states:
@@ -170,11 +166,9 @@ model-level failure before excess live token rows are accepted.
 
 ## R2-WU03 Delivery (2026-10-16)
 
-The three realm resolution models now permit a resolved row without selected-session facts when
-capacity was freed naturally. The existing state/timestamp checks remain in place for selected
-completions, and the forward migrations validate the adjusted checks separately. The source and
-schema paths were exercised against the local development databases; the focused model, controller,
-integration and Inertia component checks are recorded in the R2-WU03 evidence file.
+At delivery, the three realm resolution models permitted a resolved row without selected-session
+facts when capacity was freed naturally. The APP and ORG resolution models remain; COM authentication
+has since been retired. The historical checks are recorded in the R2-WU03 evidence file.
 
 ## R2-WU04 Delivery (2026-10-16)
 
@@ -183,12 +177,12 @@ to expiry, rotation and device-session checks. Browser RP access, root lookup, O
 UserInfo validation, Refresh and reissue, Step-Up, and credential ceremony consumers refuse
 historical `RESTRICTED` (103) rows before principal creation. The old RestrictedSessionGuard, its
 callback registrations and its refresh exception path were removed; the status reference and
-historical token/audit rows remain readable. MFA reset remains a GET-only unavailable page, and the
-three Base reset controllers are unreachable from a historical 103 session.
+historical token/audit rows remain readable. MFA reset remains a GET-only unavailable page. At that
+delivery, the three then-existing Base reset controllers were unreachable from a historical 103 session.
 
 ## Delivered reconciliation (2026-10-06)
 
-All three realms use the durable session-limit resolution contract. The parent sign-in flow remains
+APP and ORG use the durable session-limit resolution contract. The parent sign-in flow remains
 in `SESSION_ISSUANCE_PENDING` while the child transaction is bound to actor, browser, realm and OIDC
 transaction where present. Resolve, cancel, expire and conflict transitions lock and reload the
 owner and use the database clock; there is no early `SESSION_LIMIT_PENDING` graph edge or

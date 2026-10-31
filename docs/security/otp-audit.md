@@ -81,6 +81,11 @@ independent acceptance remain unverified unless a revision-scoped evidence recor
   plaintext.
 - Delivery adapters use the existing encrypted outbound payload boundary, so
   OTP values are not placed in queue arguments as plaintext.
+- Bound Telephone signup and credential-registration jobs limit each provider call to 15 seconds.
+  A timeout is an ambiguous transport outcome, leaves the issued generation unchanged, and follows
+  the existing SMS retry handling; it does not prove whether the provider accepted the message.
+- APP and ORG OTP messages using the standard SMTP delivery method limit the SMTP call to 15 seconds;
+  a timeout does not establish whether the server accepted the message.
 - Email adapters record successful enqueue and enqueue failure as separate
   sanitized Chronicle facts without recipient or OTP content; provider delivery
   receipts remain outside the current contract.

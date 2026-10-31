@@ -23,6 +23,20 @@ class SecurityJwtPreferenceTokenCodecClaimsTest < ActiveSupport::TestCase
     assert_equal "AppPreference", SecurityJwtPreferenceTokenCodec.extract_preference_type(payload)
   end
 
+  test "legacy app and org tokens retain their existing size contract" do
+    [[ENV.fetch("PUBLIC_BASE_SERVICE_URL"), "AppPreference"],
+     [ENV.fetch("PUBLIC_BASE_STAFF_URL"), "OrgPreference"],].each do |host, preference_type|
+      preferences = { "lx" => "ja", "extension" => "x" * 2_500 }
+      token = SecurityJwtPreferenceTokenCodec.encode(
+        preferences, host: host, preference_type: preference_type,
+                     public_id: "pref-public-id", jti: SecureRandom.uuid,
+      )
+
+      assert_operator token.bytesize, :>, SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+      assert_equal preferences, SecurityJwtPreferenceTokenCodec.decode(token, host: host).fetch("preferences")
+    end
+  end
+
   test "a re-signed token with one binding claim changed is refused" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     genuine = SecurityJwtPreferenceTokenCodec.encode(

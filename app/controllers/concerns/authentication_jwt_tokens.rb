@@ -102,7 +102,6 @@ module AuthenticationJwtTokens
     case token_record
     when ClientToken then ClientDeviceSession.find(device_session_id)
     when OperatorToken then OperatorDeviceSession.find(device_session_id)
-    when VisitorToken then VisitorDeviceSession.find(device_session_id)
     else raise ArgumentError, "unsupported authentication token record"
     end
   end
@@ -149,7 +148,6 @@ module AuthenticationJwtTokens
   def resource_surface_key
     case resource_type
     when "operator" then "org"
-    when "visitor" then "com"
     else "app"
     end
   end

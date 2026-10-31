@@ -45,6 +45,51 @@ module Jit
           end
         end
 
+        test "com preference public keyset works without a private key" do
+          public_only_key = OpenSSL::PKey::EC.generate("secp384r1")
+          jwk = JitSecurityJwtRegistry.export_public_jwk(public_only_key, kid: "com-public-only")
+          with_registry_inputs(
+            "PREFERENCE_COM_JWT_ACTIVE_KID" => "com-public-only",
+            "PREFERENCE_COM_JWT_PRIVATE_KEYSET" => nil,
+            "PREFERENCE_COM_JWT_PUBLIC_KEYSET" => JSON.generate(keys: [jwk]),
+            "PREFERENCE_COM_JWT_ISSUER" => "https://www.umaxica.com",
+            "PREFERENCE_COM_JWT_AUDIENCE" => "com",
+          ) do
+            issuer = JitSecurityJwtRegistry.reload!.fetch("preference_com")
+
+            assert_nil issuer.current_key.private_key
+            assert_predicate issuer.public_key_for("com-public-only"), :present?
+            snapshot = {
+              "theme" => "system",
+              "language" => "ja",
+              "timezone" => "Asia/Tokyo",
+              "currency" => "jpy",
+              "date_format" => "iso",
+              "time_format" => "24",
+              "motion" => "standard",
+              "density" => "standard",
+              "page_size" => "20",
+            }
+            now = Time.current
+            claims = {
+              "iss" => "https://www.umaxica.com",
+              "sub" => "row",
+              "aud" => "com",
+              "iat" => now.to_i,
+              "exp" => now.to_i + 400.days.to_i,
+              "jti" => "generation",
+              "preferences" => snapshot,
+            }
+            token = JWT.encode(claims, public_only_key, "ES384", { kid: "com-public-only", typ: "at+jwt" })
+
+            assert_predicate SecurityJwtPreferenceTokenCodec.decode(token, host: "www.umaxica.com"), :present?
+            assert_nil SecurityJwtPreferenceTokenCodec.encode(
+              snapshot, host: "www.umaxica.com", preference_type: "ComPreference", issued_at: now,
+                        public_id: "row", jti: "generation",
+            )
+          end
+        end
+
         test "loads configured Base OIDC client assertion issuer" do
           with_registry_inputs(
             "OIDC_CLIENT_BASE_APP_ACTIVE_KID" => "oidc-base-app-kid",

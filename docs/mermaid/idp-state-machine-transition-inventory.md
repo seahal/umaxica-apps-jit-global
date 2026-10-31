@@ -1,5 +1,28 @@
 # Current transition inventory
 
+## Credential removal commit ordering (2026-10-31)
+
+For the Client Passkey, Operator Passkey, Client TOTP, Email and Telephone removal transitions,
+`IdentityCredentialRemovalCommitter` retains the Zenith owner and credential locks while the
+Ticket invalidation transaction completes, then mutates the credential and writes its existing
+source audit where one exists. If the caller already has an outer Ticket transaction, that outer
+transaction controls the actual commit. Independent-connection failure checks cover standalone
+Client TOTP and Client/Operator Passkey removal, while an outer Ticket rollback has been observed
+to restore Step-Up after a Client TOTP removal committed. The writer does not yet reject that outer
+transaction. TOTP source audit and the other failure windows remain open.
+
+## Corporate credential entry is retired (2026-10-29, WU-3)
+
+No corporate (`com`) host serves a credential ceremony any more. The `auth`, `visa`, and `core` com
+routes and controllers are removed, Base com is anonymous, and Warp com keeps only public read-only
+pages and operational endpoints.
+
+Completed in WU-5 (2026-10-29): every `visitor_*` model, table and writer file was deleted, and the
+visitor/com realm databases (`com_zenith`, `com_signal`, `op_base_com`, `rp_*_com`) were dropped.
+The 39 `idp-visitor-*.mmd` diagrams are archived under `archive/visitor-com-retired/` and the mermaid
+README marks those rows RETIRED (WU-5); do not cite any `*/com/*` controller or `visitor_*` table as
+a current boundary in a new row.
+
 ## Visa logout request and completion transport (2026-10-26)
 
 Axis: the per-realm Rails session fields managed by `SignOidcLogout`; the completed marker is
@@ -51,14 +74,76 @@ lives in `test/operations/rp_cell_session_revoker_test.rb` and
 
 ## DBSC HTTP admission (2026-10-22)
 
-The client, visitor and operator DBSC axes, including their preference axes, retain their existing
-state transitions. The HTTP entry points now parse Structured Field strings once and serialize
-response strings with escaping. Refresh requires a matching stored session identifier before
-challenge issuance; malformed or mismatched identifiers leave the challenge and cookies unchanged.
-The six `idp-*-dbsc.mmd` diagrams note this transport guard without introducing a new state or
-transition. See [DBSC HTTP boundary](../architecture/dbsc.md#http-header-boundary),
+The client, visitor and operator **authentication-token** DBSC axes retain their existing state
+transitions. Preference-specific DBSC axes were retired with the WU-7/WU-9 Preference contract.
+The HTTP entry points parse Structured Field strings once and serialize response strings with
+escaping. Refresh requires a matching stored session identifier before challenge issuance;
+malformed or mismatched identifiers leave the challenge and cookies unchanged. The three current
+`idp-*-dbsc.mmd` diagrams cover authentication tokens only. See
+[DBSC HTTP boundary](../architecture/dbsc.md#http-header-boundary),
 `test/controllers/dbsc_header_boundary_test.rb` and
 `test/services/dbsc/proof_input_validation_test.rb`.
+
+## Preference lifecycle axes (WU-9, 2026-10-31)
+
+The four APP/ORG axes use the same two-state lifecycle as COM. Account-local axes are included
+because Base save creates an account row and reset retires it; Visa sign-in only reads the explicit
+account snapshot. The APP/ORG destructive schema cutover migrations are authored but have not been
+applied, pending the separate execution-ticket approval. The diagrams describe the implemented
+writer contract and planned target reference shape, not applied database state or test results.
+
+### idp-app-preference-status
+
+Diagram: [App anonymous Preference](./idp-app-preference-status.mmd). Storage target:
+`app_preferences.status_id` / `app_preference_statuses` (`ACTIVE=0`, `RETIRED=1`).
+
+| Transition ID | From | Trigger | To | Guard and effect | Writer |
+| --- | --- | --- | --- | --- | --- |
+| idp-app-preference-status:T001 | ACTIVE | Base reset or committed Visa sign-out | RETIRED | Lock current valid row; replacement and issuance share the setting transaction | `PreferenceWriteBoundary#write_app_org_preference!` / `#write_visa_preference!` |
+
+Visa sign-in applies only explicit Client display children and leaves the anonymous row active. The
+sign-out writer copies stored display children, including region, plus consent receipt, Web Push,
+and browser binding from the old row's database state. Preference failure is handled after
+authentication finalization and does not change the authentication result.
+
+### idp-client-preference-status
+
+Diagram: [Client account Preference](./idp-client-preference-status.mmd). Target storage:
+`client_preferences.status_id` / `client_preference_statuses` (`ACTIVE=0`, `RETIRED=1`).
+
+| Transition ID | From | Trigger | To | Guard and effect | Writer |
+| --- | --- | --- | --- | --- | --- |
+| idp-client-preference-status:T001 | absent | explicit authenticated Base save | ACTIVE | Actor is realm-matched; create the row and explicit option children | `PreferenceWriteBoundary#write_actor_preference!` |
+| idp-client-preference-status:T002 | ACTIVE | Base Preference reset | RETIRED | Lock the active actor row; the retired row is not reactivated | `ClientPreference#retire!` |
+
+A later explicit save creates a new row. Visa sign-in reads the explicit display snapshot and does
+not create or mutate the account row. Legacy `explicit_fields = NULL` is not classified or inferred.
+
+### idp-org-preference-status
+
+Diagram: [Org anonymous Preference](./idp-org-preference-status.mmd). Storage target:
+`org_preferences.status_id` / `org_preference_statuses` (`ACTIVE=2`, `RETIRED=1`).
+
+| Transition ID | From | Trigger | To | Guard and effect | Writer |
+| --- | --- | --- | --- | --- | --- |
+| idp-org-preference-status:T001 | ACTIVE | Base reset or committed Visa sign-out | RETIRED | Lock current valid row; replacement and issuance share the setting transaction | `PreferenceWriteBoundary#write_app_org_preference!` / `#write_visa_preference!` |
+
+Visa sign-in applies only explicit Operator display children. Sign-out copies stored display
+children, including region, plus consent receipt, Web Push, and browser binding from the old row's
+database state. The destructive local schema cutover remains unapproved and unapplied.
+
+### idp-operator-preference-status
+
+Diagram: [Operator account Preference](./idp-operator-preference-status.mmd). Target storage:
+`operator_preferences.status_id` / `operator_preference_statuses` (`ACTIVE=0`, `RETIRED=1`).
+
+| Transition ID | From | Trigger | To | Guard and effect | Writer |
+| --- | --- | --- | --- | --- | --- |
+| idp-operator-preference-status:T001 | absent | explicit authenticated Base save | ACTIVE | Actor is realm-matched; create the row and explicit option children | `PreferenceWriteBoundary#write_actor_preference!` |
+| idp-operator-preference-status:T002 | ACTIVE | Base Preference reset | RETIRED | Lock the active actor row; the retired row is not reactivated | `OperatorPreference#retire!` |
+
+A later explicit save creates a new row. Visa sign-in reads the explicit display snapshot and does
+not create or mutate the account row. Legacy `explicit_fields = NULL` is not classified or inferred.
 
 ## Root authentication epoch cutoff (2026-10-18)
 
@@ -92,7 +177,9 @@ Diagram: [local enrollment](./idp-rp-local-enrollment.mmd). No status enum is ad
 | expired                     | enrolled   | verified callback with live incoming authority; close expired local session under the anchor before creating its successor                             |
 | tombstoned                  | tombstoned | duplicate verified logout; recheck receipt after acquiring anchor, acknowledge the committed result                                                    |
 
-Callback refuses tombstoned anchors without identity enrollment. Independent-connection regression
+Callback refuses tombstoned anchors without identity enrollment. For an already bound anchor, it
+checks the full issuer, realm, client and subject tuple before creating another local identity.
+Independent-connection regression
 coverage in `rp_refresh_logout_concurrency_test.rb` observes an actual PostgreSQL lock wait before
 releasing the first commit, exercises both absent-sid orders and concurrent duplicate delivery, and
 checks the absorbing tombstone, receipt count and revoked local sessions. Execution results belong
@@ -257,7 +344,7 @@ refuse without proof consumption; Rails CSRF and the separate HTTP phase gate re
 | Transition ID                  | From               | Event                      | To                    | Guard and effect                                                                                                                            |
 | ------------------------------ | ------------------ | -------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | idp-sign-up-otp-challenge:T001 | absent             | channel issuer             | issued                | Original Ticket/nonce, pending owner and candidate, destination, operation, generation and keyed verifier; owning locks and fresh DB clocks |
-| idp-sign-up-otp-challenge:T002 | issued             | resend                     | issued                | Replace only this unconsumed generation; preserve candidate/shared failure limits                                                           |
+| idp-sign-up-otp-challenge:T002 | issued             | resend                     | issued                | Require a live OTP deadline, replace the unconsumed generation, retain the parent Flow deadline and preserve candidate/shared failure limits |
 | idp-sign-up-otp-challenge:T003 | issued             | successful verification    | verified              | Recheck admission after owning locks and budget wait; atomically consume proof on its typed Ticket ceremony                                 |
 | idp-sign-up-otp-challenge:T004 | verified           | exact retry                | verified              | Same input and binding, eligible owner/candidate, live fixed result deadline and common failure budget; proof unchanged                     |
 | idp-sign-up-otp-challenge:T005 | issued or verified | deadline or authority lost | unavailable predicate | No proof mutation; parent expiry uses the existing named Ticket termination                                                                 |
@@ -284,6 +371,9 @@ diagram: `idp-auth-email-otp-challenge.mmd`. App/com sign-in receipt, verificati
 connected. Final delivery uses the original ceremony reference and generation; stale evidence
 refuses transport without advancing this axis.
 
+Initial real-contact sign-in checks Source cooldown under the owner and Contact locks before
+issuing an Auth generation. Resend has its own existing admission and rate limits.
+
 | Transition ID                     | From                 | Event                       | To                | Guard and effect                                                                                                                                                                           |
 | --------------------------------- | -------------------- | --------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | idp-auth-email-otp-challenge:T001 | absent or unverified | issue_email_otp!            | issued            | Active admitted continuity, pending locked parent, DB time; current effective Contact or dummy; replace only this ceremony generation                                                      |
@@ -301,10 +391,10 @@ owner, destination, generation and deadline under their owning locks. Provider t
 inside those locks to prevent concurrent reissue or cancellation from making an already-checked
 payload stale; production lock-duration behavior remains unmeasured.
 
-At the initial locked parent decision and the post-Contact-lock issuance, verification and delivery
-decisions, an overdue primary-pending local sign-in parent uses its existing `expire_sign_in!`
-transition before refusal. Issuance raises after that owning transaction closes; verification and
-transport return explicit refusals. OIDC expiry/cancellation adds no invented transition.
+Issuance, verification and delivery acquire the Contact owner and Contact before the OIDC parent
+and Auth session. Verification and delivery treat the first Contact lookup only as a lock target
+and recheck the locked challenge reference before use. OIDC expiry/cancellation adds no invented
+transition.
 
 ## idp-contact-audit-outbox
 
@@ -409,6 +499,10 @@ Tests read cover participant rejection, selector binding, legacy dashboard/retur
 and finalization replay; no test execution is claimed.
 
 ## idp-visitor-sign-in
+
+Historical axis: visitor identity models, tables and writers were retired in WU-5; WU-7 also
+removes DBSC state from the surviving anonymous com Preference model. The com setting and
+Chronicle databases remain. This section records the former transitions for traceability.
 
 Implementation: `FlowSignIn / participants / AuthenticationSessionCommitter`. Storage:
 `visitor_sign_in_flows` / `status_id`.
@@ -598,9 +692,12 @@ their concrete authority until their own slice is completed.
 
 APP and COM contact entry is fail-closed (D-177): a second entry submit while the browser's attempt
 is not terminal-and-cleaned is refused and writes nothing; no entry path halts or cleans an earlier
-Flow. The former `superseded_by_restart` HALTED writer is removed. The birthdate checkpoint halts an
-attempt below the minimum age through `SignUpTermination` (HALTED with same-request cleanup) without
-writing the birthdate (D-178). The lifecycle edges and terminal absorption remain unchanged.
+Flow. The former `superseded_by_restart` HALTED writer is removed. The birthdate checkpoint no
+longer halts by age (ADR `sign-up-one-day-minimum-age-and-feature-level-age-restrictions`,
+R-AU-50): an ineligible birthdate — today or later — is refused with the public date copy before
+it is written (D-178) and the checkpoint stays active; other events still halt through
+`SignUpTermination` with same-request cleanup. The lifecycle edges and terminal absorption remain
+unchanged.
 
 Email finalization locks the Source owner before its candidate and commits the binding fact, app
 principal promotion and Source audit intent together. Credential after-commit MFA refresh reloads
@@ -622,12 +719,15 @@ additionally require an active owner under its lock; suspended-owner public test
 candidate proof and create no intent. The complete fault/concurrency and exact recovery matrix
 remains unfinished.
 
-The independent Email and Telephone signup issuers/verifiers lock the signup parent before issuing
-or consuming its ceremony-owned proof. They check terminal state, expiry and logical discard against
+The Email and Telephone signup issuers, verifiers and delivery guards lock the Source owner and
+Contact before the signup parent. They check terminal state, expiry and logical discard against
 the owning Ticket DB clock and recheck authority after Source locks and budget admission. An overdue
 parent is refused without a write (D-177); the issuers, verification committers and delivery guards
 no longer invoke `SignUpTermination`, and only `SignUpExpiryJob` moves it to EXPIRED with cleanup.
 This adds no signup state or transition and does not claim distributed atomicity.
+
+For both signup OTP issuers, the Ticket generation transaction finishes before the Source
+cooldown update. A Source update failure leaves the committed generation without enqueueing it.
 
 Implementation: `SignUpStateMachine + SignFlow / FlowSignUp`. Storage: `client_sign_up_flows` /
 `status_id`.
@@ -718,6 +818,9 @@ expire signup. Candidate creation preserves artifacts of a previous halted flow 
 cleanup owner reaches the purge boundary.
 
 ## idp-visitor-sign-up
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 The email entry POST preserves its previous durable locator while resetting the session phase. After
 Turnstile, identifier and explicit consent validation, `supersede_active_sign_up_flow!` uses the
@@ -898,6 +1001,9 @@ The OP cleanup fact is a separate commit; a retry after a principal commit reche
 
 ## idp-visitor-sign-up-cleanup
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `SignUpTermination / SignUpArtifactCleanup`. Storage: `visitor_sign_up_flows` /
 `cleanup_status_id`.
 
@@ -945,6 +1051,12 @@ Tests read: `test/models/auth_ceremony_session_test.rb`,
 `test/models/auth_ceremony_session_concurrency_test.rb`,
 `test/models/auth_ceremony_revocation_concurrency_test.rb`.
 
+The app Switch controller locks and revalidates the parent, then locks the ceremony and rechecks
+authentication progress. It wraps `cancel!` and handoff generation in the same OP database
+transaction. A handoff generation failure rolls back the cancellation; the continuation is sent
+only after the transaction succeeds. `test/integration/sign_entry_otp_admitted_order_test.rb`
+exercises the failure and a subsequent successful Switch.
+
 | Transition ID                         | Mutation kind         | From     | Event / Trigger                          | To        | Guard                                                | Side effect                                   | Source file                                  | Confidence |
 | ------------------------------------- | --------------------- | -------- | ---------------------------------------- | --------- | ---------------------------------------------------- | --------------------------------------------- | -------------------------------------------- | ---------- |
 | idp-client-auth-ceremony-session:T001 | DOCUMENTED_TRANSITION | issued   | admit!                                   | admitted  | active; unadmitted; known purpose; row lock          | admitted_at; purpose; binding                 | app/models/concerns/auth_ceremony_session.rb | CONFIRMED  |
@@ -971,6 +1083,9 @@ rotate_and_admit!, while callers terminate through the model; token security tra
 linked continuity.
 
 ## idp-visitor-auth-ceremony-session
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `AuthCeremonySession`. Storage: `visitor_auth_ceremony_sessions` /
 `admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at`.
@@ -1198,6 +1313,9 @@ writes to credential/contact status are side effects, not ceremony states.
 
 ## idp-visitor-email-ceremony
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `EmailCeremonyTransactionable`. Storage: `visitor_email_ceremony_transactions` /
 `status`.
 
@@ -1226,6 +1344,9 @@ separate machine indexed below.
 
 ## idp-visitor-telephone-ceremony
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `TelephoneCeremonyTransactionable`. Storage:
 `visitor_telephone_ceremony_transactions` / `status`.
 
@@ -1253,6 +1374,9 @@ writes to credential/contact status are side effects, not ceremony states.
 
 ## idp-visitor-passkey-ceremony
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `PasskeyCeremonyTransactionable`. Storage: `visitor_passkey_ceremony_transactions` /
 `status`.
 
@@ -1279,6 +1403,9 @@ writes to credential/contact status are side effects, not ceremony states. Passk
 linked to step-up through a RESTRICT FK; committed by Base operations.
 
 ## idp-visitor-secret-credential-ceremony
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `SecretCredentialCeremonyTransactionable`. Storage:
 `visitor_secret_credential_ceremony_transactions` / `status`.
@@ -1472,6 +1599,12 @@ describe compensation/retained proof, not a guaranteed distributed transaction.
 Base cancellation and ordinary freshness finalization require a usable DeviceSession and its current
 root token under source-owner/device/token/parent locks. These guards also apply to visitor and
 operator Base committers; broader direct model APIs remain inventoried separately.
+APP TOTP Step-Up verification checks a usable owner-bound current device and token before source
+verification, then locks and rechecks the owner, credential, device, token, session and parent before
+evidence. A refused post-verification check can leave the source TOTP window consumed without evidence.
+APP and ORG Passkey Step-Up verification rechecks the actor and credential under source locks and
+the device, token, session and parent under Ticket locks before evidence. A post-verification refusal
+can leave the challenge burned and the source sign counter updated without Ticket evidence.
 
 Implementation: `StepUpCeremonyTransactionable / Base committers`. Storage:
 `client_step_up_ceremony_transactions` / `status`.
@@ -1513,6 +1646,9 @@ consume_email_registration!, which locks the original parent and obtains its own
 Source binding commits.
 
 ## idp-visitor-step-up-ceremony
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `StepUpCeremonyTransactionable / Base committers`. Storage:
 `visitor_step_up_ceremony_transactions` / `status`.
@@ -1629,6 +1765,9 @@ and concurrent one winner. Auth-to-Base result uses opaque admission transport; 
 redemption creates RP session. No target external_result event is inferred.
 
 ## idp-visitor-oidc-authorization
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `OidcAuthorizationTransactionable`. Storage:
 `visitor_oidc_authorization_transactions` / `status`.
@@ -1765,6 +1904,9 @@ issues the session at authorization resume.
 
 ## idp-visitor-sign-in-flow-evidence
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `SignInFlowAuthenticationEvidence`. Storage: `visitor_sign_in_flows` /
 `authentication_method / authentication_event_at / authentication_context`.
 
@@ -1887,41 +2029,6 @@ write; concurrency/replay is controlled by proof validation and challenge transp
 transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
 enforced. Tests are inspected, not executed.
 
-## idp-client-preference-dbsc
-
-Implementation: `DbscBindable / DbscRegistrationService`. Storage: `app_preferences` /
-`dbsc_status_id`.
-
-Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
-`app/services/dbsc_record_adapter.rb`,
-`app/controllers/concerns/preference_dbsc_registration_endpoint.rb`.
-
-Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
-`test/services/dbsc/registration_service_test.rb`,
-`test/controllers/concerns/preference/dbsc_registration_endpoint_test.rb`.
-
-| Transition ID                   | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
-| ------------------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
-| idp-client-preference-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-client-preference-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-client-preference-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-| idp-client-preference-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-client-preference-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-| idp-client-preference-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-client-preference-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-| idp-client-preference-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-client-preference-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-
-DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
-reference/predicate vocabulary with no located production setter; proof failure returns ok:false
-without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
-NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
-Preference creation defaults are in topology; no preference pending writer was confirmed.
-Registration validates proof before acquiring record lock and does not recheck source state in its
-write; concurrency/replay is controlled by proof validation and challenge transport, not a
-transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
-enforced. Tests are inspected, not executed.
-
 ## idp-client-device-session
 
 Implementation: `DeviceSessionable`. Storage: `client_device_sessions` / `status_id`.
@@ -1973,6 +2080,9 @@ revocation until max expiry/leeway. No universal EXPIRED/cancel state.
 
 ## idp-visitor-token
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `TokenStatusManagement / RefreshTokenable`. Storage: `visitor_tokens` /
 `actor token status FK`.
 
@@ -2022,6 +2132,9 @@ indexed.
 
 ## idp-visitor-dbsc
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `DbscBindable / DbscRegistrationService`. Storage: `visitor_tokens` /
 `actor token DBSC status FK`.
 
@@ -2053,7 +2166,51 @@ write; concurrency/replay is controlled by proof validation and challenge transp
 transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
 enforced. Tests are inspected, not executed.
 
+## idp-com-preference-status
+
+Implementation: `PreferenceLifecycle#retire!` through the com reset write boundary.
+Storage: `com_preferences.status_id` and `com_preference_statuses`. Reference IDs 2 and 1 are
+named ACTIVE and RETIRED respectively. Issuance timestamps are stored on the parent row.
+The model and reference-table check constrain status to those two IDs. The foreign key binds each
+parent to a reference row; direct SQL can still bypass the model's transition validation.
+Com reads and writes require active status and a database decision time strictly before the
+stored last-issued expiry; an individual presented JWT must also remain unexpired.
+
+| Transition | From | Trigger | To | Guard and effect | Writer |
+| --- | --- | --- | --- | --- | --- |
+| idp-com-preference-status:T001 | ACTIVE | Confirmed reset | RETIRED | A current JWT identifies an active, locked row; retirement and creation of a default replacement commit together. A second retirement is rejected and the last issued expiry is retained. | `PreferenceLifecycle#retire!` |
+
+Invalid, missing or stale JWTs do not retire or record a reset event against the row they name.
+A valid reset records `RESET_BY_USER_DECISION` against the old row inside the enclosing Chronicle
+transaction. A signing or audit-write failure rolls back the setting transaction and that audit.
+A model update rejects a retired-to-active status change; this validation
+does not protect direct SQL or stale concurrent model updates. A successful com save persists the
+signed JWT issuance and expiry timestamps.
+`PreferenceLifecycle#issuance_retention_elapsed?` checks the last issued expiry plus 30 days at
+the supplied time, independently of status. It does not authorize deletion or check audit and hold
+references. `PreferenceLifecycleJob` uses `PreferenceLifecyclePurger` to recheck the database
+clock and Chronicle subject and com-preference actor references under the Chronicle advisory lock
+and parent lock, then destroys children, including the consent receipt, and the parent in the
+setting transaction. No com-specific hold model has been found;
+the job is not registered in a recurring schedule.
+The audit-writer/collection lock is exercised with separately committed database connections in
+both orders: an audit committed first retains its parent; an audit waiting behind a completed
+collection is rejected when its parent no longer exists.
+`ComPreference#destroy!` refuses a preference with associated Chronicle entries instead of
+destroying those entries. Direct SQL and validation-skipping deletion do not use this safeguard.
+The write boundary acquires a shared Chronicle advisory transaction lock before the setting
+transaction; the intended purge must acquire the corresponding exclusive lock before locking a
+preference. The boundary wraps the setting transaction in a Chronicle transaction so signing failure
+rolls back the creation audit as well. The setting and Chronicle commits remain separate: a
+Chronicle commit failure after the setting commit can leave a committed setting without its audit.
+Shared cookies are queued only after both commit attempts return successfully.
+An explicit consent choice writes its receipt and the binding with the cookie choices in the same
+setting transaction. Reset retains the old row's receipt and does not copy it to the replacement.
+
 ## idp-visitor-preference-dbsc
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `DbscBindable / DbscRegistrationService`. Storage: `com_preferences` /
 `dbsc_status_id`.
@@ -2090,6 +2247,9 @@ enforced. Tests are inspected, not executed.
 
 ## idp-visitor-device-session
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `DeviceSessionable`. Storage: `visitor_device_sessions` / `status_id`.
 
 Sources: `app/models/concerns/device_sessionable.rb`, `app/models/visitor_device_session.rb`,
@@ -2112,6 +2272,9 @@ encode status transitions. No own expires_at/expiry/cancel/failure state; root t
 govern authentication.
 
 ## idp-visitor-rp-session
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `RpSession`. Storage: `op_com_grants` / `revoked_at / expires_at`.
 
@@ -2219,41 +2382,6 @@ write; concurrency/replay is controlled by proof validation and challenge transp
 transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
 enforced. Tests are inspected, not executed.
 
-## idp-operator-preference-dbsc
-
-Implementation: `DbscBindable / DbscRegistrationService`. Storage: `org_preferences` /
-`dbsc_status_id`.
-
-Sources: `app/models/concerns/dbsc_bindable.rb`, `app/services/dbsc_registration_service.rb`,
-`app/services/dbsc_record_adapter.rb`,
-`app/controllers/concerns/preference_dbsc_registration_endpoint.rb`.
-
-Tests read: `test/models/concerns/dbsc_bindable_test.rb`,
-`test/services/dbsc/registration_service_test.rb`,
-`test/controllers/concerns/preference/dbsc_registration_endpoint_test.rb`.
-
-| Transition ID                     | Mutation kind         | From    | Event / Trigger                       | To      | Guard                                                                         | Side effect                                                  | Source file                               | Confidence |
-| --------------------------------- | --------------------- | ------- | ------------------------------------- | ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------- | ---------- |
-| idp-operator-preference-dbsc:T001 | DOCUMENTED_TRANSITION | NOTHING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-operator-preference-dbsc:T002 | DOCUMENTED_TRANSITION | ACTIVE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-operator-preference-dbsc:T003 | DOCUMENTED_TRANSITION | ACTIVE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-| idp-operator-preference-dbsc:T004 | DOCUMENTED_TRANSITION | PENDING | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-operator-preference-dbsc:T005 | DOCUMENTED_TRANSITION | PENDING | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-| idp-operator-preference-dbsc:T006 | DOCUMENTED_TRANSITION | FAILED  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-operator-preference-dbsc:T007 | DOCUMENTED_TRANSITION | FAILED  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-| idp-operator-preference-dbsc:T008 | DOCUMENTED_TRANSITION | REVOKE  | verified DbscRegistrationService.call | ACTIVE  | Proof/challenge/signature accepted; row lock; no explicit source-status guard | binding_method DBSC; public key; session id; clear challenge | app/services/dbsc_registration_service.rb | CONFIRMED  |
-| idp-operator-preference-dbsc:T009 | DOCUMENTED_TRANSITION | REVOKE  | downgrade_dbsc_status_to_nothing!     | NOTHING | Public helper only tests already NOTHING                                      | status only; keeps binding method                            | app/models/concerns/dbsc_bindable.rb      | CONFIRMED  |
-
-DBSC is independent of login token lifecycle and device-session dbsc_bound_at. FAILED/REVOKE are
-reference/predicate vocabulary with no located production setter; proof failure returns ok:false
-without writing FAILED. Token creation selects PENDING when a challenge is offered, otherwise
-NOTHING. No PENDING expiry state write: refresh downgrade to NOTHING leaves legacy binding explicit.
-Preference creation defaults are in topology; no preference pending writer was confirmed.
-Registration validates proof before acquiring record lock and does not recheck source state in its
-write; concurrency/replay is controlled by proof validation and challenge transport, not a
-transition map. Public downgrade can change any non-NOTHING status. No terminal state is universally
-enforced. Tests are inspected, not executed.
-
 ## idp-operator-device-session
 
 Implementation: `DeviceSessionable`. Storage: `operator_device_sessions` / `status_id`.
@@ -2304,6 +2432,9 @@ replay. Parent token expiry immediately removes active authority; issued access 
 revocation until max expiry/leeway. No universal EXPIRED/cancel state.
 
 ## idp-visitor-secret-credential
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `SecretCredential / SignSecretVerify`. Storage: `visitor_secret_credentials` /
 `visitor_secret_credential_status_id`.
@@ -2460,7 +2591,12 @@ Implementation: `EnforcementRecoveryCeremonyRecordable`. Storage:
 
 Sources: `app/models/concerns/enforcement_recovery_ceremony_recordable.rb`,
 `app/models/client_enforcement_recovery_ceremony.rb`,
-`app/controllers/concerns/enforcement_recovery_ceremony_flow.rb`.
+`app/controllers/concerns/enforcement_recovery_ceremony_flow.rb`,
+`app/operations/enforcement_case_end_operation.rb`.
+
+Recovery completion locks and checks the active ceremony and its in-force, owner-matched Case,
+then ends the Case and consumes the ceremony in one principal-database transaction. The public
+`consume!` and `revoke!` methods themselves retain the broader transitions listed below.
 
 Tests read: `test/models/enforcement_recovery_ceremony_test.rb`.
 
@@ -2482,6 +2618,9 @@ session. Callers must supply operation binding and guards; replay protection can
 these two setters alone.
 
 ## idp-visitor-withdrawal-ceremony
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `WithdrawalCeremonyRecordable`. Storage: `visitor_withdrawal_ceremonies` /
 `status_id`.
@@ -2512,6 +2651,9 @@ session. Callers must supply operation binding and guards; replay protection can
 these two setters alone.
 
 ## idp-visitor-enforcement-recovery-ceremony
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `EnforcementRecoveryCeremonyRecordable`. Storage:
 `visitor_enforcement_recovery_ceremonies` / `status_id`.
@@ -2572,6 +2714,9 @@ generic back. No cancel/expiry status path; recovery deadline is owned by lifecy
 logic.
 
 ## idp-visitor-withdrawal
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `FlowWithdrawal / WithdrawalLifecycle`. Storage: `visitor_withdrawal_flows` /
 `status_id`.
@@ -2810,6 +2955,9 @@ explicit administrator unlock is escape.
 
 ## idp-visitor-email-verification-challenge
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `EmailVerificationChallengeable`. Storage: `visitor_email_ceremony_transactions` /
 `evp_outcome / expires_at`.
 
@@ -2832,6 +2980,9 @@ for issue_evp_challenge!/record_evp_* were found outside this declaration; tests
 so HTTP runtime wiring is UNCONFIRMED. Legacy email ceremonies allow evp_outcome nil.
 
 ## idp-visitor-email-otp
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Sign-in resend uses version-2 encrypted state bound to server-owned Auth continuity and
 Contact/owner/binding facts. The exact Source Contact is locked and rechecked against the normalized
@@ -2881,6 +3032,9 @@ Source proof columns and methods are pending retirement, not a current workflow 
 
 ## idp-visitor-telephone-otp
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Signup issuance and verification require the bound candidate's owner to equal the locked Ticket
 principal before use and again under the Source contact lock. A mismatch raises explicitly without
 dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP
@@ -2922,6 +3076,9 @@ Source proof columns and methods are pending retirement, not a current workflow 
 
 ## idp-visitor-dpop-nonce
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `DpopProofStateable`. Storage: `visitor_dpop_proof_states` /
 `nonce_used_at / expires_at`.
 
@@ -2944,6 +3101,9 @@ multi-DB runtime are not verified. Nonce handshake and JTI verification are exte
 boundaries; rejection is a result.
 
 ## idp-visitor-administrative-access
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `AdministrativeAccessLock`. Storage: `visitors` / `access_state`.
 
@@ -3150,9 +3310,9 @@ Tests read: `test/models/client_passkey_test.rb`,
 
 | Transition ID                      | Mutation kind         | From     | Event / Trigger                           | To      | Guard                                                                                                         | Side effect                                                        | Source file                                             | Confidence |
 | ---------------------------------- | --------------------- | -------- | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- | ---------- |
-| idp-client-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE   | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
-| idp-client-passkey-credential:T002 | DOCUMENTED_TRANSITION | DISABLED | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
-| idp-client-passkey-credential:T003 | DOCUMENTED_TRANSITION | NOTHING  | IdentityCredentialRemovalCommitter        | DELETED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE   | IdentityCredentialRemovalCommitter        | physically removed | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Physical deletion and source audit; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-passkey-credential:T002 | DOCUMENTED_TRANSITION | DISABLED | IdentityCredentialRemovalCommitter        | physically removed | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Physical deletion and source audit; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-client-passkey-credential:T003 | DOCUMENTED_TRANSITION | NOTHING  | IdentityCredentialRemovalCommitter        | physically removed | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Physical deletion and source audit; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
 | idp-client-passkey-credential:T004 | OUT_OF_BAND           | ACTIVE   | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
 | idp-client-passkey-credential:T005 | OUT_OF_BAND           | DISABLED | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
 | idp-client-passkey-credential:T006 | OUT_OF_BAND           | REVOKED  | withdrawal anonymizer direct write        | REVOKED | Withdrawal early termination; no credential source guard                                                      | Direct REVOKED and discard_at before cross-DB child purge          | app/operations/withdrawal_personal_data_anonymizer.rb   | CONFIRMED  |
@@ -3164,15 +3324,16 @@ Tests read: `test/models/client_passkey_test.rb`,
 | idp-client-passkey-credential:T012 | OUT_OF_BAND           | DELETED  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
 | idp-client-passkey-credential:T013 | OUT_OF_BAND           | NOTHING  | SignUpArtifactCleanup dependent retention | DELETED | Selected pending_passkey_registration_id; status column exists; lock; no source-status guard                  | Schedule discard/purge and direct dynamic status-column update     | app/services/sign_up_artifact_cleanup.rb                | CONFIRMED  |
 
-Registration creates ACTIVE through model default; SQL default and FK are recorded in topology.
-Operator model explicitly defaults ACTIVE=1, while checked-in SQL default is 0; raw SQL inserts
-therefore differ from model creation. Slot limit is four under owner lock; retained revoked/deleted
-history does not consume slots. Removal is idempotent on revoked/deleted and guards the last usable
-authentication method. Other declared states have no production entry setter identified; model
-attributes remain assignable. No expiry/cancel state; cancellation belongs to ceremony.
-Authentication updates sign_count and last_used_at independently of lifecycle.
+Registration creates ACTIVE through the model default. Both Passkey models cap retained rows at
+10 per owner during model validation; a database-enforced slot allocation is still outstanding.
+Management removal checks the target-bound Step-Up and the last usable authentication method,
+then physically deletes the credential and records its source audit. Terminal retained credentials
+are refused. Authentication updates sign_count and last_used_at independently of lifecycle.
 
 ## idp-visitor-passkey-credential
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `IdentityPasskeyCeremonyFinalCommitter / IdentityCredentialRemovalCommitter`.
 Storage: `visitor_passkeys` / `status_id`.
@@ -3222,15 +3383,13 @@ Tests read: `test/models/operator_passkey_test.rb`,
 
 | Transition ID                        | Mutation kind         | From   | Event / Trigger                    | To      | Guard                                                                                                         | Side effect                                                        | Source file                                             | Confidence |
 | ------------------------------------ | --------------------- | ------ | ---------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- | ---------- |
-| idp-operator-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE | IdentityCredentialRemovalCommitter | REVOKED | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Status update; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
+| idp-operator-passkey-credential:T001 | DOCUMENTED_TRANSITION | ACTIVE | IdentityCredentialRemovalCommitter | physically removed | Owner and credential locks; owning Base context; last method guard; already revoked/deleted returns unchanged | Physical deletion and source audit; CredentialSecurityTransition invalidates admissions | app/operations/identity_credential_removal_committer.rb | CONFIRMED  |
 
-Registration creates ACTIVE through model default; SQL default and FK are recorded in topology.
-Operator model explicitly defaults ACTIVE=1, while checked-in SQL default is 0; raw SQL inserts
-therefore differ from model creation. Slot limit is four under owner lock; retained revoked/deleted
-history does not consume slots. Removal is idempotent on revoked/deleted and guards the last usable
-authentication method. Other declared states have no production entry setter identified; model
-attributes remain assignable. No expiry/cancel state; cancellation belongs to ceremony.
-Authentication updates sign_count and last_used_at independently of lifecycle.
+Registration creates ACTIVE through the model default. Both Passkey models cap retained rows at
+10 per owner during model validation; a database-enforced slot allocation is still outstanding.
+Management removal checks the target-bound Step-Up and the last usable authentication method,
+then physically deletes the credential and records its source audit. Terminal retained credentials
+are refused. Authentication updates sign_count and last_used_at independently of lifecycle.
 
 ## idp-client-secret-issuance
 
@@ -3361,6 +3520,9 @@ selected target only when capacity is still full.
 | idp-client-session-limit-resolution:T005 | DOCUMENTED_TRANSITION | absent                   | issue!                         | pending          | R2-WU01: canonical actor lock and OP writer; elapsed open rows transition to expired first; same-flow issuance is idempotent; a second live actor lease raises the named occupied-slot outcome; R2-WU02 catches it at root admission and returns generic HTTP 403 | `waiting_slot=1`; actor partial unique index; child becomes the app waiting unit (slot N+1, N=2)                | app/models/concerns/session_limit_resolution_transactionable.rb, app/controllers/concerns/authentication_base.rb and db/op_base_app_migrate waiting-slot migrations | CONFIRMED  |
 
 ## idp-visitor-session-limit-resolution
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation:
 `SessionLimitResolutionTransactionable / Base::Com::Sign::In::LimitationsController`. Storage:
@@ -3533,7 +3695,7 @@ Tests read: `test/operations/identity_totp_enrollment_final_committer_test.rb`.
 | idp-identity-totp-enrollment:T003 | OUT_OF_BAND           | expired    | store.delete                 | consumed  | Ref exists; no expiry guard                                                | Direct consumed_at update                                     | app/services/identity_totp_ceremony_candidate_store.rb            | CONFIRMED  |
 | idp-identity-totp-enrollment:T004 | DOCUMENTED_TRANSITION | consumed   | store.delete                 | consumed  | Ref exists; no immutability guard                                          | Replaces consumed_at                                          | app/services/identity_totp_ceremony_candidate_store.rb            | CONFIRMED  |
 | idp-identity-totp-enrollment:T005 | DOCUMENTED_TRANSITION | available  | clock reaches deadline       | expired   | expires_at <= now                                                          | Predicate only                                                | app/models/concerns/identity_ceremony_candidate_record.rb         | CONFIRMED  |
-| idp-identity-totp-enrollment:T006 | DOCUMENTED_TRANSITION | unverified | accepted enrollment code     | available | Bound pending parent and token; candidate and actor locks                  | Candidate proof time; parent becomes verified                 | app/operations/identity_totp_enrollment_verification_committer.rb | CONFIRMED  |
+| idp-identity-totp-enrollment:T006 | DOCUMENTED_TRANSITION | unverified | accepted enrollment code     | available | Bound pending parent; usable owner-bound current device and token; actor/device/token/candidate locks | Candidate proof time; parent becomes verified                 | app/operations/identity_totp_enrollment_verification_committer.rb | CONFIRMED  |
 | idp-identity-totp-enrollment:T007 | DOCUMENTED_TRANSITION | available  | Base enrollment final commit | consumed  | Current verified parent, candidate digest and authorization binding; locks | Create ACTIVE credential; consume child, candidate and parent | app/operations/identity_totp_enrollment_final_committer.rb        | CONFIRMED  |
 | idp-identity-totp-enrollment:T008 | DOCUMENTED_TRANSITION | unverified | clock reaches deadline       | expired   | Candidate expiry                                                           | Predicate only                                                | app/models/concerns/identity_ceremony_candidate_record.rb         | CONFIRMED  |
 
@@ -3643,15 +3805,16 @@ Tests read: `test/models/operator_lifecycle_request_test.rb`,
 | ------------------------------------ | --------------------- | -------- | --------------- | -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
 | idp-operator-operator-lifecycle:T001 | DOCUMENTED_TRANSITION | pending  | approve         | approved | Pending; actor differs requester                                  | Approver and timestamp                                                                                                     | app/services/org_operator_lifecycle_approve.rb | CONFIRMED  |
 | idp-operator-operator-lifecycle:T002 | DOCUMENTED_TRANSITION | pending  | reject          | rejected | Pending; actor differs requester                                  | Rejector/time/reason                                                                                                       | app/services/org_operator_lifecycle_reject.rb  | CONFIRMED  |
-| idp-operator-operator-lifecycle:T003 | DOCUMENTED_TRANSITION | approved | execute         | executed | Approved; actor differs requester; last active operator preserved | JOIN refused pending Bureau migration; otherwise withdraw/suspend/terminate/restore actor; revoke sessions / Entra mapping | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-operator-lifecycle:T003 | DOCUMENTED_TRANSITION | approved | execute         | executed | Approved; actor differs requester; last active operator preserved | JOIN refused pending Bureau migration; actor/Entra updates and stop event commit before OP stop delivery | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
 
 New JOIN requests and issuance from approved legacy JOIN requests are refused pending Bureau
 migration; an approved JOIN stays approved with no invitation or executed timestamp written.
 Cancelled is declared closed but no production entry writer identified; isolated state intentional.
 No expiry path. lock_version provides optimistic stale-save checks; pending/approved guards occur
-before update, not an explicit locked decision. Execution transaction is org_principal, while
-invitation/session writes use the ticket DB; Entra and actor writes share consolidated org_zenith:
-no distributed atomic guarantee. Restore clears actor withdrawal facts but deliberately does not
+before update, not an explicit locked decision. The request, Entra identity and actor writes share
+the consolidated org_zenith transaction. Stop delivery follows its commit; OP writes are not
+distributed-atomic with it.
+Restore clears actor withdrawal facts but deliberately does not
 reactivate Entra. Failed service result leaves request unchanged, not a FAILED state.
 
 ## idp-operator-entra-identity
@@ -3831,6 +3994,10 @@ status/ref FK for challenge; SQL stores it on step-up-session row.
 
 ## idp-client-step-up-email-challenge
 
+The Email Step-Up issuer, delivery eligibility check and verifier check the locked owner-bound
+device and current token. SMTP runs after delivery eligibility locks are released; direct model
+writers have separate guards.
+
 Implementation: `StepUpEmailChallenge`. Storage: `client_step_up_sessions` /
 `email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at`.
 
@@ -3866,6 +4033,9 @@ derived and no cancellation state; parent cancellation invalidates use.
 
 ## idp-visitor-step-up-session
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `StepUpSessionConsumable / BaseStepUpAdmissionIssuer`. Storage:
 `visitor_step_up_sessions` / `status / discard_at`.
 
@@ -3892,6 +4062,9 @@ revocation discards linked session and revokes parent; generic retention can del
 cancelled state. Session proof metadata and parent ceremony are separate authority axes.
 
 ## idp-visitor-step-up-passkey-challenge
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `StepUpSessionConsumable`. Storage: `visitor_step_up_sessions` /
 `passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at`.
@@ -3920,6 +4093,9 @@ parent remains pending, so burn is per reference/generation and not globally abs
 status/ref FK for challenge; SQL stores it on step-up-session row.
 
 ## idp-visitor-step-up-email-challenge
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `StepUpEmailChallenge`. Storage: `visitor_step_up_sessions` /
 `email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at`.
@@ -4152,13 +4328,17 @@ Tests read: `test/services/withdrawal_lifecycle_test.rb`,
 
 | Transition ID                    | Mutation kind         | From      | Event / Trigger                     | To         | Guard                                                                    | Side effect                                                                 | Source file                          | Confidence |
 | -------------------------------- | --------------------- | --------- | ----------------------------------- | ---------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------ | ---------- |
-| idp-client-actor-withdrawal:T001 | DOCUMENTED_TRANSITION | active    | start withdrawal request            | active     | Actor lock; create REQUESTED flow                                        | No actor withdrawal timestamps yet                                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T001 | DOCUMENTED_TRANSITION | active    | start withdrawal request            | active     | Actor lock; create REQUESTED flow using post-lock database time           | No actor withdrawal timestamps yet                                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
 | idp-client-actor-withdrawal:T002 | DOCUMENTED_TRANSITION | active    | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
 | idp-client-actor-withdrawal:T003 | DOCUMENTED_TRANSITION | closing   | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
 | idp-client-actor-withdrawal:T004 | DOCUMENTED_TRANSITION | suspended | suspend!                            | suspended  | Actor lock; confirm/discard withdrawal flow; no actor source guard       | Set start/deactivate/discard; default purge31days; revoke tokens            | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
 | idp-client-actor-withdrawal:T005 | DOCUMENTED_TRANSITION | suspended | recover!                            | active     | Can recover after1hour before purge; privacy request permits; actor lock | Recover flow; clear timestamps; Infinity retention                          | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
-| idp-client-actor-withdrawal:T006 | OUT_OF_BAND           | suspended | terminate! after7days               | terminated | Early terminatable check before actor lock                               | Flow TERMINATED; set terminated_at; anonymize/purge children; revoke tokens | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
+| idp-client-actor-withdrawal:T006 | OUT_OF_BAND           | suspended | terminate! after7days               | terminated | Early termination and deletion guards checked under actor lock           | Flow TERMINATED; set terminated_at; anonymize/purge children; revoke tokens | app/services/withdrawal_lifecycle.rb | CONFIRMED  |
 | idp-client-actor-withdrawal:T007 | DOCUMENTED_TRANSITION | suspended | clock reaches finite purge deadline | terminated | Finite purge_eligible_at <= now                                          | Derived predicate, no status write                                          | app/models/concerns/withdrawable.rb  | CONFIRMED  |
+
+For suspension and termination, the actor-side stop event commits before OP delivery; rollback does
+not deliver it. This does not make the actor and OP databases atomic. Termination's cross-database
+child purge runs before actor commit and is not covered by the actor transaction.
 
 Derived predicates overlap: withdrawn_at independent; terminated wins over suspended; active
 excludes all, while closing uses withdrawal_started_at. closing is declared but start! currently
@@ -4171,6 +4351,9 @@ access_state. Flow/token/audit/child operations include separate DB owners; no d
 is inferred. Actor and Entra rows share org_zenith in the current consolidated checkout.
 
 ## idp-visitor-email-credential
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 The named Source writer `EmailContactBinding#finalize_registration_binding!` moves an original
 pending registration candidate to VERIFIED with its binding timestamp under its own row lock and DB
@@ -4226,6 +4409,9 @@ UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no s
 
 ## idp-visitor-telephone-credential
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 The named Source writer `TelephoneContactBinding#finalize_registration_binding!` moves an original
 pending registration candidate to VERIFIED with its binding timestamp under its own row lock and DB
 clock. The independent Email and Telephone registration finalizers check current Action Policy,
@@ -4273,6 +4459,9 @@ universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING
 UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
 
 ## idp-visitor-actor-withdrawal
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `Withdrawable / app/services/withdrawal_lifecycle.rb`. Storage: `visitors` /
 `withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at`.
@@ -4353,6 +4542,8 @@ lifecycle is a separate ceremony axis rather than an identifier status.
 
 ## idp-operator-actor-withdrawal
 
+The last-active check uses the same status, access, withdrawal and retention conditions as Operator capability eligibility. Administrative locks and lifecycle stops take the same transaction-level availability lock before any Operator row lock.
+
 Implementation: `Withdrawable / app/services/org_operator_lifecycle_execute.rb`. Storage:
 `operators` /
 `withdrawal_started_at / deactivated_at / withdrawn_at / discard_at / purge_eligible_at`.
@@ -4382,6 +4573,9 @@ Tests read: `test/services/withdrawal_lifecycle_test.rb`,
 | idp-operator-actor-withdrawal:T014 | OUT_OF_BAND           | withdrawn  | terminate                           | terminated | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
 | idp-operator-actor-withdrawal:T015 | OUT_OF_BAND           | withdrawn  | restore                             | active     | Approved request; actor differs requester; last active operator guard on deactivation | Direct actor facts; session revoke and Entra SUSPENDED/REVOKED; restore leaves Entra unchanged | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
 | idp-operator-actor-withdrawal:T016 | DOCUMENTED_TRANSITION | suspended  | clock reaches finite purge deadline | terminated | Finite purge_eligible_at <= now                                                       | Derived predicate, no status write                                                             | app/models/concerns/withdrawable.rb            | CONFIRMED  |
+
+For operator lifecycle stop actions, the actor-side stop event commits before OP delivery; rollback
+does not deliver it. This does not make the actor and OP databases atomic.
 
 Derived predicates overlap: withdrawn_at independent; terminated wins over suspended; active
 excludes all, while closing uses withdrawal_started_at. closing is declared but start! currently
@@ -4442,6 +4636,12 @@ UNCONFIRMED. Browser-bound snapshot loss/multi-tab overwrite cannot be assumed p
 
 ## idp-client-enforcement-case
 
+For access-blocking effects, apply locks the principal and then rechecks the Case under its row lock before committing the principal lock. Remaining apply effects recheck the Case under its row lock. End checks for another blocking Case while holding the principal lock before releasing it.
+
+For pending active Cases, reconciliation retries the principal effect when the principal is unlocked or its Case-specific access audit is missing.
+
+End reconciliation skips another principal release when the Case-specific release audit already exists; an absent release audit remains retryable.
+
 Implementation: `EnforcementCaseApplyOperation / EndOperation / convergence jobs`. Storage:
 `app_enforcement_cases` / `state / ended_at`.
 
@@ -4459,31 +4659,32 @@ Interactive API create, apply, approve and first operator release consume the ma
 operation-scope Step-Up proof in the state transaction after the state write. The pending-approval
 create path consumes after its state and audit writes. Expiry, reconciliation and repeated end
 operations have no new interactive proof to consume. These effects do not add state transitions.
+For APP verification completion, EndOperation also locks and validates the active owner-matched
+recovery ceremony and rechecks that the Case is in force, visible and verification-releasable;
+Case ending and ceremony consumption share the principal-database transaction.
 
 | Transition ID                    | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
 | -------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
 | idp-client-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
-| idp-client-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
-| idp-client-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
-| idp-client-enforcement-case:T004 | OUT_OF_BAND           | active           | RecordInvalid / RecordNotUnique side-effect failure | failed           | Committed security decision; rescue narrow exceptions                                                      | update_column state failed; raise                                      | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-client-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; persisted Case locked and rechecked inside transaction | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-client-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; persisted Case locked and rechecked inside transaction | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
 | idp-client-enforcement-case:T005 | DOCUMENTED_TRANSITION | draft            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-client-enforcement-case:T006 | DOCUMENTED_TRANSITION | pending_approval | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-client-enforcement-case:T007 | DOCUMENTED_TRANSITION | active           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-client-enforcement-case:T008 | DOCUMENTED_TRANSITION | failed           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-client-enforcement-case:T009 | DOCUMENTED_TRANSITION | ended            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-client-enforcement-case:T010 | DOCUMENTED_TRANSITION | active           | EnforcementExpiryJob                                | closed           | expires_at <=now; active and not yet ended                                                                 | End reason expired; refcount lock release                              | app/jobs/enforcement_expiry_job.rb                               | CONFIRMED  |
-| idp-client-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence timestamps; active not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
+| idp-client-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence; Case locked and rechecked active/not ended                                                           | Retry principal lock, revocation and audit; no state rewrite           | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
 | idp-client-enforcement-case:T012 | DOCUMENTED_TRANSITION | closed           | end reconcile / repeat                              | closed           | Recorded end reason wins; lock; no duplicate end timestamp                                                 | Retry release/audit                                                    | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 
 String CHECK; no state reference FK. Case governs authentication-method/principal/identifier effects
 through actual effect->case FKs; effects have effective/expiry/ended timestamps, not independent
 transition graphs. EndOperation does not write state=ended: it preserves stored state and writes
 ended_at; declared ended incoming writer UNKNOWN. Runtime in_force requires active, effective time
-reached, unexpired and no ended_at independently of jobs. Narrow side-effect failures write failed
-via update_column despite comments describing decision preserved active; pending_convergence and
-expiry select active only, so failed recovery path is UNKNOWN (hidden convergence dead end). Other
-exceptions retain active and may reconcile. Approval controller claims approver under lock;
-operation itself checks source outside transaction without lock. Superseding closes effect
+reached, unexpired and no ended_at independently of jobs. Side-effect failures retain the active decision; pending convergence retries session revocation and
+audit, but does not retry a failed principal access lock. A missing principal raises and remains
+pending for investigation. Existing failed Cases are outside that queue. Approval controller claims approver under lock;
+operation locks and rechecks a persisted Case inside the transaction. Superseding closes effect
 timestamps without necessarily ending old Case. Appeals and verification can end; cancel is not a
 distinct state. No distributed transaction with actor/token/Chronicle. Principal ref is logical
 cross-DB, not FK.
@@ -4525,6 +4726,9 @@ effect/appeal FK directions point to Case; no state reference table.
 
 ## idp-visitor-enforcement-case
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 Implementation: `EnforcementCaseApplyOperation / EndOperation / convergence jobs`. Storage:
 `com_enforcement_cases` / `state / ended_at`.
 
@@ -4541,32 +4745,33 @@ Tests read: `test/operations/enforcement_case_apply_failure_test.rb`,
 | Transition ID                     | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
 | --------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
 | idp-visitor-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
-| idp-visitor-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
-| idp-visitor-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
-| idp-visitor-enforcement-case:T004 | OUT_OF_BAND           | active           | RecordInvalid / RecordNotUnique side-effect failure | failed           | Committed security decision; rescue narrow exceptions                                                      | update_column state failed; raise                                      | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-visitor-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; persisted Case locked and rechecked inside transaction | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-visitor-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; persisted Case locked and rechecked inside transaction | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
 | idp-visitor-enforcement-case:T005 | DOCUMENTED_TRANSITION | draft            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-visitor-enforcement-case:T006 | DOCUMENTED_TRANSITION | pending_approval | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-visitor-enforcement-case:T007 | DOCUMENTED_TRANSITION | active           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-visitor-enforcement-case:T008 | DOCUMENTED_TRANSITION | failed           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-visitor-enforcement-case:T009 | DOCUMENTED_TRANSITION | ended            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-visitor-enforcement-case:T010 | DOCUMENTED_TRANSITION | active           | EnforcementExpiryJob                                | closed           | expires_at <=now; active and not yet ended                                                                 | End reason expired; refcount lock release                              | app/jobs/enforcement_expiry_job.rb                               | CONFIRMED  |
-| idp-visitor-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence timestamps; active not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
+| idp-visitor-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence; Case locked and rechecked active/not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
 | idp-visitor-enforcement-case:T012 | DOCUMENTED_TRANSITION | closed           | end reconcile / repeat                              | closed           | Recorded end reason wins; lock; no duplicate end timestamp                                                 | Retry release/audit                                                    | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 
 String CHECK; no state reference FK. Case governs authentication-method/principal/identifier effects
 through actual effect->case FKs; effects have effective/expiry/ended timestamps, not independent
 transition graphs. EndOperation does not write state=ended: it preserves stored state and writes
 ended_at; declared ended incoming writer UNKNOWN. Runtime in_force requires active, effective time
-reached, unexpired and no ended_at independently of jobs. Narrow side-effect failures write failed
-via update_column despite comments describing decision preserved active; pending_convergence and
-expiry select active only, so failed recovery path is UNKNOWN (hidden convergence dead end). Other
-exceptions retain active and may reconcile. Approval controller claims approver under lock;
-operation itself checks source outside transaction without lock. Superseding closes effect
+reached, unexpired and no ended_at independently of jobs. Side-effect failures retain the active decision; pending convergence retries session revocation and
+audit, but does not retry a failed principal access lock. A missing principal raises and remains
+pending for investigation. Existing failed Cases are outside that queue. Approval controller claims approver under lock;
+operation locks and rechecks a persisted Case inside the transaction. Superseding closes effect
 timestamps without necessarily ending old Case. Appeals and verification can end; cancel is not a
 distinct state. No distributed transaction with actor/token/Chronicle. Principal ref is logical
 cross-DB, not FK.
 
 ## idp-visitor-enforcement-appeal
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `EnforcementAppeal / EnforcementReconciliationJob`. Storage:
 `com_enforcement_appeals` / `state / resolution_code / reviewed_at`.
@@ -4599,6 +4804,12 @@ effect/appeal FK directions point to Case; no state reference table.
 
 ## idp-operator-enforcement-case
 
+For access-blocking effects, apply locks the principal and then rechecks the Case under its row lock before committing the principal lock. Remaining apply effects recheck the Case under its row lock. End checks for another blocking Case while holding the principal lock before releasing it.
+
+For pending active Cases, reconciliation retries the principal effect when the principal is unlocked or its Case-specific access audit is missing.
+
+End reconciliation skips another principal release when the Case-specific release audit already exists; an absent release audit remains retryable.
+
 Implementation: `EnforcementCaseApplyOperation / EndOperation / convergence jobs`. Storage:
 `org_enforcement_cases` / `state / ended_at`.
 
@@ -4615,27 +4826,25 @@ Tests read: `test/operations/enforcement_case_apply_failure_test.rb`,
 | Transition ID                      | Mutation kind         | From             | Event / Trigger                                     | To               | Guard                                                                                                      | Side effect                                                            | Source file                                                      | Confidence |
 | ---------------------------------- | --------------------- | ---------------- | --------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
 | idp-operator-enforcement-case:T001 | DOCUMENTED_TRANSITION | draft            | controller requires approval                        | pending_approval | Creation requires approval; save pending state                                                             | Attach principal ref and request decision                              | app/controllers/base/org/support/enforcement_cases_controller.rb | CONFIRMED  |
-| idp-operator-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
-| idp-operator-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; transaction; operation does not row-lock source guard | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
-| idp-operator-enforcement-case:T004 | OUT_OF_BAND           | active           | RecordInvalid / RecordNotUnique side-effect failure | failed           | Committed security decision; rescue narrow exceptions                                                      | update_column state failed; raise                                      | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-operator-enforcement-case:T002 | DOCUMENTED_TRANSITION | draft            | apply operation                                     | active           | Source draft/pending; approver required when policy; persisted Case locked and rechecked inside transaction | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
+| idp-operator-enforcement-case:T003 | DOCUMENTED_TRANSITION | pending_approval | apply operation                                     | active           | Source draft/pending; approver required when policy; persisted Case locked and rechecked inside transaction | Close superseded effects; save active, then lock actor/revoke/audit    | app/operations/enforcement_case_apply_operation.rb               | CONFIRMED  |
 | idp-operator-enforcement-case:T005 | DOCUMENTED_TRANSITION | draft            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-operator-enforcement-case:T006 | DOCUMENTED_TRANSITION | pending_approval | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-operator-enforcement-case:T007 | DOCUMENTED_TRANSITION | active           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-operator-enforcement-case:T008 | DOCUMENTED_TRANSITION | failed           | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-operator-enforcement-case:T009 | DOCUMENTED_TRANSITION | ended            | end operation                                       | closed           | Valid reason; row lock; ended_at first-write; no source state guard                                        | Set ended_at/end_reason; end effects then release admin lock and audit | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 | idp-operator-enforcement-case:T010 | DOCUMENTED_TRANSITION | active           | EnforcementExpiryJob                                | closed           | expires_at <=now; active and not yet ended                                                                 | End reason expired; refcount lock release                              | app/jobs/enforcement_expiry_job.rb                               | CONFIRMED  |
-| idp-operator-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence timestamps; active not ended                                                           | Retry revocation/audit, no state rewrite                               | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
+| idp-operator-enforcement-case:T011 | DOCUMENTED_TRANSITION | active           | reconciliation                                      | active           | Pending convergence; Case locked and rechecked active/not ended                                                           | Retry principal lock, revocation and audit; no state rewrite           | app/jobs/enforcement_reconciliation_job.rb                       | CONFIRMED  |
 | idp-operator-enforcement-case:T012 | DOCUMENTED_TRANSITION | closed           | end reconcile / repeat                              | closed           | Recorded end reason wins; lock; no duplicate end timestamp                                                 | Retry release/audit                                                    | app/operations/enforcement_case_end_operation.rb                 | CONFIRMED  |
 
 String CHECK; no state reference FK. Case governs authentication-method/principal/identifier effects
 through actual effect->case FKs; effects have effective/expiry/ended timestamps, not independent
 transition graphs. EndOperation does not write state=ended: it preserves stored state and writes
 ended_at; declared ended incoming writer UNKNOWN. Runtime in_force requires active, effective time
-reached, unexpired and no ended_at independently of jobs. Narrow side-effect failures write failed
-via update_column despite comments describing decision preserved active; pending_convergence and
-expiry select active only, so failed recovery path is UNKNOWN (hidden convergence dead end). Other
-exceptions retain active and may reconcile. Approval controller claims approver under lock;
-operation itself checks source outside transaction without lock. Superseding closes effect
+reached, unexpired and no ended_at independently of jobs. Side-effect failures retain the active decision; pending convergence retries session revocation and
+audit, but does not retry a failed principal access lock. A missing principal raises and remains
+pending for investigation. Existing failed Cases are outside that queue. Approval controller claims approver under lock;
+operation locks and rechecks a persisted Case inside the transaction. Superseding closes effect
 timestamps without necessarily ending old Case. Appeals and verification can end; cancel is not a
 distinct state. No distributed transaction with actor/token/Chronicle. Principal ref is logical
 cross-DB, not FK.
@@ -4718,6 +4927,9 @@ derived from credentials and duplicated as persisted projection. Does not mean M
 been passed; last_mfa_login_at is separate proof time.
 
 ## idp-visitor-mfa-readiness
+
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
 
 Implementation: `MfaStatusTrackable / MfaStatusCredential`. Storage: `visitors` / `mfa_status_id`.
 
@@ -4806,6 +5018,9 @@ visitor helper and writes email_verified after verified OTP and before durable f
 
 ## idp-visitor-email-registration-session
 
+Retired in WU-5 (2026-10-29): the `visitor_*` models/tables/writers and the com realm
+databases are deleted; this section is history only, preserved for traceability.
+
 An entry create resets the session phase to init without clearing the durable flow locator; the
 action halts the predecessor before allocating its replacement. Ordinary reset callers retain their
 existing locator-clearing behavior. These are separate session and durable-flow transitions.
@@ -4871,6 +5086,27 @@ inventoried above remain possible on other paths. Separate-connection cancellati
 barriers verify rejection at the public model boundary; complete concurrent HTTP callback/issuance
 coverage remains pending.
 
+Contact and Social audit delivery scan bounded ID pages through a captured upper ID. A conflicting or failed
+source event remains unacknowledged while later events are attempted; the job reports the failure
+after the scan so the existing retry can revisit it. Chronicle identity matching remains required.
+
+App Email, Telephone and TOTP removal rechecks target-bound Step-Up and the current device and token
+inside the credential writer before invalidating authority and applying the source transition.
+
+Email and Telephone ceremony finalization hold the owner and candidate locks while consuming the Ticket result;
+each contact binding and its source audit follow in the enclosing source transaction. An unavailable
+owner is rejected before consumption. Separate-connection race coverage remains outstanding.
+
+Signed-in Secret presentation, confirmation, cancellation and reattempt require Step-Up bound to the
+owned issuance and browser session. Manual payload preparation occurs at the protected presentation
+request. The signup delivery path retains its own admission and does not use this signed-in proof.
+
+App Secret management revocation and signed-in storage confirmation now hold the Client and
+source rows while consuming scoped Ticket proof in a separate earlier commit. The Secret transition
+and its existing audit records commit together afterward. A source failure leaves proof spent; a
+new verification is needed. Confirmed storage retries and already-revoked retries verify fresh proof
+without consuming it. Signup storage confirmation uses its separate signup admission path.
+
 App Secret withdrawal revocation: terminated Client proof under source Client lock authorizes
 revocation. Unclaimed credentials receive discard and retention facts with withdrawal audit in the
 same source transaction. Claimed credentials retain continuation/discard eligibility until the
@@ -4880,6 +5116,10 @@ its proof.
 App Secret issuance withdrawal cancellation: unconfirmed positive issuance enters canceled state
 under its terminated Client lock; encrypted payload is erased and reservation released with source
 cancellation audit. Confirmed and zero-count omitted results remain immutable.
+
+Secret audit delivery advances past failed source rows through a captured upper ID, reports the
+failures, and preserves them for retry. Each run acknowledges at most its configured batch size;
+Chronicle identity must match before the source delivery fact is committed.
 
 ## idp-client-secret-audit-outbox
 

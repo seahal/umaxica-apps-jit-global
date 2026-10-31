@@ -23,18 +23,26 @@ class IdentityTotpEnrollmentIssuer
           end
 
           OpBaseAppRecord.connected_to(role: :writing) do
-            token.with_lock do
-              record = ClientStepUpSession.lock.find_by!(
-                user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
-              )
-              transaction.with_lock do
-                now = ClientStepUpCeremonyTransaction.database_now
-                validate_permission!(actor, token, transaction, record, now)
-                child = ClientTotpCeremonyTransaction.find_by(
-                  step_up_ceremony_transaction_ref: transaction.transaction_id,
-                )
-                child ? existing_candidate!(child, actor, token, transaction, now) :
-                  create_candidate!(actor, token, transaction, now)
+            device = token.device_session_record!
+            device.with_lock do
+              token.with_lock do
+                unless device.usable? && device.user_id == actor.id && token.device_session_id == device.id &&
+                    device.current_refresh_token_id == token.id
+                  raise IdentityTotpCeremonyContract::Error, "TOTP enrollment device unavailable"
+                end
+
+                transaction.with_lock do
+                  record = ClientStepUpSession.lock.find_by!(
+                    user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
+                  )
+                  now = ClientStepUpCeremonyTransaction.database_now
+                  validate_permission!(actor, token, transaction, record, now)
+                  child = ClientTotpCeremonyTransaction.find_by(
+                    step_up_ceremony_transaction_ref: transaction.transaction_id,
+                  )
+                  child ? existing_candidate!(child, actor, token, transaction, now) :
+                    create_candidate!(actor, token, transaction, now)
+                end
               end
             end
           end

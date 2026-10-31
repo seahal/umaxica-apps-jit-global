@@ -200,7 +200,9 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     }
   end
 
-  test "rejects app client signup one day before the sixteenth birthday with sixteen birthday copy" do
+  # R-AU-50: tolerance is gone by the service-date rule; a birthdate cannot stop the flow. The
+  # refusal must leave the checkpoint active, never write the date and never terminate the ticket.
+  test "rejects app client signup birthdate of today without halting the email cycle" do
     instant = Time.zone.local(2026, 6, 25, 12, 0, 0)
     ClientSignUpFlow.stub(:database_now, instant) do
       ClientEmailCeremonyTransaction.stub(:database_now, instant) do
@@ -210,7 +212,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
               travel_to instant do
                 clear_enqueued_jobs
                 post auth_app_sign_up_email_url(ri: "jp"),
-                     params: { :client_email => { raw_address: "birthdate-under16@example.com",
+                     params: { :client_email => { raw_address: "birthdate-today@example.com",
                                                   confirm_policy: "1", },
                                "cf-turnstile-response" => "test", },
                      headers: @headers
@@ -273,19 +275,19 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                         params: {
                           requirement: "birthdate",
                           checkpoint_version: flow.checkpoint_version,
-                          birthdate: "2010-06-26",
+                          birthdate: "2026-06-25",
                         },
                         headers: @headers
                 end
 
-                assert_response :success
-                assert_includes response.body, "16歳の誕生日"
-                assert_not_includes response.body, "13歳の誕生日"
-                assert_equal ClientSignUpFlowStatus::HALTED, flow.reload.status_id
-                assert_not flow.requirement_cleared?(:birthdate)
-                # D-178: the underage birthdate is never written, and the refusal removes the artifacts.
+                assert_response :unprocessable_content
+                assert_equal "text/plain", response.media_type
+                assert_equal I18n.t("sign.shared.birthdate.errors.not_before_today"), response.body
+                assert_not flow.reload.requirement_cleared?(:birthdate)
+                # D-178: the ineligible birthdate is never written.
                 assert_empty birthdate_writes
-                assert_predicate flow, :cleanup_completed?
+                assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, flow.reload.status_id
+                assert_not flow.cleanup_completed?
                 assert_not Client.where(id: principal_id).where.not(birthdate: nil).exists?
               end
             end
@@ -295,7 +297,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     end
   end
 
-  test "allows app client signup on the sixteenth birthday" do
+  test "accepts an app client signup birthdate one day before the service date" do
     instant = Time.zone.local(2026, 6, 25, 12, 0, 0)
     ClientSignUpFlow.stub(:database_now, instant) do
       ClientEmailCeremonyTransaction.stub(:database_now, instant) do
@@ -361,7 +363,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       params: {
                         requirement: "birthdate",
                         checkpoint_version: flow.checkpoint_version,
-                        birthdate: "2010-06-25",
+                        birthdate: "2026-06-24",
                       },
                       headers: @headers
 
@@ -723,12 +725,20 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   end
 
   # Birthdate rejections map the validation reason to a fixed public message key, so the actor can
-  # correct the input while the model's own error wording is not the response contract.
+  # correct the input while the model's own error wording is not the response contract. The
+  # immediate boundaries of the one-day rule (`today`, `tomorrow`) refuse on the same public copy
+  # as any later future date; `today` is the boundary case of ADR
+  # `sign-up-one-day-minimum-age-and-feature-level-age-restrictions`.
   {
+    :today => "sign.shared.birthdate.errors.not_before_today",
+    :tomorrow => "sign.shared.birthdate.errors.not_before_today",
     "2999-01-01" => "sign.shared.birthdate.errors.not_before_today",
     "19900115" => "sign.shared.birthdate.errors.format",
   }.each do |birthdate, key|
     test "a rejected birthdate #{birthdate} answers with the public message #{key}" do
+      service_date = Time.current.in_time_zone("Asia/Tokyo").to_date
+      birthdate = service_date.iso8601 if birthdate == :today
+      birthdate = (service_date + 1.day).iso8601 if birthdate == :tomorrow
       clear_enqueued_jobs
       post auth_app_sign_up_email_url(ri: "jp"),
            params: { :client_email => { raw_address: "birthdate-reject-#{SecureRandom.hex(3)}@example.com",
@@ -889,7 +899,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -927,13 +936,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -955,23 +957,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -986,17 +971,9 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -1185,31 +1162,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

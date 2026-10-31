@@ -8,18 +8,15 @@ module Sign
 
     setup do
       ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-      VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
       ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-      VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     end
 
-    %w(app com).each do |surface|
+    %w(app).each do |surface|
       test "#{surface} typed signup delivery encrypts six ASCII digits and the original ceremony generation" do
-        telephone_model, flow_model =
-          (surface == "app") ? [ClientTelephone, ClientSignUpFlow] : [VisitorTelephone, VisitorSignUpFlow]
+        telephone_model, flow_model = [ClientTelephone, ClientSignUpFlow]
         candidate = telephone_model.new(raw_number: "+12025550163", confirm_policy: true, confirm_using_mfa: true)
         created = TelephoneSignUpCandidateCreator.call(telephone: candidate)
-        owner = (surface == "app") ? created.telephone.user : created.telephone.visitor
+        owner = created.telephone.user
         now = flow_model.database_now
         nonce = "typed-delivery-original-browser"
         flow = flow_model.create!(
@@ -54,15 +51,10 @@ module Sign
       end
 
       test "#{surface} ceremony replacement preserves Source failures and uses bounded explicit database time" do
-        telephone_model, flow_model, transaction_model =
-          if surface == "app"
-            [ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction]
-          else
-            [VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction]
-          end
+        telephone_model, flow_model, transaction_model = [ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction]
         candidate = telephone_model.new(raw_number: "+12025550165", confirm_policy: true, confirm_using_mfa: true)
         TelephoneSignUpCandidateCreator.call(telephone: candidate)
-        owner = (surface == "app") ? candidate.user : candidate.visitor
+        owner = candidate.user
         now = flow_model.database_now
         nonce = "replacement-original-browser"
         flow = flow_model.create!(
@@ -96,7 +88,7 @@ module Sign
     test "typed signup issuance refuses missing malformed and wrong realm parents without changing candidate facts" do
       telephone = ClientTelephone.new(raw_number: "+12025550164", confirm_policy: true)
       facts = telephone.attributes
-      [nil, 0, false, "", [], {}, VisitorSignUpFlow.new].each do |flow|
+      [nil, 0, false, "", [], {}, OperatorSignUpFlow.new].each do |flow|
         assert_raises(ArgumentError) do
           TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: "original-browser")
         end
@@ -108,8 +100,8 @@ module Sign
     test "typed signup issuance refuses wrong channel candidates without changing their proof facts" do
       flow = ClientSignUpFlow.new
 
-      [nil, 0, false, "", [], {}, ClientEmail.new, VisitorEmail.new, OperatorEmail.new,
-       OperatorTelephone.new, VisitorTelephone.new,].each do |candidate|
+      [nil, 0, false, "", [], {}, ClientEmail.new, OperatorEmail.new,
+       OperatorTelephone.new,].each do |candidate|
         assert_raises(ArgumentError) do
           TelephoneSignUpOtpIssuer.call(flow: flow, telephone: candidate, session_nonce: "original-browser")
         end
@@ -140,7 +132,7 @@ module Sign
       end
     end
 
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       test "#{surface} registration refuses locked candidates without resetting failures or lockout" do
         actor, token, telephone, transaction_model =
           case surface
@@ -149,11 +141,6 @@ module Sign
             root = ClientToken.create!(authentication_epoch: 0, user: owner)
             candidate = owner.client_telephones.create!(raw_number: "+12025550167", confirm_policy: true)
             [owner, root, candidate, ClientTelephoneCeremonyTransaction]
-          when "com"
-            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner)
-            candidate = owner.visitor_telephones.create!(raw_number: "+12025550167", confirm_policy: true)
-            [owner, root, candidate, VisitorTelephoneCeremonyTransaction]
           when "org"
             owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
             root = OperatorToken.create!(authentication_epoch: 0, staff: owner)

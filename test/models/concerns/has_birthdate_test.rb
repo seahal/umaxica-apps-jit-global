@@ -6,7 +6,7 @@ require "test_helper"
 class HasBirthdateTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  MODEL_CLASSES = [Operator, Visitor, Client].freeze
+  MODEL_CLASSES = [Operator, Client].freeze
 
   setup do
     Prosopite.pause do
@@ -14,9 +14,6 @@ class HasBirthdateTest < ActiveSupport::TestCase
       OperatorVisibility.ensure_defaults!
       OperatorMfaStatus.ensure_defaults!
 
-      VisitorStatus.ensure_defaults!
-      VisitorVisibility.ensure_defaults!
-      VisitorMfaStatus.ensure_defaults!
 
       ClientStatus.ensure_defaults!
       ClientVisibility.ensure_defaults!
@@ -101,6 +98,14 @@ class HasBirthdateTest < ActiveSupport::TestCase
       assert_equal 23, record.age_on(Date.new(2024, 6, 14))
       assert_equal 24, record.age_on(Date.new(2024, 6, 15))
       assert_equal 24, record.age_on(Date.new(2024, 6, 16))
+    end
+  end
+
+  test "age_on follows the canonical leap day anniversary in a non leap year" do
+    each_birthdate_record("2012-02-29") do |record|
+      assert_equal 12, record.age_on(Date.new(2025, 2, 27))
+      assert_equal 13, record.age_on(Date.new(2025, 2, 28))
+      assert_equal 13, record.age_on(Date.new(2025, 3, 1))
     end
   end
 

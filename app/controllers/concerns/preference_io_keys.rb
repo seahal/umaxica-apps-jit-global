@@ -6,57 +6,8 @@ module PreferenceIoKeys
   SECURE_COOKIE_PREFIX = HOST_COOKIE_PREFIX
 
   module Cookies
-    THEME = "ct"
     LANGUAGE = "language"
-    TIMEZONE = "tz"
-    CURRENCY = "cu"
-    DATE_FORMAT = "df"
-    TIME_FORMAT = "tf"
-    MOTION = "mo"
-    DENSITY = "dn"
-    PAGE_SIZE = "ps"
-    CONSENTED = "preference_consented"
-    ACCESS_BASENAME = "preference_access"
-    REFRESH_BASENAME = "preference_refresh"
-    DBSC_BASENAME = "preference_dbsc"
-
-    public_constant :THEME
     public_constant :LANGUAGE
-    public_constant :TIMEZONE
-    public_constant :CURRENCY
-    public_constant :DATE_FORMAT
-    public_constant :TIME_FORMAT
-    public_constant :MOTION
-    public_constant :DENSITY
-    public_constant :PAGE_SIZE
-    public_constant :CONSENTED
-    public_constant :ACCESS_BASENAME
-    public_constant :REFRESH_BASENAME
-    public_constant :DBSC_BASENAME
-  end
-
-  module Headers
-    DBSC_SECURE_REGISTRATION = "Secure-Session-Registration"
-    DBSC_SECURE_CHALLENGE = "Secure-Session-Challenge"
-    DBSC_SECURE_SESSION_ID = "Secure-Session-Id"
-    DBSC_SECURE_RESPONSE = "Secure-Session-Response"
-    DBSC_SECURE_SKIPPED = "Secure-Session-Skipped"
-    DBSC_REGISTRATION = "Sec-Session-Registration"
-    DBSC_CHALLENGE = "Sec-Session-Challenge"
-    DBSC_SESSION_ID = "Sec-Session-Id"
-    DBSC_RESPONSE = "Sec-Session-Response"
-    DBSC_SKIPPED = "Sec-Session-Skipped"
-
-    public_constant :DBSC_SECURE_REGISTRATION
-    public_constant :DBSC_SECURE_CHALLENGE
-    public_constant :DBSC_SECURE_SESSION_ID
-    public_constant :DBSC_SECURE_RESPONSE
-    public_constant :DBSC_SECURE_SKIPPED
-    public_constant :DBSC_REGISTRATION
-    public_constant :DBSC_CHALLENGE
-    public_constant :DBSC_SESSION_ID
-    public_constant :DBSC_RESPONSE
-    public_constant :DBSC_SKIPPED
   end
 
   module Params

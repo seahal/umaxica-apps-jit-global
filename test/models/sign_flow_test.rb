@@ -6,25 +6,21 @@ require "test_helper"
 class SignFlowTest < ActiveSupport::TestCase
   SIGN_IN_CLASSES = [
     ClientSignInFlow,
-    VisitorSignInFlow,
     OperatorSignInFlow,
   ].freeze
 
   SIGN_UP_CLASSES = [
     ClientSignUpFlow,
-    VisitorSignUpFlow,
     OperatorSignUpFlow,
   ].freeze
 
   test "sign-in cycles inherit from their surface cycle records" do
     assert_operator ClientSignInFlow, :<, OpBaseAppRecord
-    assert_operator VisitorSignInFlow, :<, OpBaseComRecord
     assert_operator OperatorSignInFlow, :<, OpBaseOrgRecord
   end
 
   test "sign-up cycles inherit from their surface cycle records" do
     assert_operator ClientSignUpFlow, :<, OpBaseAppRecord
-    assert_operator VisitorSignUpFlow, :<, OpBaseComRecord
     assert_operator OperatorSignUpFlow, :<, OpBaseOrgRecord
   end
 
@@ -97,34 +93,6 @@ class SignFlowTest < ActiveSupport::TestCase
 
       assert_predicate cycle, :valid?, entry_method
     end
-  end
-
-  test "com sign-up cycles accept only email and telephone entry methods" do
-    %w(email telephone).each do |entry_method|
-      cycle = build_cycle(VisitorSignUpFlow, entry_method: entry_method)
-
-      assert_predicate cycle, :valid?, entry_method
-    end
-
-    %w(google apple).each do |entry_method|
-      cycle = build_cycle(VisitorSignUpFlow, entry_method: entry_method)
-
-      assert_not cycle.valid?, entry_method
-      assert_not_empty cycle.errors[:entry_method]
-    end
-  end
-
-  test "com sign-up cycles reject social provider state" do
-    cycle = build_cycle(VisitorSignUpFlow, entry_method: "email", social_provider: "google")
-
-    assert_not cycle.valid?
-    assert_not_empty cycle.errors[:social_provider]
-  end
-
-  test "com sign-up cycles do not expose social callback state" do
-    assert_not_includes VisitorSignUpFlow::STATUSES, "SOCIAL_CALLBACK_PENDING"
-    assert_not_includes VisitorSignUpFlow::STEPS, "social_callback"
-    assert_not_includes VisitorSignUpFlow::STATUS_MODEL::DEFAULTS, 36
   end
 
   test "sign-up cycles reject unsafe return paths" do
@@ -246,7 +214,7 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   test "sign-up cycle cleanup predicates track the configured cleanup status" do
-    [ClientSignUpFlow, VisitorSignUpFlow].each do |cycle_class|
+    [ClientSignUpFlow].each do |cycle_class|
       cycle = build_cycle(cycle_class, cleanup_status_id: cycle_class.cleanup_status_id_for(:pending))
 
       assert_predicate cycle, :cleanup_pending?, cycle_class.name
@@ -604,7 +572,7 @@ class SignFlowTest < ActiveSupport::TestCase
       now = model.database_now
       attributes = { step: "start" }
       attributes[:entry_method] = "email" unless model == OperatorSignUpFlow
-      if [ClientSignUpFlow, VisitorSignUpFlow].include?(model)
+      if model == ClientSignUpFlow
         attributes[:auth_admission_binding] = SignUpAdmissionTestFactory.binding_for!(model)
       end
       flow = model.create!(
@@ -716,7 +684,7 @@ class SignFlowTest < ActiveSupport::TestCase
         }
       end
     attrs[:entry_method] = default_sign_up_entry_method(cycle_class) if cycle_class < SignUpFlowTicket
-    if [ClientSignUpFlow, VisitorSignUpFlow].include?(cycle_class)
+    if cycle_class == ClientSignUpFlow
       attrs[:auth_admission_binding] = SignUpAdmissionTestFactory.binding_for!(cycle_class)
     end
     attrs

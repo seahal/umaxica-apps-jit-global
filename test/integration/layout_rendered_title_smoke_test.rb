@@ -34,11 +34,6 @@ class LayoutRenderedTitleSmokeTest < ActionDispatch::IntegrationTest
         tld: "APP",
       },
       {
-        host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"),
-        path: -> { new_core_com_sign_out_path(ri: "jp") },
-        tld: "COM",
-      },
-      {
         host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"),
         path: -> { new_core_org_sign_out_path(ri: "jp") },
         tld: "ORG",
@@ -47,11 +42,6 @@ class LayoutRenderedTitleSmokeTest < ActionDispatch::IntegrationTest
         host: ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
         path: -> { new_warp_app_sign_out_path(ri: "jp") },
         tld: "APP",
-      },
-      {
-        host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
-        path: -> { new_warp_com_sign_out_path(ri: "jp") },
-        tld: "COM",
       },
       {
         host: ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),

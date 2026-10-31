@@ -1,0 +1,7 @@
+# APP Email Step-Up handoff and admission
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had extensive uncommitted changes affecting the checks.
+- The baseline-listed delivered-code test failed before handoff with HTTP 400. A focused probe found that its admission setup posted to an endpoint whose current route is GET-only, receiving 404; the following assertions therefore did not exercise an admitted ceremony.
+- Updated all three tests in the file to redeem their already attached and confirmed admission with the current HTTPS GET and assert the redirect. This also strengthens the method-denial case, which previously passed after the failed entry request without establishing an admitted session. The wrong/malformed code and denial tests had previously run together as 2 runs, 8 assertions, 1 failure; after the update the complete file passed with 3 runs, 44 assertions.
+- Extended the successful Email case through the Auth handoff GET and its same-origin form POST. The GET returned the `strict-origin` response header and meta tag; the POST redirected to the configured Base host, while the token had not yet gained Step-Up freshness. This uses Rails integration requests with the existing test setup; it does not demonstrate actual browser Origin behavior, CSRF enforcement during this particular test, external delivery, or subsequent Base result consumption.
+- RuboCop and scoped `git diff --check` passed. The full-suite record `2026-10-31-two-full-suite-after-corrections-N5R8.md` predates this test change.

@@ -8,7 +8,7 @@ class PreferenceCookieInvalidValuesTest < ActionDispatch::IntegrationTest
   test "web cookie update rejects invalid consent values without changing canonical preference" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
-    preference = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING)
+    preference = AppPreference.create!(status_id: AppPreferenceStatus::ACTIVE)
     AppPreferenceCookie.create!(
       preference: preference,
       targetable: false,
@@ -27,7 +27,7 @@ class PreferenceCookieInvalidValuesTest < ActionDispatch::IntegrationTest
             PreferenceJwtConfiguration.stub(:active_kid, "default") do
               PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
                 PreferenceJwtConfiguration.stub(:audiences, [host]) do
-                  cookies[PreferenceCookieName.access] = PreferenceToken.encode(
+                  cookies[PreferenceCookieName.anonymous_jwt] = PreferenceToken.encode(
                     { "consented" => false },
                     host: host,
                     preference_type: "AppPreference",

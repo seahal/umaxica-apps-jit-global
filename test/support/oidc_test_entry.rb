@@ -9,7 +9,6 @@ module OidcTestEntry
 
   CLIENTS = {
     "app" => ["core-app-jp", "client"],
-    "com" => ["core-com-jp", "visitor"],
     "org" => ["core-org-jp", "operator"],
   }.freeze
   CODE_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"

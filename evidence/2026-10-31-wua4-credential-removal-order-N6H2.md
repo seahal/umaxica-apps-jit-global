@@ -1,0 +1,8 @@
+# Credential removal Ticket and Zenith ordering
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`.
+- The worktree contained uncommitted changes affecting the checked implementation, tests and diagrams.
+- Changed `IdentityCredentialRemovalCommitter` to keep the Zenith owner and credential locks while the device/token Ticket transaction finishes, then perform the credential removal and its existing source audit where applicable. The existing owner, device, session, target, last-method and Step-Up checks remain before Ticket invalidation.
+- Added a nontransactional APP TOTP failure case. Before the change, a separate Ticket connection observed that Step-Up invalidation was not yet committed at the Zenith update and the test failed. After the change, the separate connection observed invalidation before an injected Zenith update failure; the TOTP remained active and Step-Up stayed cleared. The focused test passed: 1 run, 4 assertions.
+- With `PARALLEL_WORKERS=1`, the new commit-order test, credential-removal, Passkey authorization and concurrency files, and lifecycle direct-write invariant passed together: 29 runs, 283 assertions, no failures or errors. RuboCop and `git diff --check` passed. Current credential diagrams and the transition inventory were updated.
+- The independent-connection failure case covers standalone APP TOTP removal only. If a caller already owns an outer Ticket transaction, that transaction controls the actual commit; that case is not established. TOTP's same-Zenith authoritative audit, other credential failure windows, cross-database audit effects, and the rest of XDB-07 remain open.

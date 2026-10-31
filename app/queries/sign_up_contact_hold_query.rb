@@ -29,11 +29,6 @@ class SignUpContactHoldQuery
       when ClientTelephone
         [ClientTelephone, :number_digest, :user_identity_telephone_status_id, ClientTelephoneStatus::DELETED, Client,
          :user_id,]
-      when VisitorEmail
-        [VisitorEmail, :address_digest, :visitor_email_status_id, VisitorEmailStatus::DELETED, Visitor, :visitor_id]
-      when VisitorTelephone
-        [VisitorTelephone, :number_digest, :visitor_telephone_status_id, VisitorTelephoneStatus::DELETED, Visitor,
-         :visitor_id,]
       else raise ArgumentError, "unsupported sign-up contact"
       end
     end

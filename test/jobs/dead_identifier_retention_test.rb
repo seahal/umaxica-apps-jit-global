@@ -3,12 +3,11 @@
 require "test_helper"
 
 class DeadIdentifierRetentionTest < ActiveJob::TestCase
-  %w(app com).each do |realm|
-    test "#{realm} a longer retained Contact prevents a false account shredding receipt" do
+  %w(app).each do |realm|
+    test "app a longer retained Contact prevents a false account shredding receipt" do
       owner_model, email_model, email_history, owner_key, occurrence_model =
         case realm
         when "app" then [Client, ClientEmail, ClientEmailHistory, :user_id, ClientOccurrence]
-        when "com" then [Visitor, VisitorEmail, VisitorEmailHistory, :visitor_id, VisitorOccurrence]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago,
@@ -47,13 +46,11 @@ class DeadIdentifierRetentionTest < ActiveJob::TestCase
       assert_equal 1, email_history.where(owner_key => owner.id).count
     end
 
-    test "#{realm} due account collection archives original identifiers before marking retirement complete" do
+    test "app due account collection archives original identifiers before marking retirement complete" do
       owner_model, email_model, telephone_model, email_history, telephone_history, owner_key =
         case realm
         when "app"
           [Client, ClientEmail, ClientTelephone, ClientEmailHistory, ClientTelephoneHistory, :user_id]
-        when "com"
-          [Visitor, VisitorEmail, VisitorTelephone, VisitorEmailHistory, VisitorTelephoneHistory, :visitor_id]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago,

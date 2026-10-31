@@ -182,6 +182,8 @@ scope(module: :base, as: :base) do
             patch :cookie, to: "cookies#update"
             get :theme, to: "themes#show"
             patch :theme, to: "themes#update"
+            get :web_push, to: "web_pushes#show"
+            patch :web_push, to: "web_pushes#update"
           end
         end
       end
@@ -298,38 +300,15 @@ scope(module: :base, as: :base) do
     end
   end
 
-  # Corporate authority gateway host.
+  # Corporate authority gateway host. The com surface is anonymous: it serves the public
+  # preference entry and the operational/static endpoints only. It has no principal, no
+  # credential or session boundary, and no OIDC relying-party route.
   constraints(
     host: [Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host,
            ENV["PUBLIC_BASE_CORPORATE_URL"], "base.com.localhost",].compact,
   ) do
     scope(module: :com, as: :com) do
       root "roots#index"
-      # Self-RP entry: GET renders a neutral form; POST starts the shared OIDC authorization flow.
-      scope path: "sign", as: :sign do
-        get "", to: "sign/entries#show", as: :show
-        post "", to: "sign/entries#create", as: :create
-        # D-153: one generic landing for expected abnormal endings of the sign flow.
-        resource :interruption, only: :show, module: :sign
-      end
-      get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
-                                                         as: :ceremony_binding_confirmation
-      post "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#create"
-
-      # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
-      # transport carries every protocol method in the JSON-RPC body, so one create action is the
-      # whole endpoint.
-      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
-      # resource :mcp, only: :create
-
-      resource :welcome, only: :show
-      resource :dashboard, only: :show, controller: :roots
-      resource :selector, only: %i(show update)
-      resource :switcher, only: %i(show update)
-      resources :accounts, only: %i(index show)
-      resources :organizations, only: %i(index show) do
-        resources :memberships, module: :organizations
-      end
       resource :preference, only: :show
 
       namespace :preference do
@@ -338,9 +317,6 @@ scope(module: :base, as: :base) do
         resource :cookie, only: %i(edit update)
         resource :currency, only: %i(edit update)
         resource :density, only: %i(edit update)
-        resources :emails, only: :edit
-        delete "emails/:id", to: "emails#destroy", as: :email
-        post "emails/:id", to: "emails#create"
         resource :language, only: %i(edit update)
         resource :motion, only: %i(edit update)
         resource :pagination, only: %i(edit update)
@@ -349,10 +325,6 @@ scope(module: :base, as: :base) do
         resource :screen, only: %i(edit update)
         resource :theme, only: %i(edit update)
         resource :timezone, only: %i(edit update)
-      end
-
-      namespace(:well_known, path: ".well-known") do
-        resource(:jwks, only: :show, path: "jwks.json", format: false)
       end
 
       # Deployment identifier endpoint.
@@ -366,36 +338,23 @@ scope(module: :base, as: :base) do
       end
 
       # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
-      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent above.
-      # These are JSON-only; the controllers answer 406 to any other `Accept`.
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent that the
+      # com realm no longer serves.
       namespace(:api) do
         namespace(:v0) do
           resource(:health, only: :show, path: "health.json", format: false)
           resource(:revision, only: :show, path: "revision.json", format: false)
-          # R5-WU15 account/organization/membership owner API for the com Base Self-RP.
-          # R5-WU12 account standing owner (Enforcement) for the Base Self-RP page /identity/standing.
-          get("identity/standing", to: "identity/standings#show", as: :identity_standing)
-          get("identity/selection", to: "identity/selections#show", as: :identity_selection)
-          scope(path: "membership/com", as: :membership) do
-            get("accounts", to: "membership/directory#accounts", as: :accounts)
-            get("accounts/:ref", to: "membership/directory#account", as: :account)
-            get("organizations", to: "membership/directory#organizations", as: :organizations)
-            get("organizations/:ref", to: "membership/directory#organization", as: :organization)
-            get("organizations/:organization_ref/memberships", to: "membership/directory#memberships", as: :memberships)
-            get(
-              "organizations/:organization_ref/memberships/:id", to: "membership/directory#membership",
-                                                                 as: :membership,
-            )
-            post(
-              "organizations/:organization_ref/memberships/authorization", to: "membership/directory#authorization",
-                                                                           as: :membership_authorization,
-            )
-          end
-          # R5-WU14 context switcher for the com Base Self-RP (approved contract 2026-10-17).
-          scope(path: "avatar/com", as: :avatar) do
-            get("dashboard-identity", to: "avatar/dashboard_identities#show", as: :dashboard_identity)
-            get("switcher", to: "avatar/switchers#show", as: :switcher)
-            put("switcher", to: "avatar/switchers#update")
+
+          # Browser preference API for this host's own chrome controls (theme, cookie consent).
+          # GET + PATCH only: `resource ... only: :update` would also map PUT
+          # (adr/api-route-vocabulary-consolidation.md, 2026-10-02 amendment).
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+            get :web_push, to: "web_pushes#show"
+            patch :web_push, to: "web_pushes#update"
           end
         end
       end
@@ -410,103 +369,9 @@ scope(module: :base, as: :base) do
       # `resource`. See adr/pwa-offline-route-exception.md.
       get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
-
-      # Base owns the post-authentication sign-out confirmation and completion resources.
-      scope path: :sign do
-        resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
-                               only: %i(show new edit create)
-        resource :out_completion, only: :show, path: "out/completion",
-                                  controller: :sign_outs, as: :sign_out_completion
-      end
-
-      # Base is a first-party browser RP on this host; Visa is the OIDC authority.
-
-      namespace(:oidc) do
-        resource(:callback, only: :show)
-        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resources(:closures, only: :create)
-      end
-
-      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
-      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
-      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
-      # 2026-10-02 amendment).
-      namespace :api do
-        namespace :v0 do
-          namespace :preferences do
-            get :cookie, to: "cookies#show"
-            patch :cookie, to: "cookies#update"
-            get :theme, to: "themes#show"
-            patch :theme, to: "themes#update"
-          end
-        end
-      end
-
-      # Step-up verification.
-      resource :verification, only: %i(show create)
-      namespace :verification do
-        resource :cancellation, only: %i(show create)
-        resource :completion, only: %i(show create)
-        resource :setup, only: %i(show create)
-      end
-
-      resource :identity, only: :show
-      # User-facing sessions have the canonical top-level resource path. The identity namespace
-      # remains as a compatibility route for existing links while callers migrate.
-      resource :other_sessions, path: "sessions/other", controller: "identity/revocations/others", only: :destroy
-      resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
-      namespace :identity do
-        resource :standing, only: :show
-        resource :recovery_secret, only: :show, path: "recovery-secret"
-        resources :passkeys, only: %i(index show new create update destroy)
-        namespace :mfa do
-          resource :reset, only: :show
-          resource :challenge, only: %i(show update)
-        end
-        resource :recovery, only: :show do
-          resource :completion, only: :create, module: :recovery
-        end
-        namespace :recovery do
-          resource :session, only: %i(new create)
-          resources :appeals, only: :create
-        end
-        namespace :emails do
-          resource :registration, only: %i(new create edit update)
-        end
-        resources :emails, only: %i(index edit update destroy)
-
-        namespace :telephones do
-          resource :registration, only: %i(new create edit update)
-        end
-        resources :telephones, only: %i(index new create edit destroy)
-
-        resource :birthdate, only: :show
-
-        resources :secrets,
-                  controller: :secret_credentials,
-                  only: %i(index show new edit create update destroy) do
-          resource :rotation, only: :create
-          resource :removal, only: :create
-        end
-        resources :sessions, only: %i(index show destroy)
-        resource :revocation, only: :destroy, path: "other_sessions", controller: "revocations/others",
-                              as: :other_sessions
-
-        resources :activities, only: :index
-        resource :withdrawal, only: %i(new edit create update destroy)
-        namespace :withdrawal do
-          # DELETE ends the withdrawal ceremony session.
-          resource :session, only: %i(new create destroy)
-        end
-        namespace :privacy do
-          resource :erasure, only: %i(new create)
-          namespace :erasure do
-            resource :status, only: :show
-          end
-        end
-      end
     end
   end
+
 
   # Staff authority gateway host.
   constraints(
@@ -612,10 +477,10 @@ scope(module: :base, as: :base) do
             )
           end
           # R5-WU14 Avatar owner API for the org Base Self-RP (approved contract 2026-10-17).
-          # R5-WU12 Support owner for app Client / com Visitor administration.
+          # R5-WU12 Support owner for app Client administration.
           # R5-WU17 Support landing owner for the Base Self-RP page /support.
           get("support", to: "support/areas#index", as: :support_areas)
-          scope(path: "support/:realm", as: :support, constraints: { realm: /app|com/ }) do
+          scope(path: "support/:realm", as: :support, constraints: { realm: /app/ }) do
             get("accounts", to: "support/accounts#index", as: :accounts)
             get("accounts/:ref", to: "support/accounts#show", as: :account)
             get("accounts/:ref/revocation-screen", to: "support/accounts#revocation_screen", as: :revocation_screen)
@@ -624,7 +489,7 @@ scope(module: :base, as: :base) do
           end
           # R5-WU12 Enforcement owner: same resource shape as the Base Self-RP pages it serves; the org
           # realm stays routed so its policy can deny it exactly as before.
-          scope(path: "support/:realm", as: :support_enforcement, constraints: { realm: /app|com|org/ }) do
+          scope(path: "support/:realm", as: :support_enforcement, constraints: { realm: /app|org/ }) do
             resources(:enforcement_cases, only: %i(index show new create), controller: "support/enforcement_cases") do
               resource(:approval, only: %i(new create), controller: "support/enforcement_cases/approvals")
               resource(:release, only: %i(new create), controller: "support/enforcement_cases/releases")
@@ -692,7 +557,7 @@ scope(module: :base, as: :base) do
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
 
       # Staff management areas.
-      resource :configuration, only: :show
+      resource :settings, only: :show
       resources :accounts, only: %i(index show)
       resources :iam, only: :index
       # adr/operator-capability-authorization.md, IAM: capability grants. A revocation is its own
@@ -706,14 +571,11 @@ scope(module: :base, as: :base) do
       resources :audit, only: :index
       resources :support, only: :index
       namespace :support do
-        # adr/operator-capability-authorization.md, Support: Clients are the app realm and Visitors
-        # the com realm, fixed by the resource name; no parameter selects the target class. Each
-        # session revocation is a recorded operation (`show` is its result).
+        # adr/operator-capability-authorization.md, Support: Clients are the app realm, fixed by the
+        # resource name; no parameter selects the target class. Each session revocation is a
+        # recorded operation (`show` is its result).
         resources :clients, only: %i(index show) do
           resources :revocations, only: %i(new create show), module: :clients
-        end
-        resources :visitors, only: %i(index show) do
-          resources :revocations, only: %i(new create show), module: :visitors
         end
 
         # adr/unified-enforcement.md, Approval: realm-scoped noun resources, per
@@ -760,6 +622,8 @@ scope(module: :base, as: :base) do
             patch :cookie, to: "cookies#update"
             get :theme, to: "themes#show"
             patch :theme, to: "themes#update"
+            get :web_push, to: "web_pushes#show"
+            patch :web_push, to: "web_pushes#update"
           end
         end
       end

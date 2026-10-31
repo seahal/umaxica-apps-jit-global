@@ -16,17 +16,6 @@ class IdentityPasskeyRegistrationVerificationCommitter
       token_key: :user_token_id,
       surface: "app",
     },
-    "com" => {
-      actor_class: Visitor,
-      token_class: VisitorToken,
-      transaction_class: VisitorStepUpCeremonyTransaction,
-      session_class: VisitorStepUpSession,
-      candidate_class: VisitorPasskeyCeremonyCandidate,
-      passkey_class: VisitorPasskey,
-      actor_key: :visitor_id,
-      token_key: :visitor_token_id,
-      surface: "com",
-    },
     "org" => {
       actor_class: Operator,
       token_class: OperatorToken,
@@ -108,33 +97,51 @@ class IdentityPasskeyRegistrationVerificationCommitter
       }
     end
 
+    def validate_candidate_device!(actor, token, device)
+      owner_matches =
+        case [actor, token, device]
+        in [Client, ClientToken, ClientDeviceSession] then token.user_id == actor.id && device.user_id == actor.id
+        in [Operator, OperatorToken, OperatorDeviceSession]
+          token.staff_id == actor.id && device.staff_id == actor.id && !token.standby_authentication_context?
+        else false
+        end
+      unless owner_matches && device.usable? && token.device_session_id == device.id &&
+          device.current_refresh_token_id == token.id
+        refuse!("passkey registration device or session unavailable")
+      end
+    end
+
     def record_candidate!(binding, actor, token, transaction, material)
       candidate_class = binding.fetch(:candidate_class)
       candidate_class.connection_class_for_self.connected_to(role: :writing) do
-        token.with_lock do
-          transaction.with_lock do
-            now = transaction.class.database_now
-            unless token.active_status?(now) && transaction.actor_ref == actor.public_id &&
-                transaction.session_ref == token.public_id && transaction.surface == binding.fetch(:surface) &&
-                %w(bootstrap credential_registration).include?(transaction.purpose) &&
-                transaction.status == "pending" && !transaction.expired?(now: now) &&
-                transaction.allowed_methods_array.include?("passkey") &&
-                transaction.step_up_required == false &&
-                transaction.user_verification_required == false &&
-                transaction.full_reauthentication_required == false &&
-                transaction.phishing_resistant_required == false
-              refuse!("passkey registration unavailable")
-            end
+        device = token.device_session_record!
+        device.with_lock do
+          token.with_lock do
+            validate_candidate_device!(actor, token, device)
+            transaction.with_lock do
+              now = transaction.class.database_now
+              unless token.active_status?(now) && transaction.actor_ref == actor.public_id &&
+                  transaction.session_ref == token.public_id && transaction.surface == binding.fetch(:surface) &&
+                  %w(bootstrap credential_registration).include?(transaction.purpose) &&
+                  transaction.status == "pending" && !transaction.expired?(now: now) &&
+                  transaction.allowed_methods_array.include?("passkey") &&
+                  transaction.step_up_required == false &&
+                  transaction.user_verification_required == false &&
+                  transaction.full_reauthentication_required == false &&
+                  transaction.phishing_resistant_required == false
+                refuse!("passkey registration unavailable")
+              end
 
-            candidate = IdentityCeremonyCandidateRecord.create_with_generated_ref(
-              candidate_class,
-              digest: candidate_class.digest_for(**material),
-              surface: binding.fetch(:surface), actor_ref: actor.public_id, session_ref: token.public_id,
-              step_up_ceremony_transaction_ref: transaction.transaction_id,
-              expires_at: transaction.expires_at, **material,
-            )
-            transaction.record_registration_verification!(method: "passkey", verified_at: now)
-            candidate
+              candidate = IdentityCeremonyCandidateRecord.create_with_generated_ref(
+                candidate_class,
+                digest: candidate_class.digest_for(**material),
+                surface: binding.fetch(:surface), actor_ref: actor.public_id, session_ref: token.public_id,
+                step_up_ceremony_transaction_ref: transaction.transaction_id,
+                expires_at: transaction.expires_at, **material,
+              )
+              transaction.record_registration_verification!(method: "passkey", verified_at: now)
+              candidate
+            end
           end
         end
       end

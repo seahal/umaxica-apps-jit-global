@@ -6,12 +6,11 @@ require "webauthn/fake_client"
 class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   # These token references must exist even on a newly migrated database.
-  fixtures :client_token_binding_methods, :visitor_token_binding_methods, :operator_token_binding_methods,
-           :client_token_dbsc_statuses, :visitor_token_dbsc_statuses, :operator_token_dbsc_statuses
+  fixtures :client_token_binding_methods, :operator_token_binding_methods,
+           :client_token_dbsc_statuses, :operator_token_dbsc_statuses
 
-  test "passkey removal requires scoped evidence in app com and org even when another key survives" do
+  test "passkey removal requires scoped evidence in app and org even when another key survives" do
     [[Client, ClientPasskey, ClientToken, :user_id],
-     [Visitor, VisitorPasskey, VisitorToken, :visitor_id],
      [Operator, OperatorPasskey, OperatorToken, :staff_id],].each do |actor_class, key_class, token_class, owner_key|
       actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
       token = token_class.create!(:authentication_epoch => 0, owner_key => actor.id)
@@ -32,7 +31,7 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
       assert_nil token.reload.last_step_up_at
 
       reference = (key_class == OperatorPasskey) ? target.external_id : target.public_id
-      surface = { Client => "app", Visitor => "com", Operator => "org" }.fetch(actor_class)
+      surface = { Client => "app", Operator => "org" }.fetch(actor_class)
       evidence = {
         last_step_up_at: Time.current,
         last_step_up_scope: "settings_passkey",
@@ -44,6 +43,7 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
         last_step_up_phishing_resistant: true,
         last_step_up_user_verified: true,
         last_step_up_full_reauthentication: false,
+        last_step_up_resource_ref: reference,
       }
       [{ last_step_up_scope: "settings_email" }, { last_step_up_scope: "" },
        { last_step_up_at: 16.minutes.ago }, { last_step_up_at: 1.minute.from_now },
@@ -55,6 +55,39 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
                    "#{actor_class} must refuse #{invalid.keys.join(", ")}"
         assert_equal status, target.reload.status_id
       end
+    end
+  end
+
+  test "login-blocked owners cannot remove Passkeys with earlier Step-Up" do
+    [
+      [Client, ClientPasskey, ClientToken, ClientStatus::ACTIVE, ClientStatus::RESERVED, :user_id, "app"],
+      [Operator, OperatorPasskey, OperatorToken, OperatorStatus::ACTIVE, OperatorStatus::RESERVED, :staff_id, "org"],
+    ].each do |values|
+      actor_class, key_class, token_class, active, blocked, owner_key, surface = values
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class), status_id: active)
+      metadata = (key_class == ClientPasskey) ? { uv_verified_at: Time.current } : {}
+      key_class.create!(
+        owner_key => actor.id, :webauthn_id => SecureRandom.uuid, :public_key => "remaining", **metadata,
+      )
+      target = key_class.create!(
+        owner_key => actor.id, :webauthn_id => SecureRandom.uuid, :public_key => "target", **metadata,
+      )
+      token = token_class.create!(:authentication_epoch => 0, owner_key => actor.id)
+      reference = (key_class == OperatorPasskey) ? target.external_id : target.public_id
+      token.update!(
+        last_step_up_at: token_class.database_now, last_step_up_scope: "settings_passkey",
+        last_step_up_method: "passkey",
+        last_step_up_credential_ref: reference, last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{surface}",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: reference,
+      )
+      actor.reload.update!(status_id: blocked)
+      step_up_at = token.last_step_up_at
+
+      assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
+      assert_predicate target.reload, :persisted?
+      assert_equal step_up_at, token.reload.last_step_up_at
     end
   end
 
@@ -129,9 +162,350 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
     end
   end
 
+  test "org registration records the external ID and reconciles the same Passkey on retry" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    existing = actor.staff_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "existing-org-key", uv_verified_at: Time.current,
+    )
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_credential_ref: existing.external_id, last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "credential_registration", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "credential_registration_handoff",
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    IdentityPasskeyRegistrationVerificationCommitter.call!(
+      actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+      reference: reference,
+      credential_params: fake.create(
+        challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+      ),
+      description: "New org passkey",
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction.reload, ceremony_session_ref: ceremony.id.to_s,
+    )
+    registered = IdentityPasskeyRegistrationFinalCommitter.call!(
+      actor: actor, token: token, transaction: transaction, raw_result: result.code,
+    )
+
+    assert_equal registered.external_id, transaction.reload.verified_credential_ref
+    assert_equal registered.id, IdentityPasskeyRegistrationFinalCommitter.call!(
+      actor: actor, token: token, transaction: transaction, raw_result: result.code,
+    ).id
+  end
+
+  test "org registration rejects a revoked device before credential and audit creation" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    existing = actor.staff_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "existing-org-key", uv_verified_at: Time.current,
+    )
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_credential_ref: existing.external_id, last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "credential_registration", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "credential_registration_handoff",
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    IdentityPasskeyRegistrationVerificationCommitter.call!(
+      actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+      reference: reference,
+      credential_params: fake.create(
+        challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+      ),
+      description: "New org passkey",
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction.reload, ceremony_session_ref: ceremony.id.to_s,
+    )
+    token.device_session_record!.revoke!
+
+    assert_no_difference ["OperatorPasskey.count", "OperatorPasskeyAuditOutbox.count"] do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationFinalCommitter.call!(
+          actor: actor, token: token, transaction: transaction, raw_result: result.code,
+        )
+      end
+    end
+    assert_not_predicate transaction.reload, :consumed?
+  end
+
+  test "org bootstrap refuses to record a candidate when the token changed to standby" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "bootstrap_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    OperatorToken.find(token.id).update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
+    attestation = fake.create(
+      challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+    )
+
+    assert_no_difference "OperatorPasskeyCeremonyCandidate.count" do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationVerificationCommitter.call!(
+          actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+          reference: reference, credential_params: attestation, description: "New org passkey",
+        )
+      end
+    end
+    assert_equal "pending", transaction.reload.status
+  end
+
+  test "org bootstrap refuses to record a candidate after device revocation" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "bootstrap_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    token.device_session_record!.revoke!
+    attestation = fake.create(
+      challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+    )
+
+    assert_no_difference "OperatorPasskeyCeremonyCandidate.count" do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationVerificationCommitter.call!(
+          actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+          reference: reference, credential_params: attestation, description: "New org passkey",
+        )
+      end
+    end
+    assert_equal "pending", transaction.reload.status
+  end
+
+  test "org bootstrap refuses to record a candidate after token supersession" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "bootstrap_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    device = token.device_session_record!
+    replacement = OperatorToken.create!(authentication_epoch: 0, staff: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+    attestation = fake.create(
+      challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+    )
+
+    assert_no_difference "OperatorPasskeyCeremonyCandidate.count" do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationVerificationCommitter.call!(
+          actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+          reference: reference, credential_params: attestation, description: "New org passkey",
+        )
+      end
+    end
+    assert_equal "pending", transaction.reload.status
+  end
+
+  test "org bootstrap refuses a token that changed to standby after it was read" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "bootstrap_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    IdentityPasskeyRegistrationVerificationCommitter.call!(
+      actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+      reference: reference, credential_params: fake.create(
+        challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+      ),
+      description: "New org passkey",
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction.reload, ceremony_session_ref: ceremony.id.to_s,
+    )
+    OperatorToken.find(token.id).update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
+
+    assert_no_difference ["OperatorPasskey.count", "OperatorPasskeyAuditOutbox.count"] do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationFinalCommitter.call!(
+          actor: actor, token: token, transaction: transaction, raw_result: result.code,
+        )
+      end
+    end
+    assert_not_predicate transaction.reload, :consumed?
+  end
+
+  test "org registration rejects a superseded token before credential and audit creation" do
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    existing = actor.staff_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "existing-org-key", uv_verified_at: Time.current,
+    )
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_credential_ref: existing.external_id, last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+    requirement = StepUpRequirement.new(
+      scope: "settings_passkey", purpose: "credential_registration", step_up_required: false,
+      allowed_methods: [:passkey], phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:org", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
+    ).transaction
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "credential_registration_handoff",
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    fake = WebAuthn::FakeClient.new("https://auth.umaxica.org", encoding: :base64url)
+    config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: fake.origin)
+    challenge = SecureRandom.urlsafe_base64(32)
+    reference = record.issue_bound_passkey_registration_challenge!(
+      transaction: transaction, challenge: challenge, rp_id: config.rp_id, origin: config.origin,
+    )
+    IdentityPasskeyRegistrationVerificationCommitter.call!(
+      actor: actor, token: token, transaction: transaction, session_record: record, config: config,
+      reference: reference,
+      credential_params: fake.create(
+        challenge: challenge, user_verified: true, extensions: { "credProps" => { "rk" => true } },
+      ),
+      description: "New org passkey",
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction.reload, ceremony_session_ref: ceremony.id.to_s,
+    )
+    device = token.device_session_record!
+    replacement = OperatorToken.create!(authentication_epoch: 0, staff: actor, device_session: device)
+    device.update!(current_refresh_token_id: replacement.id)
+
+    assert_no_difference ["OperatorPasskey.count", "OperatorPasskeyAuditOutbox.count"] do
+      assert_raises(IdentityPasskeyCeremonyContract::Error) do
+        IdentityPasskeyRegistrationFinalCommitter.call!(
+          actor: actor, token: token, transaction: transaction, raw_result: result.code,
+        )
+      end
+    end
+    assert_not_predicate transaction.reload, :consumed?
+  end
+
   test "passkey freshness ends exactly at the Security Mode window and refuses a future event (microseconds)" do
     [[Client, ClientPasskey, ClientToken, ClientPasskeyPolicy, :user_id, "app"],
-     [Visitor, VisitorPasskey, VisitorToken, VisitorPasskeyPolicy, :visitor_id, "com"],
      [Operator, OperatorPasskey, OperatorToken, OperatorPasskeyPolicy, :staff_id, "org"],].each do |
       actor_class, key_class, token_class, policy_class, owner_key, surface|
       actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
@@ -148,7 +522,7 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
         last_step_up_credential_ref: reference, last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{surface}",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_full_reauthentication: false,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: reference,
       )
       policy = policy_class.new(key, user: actor)
       microsecond = Rational(1, 1_000_000)
@@ -179,15 +553,12 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
     end
   end
 
-  test "app and com passkey management accept active verified and signup-verified email evidence" do
-    [[Client, ClientEmail, ClientToken, ClientPasskeyPolicy, :user_id, :user_email_status_id, "app"],
-     [Visitor, VisitorEmail, VisitorToken, VisitorPasskeyPolicy, :visitor_id, :visitor_email_status_id,
-      "com",],].each do |actor_class, email_class, token_class, policy_class, owner_key, status_key, surface|
+  test "app passkey management accepts active verified and signup-verified email evidence" do
+    [[Client, ClientEmail, ClientToken, ClientPasskeyPolicy, :user_id, :user_email_status_id,
+      "app",]].each do |actor_class, email_class, token_class, policy_class, owner_key, status_key, surface|
       statuses =
         if actor_class == Client
           [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP]
-        elsif actor_class == Visitor
-          [VisitorEmailStatus::VERIFIED, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP]
         else
           raise ArgumentError, "unsupported email owner"
         end

@@ -49,7 +49,7 @@ updating this document and the test together.
 | `PUBLIC_AUTH_APP_REDIRECTS`       | Auth app redirect-only compatibility paths such as `/billings`                                                                                                             | Redirect-only compatibility endpoints. Base owns authority.                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `PUBLIC_AUTH_APP_SETTINGS_COMPAT` | Auth app `/settings/*` registration, birthdate, and session-revocation compatibility routes that currently declare `:open`                                                 | Compatibility reachability only; authority must remain in the guarded settings/session services.                                                                                                                                                                                                                                                                                                                                                                              |
 | `PUBLIC_CORE_API`                 | Core `GET /api/v0/session` and `POST /api/v0/token/refresh`                                                                                                                | Core browser/BFF session-token boundary endpoints.                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `PUBLIC_AUTH_ORG_REDIRECTS`       | Auth org redirect-only compatibility paths such as `/accounts`, `/audit`, `/billing`, `/configuration`, `/iam`, `/support`, and `/system`                                  | Redirect-only compatibility endpoints. Base owns authority.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `PUBLIC_AUTH_ORG_REDIRECTS`       | Auth org redirect-only compatibility paths such as `/accounts`, `/audit`, `/billing`, `/iam`, `/support`, and `/system`                                  | Redirect-only compatibility endpoints. Base owns authority.                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `PUBLIC_WARP_SETTINGS`            | Warp `GET /settings`                                                                                                                                                       | Current Warp settings shell entrypoint.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `PUBLIC_MCP`                      | `POST /mcp` on the Base and Warp app/com/org hosts                                                                                                                         | **Withdrawn 2026-09-19** (routes commented out; see `adr/mcp-endpoint-withdrawal.md`). Was: Model Context Protocol JSON-RPC transport, unauthenticated. Served only three read-only tools: process liveness, deployment revision, and this endpoint's own realm/surface labels. Reads no database, actor, session, or environment listing, and exposes no write tool. Dependency and topology detail stays out of scope per `adr/internal-health-endpoint-edge-isolation.md`. |
 | `PUBLIC_GUID_RESOLUTION`          | GUID `GET /api/v0/resources/:guid`                                                                                                                                         | Public resolution boundary. The bootstrap validates transport safety and returns Problem Details `404`; it exposes no database key, target URL, or redirect.                                                                                                                                                                                                                                                                                                                  |
@@ -58,7 +58,7 @@ updating this document and the test together.
 
 ## Default Rule
 
-`PUBLIC_AUTH_STEP_UP` covers Auth app/com/org `GET /verification`. An opaque reference on the entry
+`PUBLIC_AUTH_STEP_UP` covers Auth app/org `GET /verification`. An opaque reference on the entry
 GET redirects to Auth `GET /ceremony_bindings`, which attaches Auth-local continuity and sends the
 browser to the Base confirmation boundary. After confirmation, a GET of the original entry redeems
 the purpose-bound admission and rotates Auth-local continuity. The clean entry page requires that
@@ -66,23 +66,23 @@ continuity and the matching, unexpired Base transaction; it uses the transaction
 ceremony ownership authorization. It does not accept an Auth root login as admission.
 
 The same classification includes the admitted Passkey display, POST options and assertion, GET/POST
-opaque result handoff on all three surfaces, and APP/COM Email OTP display, issuance, verification
+opaque result handoff on both surfaces, and APP Email OTP display, issuance, verification
 and POST redelivery. Every action resolves the exact admitted actor, session and transaction and
 retains business authorization. Display GET requests create no challenge or email generation. ORG
 has no Email OTP endpoint. Auth cancellation POST closes the admitted transaction and its
 continuity, then uses the existing Jump redirect to that surface's fixed Base dashboard. It grants
 no freshness and does not resume the protected change request.
 
-The category also includes Auth app/com/org `GET /verification/setup/new`. Setup GET redirects an
+The category also includes Auth app/org `GET /verification/setup/new`. Setup GET redirects an
 opaque admission reference through Auth `GET /ceremony_bindings` and the Base confirmation boundary;
 the confirmed entry GET redeems only the exact Base bootstrap permission. Its clean page requires scoped registration continuity,
 actor/session ownership and policy authorization. Available registration methods come from that
 transaction, and registration evidence cannot satisfy ordinary step-up freshness.
 
-`PUBLIC_SIGN_IN_UP` also covers Auth app/com/org `POST /sign/cancellation` and `POST /sign/switch`
-(D09 Cancel and D06 Switch). Both act only on the current browser's admitted first-page Auth
-ceremony for a pending OIDC parent, are CSRF-protected, and hand an encrypted single-use request to
-Base, which commits it only through a same-origin POST from the browser that started the parent.
+`PUBLIC_SIGN_IN_UP` also covers Auth app/org `POST /sign/cancellation` and APP `POST /sign/switch`
+(D09 Cancel and D06 Switch). Both act on the current browser's admitted first-page Auth ceremony
+for a pending OIDC parent and are CSRF-protected. The current implementation redirects to a Visa
+GET continuation that checks the handoff and commits its result. ORG has no Switch route.
 
 Routes not covered above must require authentication or fail closed. In code, that means the route
 must resolve to `:private` or `:deny_all`, and its concrete controller/action must declare that

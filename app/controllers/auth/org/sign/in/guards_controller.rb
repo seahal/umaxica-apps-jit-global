@@ -7,6 +7,7 @@ module Auth
       module In
         class GuardsController < ::Auth::Org::ApplicationController
           AUTHENTICATION_MODE = :open
+          sign_entry_classification! :sign_in
 
           def show
             cycle = validated_guard_cycle

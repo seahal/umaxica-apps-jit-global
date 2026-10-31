@@ -23,39 +23,6 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
     assert_predicate ClientOccurrence.where(event_type: "processor_erasure.failed"), :exists?
   end
 
-  test "job is idempotent for notified visitor notification" do
-    visitor = create_visitor
-    privacy_request = VisitorPrivacyRequest.create!(visitor: visitor)
-    notification = VisitorProcessorErasureNotification.create!(
-      visitor_privacy_request: privacy_request,
-      processor_key: "email_delivery",
-      status_id: VisitorProcessorErasureNotification.status_id_for("NOTIFIED"),
-      notified_at: Time.current,
-    )
-
-    assert_no_difference -> { VisitorOccurrence.count } do
-      ProcessorErasureNotificationJob.perform_now(surface: "com", public_id: notification.public_id)
-    end
-
-    assert_equal VisitorProcessorErasureNotification.status_id_for("NOTIFIED"), notification.reload.status_id
-  end
-
-  test "job marks an unsupported visitor processor as permanent failure" do
-    visitor = create_visitor
-    privacy_request = VisitorPrivacyRequest.create!(visitor: visitor)
-    notification = VisitorProcessorErasureNotification.create!(
-      visitor_privacy_request: privacy_request,
-      processor_key: "payment",
-    )
-
-    ProcessorErasureNotificationJob.perform_now(surface: "com", public_id: notification.public_id)
-
-    assert_equal VisitorProcessorErasureNotification.status_id_for("PERMANENT_FAILURE"), notification.reload.status_id
-    occurrence = VisitorOccurrence.where(event_type: "processor_erasure.failed").order(:id).last
-
-    assert_equal "processor_unavailable", occurrence.context.fetch("reason_code")
-  end
-
   test "job does not reprocess a permanent notification" do
     client = create_client
     privacy_request = ClientPrivacyRequest.create!(client: client)
@@ -111,13 +78,12 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
     end
   end
 
-  test "job rejects unsupported surfaces" do
-    error =
+  test "job rejects unsupported and retired surfaces" do
+    ["com", "org", "", nil].each do |surface|
       assert_raises(ArgumentError) do
-        ProcessorErasureNotificationJob.perform_now(surface: "org", public_id: "missing")
+        ProcessorErasureNotificationJob.perform_now(surface: surface, public_id: "missing")
       end
-
-    assert_equal 'unsupported processor erasure surface: "org"', error.message
+    end
   end
 
   private
@@ -134,15 +100,4 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
     )
   end
 
-  def create_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    Visitor.create!(
-      status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-    )
-  end
 end

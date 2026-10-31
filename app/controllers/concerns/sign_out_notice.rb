@@ -17,6 +17,7 @@ module SignOutNotice
   SIGN_OUT_NOTICE_TTL = 5.minutes
   SIGN_OUT_NOTICE_CACHE_CONTROL = "no-store, no-cache, must-revalidate, private"
   SIGN_OUT_REFERRER_POLICY = "no-referrer"
+  SIGN_OUT_CONFIRMATION_REFERRER_POLICY = "strict-origin"
 
   private
 
@@ -88,7 +89,9 @@ module SignOutNotice
     response.headers["Cache-Control"] = SIGN_OUT_NOTICE_CACHE_CONTROL
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-    response.headers["Referrer-Policy"] = SIGN_OUT_REFERRER_POLICY
+    response.headers["Referrer-Policy"] =
+      (action_name == "edit" || @sign_out_confirmation_page) ?
+        SIGN_OUT_CONFIRMATION_REFERRER_POLICY : SIGN_OUT_REFERRER_POLICY
   end
 
   # A lost commit response is neither a successful nor a failed sign-out. Keep the response

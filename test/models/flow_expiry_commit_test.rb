@@ -5,8 +5,8 @@ require "test_helper"
 class FlowExpiryCommitTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
-  test "standalone sign-in expiry commits before raising in every realm" do
-    [ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow].each do |model|
+  test "standalone sign-in expiry commits before raising in the app and org realms" do
+    [ClientSignInFlow, OperatorSignInFlow].each do |model|
       flow = nil
       begin
         now = model.database_now
@@ -24,7 +24,7 @@ class FlowExpiryCommitTest < ActiveSupport::TestCase
     end
   end
   test "expiry ownership follows the writer transaction when the caller temporarily selects reading" do
-    [ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow].each do |model|
+    [ClientSignInFlow, OperatorSignInFlow].each do |model|
       flow = nil
       begin
         now = model.database_now

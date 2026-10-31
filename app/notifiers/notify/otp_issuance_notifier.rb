@@ -11,9 +11,7 @@ module Notify
   # credentials out of the job arguments. The plaintext values stay local and
   # never enter `params`.
   #
-  # The arguments are validated explicitly because Noticed::Ephemeral#deliver does
-  # not call validate!, which would make a declared `required_params` a silent
-  # no-op rather than an error.
+  # Validate arguments before encryption and retain Noticed's delivery configuration validation.
   module OtpIssuanceNotifier
     public
 
@@ -58,7 +56,20 @@ module Notify
         contact_otp_generation: contact_otp_generation,
       )
       notifier_params.merge!(registration_binding.to_h) if registration_binding
-      with(notifier_params).deliver(record)
+      notifier = with(notifier_params)
+      notifier.validate!
+      unless notifier.bulk_delivery_methods.empty? && notifier.delivery_methods.keys == [:email]
+        raise ArgumentError, "OTP notifier must use exactly one email delivery"
+      end
+
+      delivery = notifier.delivery_methods.fetch(:email)
+      notification = const_get(:Notification, false).new(recipient: record, event: notifier)
+      raise ActiveJob::EnqueueError, "OTP email enqueue rejected" unless delivery.perform?(notification)
+
+      job = delivery.ephemeral_perform_later(name, record, notifier.params, {}, context: notification)
+      raise ActiveJob::EnqueueError, "OTP email enqueue rejected" unless job
+
+      notifier
     end
 
     private

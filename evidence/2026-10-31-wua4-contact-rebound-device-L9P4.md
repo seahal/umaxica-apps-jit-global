@@ -1,0 +1,6 @@
+# Contact registration device binding
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; the worktree contained uncommitted changes affecting this result.
+- With an APP token instance read before its persisted device association changed, both Email and Telephone finalizers accepted the registration against a different device than the one initially locked (2 runs, 10 assertions, 2 failures before the fix). Both now retain the locked device object and require the locked token still to name it. The focused cases passed with 2 runs and 22 assertions; the three related finalizer files passed with 61 runs and 1,084 assertions.
+- The corresponding resend cases also accepted a token rebound after it was read (2 runs, 8 assertions, 2 failures before the fix). Both resend issuers now require the locked token to name the locked device. The three related resend/bootstrap files passed with 46 runs and 695 assertions.
+- RuboCop passed for the four changed operations and the two changed test files. Tests use transactional fixtures and synthetic token reassignment; they do not establish that normal production workflows reassign a token or test independent-connection races. Ticket-first finalization and the other XDB-08/09/14 commit boundaries remain incomplete.

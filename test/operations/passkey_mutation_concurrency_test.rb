@@ -11,6 +11,44 @@ class PasskeyMutationConcurrencyTest < ActiveSupport::TestCase
   uses_transaction :test_rename_waits_for_device_revocation_and_refuses_the_stale_authority_after_the_lock_is_released,
                    :test_removal_waits_for_device_revocation_and_refuses_the_stale_authority_after_the_lock_is_released
 
+  test "a source audit failure after the OP commit spends Passkey rename proof" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    key = actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "commit-order-key", description: "Original", uv_verified_at: Time.current,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_credential_ref: key.public_id, last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: key.public_id,
+    )
+    device = token.device_session_record!
+    commits = []
+    observer = lambda do |_name, _start, _finish, _id, event|
+      commits << event.fetch(:connection).pool.db_config.name if event.fetch(:sql).start_with?("COMMIT")
+    end
+    failure = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "injected source audit failure" }
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      PasskeyAuditOutbox.stub(:record_for!, failure) do
+        assert_raises(IdentityPasskeyNameCommitter::DependencyFailure) do
+          IdentityPasskeyNameCommitter.call!(actor: actor, token: token, passkey: key, description: "Failed")
+        end
+      end
+    end
+
+    assert_includes commits, "op_base_app"
+    assert_nil token.reload.last_step_up_at
+    assert_equal "Original", key.reload.description
+    assert_equal 0, ClientPasskeyAuditOutbox.where(external_id: key.external_id).count
+  ensure
+    key&.delete
+    token&.delete
+    device&.delete
+    actor&.delete
+  end
+
   %i(rename removal).each do |operation|
     test "#{operation} waits for device revocation and refuses the stale authority after the lock is released" do
       actor = Client.create!(
@@ -29,7 +67,7 @@ class PasskeyMutationConcurrencyTest < ActiveSupport::TestCase
         last_step_up_credential_ref: key.public_id, last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_full_reauthentication: false,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: key.public_id,
       )
 
       assert ClientPasskeyPolicy.new(key, user: actor).management_authorized?(

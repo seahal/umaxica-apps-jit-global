@@ -14,13 +14,12 @@
 module CurrentBannerQuery
   module_function
 
-  ALLOWED_TLDS = %i(app org com).freeze
+  ALLOWED_TLDS = %i(app org).freeze
   ALLOWED_DOMAINS = %i(sign core acme docs news help).freeze
 
   BANNER_MODELS = {
     app: "ClientBanner",
     org: "OperatorBanner",
-    com: "VisitorBanner",
   }.freeze
 
   def call(tld:, region:, domain:)

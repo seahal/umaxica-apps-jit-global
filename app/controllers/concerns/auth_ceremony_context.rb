@@ -31,8 +31,11 @@ module AuthCeremonyContext
     social_admission_refusal!("ceremony_purpose_mismatch") unless
       record.admission_purpose == "authentication_handoff"
 
-    binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
-      .find_by(admitted_auth_ceremony_session_id: record.id)
+    model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+    binding =
+      model.connection_owner.connected_to(role: :writing) do
+        model.find_by(admitted_auth_ceremony_session_id: record.id)
+      end
     social_admission_refusal!("binding_missing") unless binding
     social_admission_refusal!("binding_not_redeemed") unless binding.redeemed?
     social_admission_refusal!("binding_retired") if binding.retired?
@@ -94,10 +97,13 @@ module AuthCeremonyContext
     transaction_ref = record&.authorization_transaction_ref
     return nil if transaction_ref.blank?
 
-    OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-      surface: auth_ceremony_surface,
-      transaction_id: transaction_ref,
-    )
+    model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+    model.connection_owner.connected_to(role: :writing) do
+      OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+        surface: auth_ceremony_surface,
+        transaction_id: transaction_ref,
+      )
+    end
   rescue ActiveRecord::RecordNotFound
     nil
   end
@@ -218,8 +224,11 @@ module AuthCeremonyContext
     transaction = auth_ceremony_authorization_transaction(record)
     return nil if transaction.nil?
 
-    binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
-      .find_by(admitted_auth_ceremony_session_id: record.id)
+    model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+    binding =
+      model.connection_owner.connected_to(role: :writing) do
+        model.find_by(admitted_auth_ceremony_session_id: record.id)
+      end
     return nil unless binding&.purpose == "authentication_handoff" &&
       binding.authorization_transaction_id == transaction.id
 

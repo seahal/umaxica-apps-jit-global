@@ -4,7 +4,6 @@
 class IdentityTelephoneCeremonyTransactionPurger
   MODEL_BY_SURFACE = {
     app: ClientTelephoneCeremonyTransaction,
-    com: VisitorTelephoneCeremonyTransaction,
     org: OperatorTelephoneCeremonyTransaction,
   }.freeze
 

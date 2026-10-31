@@ -5,8 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class BannerPartialTest < ActionView::TestCase
-  fixtures :client_banners, :visitor_banners, :clients, :client_statuses, :visitors, :visitor_statuses,
-           :visitor_visibilities, :visitor_security_modes, :visitor_mfa_statuses
+  fixtures :client_banners, :clients, :client_statuses
 
   test "renders title and body when title is present" do
     render partial: "layouts/shared/banner", locals: { banner: client_banners(:current_user_banner) }
@@ -16,9 +15,14 @@ class BannerPartialTest < ActionView::TestCase
   end
 
   test "renders body without title heading when title is blank" do
-    render partial: "layouts/shared/banner", locals: { banner: visitor_banners(:untitled_visitor_banner) }
+    # Plain value object standing in for a banner record with a blank title;
+    # no retained banner fixture has an untitled title, and the partial only
+    # reads `title` and `body`.
+    untitled_banner = Struct.new(:title, :body).new("", "Untitled banner body")
 
-    assert_includes rendered, "Visitor untitled banner body"
+    render partial: "layouts/shared/banner", locals: { banner: untitled_banner }
+
+    assert_includes rendered, "Untitled banner body"
     assert_not_includes rendered, "<h2>"
   end
 end

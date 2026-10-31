@@ -7,7 +7,6 @@ class DpopProofStateableTest < ActiveSupport::TestCase
   setup do
     ClientDpopProofState.delete_all
     OperatorDpopProofState.delete_all
-    VisitorDpopProofState.delete_all
   end
 
   test "record_jti! stores a proof state once and rejects duplicates" do
@@ -44,20 +43,6 @@ class DpopProofStateableTest < ActiveSupport::TestCase
       htm: "POST",
       htu: "https://example.com/token",
     )
-  end
-
-  test "issue_nonce! creates an active nonce that can be consumed once" do
-    now = Time.current
-    nonce = VisitorDpopProofState.issue_nonce!(now: now)
-
-    state = VisitorDpopProofState.find_by!(nonce: nonce)
-
-    assert_equal now.to_i, state.seen_at.to_i
-    assert_equal (now + DpopProofStateable::TTL_SECONDS.seconds).to_i, state.expires_at.to_i
-    assert_predicate VisitorDpopProofState.active_at(now), :exists?
-    assert VisitorDpopProofState.consume_nonce!(nonce, now: now + 1.second)
-    assert_equal (now + 1.second).to_i, state.reload.nonce_used_at.to_i
-    assert_not VisitorDpopProofState.consume_nonce!(nonce, now: now + 2.seconds)
   end
 
   test "consume_nonce! rejects blank, expired, and missing nonces" do

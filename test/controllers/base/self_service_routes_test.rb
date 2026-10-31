@@ -16,7 +16,6 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     @app_host = hosts.base_service.host
     @org_host = hosts.base_staff.host
-    @com_host = hosts.base_corporate.host
   end
 
   # The app surface no longer exposes singular current self-service pages (/account, /avatar,
@@ -206,92 +205,6 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
     assert_self_service_page(base_org_avatar_url(ri: "jp", host: @org_host), headers: headers, title: "Avatar")
   end
 
-  test "com self service pages require authentication" do
-    assert_requires_authentication(base_com_identity_url(ri: "jp", host: @com_host), host: @com_host)
-    assert_requires_authentication(base_com_accounts_url(ri: "jp", host: @com_host), host: @com_host)
-  end
-
-  test "com self service pages render for signed in visitor" do
-    visitor = create_verified_visitor_with_email(email_address: "base-self-service-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    select_token!(surface: :com, principal: visitor, token: token)
-    headers =
-      begin
-        rp_headers = as_visitor_headers(visitor, host: @com_host, session_public_id: token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "com"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpComGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpComGrant.create!(
-              authentication_epoch: 0,
-              visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "visitor",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "visitor",
-                                     ), client_id: rp_client.client_id,
-            )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
-    set_access_cookie(
-      jwt_access_token_for(
-        visitor, host: @com_host, session_public_id: token.public_id,
-                 resource_type: "visitor",
-      ),
-    )
-
-    assert_self_service_page(base_com_identity_url(ri: "jp", host: @com_host), headers: headers, title: "Identity")
-  end
-
-  test "com does not expose avatar or organization self service routes" do
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("https://#{@com_host}/avatar", method: :get)
-    end
-  end
-
   private
 
   def select_token!(surface:, principal:, token:)
@@ -307,7 +220,6 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
       case host
       when @app_host then :app
       when @org_host then :org
-      when @com_host then :com
       else raise ArgumentError, "unknown Base host: #{host}"
       end
 
@@ -371,13 +283,6 @@ class BaseSelfServiceRoutesTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -399,23 +304,6 @@ class BaseSelfServiceRoutesTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -430,17 +318,9 @@ class BaseSelfServiceRoutesTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -628,31 +508,6 @@ class BaseSelfServiceRoutesTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
@@ -666,8 +521,7 @@ class BaseSelfServiceRoutesTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
@@ -728,7 +582,7 @@ end
 class BaseSelfServiceRoutesTest
   private
 
-  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org/.com)
+  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org)
   # must resolve to surface:BASE_* so the access token issuer matches the surface the
   # controller validates against.
   def jwt_issuer_id_for_test_host(host, resource_type)
@@ -747,13 +601,10 @@ class BaseSelfServiceRoutesTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end

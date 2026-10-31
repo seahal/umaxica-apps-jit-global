@@ -1,0 +1,5 @@
+# Local development RP anchor inventory
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had extensive uncommitted changes affecting the check.
+- At approximately 2026-10-31 07:43 UTC, a development Rails runner grouped RP anchor rows by whether their identity binding and revocation timestamp were present. Before querying each of the nine APP/ORG JP-development cells, it checked that the configured writer host was `primary` and the database name matched that cell's `development_rp_*_db` name. All nine groups were empty: no RP anchor rows were returned in any inspected local development cell.
+- The runner performed aggregate reads only, but the existing Rails development boot may run initializers with their own side effects; this observation does not assert that boot itself wrote nothing. It makes no claim about test, deployed, Neon or production data and does not establish foreign-key state, history, backup, a final schema design or migration approval. Counts can change after measurement.

@@ -10,8 +10,8 @@ module StepUpEmailChallenge
     raise ArgumentError, "email credential required" unless credential_ref.is_a?(String) && credential_ref.present?
 
     self.class.connection_class_for_self.connected_to(role: :writing) do
-      with_lock do
-        transaction.with_lock do
+      transaction.with_lock do
+        with_lock do
           now = transaction.class.database_now
           raise IdentityStepUpCeremonyContract::Error, "email ceremony unavailable" unless email_transaction_pending?(
             transaction, now,
@@ -37,8 +37,8 @@ module StepUpEmailChallenge
     raise ArgumentError, "delivery outcome must be boolean" unless [true, false].include?(success)
 
     self.class.connection_class_for_self.connected_to(role: :writing) do
-      with_lock do
-        transaction.with_lock do
+      transaction.with_lock do
+        with_lock do
           now = transaction.class.database_now
           return false unless email_transaction_pending?(transaction, now) &&
             generation.is_a?(Integer) && generation.positive? && email_code_generation == generation &&
@@ -53,8 +53,8 @@ module StepUpEmailChallenge
 
   def consume_bound_email_code!(transaction:, credential_ref:, code:)
     self.class.connection_class_for_self.connected_to(role: :writing) do
-      with_lock do
-        transaction.with_lock do
+      transaction.with_lock do
+        with_lock do
           now = transaction.class.database_now
           return false unless email_transaction_pending?(transaction, now) &&
             email_credential_ref == credential_ref && email_delivery_state == "delivered" &&

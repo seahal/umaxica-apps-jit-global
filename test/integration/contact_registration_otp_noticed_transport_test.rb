@@ -7,7 +7,7 @@ require "minitest/mock"
 class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(current verified reissued revoked expired).each do |state|
       test "#{surface} Noticed registration OTP #{state} retains original delivery authority" do
         actor, token, contact, flow_model, notifier, notifier_name =
@@ -20,14 +20,6 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
             )
             [owner, root, candidate, ClientEmailCeremonyTransaction, Notify::App::OtpNotifier,
              "Notify::App::OtpNotifier::Notification",]
-          when :com
-            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-            candidate = owner.visitor_emails.create!(
-              raw_address: "noticed-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
-            )
-            [owner, root, candidate, VisitorEmailCeremonyTransaction, Notify::Com::OtpNotifier,
-             "Notify::Com::OtpNotifier::Notification",]
           end
         token.rotate_refresh_token!
         nonce = SecureRandom.urlsafe_base64(32)

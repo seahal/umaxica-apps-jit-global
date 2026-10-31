@@ -27,7 +27,7 @@ class Core::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_nil cookies[PreferenceCookieName.access(surface: :org)]
-    assert_nil cookies[PreferenceCookieName.refresh(surface: :org)]
+    assert_nil cookies[PreferenceCookieName.anonymous_jwt]
+    assert_nil cookies["preference_refresh"]
   end
 end

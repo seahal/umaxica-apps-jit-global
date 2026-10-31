@@ -98,7 +98,6 @@ class MessageSerializationTest < ActiveSupport::TestCase
     token = ActiveSupport::MessageVerifier.new(key, serializer: Marshal).generate({ pid: "legacy" })
 
     assert_nil SessionLimitResolutionTokenRef.find_client_token(token)
-    assert_nil SessionLimitResolutionTokenRef.find_visitor_token(token)
     assert_nil SessionLimitResolutionTokenRef.find_operator_token(token)
 
     key = Rails.application.key_generator.generate_key("session_ref")

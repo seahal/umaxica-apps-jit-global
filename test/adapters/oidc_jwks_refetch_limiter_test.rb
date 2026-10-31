@@ -112,20 +112,29 @@ class OidcJwksRefetchLimiterTest < ActiveSupport::TestCase
   end
 
   test "a token whose header fails the cheap checks triggers no fetch and no lease" do
-    client = client_with(limiter: OidcJwksRefetchLimiter.new(connection: UnavailableValkey.new))
+    valkey = CountingUnavailableValkey.new
+    client = client_with(limiter: OidcJwksRefetchLimiter.new(connection: valkey))
     other_issuer = JWT.encode(
       { "iss" => "https://other.example", "aud" => ["c"] }, @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
     )
+    wrong_algorithm = JWT.encode(
+      { "iss" => "https://op.example", "aud" => ["c"] }, "untrusted-key", "HS256",
+      { "kid" => "unknown", "typ" => "at+jwt" },
+    )
 
-    result = OidcOpAccessTokenVerifier.new(
-      access_token: other_issuer, client_id: "core-app-jp", realm: "app", issuer: "https://op.example",
-      audience: "core-app-jp", jwks_client: client,
-    ).call
+    [[other_issuer, "invalid_token"], [wrong_algorithm, "invalid_header"]].each do |token, error|
+      result = OidcOpAccessTokenVerifier.new(
+        access_token: token, client_id: "core-app-jp", realm: "app", issuer: "https://op.example",
+        audience: "core-app-jp", jwks_client: client,
+      ).call
 
-    assert_equal "invalid_token", result.error
-    assert_equal 0, @fetches
+      assert_equal error, result.error
+      assert_equal 0, @fetches
+      assert_equal 0, valkey.calls
+    end
     assert_equal :invalid, client.lookup("x" * (OidcOpJwksClient::MAXIMUM_KID_LENGTH + 1)).status
     assert_equal 0, @fetches
+    assert_equal 0, valkey.calls
   end
 
   test "a lease holder that dies without a result blocks others only until the lease TTL expires" do

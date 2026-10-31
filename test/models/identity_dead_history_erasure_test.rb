@@ -9,28 +9,14 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
     oidc_connections client_memberships clients client_banners client_members client_member_discoveries
     client_member_observations client_member_revocations client_member_impersonations client_member_suspensions
     client_member_deletions owned_members client_bulletins rp_account authority_lock core_app_client_bridge
-    user_preference
+    client_preference
   ).freeze
-  VISITOR_PREFERENCE_ASSOCIATIONS = %i(
-    visitor_preference_language visitor_preference_timezone visitor_preference_region visitor_preference_theme
-    visitor_preference_currency visitor_preference_date_format visitor_preference_time_format
-    visitor_preference_motion visitor_preference_density visitor_preference_page_size
-    visitor_preference_adult_content_gate
-  ).freeze
-  VISITOR_ERASURE_ASSOCIATIONS = [
-    :visitor_emails, :visitor_withdrawal_ceremonies, :visitor_telephones, :visitor_secret_credentials,
-    :visitor_passkeys, :visitor_tokens, :visitor_device_sessions, :authority_lock, :visitor_banners,
-    :oidc_connections, :rp_account, :core_com_visitor_bridge,
-    { visitor_preference: VISITOR_PREFERENCE_ASSOCIATIONS },
-  ].freeze
 
-  %w(app com).each do |realm|
+  %w(app).each do |realm|
     test "#{realm} permitted physical Identity erasure removes only its dead histories" do
       owner_model, email_history, telephone_history, owner_key, email_model, telephone_model =
         case realm
         when "app" then [Client, ClientEmailHistory, ClientTelephoneHistory, :user_id, ClientEmail, ClientTelephone]
-        when "com"
-          [Visitor, VisitorEmailHistory, VisitorTelephoneHistory, :visitor_id, VisitorEmail, VisitorTelephone]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
@@ -74,7 +60,6 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
       owner_model, email_history, owner_key =
         case realm
         when "app" then [Client, ClientEmailHistory, :user_id]
-        when "com" then [Visitor, VisitorEmailHistory, :visitor_id]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
@@ -107,7 +92,6 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
       owner_model, email_history, owner_key, hold_model, hold_key =
         case realm
         when "app" then [Client, ClientEmailHistory, :user_id, ClientRetentionHold, :client]
-        when "com" then [Visitor, VisitorEmailHistory, :visitor_id, VisitorRetentionHold, :visitor]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
@@ -130,7 +114,6 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
       owner_model, email_model, email_history, owner_key =
         case realm
         when "app" then [Client, ClientEmail, ClientEmailHistory, :user_id]
-        when "com" then [Visitor, VisitorEmail, VisitorEmailHistory, :visitor_id]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
@@ -162,7 +145,6 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
       owner_model, email_history, owner_key =
         case realm
         when "app" then [Client, ClientEmailHistory, :user_id]
-        when "com" then [Visitor, VisitorEmailHistory, :visitor_id]
         end
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
@@ -183,10 +165,8 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
   private
 
   def preload_for_erasure(owner)
-    case owner
-    when Client then Client.includes(CLIENT_ERASURE_ASSOCIATIONS).find(owner.id)
-    when Visitor then Visitor.includes(VISITOR_ERASURE_ASSOCIATIONS).find(owner.id)
-    else raise ArgumentError, "unsupported Identity erasure owner"
-    end
+    raise ArgumentError, "unsupported Identity erasure owner" unless owner.is_a?(Client)
+
+    Client.includes(CLIENT_ERASURE_ASSOCIATIONS).find(owner.id)
   end
 end

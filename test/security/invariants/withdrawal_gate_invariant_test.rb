@@ -14,9 +14,7 @@ module Security
 
       setup do
         ensure_client_token_reference_records!
-        ensure_visitor_token_reference_records!
         @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-        @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
         host! @host
       end
 
@@ -62,298 +60,13 @@ module Security
         assert_response :success
       end
 
-      test "suspended visitor is redirected to com withdrawal session entry from protected html routes" do
-        visitor, headers =
-          begin
-            fv5041 = :suspended
-            fv5040 = create_visitor
-            fv5056 = VisitorToken.create!(
-              authentication_epoch: 0,
-              visitor: fv5040,
-              visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-              visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-              discard_at: 1.day.from_now,
-            )
-            satisfy_visitor_verification(fv5056)
-            fv5056.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
-
-            fv5039 =
-              begin
-                fv5042 = as_visitor_headers(fv5040, host: @com_host, session_public_id: fv5056.public_id)
-                fv5051 = fv5042["Host"]
-                fv5055 =
-                  begin
-                    Rails.application.routes.recognize_path("https://#{fv5051}/") if fv5051.present?
-                  rescue ActionController::RoutingError
-                    nil
-                  end
-                fv5054, fv5053 = fv5055&.fetch(:controller)&.split("/")
-                if %w(base warp core edit).include?(fv5054) && fv5053 == "com"
-                  fv5052 =
-                    case fv5054
-                    when "base" then "base-#{fv5053}-ww"
-                    when "edit" then "edit-org-ww"
-                    else "#{fv5054}-#{fv5053}"
-                    end
-                  fv5049 = VisitorToken.find_by!(public_id: fv5042.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                  fv5048 = OidcClientRegistry.find!(fv5052)
-                  fv5046 = [fv5048.client_id, fv5049.public_id]
-                  @base_browser_rp_credentials ||= {}
-                  if !@base_browser_rp_credentials[fv5046] && fv5049.currently_usable? &&
-                      !(fv5049.device_session_id && OpComGrant.exists?(
-                        device_session_id: fv5049.device_session_id, oidc_client_id: fv5048.client_id, revoked_at: nil,
-                      ))
-                    fv5049.rotate_refresh_token! unless fv5049.device_session_record.current_refresh_token_id
-                    fv5050 = Time.current
-                    fv5047 = OpComGrant.create!(
-                      authentication_epoch: 0,
-                      visitor_token: fv5049, oidc_client_id: fv5048.client_id, oidc_scope: "openid profile",
-                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5050,
-                      refresh_token_expires_at: fv5050 + 10.minutes,
-                    )
-                    fv5045 = AuthenticationTokenService.encode(
-                      Visitor.find(fv5049.visitor_id), host: fv5051, resource_type: "visitor",
-                                                       session_public_id: fv5049.public_id,
-                                                       base_session_public_id: fv5049.public_id,
-                                                       oidc_sid: fv5047.public_id, oidc_jti: fv5047.oidc_jti,
-                                                       expires_at: fv5050 + 10.minutes, scopes: %w(openid profile),
-                                                       issuer: OidcIssuer.for_client(fv5048), audiences: [fv5048.aud],
-                                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5048),
-                                                       subject: OidcSubject.for(
-                                                         Visitor.find(fv5049.visitor_id),
-                                                         resource_type: "visitor",
-                                                       ), client_id: fv5048.client_id,
-                    )
-                    @base_browser_rp_credentials[fv5046] = [fv5045, fv5047.issue_refresh_token!]
-                  end
-                  if @base_browser_rp_credentials[fv5046]
-                    fv5045, fv5044 = @base_browser_rp_credentials.fetch(fv5046)
-                    fv5043 = [
-                      fv5042.fetch("Cookie"),
-                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fv5045)}",
-                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fv5044)}",
-                    ].join("; ")
-                    fv5042 = fv5042.merge("Cookie" => fv5043, "HTTP_COOKIE" => fv5043)
-                  end
-                end
-                fv5042
-              end
-            apply_withdrawal_state!(fv5040, fv5041)
-            [fv5040, fv5039]
-          end
-
-        get base_com_identity_sessions_url(ri: "jp", host: @com_host),
-            headers: headers
-
-        assert_predicate visitor.reload, :suspended?
-        assert_response :redirect
-        assert_redirected_to new_base_com_identity_withdrawal_session_path(ri: "jp")
-        assert_not_equal new_base_app_identity_withdrawal_session_path(ri: "jp"), URI.parse(response.location).path
-      end
-
-      test "suspended visitor gets withdrawal required on json protected routes" do
-        _visitor, headers =
-          begin
-            fv5022 = :suspended
-            fv5021 = create_visitor
-            fv5037 = VisitorToken.create!(
-              authentication_epoch: 0,
-              visitor: fv5021,
-              visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-              visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-              discard_at: 1.day.from_now,
-            )
-            satisfy_visitor_verification(fv5037)
-            fv5037.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
-
-            fv5020 =
-              begin
-                fv5023 = as_visitor_headers(fv5021, host: @com_host, session_public_id: fv5037.public_id)
-                fv5032 = fv5023["Host"]
-                fv5036 =
-                  begin
-                    Rails.application.routes.recognize_path("https://#{fv5032}/") if fv5032.present?
-                  rescue ActionController::RoutingError
-                    nil
-                  end
-                fv5035, fv5034 = fv5036&.fetch(:controller)&.split("/")
-                if %w(base warp core edit).include?(fv5035) && fv5034 == "com"
-                  fv5033 =
-                    case fv5035
-                    when "base" then "base-#{fv5034}-ww"
-                    when "edit" then "edit-org-ww"
-                    else "#{fv5035}-#{fv5034}"
-                    end
-                  fv5030 = VisitorToken.find_by!(public_id: fv5023.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                  fv5029 = OidcClientRegistry.find!(fv5033)
-                  fv5027 = [fv5029.client_id, fv5030.public_id]
-                  @base_browser_rp_credentials ||= {}
-                  if !@base_browser_rp_credentials[fv5027] && fv5030.currently_usable? &&
-                      !(fv5030.device_session_id && OpComGrant.exists?(
-                        device_session_id: fv5030.device_session_id, oidc_client_id: fv5029.client_id, revoked_at: nil,
-                      ))
-                    fv5030.rotate_refresh_token! unless fv5030.device_session_record.current_refresh_token_id
-                    fv5031 = Time.current
-                    fv5028 = OpComGrant.create!(
-                      authentication_epoch: 0,
-                      visitor_token: fv5030, oidc_client_id: fv5029.client_id, oidc_scope: "openid profile",
-                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5031,
-                      refresh_token_expires_at: fv5031 + 10.minutes,
-                    )
-                    fv5026 = AuthenticationTokenService.encode(
-                      Visitor.find(fv5030.visitor_id), host: fv5032, resource_type: "visitor",
-                                                       session_public_id: fv5030.public_id,
-                                                       base_session_public_id: fv5030.public_id,
-                                                       oidc_sid: fv5028.public_id, oidc_jti: fv5028.oidc_jti,
-                                                       expires_at: fv5031 + 10.minutes, scopes: %w(openid profile),
-                                                       issuer: OidcIssuer.for_client(fv5029), audiences: [fv5029.aud],
-                                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5029),
-                                                       subject: OidcSubject.for(
-                                                         Visitor.find(fv5030.visitor_id),
-                                                         resource_type: "visitor",
-                                                       ), client_id: fv5029.client_id,
-                    )
-                    @base_browser_rp_credentials[fv5027] = [fv5026, fv5028.issue_refresh_token!]
-                  end
-                  if @base_browser_rp_credentials[fv5027]
-                    fv5026, fv5025 = @base_browser_rp_credentials.fetch(fv5027)
-                    fv5024 = [
-                      fv5023.fetch("Cookie"),
-                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fv5026)}",
-                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fv5025)}",
-                    ].join("; ")
-                    fv5023 = fv5023.merge("Cookie" => fv5024, "HTTP_COOKIE" => fv5024)
-                  end
-                end
-                fv5023
-              end
-            apply_withdrawal_state!(fv5021, fv5022)
-            [fv5021, fv5020]
-          end
-
-        get base_com_identity_sessions_url(ri: "jp", host: @com_host),
-            headers: headers.merge("Accept" => "application/json")
-
-        assert_response :forbidden
-        assert_equal "WITHDRAWAL_REQUIRED", response.parsed_body["error"]
-      end
-
-      test "com withdrawal status route requires ceremony" do
-        visitor, headers =
-          begin
-            fv5003 = :suspended
-            fv5002 = create_visitor
-            fv5018 = VisitorToken.create!(
-              authentication_epoch: 0,
-              visitor: fv5002,
-              visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-              visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-              discard_at: 1.day.from_now,
-            )
-            satisfy_visitor_verification(fv5018)
-            fv5018.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
-
-            fv5001 =
-              begin
-                fv5004 = as_visitor_headers(fv5002, host: @com_host, session_public_id: fv5018.public_id)
-                fv5013 = fv5004["Host"]
-                fv5017 =
-                  begin
-                    Rails.application.routes.recognize_path("https://#{fv5013}/") if fv5013.present?
-                  rescue ActionController::RoutingError
-                    nil
-                  end
-                fv5016, fv5015 = fv5017&.fetch(:controller)&.split("/")
-                if %w(base warp core edit).include?(fv5016) && fv5015 == "com"
-                  fv5014 =
-                    case fv5016
-                    when "base" then "base-#{fv5015}-ww"
-                    when "edit" then "edit-org-ww"
-                    else "#{fv5016}-#{fv5015}"
-                    end
-                  fv5011 = VisitorToken.find_by!(public_id: fv5004.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                  fv5010 = OidcClientRegistry.find!(fv5014)
-                  fv5008 = [fv5010.client_id, fv5011.public_id]
-                  @base_browser_rp_credentials ||= {}
-                  if !@base_browser_rp_credentials[fv5008] && fv5011.currently_usable? &&
-                      !(fv5011.device_session_id && OpComGrant.exists?(
-                        device_session_id: fv5011.device_session_id, oidc_client_id: fv5010.client_id, revoked_at: nil,
-                      ))
-                    fv5011.rotate_refresh_token! unless fv5011.device_session_record.current_refresh_token_id
-                    fv5012 = Time.current
-                    fv5009 = OpComGrant.create!(
-                      authentication_epoch: 0,
-                      visitor_token: fv5011, oidc_client_id: fv5010.client_id, oidc_scope: "openid profile",
-                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5012,
-                      refresh_token_expires_at: fv5012 + 10.minutes,
-                    )
-                    fv5007 = AuthenticationTokenService.encode(
-                      Visitor.find(fv5011.visitor_id), host: fv5013, resource_type: "visitor",
-                                                       session_public_id: fv5011.public_id,
-                                                       base_session_public_id: fv5011.public_id,
-                                                       oidc_sid: fv5009.public_id, oidc_jti: fv5009.oidc_jti,
-                                                       expires_at: fv5012 + 10.minutes, scopes: %w(openid profile),
-                                                       issuer: OidcIssuer.for_client(fv5010), audiences: [fv5010.aud],
-                                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5010),
-                                                       subject: OidcSubject.for(
-                                                         Visitor.find(fv5011.visitor_id),
-                                                         resource_type: "visitor",
-                                                       ), client_id: fv5010.client_id,
-                    )
-                    @base_browser_rp_credentials[fv5008] = [fv5007, fv5009.issue_refresh_token!]
-                  end
-                  if @base_browser_rp_credentials[fv5008]
-                    fv5007, fv5006 = @base_browser_rp_credentials.fetch(fv5008)
-                    fv5005 = [
-                      fv5004.fetch("Cookie"),
-                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fv5007)}",
-                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fv5006)}",
-                    ].join("; ")
-                    fv5004 = fv5004.merge("Cookie" => fv5005, "HTTP_COOKIE" => fv5005)
-                  end
-                end
-                fv5004
-              end
-            apply_withdrawal_state!(fv5002, fv5003)
-            [fv5002, fv5001]
-          end
-        host! @com_host
-
-        with_step_up_satisfied(surface: "com") do
-          get edit_base_com_identity_withdrawal_url(ri: "jp", host: @com_host), headers: headers
-        end
-
-        assert_response :unauthorized
-
-        ceremony = VisitorWithdrawalCeremony.issue!(subject: visitor, request: ActionDispatch::TestRequest.create)
-        cookie_name = AuthenticationCookieName.with_host_prefix(
-          "withdrawal_ceremony",
-          production: JitSessionCookieConfig.force_secure?,
-        )
-        headers = {
-          "Client-Agent" => TEST_BROWSER_USER_AGENT,
-          "Cookie" => "#{cookie_name}=#{ceremony.public_id}:#{ceremony.plaintext_token}",
-        }
-
-        with_step_up_satisfied(surface: "com") do
-          get edit_base_com_identity_withdrawal_url(ri: "jp", host: @com_host), headers: headers
-        end
-
-        assert_response :success
-      end
-
       test "application controllers do not skip the withdrawal gate" do
         allowlist = {
-          # DBSC endpoints must process device-session challenge state before the normal withdrawal gate.
+          # Sign DBSC endpoints own their device binding boundary before the normal withdrawal gate.
           "app/controllers/acme/app/edge/v0/dbsc_controller.rb" =>
-            "DBSC endpoint owns its device binding boundary",
-          "app/controllers/acme/com/edge/v0/dbsc_controller.rb" =>
-            "DBSC endpoint owns its device binding boundary",
+          "DBSC endpoint owns its device binding boundary",
           "app/controllers/acme/org/edge/v0/dbsc_controller.rb" =>
             "DBSC endpoint owns its device binding boundary",
-          "app/controllers/core/app/api/v0/preferences/dbsc_controller.rb" =>
-            "DBSC endpoint owns its device binding boundary",
-          "app/controllers/core/com/api/v0/preferences/dbsc_controller.rb" =>
             "DBSC endpoint owns its device binding boundary",
         }
 
@@ -454,16 +167,6 @@ module Security
         )
       end
 
-      def create_visitor
-        ensure_visitor_reference_records!
-        Visitor.create!(
-          status_id: VisitorStatus::NOTHING,
-          visibility_id: VisitorVisibility::VISITOR,
-          security_mode_id: SecurityModeConfigurable::NORMAL,
-          mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-        )
-      end
-
       def with_step_up_satisfied(surface:, &)
         satisfied = Actor::StepUp.new(
           scope: "withdrawal",
@@ -525,13 +228,10 @@ class Security::Invariants::WithdrawalGateInvariantTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -563,13 +263,6 @@ class Security::Invariants::WithdrawalGateInvariantTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.ensure_defaults!
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -591,23 +284,6 @@ class Security::Invariants::WithdrawalGateInvariantTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -622,17 +298,9 @@ class Security::Invariants::WithdrawalGateInvariantTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -819,31 +487,6 @@ class Security::Invariants::WithdrawalGateInvariantTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
@@ -857,8 +500,7 @@ class Security::Invariants::WithdrawalGateInvariantTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

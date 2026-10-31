@@ -8,7 +8,7 @@ require "jwt"
 class SecurityJwtAuthAccessTokenCodec
   JWT_ALGORITHM = SecurityJwtRfc9068AccessTokenProfile::ALGORITHM
   TOKEN_TYPE = SecurityJwtRfc9068AccessTokenProfile::TOKEN_TYPE
-  VALID_RESOURCE_TYPES = %w(client operator visitor).freeze
+  VALID_RESOURCE_TYPES = %w(client operator).freeze
   # Keyring used when a caller does not name one. Callers that sign or verify
   # with a surface keyring must pass `jwt_issuer_id:` explicitly; the keyring is
   # never inferred from the request host.
@@ -26,7 +26,6 @@ class SecurityJwtAuthAccessTokenCodec
         case resource
         when ::Client then "client"
         when ::Operator then "operator"
-        when ::Visitor then "visitor"
         end
 
       return nil unless valid_encode_params?(resource, host)
@@ -216,8 +215,8 @@ class SecurityJwtAuthAccessTokenCodec
     def valid_encode_params?(resource, host)
       return false if resource.nil? || host.blank?
 
-      # Ensure resource is Client, Operator or Visitor
-      resource.is_a?(::Client) || resource.is_a?(::Operator) || resource.is_a?(::Visitor)
+      # Ensure resource is Client or Operator
+      resource.is_a?(::Client) || resource.is_a?(::Operator)
     end
 
     def oidc_jti_for_session(resource_type, session_public_id)
@@ -234,7 +233,6 @@ class SecurityJwtAuthAccessTokenCodec
       case resource_type.to_s
       when "client" then ::ClientToken
       when "operator" then ::OperatorToken
-      when "visitor" then ::VisitorToken
       end
     end
 

@@ -15,12 +15,13 @@ class Warp::Org::Api::V0::Preferences::PreferencesControllerTest < ActionDispatc
     assert_equal "sy", response.parsed_body.fetch("theme")
   end
 
-  test "PATCH theme writes the public theme cookie" do
-    patch warp_org_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
+  test "PATCH theme is refused on the read-only Warp host" do
+    assert_no_difference -> { OperatorPreference.count } do
+      patch warp_org_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
+    end
 
-    assert_response :ok
-    assert_equal "dr", response.parsed_body.fetch("theme")
-    assert_includes response.headers["Set-Cookie"].to_s, "#{PreferenceIoKeys::Cookies::THEME}=dr"
+    assert_response :forbidden
+    assert_nil response.headers["Set-Cookie"]
   end
 
   test "GET cookie reports the anonymous consent banner" do
@@ -30,16 +31,12 @@ class Warp::Org::Api::V0::Preferences::PreferencesControllerTest < ActionDispatc
     assert response.parsed_body.fetch("show_banner")
   end
 
-  test "PATCH cookie stores anonymous consent without issuing preference credentials" do
+  test "PATCH cookie is refused on the read-only Warp host" do
     assert_no_difference -> { OperatorPreference.count } do
       patch warp_org_api_v0_preferences_cookie_path, params: { consented: true }, as: :json
     end
 
-    assert_response :no_content
-    set_cookie = response.headers["Set-Cookie"].to_s
-
-    assert_includes set_cookie, "preference_consented=1"
-    assert_not_includes set_cookie, "#{PreferenceCookieName.access(surface: :org)}="
-    assert_not_includes set_cookie, "#{AuthenticationBase::ACCESS_COOKIE_KEY}="
+    assert_response :forbidden
+    assert_nil response.headers["Set-Cookie"]
   end
 end

@@ -13,7 +13,8 @@ The preference system has two different roles.
 
 - `AppPreference`, `OrgPreference`, and `ComPreference` hold login-independent surface setting
   state.
-- `UserPreference`, `OperatorPreference`, and `VisitorPreference` hold per-account local settings.
+- `ClientPreference` and `OperatorPreference` hold per-account local settings for app and org.
+  Com has no account-local preference.
 
 The system must keep these roles separate.
 
@@ -23,11 +24,14 @@ is a signed projection of that database state for runtime reads. Auth access tok
 
 ## JWT Projection Boundary
 
-Current token projection is intentionally narrow.
+The active Preference transport is one realm-scoped signed value and two display cookies. App,
+org, and com use the same anonymous token contract. Base owns save/reset; Visa App and Visa Org own
+the sign-in/sign-out reflection. WU-9's persistence cutover still requires its separately approved
+local shape migrations and final acceptance checks.
 
-| Data         | JWT projection                 | Current contract                                                                              |
+| Data         | JWT projection                 | Accepted target contract                                                                              |
 | ------------ | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| Preference   | Preference JWT only            | DB source of truth projected into `preference_access`; auth access tokens do not carry `prf`. |
+| Preference   | Preference JWT only            | App, org, and com use a realm-scoped `__Secure-preference`, `language`, and `__Secure-experience` cookie set. Auth access tokens do not carry `prf`. |
 | Identity     | Auth/OIDC identity claims only | Credential, contact, verification, and lifecycle state remain DB-only.                        |
 | Avatar       | None                           | Avatar selection and authority remain DB-only/session-row state.                              |
 | Organization | None                           | Organization membership and role checks remain DB-only policy state.                          |
@@ -38,16 +42,12 @@ the authenticated subject for an RP. An auth access token may carry authenticati
 the Rails authorization boundary. Neither token turns identity, avatar, organization, or group rows
 into JWT-owned source-of-truth state.
 
-Preference authority and preference transport are separate. Base is the preference HTML
-authority: it owns the preference screens and the durable preference records they edit. The
-display-preference transport for page chrome (theme and cookie consent) is host-local: Base, Auth,
-Core, and Warp each serve `/api/v0/preferences/{theme,cookie}` on their own host, because the
-preference credentials are host-only cookies. Serving that transport grants no preference authority;
-the read and update logic is the shared `PreferenceWebThemeEndpoint` / `PreferenceWebCookieEndpoint`
-behavior, and Auth serves it only for its ceremony pages
-(`adr/preference-browser-transport-family-capability.md`). Other runtime code consumes preference
-state as read-only context through `Actor.preferences`. (The historical statement that preference
-writes are exposed through the `sign` surfaces predates that split and no longer applies.)
+Preference authority and preference transport are separate. Only the matching Base and Visa
+surfaces write a realm's Preference database and hold that realm's signing key. Other hosts verify
+the shared domain-scoped JWT and render read-only preference context. Base also owns the host-only
+`__Host-preference_binding` cookie used to authorize consent and Web Push reads. A signed JWT by
+itself is not consent authority. Other runtime code consumes display state as read-only context
+through `Actor.preferences`.
 
 ## URL Role Boundary
 
@@ -59,15 +59,24 @@ Preference, setting, and operational configuration routes have separate responsi
 - `/setting` is the signed-in user setting boundary. It owns account-local and security settings for
   the current actor, such as credentials, sessions, MFA, contact methods, notification settings, and
   withdrawal flows.
-- `/configurator` is the operator-controlled configuration boundary. It owns settings an authorized
-  operator manages for an organization, workspace, tenant, public surface, or managed runtime.
+- `/configurator` is the generic operator-controlled configuration boundary. It owns settings an
+  authorized operator manages for an organization, workspace, tenant, public surface, or managed
+  runtime.
+
+The owner-approved WU-X1 migration gives the existing Base ORG management entry a surface-local
+`/settings` route on the Base ORG host. Auth APP and ORG `/settings` remain their separate identity
+self-service endpoints on the Auth hosts. These routes have independent controllers, sessions,
+policies, and state; matching path text does not share an implementation. The Auth ORG
+`/configuration` transfer endpoint was removed, and no `/configuration` alias or redirect remains.
+The Base ORG entry remains closed until an authoritative settings data source exists. This is a
+specific migration exception and does not establish `/settings` as the generic operator route.
 
 Do not move preference writes under `/setting` merely because the actor is authenticated. Do not
 expose account settings through `/preference` merely because a settings page also displays
 preference context. Do not mix operator-managed configuration with user self-service settings.
 
-These URL roles are canonical for new documentation and route work. Existing plural `/settings`
-routes are a compatibility gap and need a separate migration plan before route renaming.
+These URL roles are canonical for new documentation and route work, subject to the explicit
+Base-ORG-only migration above. Do not infer shared behavior from the repeated `/settings` path.
 
 ## Scope
 
@@ -84,87 +93,93 @@ Shared preference is the source of truth for login-independent surface preferenc
 
 Local preference is the source of truth for account-local settings.
 
-- It belongs to the `Client` / `Operator` / `Visitor` records.
+- It belongs to `Client` or `Operator` records. Corporate (`com`) has no account-local preference.
 - It stores per-account language, region, timezone, and theme settings.
 - It is kept in each domain database.
 
 ## Synchronization Rules
 
-The system uses explicit sync rules.
+The accepted target is one-way and field-explicit. The replacement
+[sign-in application ADR](../../adr/preference-sign-in-application-is-one-directional.md) and
+[realm JWT and binding ADR](../../adr/preference-realm-jwt-and-host-bound-browser-binding.md)
+supersede the older record-recency and host-local transport contracts. App/org and com now use the
+same realm JWT and Base host binding rules.
 
 ### Before login
 
-- Write preference changes from the `sign` preference routes to `AppPreference`, `OrgPreference`, or
-  `ComPreference`.
-- Do not depend on local preference data.
+- Anonymous preference writes target the matching `AppPreference`, `OrgPreference`, or
+  `ComPreference` row.
+- Account-local values are not written by anonymous save paths.
 
 ### During login
 
-- Write the same user-visible preference data to both shared preference and local preference.
-- Keep the values aligned by explicit sync.
-- If both sides already exist, reconcile by parent-record recency: the newer parent preference
-  record wins as a whole record. This is intentional until the schema has per-field change metadata.
+- After Visa has finalized sign-in, its shared Preference writer applies only account display values
+  named in the account row's explicit metadata to the anonymous row. The anonymous row never writes
+  back to the account. An account row with
+  `explicit_fields IS NULL` has unknown historical provenance: it remains unchanged and supplies no
+  inferred values.
+- `region` is not applied by itself. A region save marks the fixed language, date format, time
+  format, and currency companions explicit; those companions are the values applied on sign-in.
+- Consent, Web Push, and browser binding remain browser-local. Sign-in does not import them from the
+  account. Corporate preferences have no account adoption path.
 
 ### During logout
 
-- Write only to shared preference from the `sign` preference/logout boundary.
-- Local preference remains as the account-local record.
+After authentication logout commits, Visa sign-out asks the shared Preference writer to create a
+new anonymous generation, copy display values plus consent, Web Push option, and the binding record
+from the old row's database state, and retire the old row in one setting transaction. It does not
+infer Preference state from cookies. Account-local settings remain in place.
 
 ### Sync failure handling
 
-- Do not expose sync failure to the user as a product error.
-- Keep the user-facing action successful when possible.
-- Recover the state by writing back to the matching local preference when a shared/local sync fails.
-- Emit a structured error log for later recovery and investigation.
+The target writer follows the ordered Z-then-setting commits and explicit failure outcomes in
+`two.md` §4.4 and §4.8. An account save that commits in Z but fails in the setting database is a
+visible partial failure; it is not reported as saved. A sign-out remains complete when the
+independent Preference rebuild fails, and the failure is reported without claiming that the new
+Preference cookie reached the browser.
 
-Recovery target by surface:
+## Write Boundary
 
-- `App` -> `UserPreference`
-- `Org` -> `OperatorPreference`
-- `Com` -> `VisitorPreference`
+`PreferenceWriteBoundary#write_preference!` is the single accepted writer for `save`, `sign_in`,
+`sign_out`, and `reset`. Base owns authenticated save/reset; Visa owns sign-in/sign-out. Each call
+receives a server-verified actor and explicit submitted values. Request data cannot choose the actor,
+realm, or operation. The surface-to-realm table is closed, and other hosts remain readers.
 
-Current implementation note: Com/Visitor adoption is implemented symmetrically with App/Client and
-Org/Operator. `PreferenceAdoption#adoptable_preference_class?` treats `ComPreference` as adoptable,
-and login-time and rotation-time sync create/update the `VisitorPreference` mirror the same way the
-`UserPreference`/`StaffPreference` mirrors are created and updated.
-
-Required log fields:
-
-- `preference_type`
-- `source`
-- `target`
-- `action`
-- `error_class`
-- `error_message`
-- `owner_id`
-- `surface` or `scope`
-- `request_id` or another correlation key
+The same boundary serves Base com/app/org save/reset and Visa app/org sign-in/sign-out. A closed
+surface-to-realm map refuses unregistered writers.
 
 ## Data Sharing Rules
 
-`App` / `Org` / `Com` preference data must not be treated as one shared row across all surfaces.
+`App`, `Org`, and `Com` preference data remain separate realm-local state.
 
 - Do not copy `App` data into `Org` or `Com`.
 - Do not copy `Org` data into `App` or `Com`.
 - Do not copy `Com` data into `App` or `Org`.
 
-Each surface keeps its own preference state.
-
-The local preference records also must stay isolated inside the matching principal bubble.
-
-- `UserPreference` stays in the `app_principal` database.
-- `OperatorPreference` stays in the `org_principal` database.
-- `VisitorPreference` stays in the `com_principal` database.
+Account-local preference records also remain isolated inside their matching principal boundary.
+`ClientPreference` uses the app Zenith database; `OperatorPreference` uses the org Zenith database.
+There is no corporate account-local preference.
 
 ## Shared Fields
 
-The sync path should only move the allowlisted user-facing fields.
+The anonymous display snapshot supports these ten fields:
 
-- `language`
-- `region`
-- `timezone`
 - `theme`
-- cookie consent fields when they are part of the active session state
+- `language`
+- `timezone`
+- `currency`
+- `date_format`
+- `time_format`
+- `motion`
+- `density`
+- `page_size` (including the registered `infinity` value)
+- `region`
+
+`region` is stored in the database but is not a JWT display claim. A region save also marks its four
+fixed display companions explicit. The shared cookie projection carries language and the experience
+object with the other display values. Consent, Web Push option, and browser binding are stored in
+separate browser-row children; they are not account-local fields. `adult_content_gate` remains a
+dormant model/option/child family and is excluded from runtime display and save registries.
 
 ## Promotional Email Unsubscribe
 
@@ -176,7 +191,10 @@ surfaces.
   `PROMOTIONAL_UNSUBSCRIBE_HMAC_SALT` secret.
 - `app` uses the external HMAC scope `client` while it still updates the current `UserEmail`
   storage-backed model.
-- `com` uses `VisitorEmail`; `org` uses `OperatorEmail`.
+- `org` uses `OperatorEmail`.
+- The `com` visitor unsubscribe scope is retired: the corporate hosts no longer serve
+  `/preference/emails` or any visitor contact surface, and `PromotionalEmailUnsubscribeHeaders`
+  raises `ArgumentError` for the retired `visitor` option instead of falling back to another scope.
 - `GET /preference/email/:id/edit` renders a confirmation page and does not change state.
 - `DELETE /preference/email/:id` and Gmail one-click `POST /preference/email/:id` set `promotional`
   to `false` idempotently.
@@ -192,7 +210,8 @@ The sync path must not copy unrelated data.
 
 ## Request Context Parameters
 
-The sign surfaces use the same request context contract for `app`, `org`, and `com`.
+The app and org sign surfaces use the same request context contract. The anonymous corporate
+(`com`) preference pages use the same `ri`/`lx`/`ct`/`tz` overlay without a principal.
 
 - `ri` carries the region.
 - `lx` carries the language.
@@ -202,8 +221,8 @@ The sign surfaces use the same request context contract for `app`, `org`, and `c
 - `pt` and `nt` carry redirect target lanes and are not propagated through ordinary preference
   navigation by default.
 
-`ri` is mandatory request context. Current sign `app`, `org`, and `com` routes must carry a valid
-`ri`. If `ri` is missing or invalid on a GET or HEAD request, the controller redirects to the same
+`ri` is mandatory request context. Current sign `app` and `org` routes, and the anonymous `com`
+preference pages, must carry a valid `ri`. If `ri` is missing or invalid on a GET or HEAD request, the controller redirects to the same
 route with a valid `ri` value. `ri` is request context, not a preference write path.
 
 Global browser HTML on Base, Auth, Visa, Tech and Edit MUST use this canonicalization contract.
@@ -242,7 +261,7 @@ internal Rails origin.
 - `PUBLIC_` should be used for the host or URL the browser sees.
 - `PRIVATE_` should be used for the host or URL Rails or a pod uses internally.
 
-The preference access-token cookie path must keep these boundaries aligned. If Rails issues a token
+The Preference JWT cookie path must keep these boundaries aligned. If Rails issues a token
 for one boundary and immediately validates against the other, the browser can end up with a freshly
 issued cookie that is then deleted on the same response.
 
@@ -255,29 +274,33 @@ Examples:
 
 ## Preference Reset
 
-Preference reset is a fresh-visit rebootstrap, not an in-place defaults update. A successful reset
-retires the current shared surface preference, clears preference auth and request-context cookies,
-creates a new shared preference through the normal new-visitor bootstrap path, and redirects to the
-same-surface `/preference` without request-context query parameters. The following GET then uses the
-normal required-`ri` lifecycle to add the default region context.
+The accepted reset transition retires the currently valid anonymous row and creates a new row with
+its registered defaults in the same setting-database transaction. After commit, the writer issues
+the three shared Preference cookies from that new snapshot and deletes the old host-only browser
+binding cookie. If the supplied JWT is invalid, the row it names stays unchanged; reset creates a
+default row instead. The new contract does not return to the refresh/DBSC path.
+
+The same transition uses the shared writer for com/app/org. It retires the current row, creates a
+default replacement, issues the three shared cookies after commit, and clears the host-only binding
+cookie.
 
 ## Runtime Read Contract
 
-Preference data flows in one direction for Rails runtime reads:
+The read-only runtime projection is a domain-scoped Preference JWT. App/org and com hydrate through
+the same realm claim shape:
 
 ```text
-Preference JWT payload (`preference_access` / `__Host-preference_access`) -> Actor.preferences
-
-The Preference JWT is an RFC 9068 `at+jwt` access token. Protocol claims (`iss`, `exp`, `aud`,
-`sub`, `client_id`, `iat`, `jti`, `scope`) sit in the JWT Claims Set. Application preference data
-remains in the private `preferences` object. `sub` is the preference record `public_id`. See
-`adr/rfc9068-access-token-profile.md`.
+Preference JWT payload (`__Secure-preference`) -> Actor.preferences
 ```
 
-The database is the durable storage boundary (SSoT) used by explicit preference write and
-token-refresh flows. The **Preference JWT** (`*_preference_access` cookie) is its signed projection
-and the Rails runtime read cache for normal requests. `Actor.preferences` is the immutable
-request-local runtime preference value exposed to controllers, views, and services.
+The anonymous Preference JWT uses the closed realm shape defined by the accepted Preference ADRs.
+Its `sub` identifies the anonymous preference row; `aud` identifies the realm. It is separate from
+the RFC 9068 authentication access token.
+
+The database is the durable storage boundary used by explicit Preference writes. The signed
+Preference JWT is a runtime read cache. `Actor.preferences` is the immutable request-local
+preference value exposed to controllers, views, and services. Preference JWT refresh-token and
+DBSC flows are retired.
 
 > **2026-05-30:** The hydration source changed from the auth access-token `prf` claim to the
 > Preference JWT payload. The `prf` claim never mirrored the DB (it was built from the NULL+overlay
@@ -286,7 +309,7 @@ request-local runtime preference value exposed to controllers, views, and servic
 > controller lifecycle runs before `set_current_actor`, so hydration is a read-only, no-extra-DB
 > step.
 
-In a normal request, `Actor.preferences` is built in two stages:
+In a normal app/org request, `Actor.preferences` is built in two stages:
 
 1. Build the base preference from the Preference JWT payload (`preference_payload_preferences`), via
    `Actor::Preference.from_jwt`. When no Preference JWT cookie exists (Bearer/OIDC APIs and
@@ -297,17 +320,40 @@ In a normal request, `Actor.preferences` is built in two stages:
 
 The overlay changes only the current request's runtime preference. It is not a preference write.
 
-### Language resolution and dynamic region seeding
+### Anonymous corporate requests
 
-Child preference records are always created with a default option on first visit, so a saved value
-cannot, by itself, distinguish an explicit user choice from an auto-seeded default. The
-`explicit_fields` jsonb marker on `app/com/org_preferences` records which fields the user set on
-purpose; it rides along in the payload as the `explicit` list. The effective language is resolved by
-priority:
+The corporate (`com`) hosts have no principal, credential, session, or admission boundary, so their
+hydration is a separate path:
+
+1. `ComAnonymousActorContext#set_anonymous_context` installs one request-local actor snapshot with
+   `Unauthenticated`, `Actor::Authentication::NULL`, `Actor::Authz::NULL`,
+   `Actor::Configuration::NULL`, and `Actor::SelectedContext::NULL`.
+2. The initial preference starts from `Actor::Preference.new` and the request overlay. After token
+   verification, a valid com JWT supplies the display values and the request overlay is applied to
+   the request-local snapshot. With no valid JWT, the initial default and overlay remain in use.
+3. `prepend_around_action :with_anonymous_context_lifecycle` clears the actor snapshot and restores
+   the thread's time zone when the request ends.
+
+`Base::Com::ApplicationController` and `Warp::Com::ApplicationController` include the concern
+explicitly and do not include the principal-resolving authentication or adoption concerns. Warp com
+verifies the JWT without reading the setting database. Base com can read the preference row for its
+settings and browser-bound consent and Web Push endpoints. Consent and Web Push remain endpoint
+responses; Base does not copy their database values into the request-local Actor preference. The
+actor snapshot carries only the verified display projection and request overlay. Other com hosts
+retain the disabled Web Push default.
+Base also reads the region of an active, unexpired anonymous preference without requiring a browser
+binding; an explicit URL region overlays that value for the request. The independent com signing
+namespace and lifecycle schema are present locally; deployment key distribution and full WU-7
+acceptance remain unverified.
+
+### Language resolution and regional defaults
+
+The anonymous JWT stores language as a display value and has no explicitness marker. Request
+context is applied locally in this order:
 
 1. `?lx` request param (request-local; never written to DB/JWT).
-2. An explicitly set language (present in `explicit_fields`) — wins over `?ri`.
-3. `?ri`-derived dynamic seeding for users who have not set a language (`jp` -> ja, `us` -> en).
+2. `?ri` regional locale (`jp` -> ja, `us` -> en).
+3. Language from the verified Preference JWT.
 4. Default (`ja`).
 
 Example:
@@ -319,12 +365,13 @@ Actor.preferences: language=en, theme=sy, timezone=Asia/Tokyo
 ```
 
 The page renders in English for that request. The database and Preference JWT remain Japanese until
-an explicit preference write path changes them and reissues a token.
+an explicit preference write changes them and reissues a token.
 
 ### Region is a regional-bundle reset
 
 A `/preference/region` write is not a single-field write. It rewrites the region-owned locale
-defaults to the region's values in one transaction and marks each one explicit:
+defaults to the region's values in one transaction. For a signed-in actor, it marks the region and
+its four companion values explicit in the actor-local preference metadata:
 
 | Region | language | date format        | clock | currency |
 | ------ | -------- | ------------------ | ----- | -------- |
@@ -332,8 +379,9 @@ defaults to the region's values in one transaction and marks each one explicit:
 | `us`   | `en`     | `us` (MM/DD/YYYY)  | 12h   | `usd`    |
 
 The individual language / calendar / clock / currency screens still let a person override any of
-these afterwards; the override is then explicit and survives a later `?ri` change. If any of the
-five child writes fails, the whole change rolls back — a half-applied bundle is never persisted.
+these afterwards. A later request-region overlay affects only that request. If any of the five
+child writes fails, the whole preference update reports failure rather than claiming the bundle was
+saved.
 
 Do not reverse this flow.
 
@@ -347,109 +395,64 @@ Do not reverse this flow.
 they must not treat request context, RP rendering, jump redirects, or read-side token consumption as
 preference writes.
 
-JS-readable preference cookies such as `language`, `ct`, and `tz` may be written by Rails for
-compatibility with browser, Hono, edge, or UI code. Rails request code must not trust them as
-preference input.
+The current readable display cookies are `language` and `__Secure-experience`. Rails derives both
+from the same verified database snapshot as the Preference JWT. Per-item cookies such as `ct` and
+`tz` are retired; Rails request code does not trust readable display cookies as preference input.
 
-Database reads and writes are allowed only in bounded flows:
+Database writes are allowed only in bounded flows:
 
-- new preference creation
-- valid refresh-token rotation that intentionally reissues the preference JWT
-- logged-in HTML preference edit entry refresh
-- explicit preference update endpoints (Base preference screens and the host-local
-  `/api/v0/preferences/{theme,cookie}` transport)
-- explicit Base preference reset or delete endpoints
-- login-time adoption or sync
-- repair, admin, or maintenance tasks
+- explicit Base Preference save and reset
+- Visa sign-in application after the authenticated transaction is finalized
+- Visa sign-out rebuilding after authentication logout commits
+- no other host, endpoint, or maintenance path writes Preference state
 
-GET and HEAD writes are allowed only for the lifecycle exceptions recorded in
-[`docs/security/db-write-allowlist.md`](../security/db-write-allowlist.md). Preference bootstrap,
-refresh rotation, authenticated transparent refresh, throttled session activity touch, OIDC callback
-handling, and logged-in preference edit entry refresh are separate categories and should not be
-collapsed into a generic read-side repair path.
+GET and HEAD do not create, update, or refresh Preference rows. Preference reads are limited to
+verified JWT state and bounded database reads such as Base consent/binding checks.
 
-Normal authenticated request setup must not recover a missing, broken, or malformed preference
-access-token by reading the preference database. Treat that as an authentication / token failure and
-raise or fail the request through the normal error path. Database recovery belongs to a dedicated
-refresh, write, repair, or administrative flow, not to generic `before_action` runtime setup.
+Normal request setup must not recover a missing, broken, or malformed Preference JWT by reading the
+Preference database. Writes start a default row when the supplied JWT does not identify a current
+row; GET/HEAD do not issue a replacement token.
 
-Logged-in HTML preference edit screens are a bounded exception to the normal runtime path. Before
-they initialize `Actor.preferences` and apply locale, timezone, or theme side effects, they may read
-the actor-local preference database, copy that value into the current surface preference, and issue
-a fresh preference access-token JWT. This keeps preference editing screens from showing stale values
-when the same signed-in actor changed preferences in another browser or device. Request-local `lx`,
-`ct`, and `tz` overlays are still applied only after this DB -> JWT refresh and are not copied back
-to the database or JWT.
+Authenticated preference screens resolve the verified anonymous JWT and actor context like other
+Base requests. A screen read never copies actor values into the anonymous row. An explicit save
+updates only submitted actor fields and the browser snapshot.
 
 ## Implementation Notes
 
-- `Preference::ClassRegistry` decides which preference class is active.
-- `Preference::Adoption` performs the login-time sync between shared and local preference.
-- `Preference::Core` reads and updates the current preference snapshot.
-- Surface preference records use the `app_setting`, `org_setting`, or `com_setting` database
-  connection.
-- `Actor::Preference` is the runtime read interface for request code. In the normal request path it
-  is built from the Preference JWT payload, then valid request-local `lx`, `ct`, and `tz` values are
-  overlaid when explicitly present. Request code reads the resolved effective value through
-  `Actor.preferences`.
-- Auth access tokens do not carry preference snapshots. Preference snapshots belong to the
-  `*_preference_access` token payload, whose stable short keys include `lx`, `ri`, `tz`, and `ct`.
-  Extended options use `cu` for currency, `df` for date format, `tf` for time format, `mo` for
-  motion, `dn` for density, and `ps` for items per page.
-- The obsolete auth access-token `prf` claim is no longer emitted. Existing already-issued tokens
-  that contain it are ignored by runtime preference hydration until they expire.
-- Region request context is mandatory. A valid `ri` request parameter wins for that request. If `ri`
-  is missing, the system redirects to a valid `ri` value; optional context keys are not backfilled
-  into URLs. `lx`, `ct`, and `tz` are optional; when valid and present they affect only the current
-  request's `Actor.preferences` overlay.
-- Region preference writes persist the saved region but do not rewrite the current request context.
-  A `/preference/region` update must redirect with the incoming `ri` instead of deriving `ri` from
-  the saved region value.
-- Preference-changing HTML and JSON actions that update language, region, timezone, theme, currency,
-  date format, time format, motion, density, items per page, cookie consent, or explicit resets must
-  reload the shared preference record and reissue the preference access token before returning the
-  response.
-- Logged-in HTML preference edit screens must refresh the current surface preference token from the
-  actor-local preference DB before `Actor.preferences` is initialized for the request. This is a
-  screen-entry sync, not a generic fallback for broken JWTs.
-- Preference access tokens carry a `jti` claim. Do not check the `jti` against the database in the
-  normal Rails runtime read path; doing so turns the JWT into a database lookup ticket instead of a
-  runtime cache. Database-backed `jti` checks belong only to refresh, write, repair, or other
-  explicitly bounded flows.
-- Extended option values are fixed reference-table rows with foreign keys for each shared/local
-  preference prefix: `App`/`User`, `Org`/`Staff`, and `Com`/`Visitor`. The `User` and `Staff`
-  prefixes are storage compatibility names for the current app and org local preference tables;
-  runtime actors are `Client` and `Operator`.
-- The `/api/v0/preferences/theme` and `/api/v0/preferences/cookie` JSON endpoints on Base, Auth,
-  Core, and Warp provide the no-full-page-reload update path for dark mode and cookie consent. The
-  page chrome receives the endpoint path from the server (`PreferenceBrowserControlsRegistry`), and
-  Palm and Edit render no controls and serve no such endpoint. They update the matching preference record when a
-  valid preference access token identifies it, then issue a fresh preference access token.
-- Shared preference credential cookie names are scoped by surface (`app_preference_*`,
-  `com_preference_*`, `org_preference_*`) only as legacy compatibility names. The current credential
-  cookie names are role-based by credential type: `preference_access`, `preference_refresh`, and
-  `preference_dbsc`, with the `__Host-` prefix in production. Legacy `__Secure-*` and scoped names
-  may be read only for compatibility.
+- `PreferenceClassRegistry` names the registered realm and account classes. New code uses the
+  registry's static class maps and fails on an unknown prefix.
+- `PreferenceWriteBoundary#write_preference!` is the shared write entrance for `save`, `sign_in`,
+  `sign_out`, and `reset`. Its closed surface map names Base and Visa writers.
+- `ActorPreferenceExplicitDisplay#explicit_display_snapshot` reads only explicitly named display
+  children. An old actor row whose `explicit_fields` is `NULL` remains historical and read-only; it
+  cannot supply a snapshot, and child values do not establish explicit intent. The approved shape
+  requires this field to be NOT NULL. `region` and dormant `adult_content_gate` are not transferred
+  by Visa sign-in.
+- App/org setting databases have consent receipt, browser binding, and Web Push option child tables.
+  Visa sign-out copies those records only from the source row in the matching setting transaction.
+- App/org Preference adoption, refresh, DBSC, assurance, and item-cookie paths are retired.
+- The accepted anonymous JWT projection is the closed display snapshot, with `language` and
+  `__Secure-experience` generated from one database snapshot. The registered page-size value
+  `infinity` remains valid. Unknown option names and keys fail instead of acquiring aliases.
+- `adult_content_gate` models, options, and child tables remain dormant. Its controller/runtime
+  registry references have been removed while the model-layer tables remain.
+- Runtime readers consume verified preference context through `Actor.preferences`. Request-local
+  region/language/theme/timezone overlays do not become writes.
+- The accepted ADRs are indexed in `adr/README.md`. The older record-recency and host-local
+  transport ADRs are historical and must not be reinstated as the current contract.
 
 ## Remaining Follow-ups
 
-- Re-login reconciliation strategy is recorded in
-  `adr/preference-relogin-reconciliation-record-recency.md`.
-- Legacy duplicate model cleanup is tracked in
-  `plans/backlog/legacy-preference-models-retirement-plan.md`; the obsolete `user_app_preferences`
-  and `staff_org_preferences` bridges have been retired.
-- Future database placement changes must be handled by their own migration plans; this document
-  describes the current accepted layout.
+- Apply the WU-9 database shape only after the current §12.8 execution ticket and local cutover
+  approval are confirmed. The destructive local migrations have not been run.
+- Complete WU-9 public acceptance coverage and one full-suite comparison after the approved local
+  shape cutover.
+- Complete WU-7 acceptance separately. Its implementation and local schema do not by themselves
+  establish the full-suite acceptance result.
 
 ## Open Questions
 
-- Should shared preference keep a full history, or only the latest state?
-- ~~Should logout clear the local copy, or only stop writing to it?~~ Resolved 2026-07-02:
-  keep-values (do not clear or downgrade on logout). See
-  `docs/architecture/preference-behavior-contract.md`'s State Transitions table.
-- Should `App`, `Org`, and `Com` use the same shared schema forever, or should each surface keep a
-  separate shape?
-- Should activity records stay near the `com_setting` database, or move to a separate audit surface
-  later?
-- Should sync recovery always use the surface-matched local preference, or should the action type
-  decide first?
+No preference transport, sign-in direction, Web Push representation, legacy JWT compatibility, or
+old account `explicit_fields IS NULL` classification question remains open. The owner-approved
+answers are recorded in `plans/2026-10-28-wu-p0-preference-adr-revisions.md` and
+`evidence/2026-10-31-wu9-p0-owner-decisions-V6J3.md`.

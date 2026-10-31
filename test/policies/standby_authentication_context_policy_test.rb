@@ -43,10 +43,7 @@ class EmergencyAuthenticationContextPolicyTest < ActiveSupport::TestCase
   def normal_claims = { "scope" => "authenticated domain:operator read:org write:org" }
 
   def emergency_claims
-    normal_claims.merge(
-      "scope" => "authenticated domain:operator read:org",
-      AuthenticationContextValue::CLAIM => "standby",
-    )
+    normal_claims.merge(AuthenticationContextValue::CLAIM => "standby")
   end
 
   test "a normal session is not narrowed by the capability layer" do

@@ -44,7 +44,7 @@ module Authentication
       class << self
         attr_accessor :token_oidc_jti, :token_last_used_at, :token_created_at,
                       :token_user_id, :token_device_session_id, :token_device_session,
-                      :token_visitor_id, :token_staff_id # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+                      :token_staff_id
 
         def touches
           @touches ||= []
@@ -76,7 +76,7 @@ module Authentication
           "token_public_id", self.class.token_oidc_jti,
           self.class.token_last_used_at, self.class.token_created_at,
           self.class.token_user_id || 123, self.class.token_device_session_id,
-          self.class.token_device_session, self.class.token_visitor_id || 123,
+          self.class.token_device_session, 123,
           self.class.token_staff_id || 123,
         )
       end
@@ -284,10 +284,10 @@ module Authentication
       FakeTokenScope.token_user_id = nil
     end
 
-    test "rejects visitor and operator tokens whose actor differs from the access token subject" do
+    test "rejects operator tokens whose actor differs from the access token subject" do
       FakeTokenScope.token_oidc_jti = "current-jti"
 
-      { "visitor" => :token_visitor_id, "operator" => :token_staff_id }.each do |surface, actor_slot|
+      { "operator" => :token_staff_id }.each do |surface, actor_slot|
         payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:#{surface}", "jti" => "current-jti" }
         FakeTokenScope.public_send("#{actor_slot}=", 999)
 
@@ -311,7 +311,6 @@ module Authentication
       end
     ensure
       FakeTokenScope.token_oidc_jti = nil
-      FakeTokenScope.token_visitor_id = nil
       FakeTokenScope.token_staff_id = nil
     end
 

@@ -9,23 +9,26 @@ Surfaces outside this table are OAuth/OIDC Non-Participants; see
 
 | Role     | Surface                      | Notes                                                                                   |
 | -------- | ---------------------------- | --------------------------------------------------------------------------------------- |
-| OP / AS  | Visa app/com/org             | `/oauth/*`, discovery, JWKS, authorization, token, UserInfo, revocation and end-session |
-| Ceremony | Auth app/com/org             | Passkey/Google/Apple/Entra; app TOTP only; credential callbacks stay on Auth            |
-| RP       | Base app/com/org             | `www.umaxica.*`; neutral `GET/POST /sign` + `GET /oidc/callback`, local RP Session      |
-| RP       | Core app/com/org             | Independent clients and local RP sessions                                               |
-| RP       | Warp app/com/org             | Independent clients; OIDC client IDs retain `side-*`                                    |
+| OP / AS  | Visa app/org                 | `/oauth/*`, discovery, JWKS, authorization, token, UserInfo, revocation and end-session |
+| Ceremony | Auth app/org                 | Passkey/Google/Apple/Entra; app TOTP only; credential callbacks stay on Auth            |
+| RP       | Base app/org                 | `www.umaxica.{app,org}`; neutral `GET/POST /sign` + `GET /oidc/callback`, local RP Session |
+| RP       | Core app/org                 | Independent clients and local RP sessions                                               |
+| RP       | Warp app/org                 | Independent clients; OIDC client IDs retain `side-*`                                    |
 | RP       | Edit org, Tech org, Palm app | Independent browser RPs with host-local sessions                                        |
+| None     | Base com, Warp com           | Anonymous public preference entry and public read-only pages; no credential, session, admission or RP boundary |
 
-Retired browser paths: `/dashboard` (Auth/Base six faces), Base `/lobby`, `/sign/out/complete`, and
+Retired browser paths: `/dashboard` (Auth/Base app and org faces), Base `/lobby`, `/sign/out/complete`, and
 the RP entry aliases `/sign/in` and `/sign/in/callback`. Auth credential ceremonies may still use
 `/sign/in/*`; those are not RP entrypoints and must not be used as the Core, Warp, or Edit browser
 authorization boundary.
 
 The former Rails surface name was Side. Its current internal namespace is Warp; the registered
 `side-*` OIDC client identifiers, audiences, and signing namespaces remain protocol values. Visa
-uses independent `VISA_APP`, `VISA_COM` and `VISA_ORG` issuer/key namespaces; Base retains
-`BASE_APP`, `BASE_COM` and `BASE_ORG` for RP responsibilities. A Base RP credential is never
-authority proof for Visa, and a Visa authority token is never used as a Base local RP credential.
+uses independent `VISA_APP` and `VISA_ORG` issuer/key namespaces; Base retains `BASE_APP` and
+`BASE_ORG` for RP responsibilities. The `*_COM` namespaces remain registered until their Jump and
+key scaffolding is retired, but no corporate host publishes them or runs a credential ceremony. A
+Base RP credential is never authority proof for Visa, and a Visa authority token is never used as a
+Base local RP credential.
 
 The RP `GET /sign` entry is non-mutating. Its CSRF-protected `POST /sign` refuses a browser that is
 already authenticated by either the root Browser Session or a valid access credential for that same

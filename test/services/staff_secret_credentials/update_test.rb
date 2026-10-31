@@ -117,6 +117,96 @@ class StaffSecretCredentialsUpdateTest < ActiveSupport::TestCase
     assert_equal "Second Secret", second.reload.name
   end
 
+  test "a reserved operator cannot rename or delete a Secret with previously valid Step-Up" do
+    @staff.update!(status_id: OperatorStatus::RESERVED)
+    requirement = StepUpRequirement.new(
+      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+
+    assert_no_difference "OperatorChronicle.count" do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsUpdate.call(
+          actor: @staff, secret_credential: @secret_credential, params: { name: "blocked" },
+          step_up_token: @token, step_up_requirement: requirement,
+        )
+      end
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsDestroy.call(
+          actor: @staff, secret_credential: @secret_credential,
+          step_up_token: @token, step_up_requirement: requirement,
+        )
+      end
+    end
+    assert_equal "Test Secret", @secret_credential.reload.name
+    assert_predicate @secret_credential, :active?
+    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  end
+
+  test "a revoked device cannot rename or delete a Secret with previously valid Step-Up" do
+    @token.device_session_record!.revoke!
+    requirement = StepUpRequirement.new(
+      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+
+    assert_no_difference "OperatorChronicle.count" do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsUpdate.call(
+          actor: @staff, secret_credential: @secret_credential, params: { name: "blocked" },
+          step_up_token: @token, step_up_requirement: requirement,
+        )
+      end
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsDestroy.call(
+          actor: @staff, secret_credential: @secret_credential,
+          step_up_token: @token, step_up_requirement: requirement,
+        )
+      end
+    end
+    assert_equal "Test Secret", @secret_credential.reload.name
+    assert_predicate @secret_credential, :active?
+    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  end
+
+  test "a superseded token cannot rename or delete a Secret with previously valid Step-Up" do
+    device = @token.device_session_record!
+    replacement = operator_tokens(:one)
+    replacement.update!(device_session_id: device.id)
+    device.update!(current_refresh_token_id: replacement.id)
+    requirement = StepUpRequirement.new(
+      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+
+    assert_no_difference "OperatorChronicle.count" do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsUpdate.call(
+          actor: @staff, secret_credential: @secret_credential, params: { name: "blocked" },
+          step_up_token: @token, step_up_requirement: requirement,
+        )
+      end
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsDestroy.call(
+          actor: @staff, secret_credential: @secret_credential,
+          step_up_token: @token, step_up_requirement: requirement,
+        )
+      end
+    end
+    assert_equal "Test Secret", @secret_credential.reload.name
+    assert_predicate @secret_credential, :active?
+    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  end
+
   private
 
   def update_secret(params)

@@ -140,6 +140,72 @@ ALTER SEQUENCE public.app_preference_binding_methods_id_seq OWNED BY public.app_
 
 
 --
+-- Name: app_preference_browser_bindings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_preference_browser_bindings (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    digest character varying(64) NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT app_preference_browser_bindings_digest_format CHECK (((digest)::text ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: app_preference_browser_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.app_preference_browser_bindings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: app_preference_browser_bindings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.app_preference_browser_bindings_id_seq OWNED BY public.app_preference_browser_bindings.id;
+
+
+--
+-- Name: app_preference_consent_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_preference_consent_receipts (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    version uuid NOT NULL,
+    recorded_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: app_preference_consent_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.app_preference_consent_receipts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: app_preference_consent_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.app_preference_consent_receipts_id_seq OWNED BY public.app_preference_consent_receipts.id;
+
+
+--
 -- Name: app_preference_cookies; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -833,6 +899,67 @@ ALTER SEQUENCE public.app_preference_timezones_id_seq OWNED BY public.app_prefer
 
 
 --
+-- Name: app_preference_web_push_options; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_preference_web_push_options (
+    id bigint NOT NULL,
+    CONSTRAINT app_preference_web_push_options_closed CHECK ((id = ANY (ARRAY[(0)::bigint, (1)::bigint])))
+);
+
+
+--
+-- Name: app_preference_web_push_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.app_preference_web_push_options_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: app_preference_web_push_options_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.app_preference_web_push_options_id_seq OWNED BY public.app_preference_web_push_options.id;
+
+
+--
+-- Name: app_preference_web_pushes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_preference_web_pushes (
+    id bigint NOT NULL,
+    preference_id bigint NOT NULL,
+    option_id bigint NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: app_preference_web_pushes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.app_preference_web_pushes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: app_preference_web_pushes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.app_preference_web_pushes_id_seq OWNED BY public.app_preference_web_pushes.id;
+
+
+--
 -- Name: app_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -918,6 +1045,20 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates ALTER COLUMN id SET D
 --
 
 ALTER TABLE ONLY public.app_preference_binding_methods ALTER COLUMN id SET DEFAULT nextval('public.app_preference_binding_methods_id_seq'::regclass);
+
+
+--
+-- Name: app_preference_browser_bindings id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_browser_bindings ALTER COLUMN id SET DEFAULT nextval('public.app_preference_browser_bindings_id_seq'::regclass);
+
+
+--
+-- Name: app_preference_consent_receipts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_consent_receipts ALTER COLUMN id SET DEFAULT nextval('public.app_preference_consent_receipts_id_seq'::regclass);
 
 
 --
@@ -1082,6 +1223,20 @@ ALTER TABLE ONLY public.app_preference_timezones ALTER COLUMN id SET DEFAULT nex
 
 
 --
+-- Name: app_preference_web_push_options id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_web_push_options ALTER COLUMN id SET DEFAULT nextval('public.app_preference_web_push_options_id_seq'::regclass);
+
+
+--
+-- Name: app_preference_web_pushes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_web_pushes ALTER COLUMN id SET DEFAULT nextval('public.app_preference_web_pushes_id_seq'::regclass);
+
+
+--
 -- Name: app_preferences id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1110,6 +1265,22 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates
 
 ALTER TABLE ONLY public.app_preference_binding_methods
     ADD CONSTRAINT app_preference_binding_methods_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: app_preference_browser_bindings app_preference_browser_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_browser_bindings
+    ADD CONSTRAINT app_preference_browser_bindings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: app_preference_consent_receipts app_preference_consent_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_consent_receipts
+    ADD CONSTRAINT app_preference_consent_receipts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1297,6 +1468,22 @@ ALTER TABLE ONLY public.app_preference_timezones
 
 
 --
+-- Name: app_preference_web_push_options app_preference_web_push_options_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_web_push_options
+    ADD CONSTRAINT app_preference_web_push_options_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: app_preference_web_pushes app_preference_web_pushes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_web_pushes
+    ADD CONSTRAINT app_preference_web_pushes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: app_preferences app_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1332,6 +1519,20 @@ CREATE INDEX index_app_preference_adult_content_gates_on_option_id ON public.app
 --
 
 CREATE UNIQUE INDEX index_app_preference_adult_content_gates_on_preference_id ON public.app_preference_adult_content_gates USING btree (preference_id);
+
+
+--
+-- Name: index_app_preference_browser_bindings_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_app_preference_browser_bindings_on_preference_id ON public.app_preference_browser_bindings USING btree (preference_id);
+
+
+--
+-- Name: index_app_preference_consent_receipts_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_app_preference_consent_receipts_on_preference_id ON public.app_preference_consent_receipts USING btree (preference_id);
 
 
 --
@@ -1479,6 +1680,20 @@ CREATE INDEX index_app_preference_timezones_on_option_id ON public.app_preferenc
 --
 
 CREATE UNIQUE INDEX index_app_preference_timezones_on_preference_id ON public.app_preference_timezones USING btree (preference_id);
+
+
+--
+-- Name: index_app_preference_web_pushes_on_option_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_app_preference_web_pushes_on_option_id ON public.app_preference_web_pushes USING btree (option_id);
+
+
+--
+-- Name: index_app_preference_web_pushes_on_preference_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_app_preference_web_pushes_on_preference_id ON public.app_preference_web_pushes USING btree (preference_id);
 
 
 --
@@ -1631,6 +1846,14 @@ ALTER TABLE ONLY public.app_preference_cookies
 
 
 --
+-- Name: app_preference_web_pushes fk_rails_2074014ea1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_web_pushes
+    ADD CONSTRAINT fk_rails_2074014ea1 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+
+
+--
 -- Name: app_preference_motions fk_rails_31c6aac7a8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1652,6 +1875,14 @@ ALTER TABLE ONLY public.app_preference_timezones
 
 ALTER TABLE ONLY public.app_preferences
     ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL NOT VALID;
+
+
+--
+-- Name: app_preference_consent_receipts fk_rails_4f989999e1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_consent_receipts
+    ADD CONSTRAINT fk_rails_4f989999e1 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
@@ -1695,6 +1926,14 @@ ALTER TABLE ONLY public.app_preference_date_formats
 
 
 --
+-- Name: app_preference_web_pushes fk_rails_871b90476f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_web_pushes
+    ADD CONSTRAINT fk_rails_871b90476f FOREIGN KEY (option_id) REFERENCES public.app_preference_web_push_options(id);
+
+
+--
 -- Name: app_preference_time_formats fk_rails_9cf8a045c5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1732,6 +1971,14 @@ ALTER TABLE ONLY public.app_preference_themes
 
 ALTER TABLE ONLY public.app_preference_page_sizes
     ADD CONSTRAINT fk_rails_c926d3d05c FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
+
+
+--
+-- Name: app_preference_browser_bindings fk_rails_ca2095cdf9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_preference_browser_bindings
+    ADD CONSTRAINT fk_rails_ca2095cdf9 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
@@ -1781,6 +2028,7 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261031191202'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261013035713'),

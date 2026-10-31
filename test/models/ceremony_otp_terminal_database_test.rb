@@ -4,9 +4,9 @@ require "test_helper"
 
 class CeremonyOtpTerminalDatabaseTest < ActiveSupport::TestCase
   [
-    [ClientEmailCeremonyTransaction, :email], [VisitorEmailCeremonyTransaction, :email],
+    [ClientEmailCeremonyTransaction, :email],
     [OperatorEmailCeremonyTransaction, :email], [ClientTelephoneCeremonyTransaction, :telephone],
-    [VisitorTelephoneCeremonyTransaction, :telephone], [OperatorTelephoneCeremonyTransaction, :telephone],
+    [OperatorTelephoneCeremonyTransaction, :telephone],
   ].each do |model, channel|
     %i(verified cancelled).each do |terminal|
       test "#{model.name} direct database writes cannot erase or replace #{terminal} OTP facts" do

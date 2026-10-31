@@ -18,11 +18,6 @@ class OperatorPreferenceLanguageOption < OrgPrincipalRecord
 
   DEFAULTS = [JA, EN].freeze
 
-  has_many :staff_preference_languages,
-           class_name: "OperatorPreferenceLanguage",
-           foreign_key: :option_id,
-           inverse_of: :option,
-           dependent: :restrict_with_error
   has_many :operator_preference_languages,
            class_name: "OperatorPreferenceLanguage",
            foreign_key: :option_id,

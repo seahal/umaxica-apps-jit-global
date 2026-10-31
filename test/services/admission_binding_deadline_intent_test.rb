@@ -3,12 +3,77 @@
 require "test_helper"
 
 class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  test "switch handoff refuses at and after the original admission curfew" do
+    client = OidcClientRegistry.find!("core-app-jp")
+    parent = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "authentication", ttl: 1.hour,
+      params: {
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+        response_type: "code",
+        scope: "openid profile",
+        state: SecureRandom.hex(16),
+        nonce: SecureRandom.hex(16),
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+      },
+    ).transaction
+    browser_nonce = SecureRandom.hex(32)
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: parent, base_browser_nonce: browser_nonce, base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      previous_raw_sid: raw_sid, admission_purpose: "authentication_handoff",
+      authorization_transaction_ref: parent.transaction_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    admitted.cancel!
+    curfew = binding.reload.curfew_at
+
+    handoff = nil
+    ClientOidcAuthorizationTransaction.stub(:database_now, curfew - 1.second) do
+      handoff = BaseAuthAdmissionCoordinator.issue_switch_handoff!(
+        transaction: parent, ceremony_session: admitted, target: "sign_up",
+      )
+
+      assert_predicate handoff, :present?
+      assert_equal [parent, "sign_up"], BaseAuthAdmissionCoordinator.read_switch_handoff!(handoff:, surface: "app")
+    end
+    [curfew, curfew + 1.second].each do |decision_time|
+      ClientOidcAuthorizationTransaction.stub(:database_now, decision_time) do
+        assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+          BaseAuthAdmissionCoordinator.issue_switch_handoff!(
+            transaction: parent, ceremony_session: admitted, target: "sign_up",
+          )
+        end
+        assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+          BaseAuthAdmissionCoordinator.read_switch_handoff!(handoff:, surface: "app")
+        end
+      end
+      ClientAuthAdmissionBinding.stub(:database_now, decision_time) do
+        assert_no_difference -> { ClientAuthAdmissionBinding.count } do
+          error =
+            assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+              BaseAuthAdmissionCoordinator.issue_switch_admission!(
+                transaction: parent, base_browser_nonce: browser_nonce, base_token: nil, target: "sign_up",
+              )
+            end
+
+          assert_equal "expired_admission", error.code
+        end
+      end
+    end
+  end
+
+  %w(app org).each do |surface|
     test "#{surface} issuance stores an immutable OP-clock curfew and explicit authentication intent" do
       client_id, resource_type, model =
         case surface
         when "app" then ["core-app-jp", "client", ClientAuthAdmissionBinding]
-        when "com" then ["core-com-jp", "visitor", VisitorAuthAdmissionBinding]
         when "org" then ["core-org-jp", "operator", OperatorAuthAdmissionBinding]
         end
       prompts = (surface == "org") ? [nil] : [nil, "create"]
@@ -55,7 +120,6 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
       client_id, resource_type, model =
         case surface
         when "app" then ["core-app-jp", "client", ClientAuthAdmissionBinding]
-        when "com" then ["core-com-jp", "visitor", VisitorAuthAdmissionBinding]
         when "org" then ["core-org-jp", "operator", OperatorAuthAdmissionBinding]
         end
       parent = OidcAuthorizationTransactionCoordinator.issue!(
@@ -85,12 +149,11 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
     end
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} Switch copies the original curfew instead of minting a later one" do
       client_id, resource_type, model =
         case surface
         when "app" then ["core-app-jp", "client", ClientAuthAdmissionBinding]
-        when "com" then ["core-com-jp", "visitor", VisitorAuthAdmissionBinding]
         end
       parent = OidcAuthorizationTransactionCoordinator.issue!(
         surface: surface, intent: "authentication",
@@ -241,8 +304,6 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
     [
       ["app", clients(:one), ClientToken, { user: clients(:one) }, ClientStepUpCeremonyTransaction,
        ClientAuthAdmissionBinding,],
-      ["com", visitors(:reserved_visitor), VisitorToken, { visitor: visitors(:reserved_visitor) },
-       VisitorStepUpCeremonyTransaction, VisitorAuthAdmissionBinding,],
       ["org", operators(:one), OperatorToken, { staff: operators(:one) }, OperatorStepUpCeremonyTransaction,
        OperatorAuthAdmissionBinding,],
     ].each do |surface, actor, token_class, owner, parent_class, binding_class|

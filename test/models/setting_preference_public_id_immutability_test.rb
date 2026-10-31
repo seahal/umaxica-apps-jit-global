@@ -6,7 +6,11 @@ class SettingPreferencePublicIdImmutabilityTest < ActiveSupport::TestCase
   [AppPreference, ComPreference, OrgPreference].each do |model|
     %i(update_columns update_all upsert_all sql).each do |writer|
       test "#{model.name} rejects permanent identity replacement through #{writer}" do
-        preference = model.create!
+        attributes =
+          (model == ComPreference) ? { jti: SecureRandom.uuid,
+                                       last_issued_at: Time.current,
+                                       last_issued_expires_at: 400.days.from_now, } : {}
+        preference = model.create!(**attributes)
         original = preference.public_id
         replacement = (original == "a" * 21) ? "b" * 21 : "a" * 21
 
@@ -40,7 +44,11 @@ class SettingPreferencePublicIdImmutabilityTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects null and blank replacement without losing issued identity" do
-      preference = model.create!
+      attributes =
+        (model == ComPreference) ? { jti: SecureRandom.uuid,
+                                     last_issued_at: Time.current,
+                                     last_issued_expires_at: 400.days.from_now, } : {}
+      preference = model.create!(**attributes)
       original = preference.public_id
 
       [nil, "", " "].each do |replacement|
@@ -55,23 +63,39 @@ class SettingPreferencePublicIdImmutabilityTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} permits same identity and unrelated mutable state updates" do
-      preference = model.create!
+      attributes =
+        (model == ComPreference) ? { jti: SecureRandom.uuid,
+                                     last_issued_at: Time.current,
+                                     last_issued_expires_at: 400.days.from_now, } : {}
+      preference = model.create!(**attributes)
       original = preference.public_id
       used_at = Time.current.change(usec: 0)
 
       preference.update_columns(public_id: original)
       model.where(id: preference.id).update_all(public_id: original)
       model.upsert_all([preference.attributes.merge("public_id" => original)])
-      preference.update!(used_at: used_at)
+      if model == ComPreference
+        preference.confirm_issuance!(issued_at: used_at, expires_at: used_at + 400.days)
+      else
+        preference.update!(used_at: used_at)
+      end
 
       assert_equal original, preference.reload.public_id
-      assert_equal used_at, preference.used_at
+      assert_equal used_at, (model == ComPreference) ? preference.last_issued_at : preference.used_at
     end
 
     test "#{model.name} retains immutable identity after logical deletion" do
-      preference = model.create!
+      attributes =
+        (model == ComPreference) ? { jti: SecureRandom.uuid,
+                                     last_issued_at: Time.current,
+                                     last_issued_expires_at: 400.days.from_now, } : {}
+      preference = model.create!(**attributes)
       original = preference.public_id
-      preference.update!(discard_at: Time.current)
+      if model == ComPreference
+        preference.retire!
+      else
+        preference.update!(discard_at: Time.current)
+      end
       replacement = (original == "a" * 21) ? "b" * 21 : "a" * 21
 
       assert_raises(ActiveRecord::StatementInvalid) do

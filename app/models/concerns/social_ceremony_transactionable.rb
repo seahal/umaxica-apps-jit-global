@@ -98,8 +98,6 @@ module SocialCeremonyTransactionable
         OpBaseAppRecord
       elsif self <= OpBaseOrgRecord
         OpBaseOrgRecord
-      elsif self <= OpBaseComRecord
-        OpBaseComRecord
       else
         ActiveRecord::Base
       end

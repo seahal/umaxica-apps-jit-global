@@ -21,6 +21,7 @@ module BaseCeremonyBindingConfirmation
     validate_binding_base_context!(binding)
     return confirm_and_redirect!(binding) if automatic_ceremony_binding_confirmation?
 
+    response.headers["Referrer-Policy"] = "strict-origin"
     render "base/shared/ceremony_binding_confirmation", layout: false,
                                                         locals: {
                                                           binding_ref: params[:binding_ref],
@@ -147,7 +148,6 @@ module BaseCeremonyBindingConfirmation
     session_class =
       case binding
       when ClientAuthAdmissionBinding then ClientAuthCeremonySession
-      when VisitorAuthAdmissionBinding then VisitorAuthCeremonySession
       when OperatorAuthAdmissionBinding then OperatorAuthCeremonySession
       else raise BaseAuthAdmissionCoordinator::Denied.new("binding is invalid", code: "invalid_admission")
       end
@@ -164,14 +164,6 @@ module BaseCeremonyBindingConfirmation
         step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
         authorization_transaction_class: ClientOidcAuthorizationTransaction,
         step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
-      )
-    when VisitorAuthAdmissionBinding
-      auth_binding_parent_record_for_surface(
-        binding.parent_kind,
-        authorization_transaction_id: binding.authorization_transaction_id,
-        step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-        authorization_transaction_class: VisitorOidcAuthorizationTransaction,
-        step_up_ceremony_transaction_class: VisitorStepUpCeremonyTransaction,
       )
     when OperatorAuthAdmissionBinding
       auth_binding_parent_record_for_surface(
@@ -207,8 +199,6 @@ module BaseCeremonyBindingConfirmation
     case self.class.base_admission_surface_name
     when "app"
       app_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https")
-    when "com"
-      com_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), protocol: "https")
     when "org"
       org_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"), protocol: "https")
     else
@@ -236,22 +226,6 @@ module BaseCeremonyBindingConfirmation
     end
   end
 
-  def com_auth_binding_entry_url(binding, **query)
-    case binding.purpose
-    when "authentication_handoff"
-      signup_binding?(binding) ? auth_com_sign_up_url(**query) : auth_com_sign_in_url(**query)
-    when "bootstrap_handoff"
-      new_auth_com_verification_setup_url(**query)
-    when "credential_registration_handoff"
-      require_passkey_registration_binding!(binding)
-      new_auth_com_verification_registration_passkey_url(**query)
-    when "step_up_handoff", "reauthentication_handoff", "credential_change_handoff"
-      auth_com_verification_url(**query)
-    else
-      raise ArgumentError, "unsupported com admission purpose"
-    end
-  end
-
   def org_auth_binding_entry_url(binding, **query)
     case binding.purpose
     when "authentication_handoff"
@@ -275,7 +249,7 @@ module BaseCeremonyBindingConfirmation
 
     parent = auth_binding_parent_record(binding)
     case parent
-    when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
+    when ClientOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
       AuthEntryIntentResolver.call(prompt: parent.oidc_prompt, entry_intent: binding.entry_intent) == "sign_up"
     else
       false

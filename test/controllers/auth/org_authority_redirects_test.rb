@@ -6,7 +6,6 @@ require "test_helper"
 
 class Auth::OrgAuthorityRedirectsTest < ActionDispatch::IntegrationTest
   ROUTES = {
-    auth_org_configuration_url: "/configuration",
     auth_org_accounts_url: "/accounts",
     auth_org_iam_index_url: "/iam",
     auth_org_system_index_url: "/system",

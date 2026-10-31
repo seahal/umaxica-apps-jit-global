@@ -4,25 +4,21 @@
 class SignInCycleLocator
   SESSION_KEYS = {
     app: :app_sign_in_flow_locator,
-    com: :com_sign_in_flow_locator,
     org: :org_sign_in_flow_locator,
   }.freeze
 
   CYCLE_CLASSES = {
     app: ClientSignInFlow,
-    com: VisitorSignInFlow,
     org: OperatorSignInFlow,
   }.freeze
 
   ACTOR_CLASSES = {
     app: Client,
-    com: Visitor,
     org: Operator,
   }.freeze
 
   TOKEN_CLASSES = {
     app: ClientToken,
-    com: VisitorToken,
     org: OperatorToken,
   }.freeze
 

@@ -11,7 +11,7 @@ module PasskeySignInFlow
   extend ActiveSupport::Concern
 
   # Actor-known ceremonies may still need a padded descriptor list to preserve
-  # their existing privacy contract. APP/COM identifier-first sign-in sends no
+  # their existing privacy contract. APP identifier-first sign-in sends no
   # descriptors (adr/passkey-identifier-first-sign-in.md).
   ACTOR_BOUND_ALLOW_CREDENTIALS_COUNT = 4
 
@@ -136,7 +136,6 @@ module PasskeySignInFlow
   def passkey_sign_in_actor(passkey)
     case passkey
     when ClientPasskey then passkey.association(:user).tap { |owner| owner.reset_scope }.scope.take!
-    when VisitorPasskey then passkey.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
     when OperatorPasskey then passkey.association(:staff).tap { |owner| owner.reset_scope }.scope.take!
     else raise ArgumentError, "unsupported Passkey credential"
     end
@@ -231,7 +230,7 @@ module PasskeySignInFlow
     passkey_identifier_required_error_key
   end
 
-  # APP/COM: the Identity named by an effective Email or Telephone of this surface. ORG ceremonies
+  # APP: the Identity named by an effective Email or Telephone of this surface. ORG ceremonies
   # override it with their Entra or Emergency selection.
   def find_active_passkey_actor(identifier)
     PasskeySignInIdentityResolverQuery.call(surface: webauthn_surface.key, identifier: identifier)
@@ -275,7 +274,7 @@ module PasskeySignInFlow
   end
 
   def disclose_passkey_descriptors?
-    %i(app com).exclude?(webauthn_surface.key)
+    webauthn_surface.key != :app
   end
 
   def passkey_eligible_for_sign_in?(passkey, actor)
@@ -283,7 +282,7 @@ module PasskeySignInFlow
 
     return reject_passkey_sign_in unless passkey.status_id == status_class::ACTIVE
 
-    if (passkey.is_a?(ClientPasskey) || passkey.is_a?(VisitorPasskey)) && !passkey.class.where(id: passkey.id)
+    if passkey.is_a?(ClientPasskey) && !passkey.class.where(id: passkey.id)
         .exists?(["discard_at > ?", passkey.class.database_now])
       return reject_passkey_sign_in
     end

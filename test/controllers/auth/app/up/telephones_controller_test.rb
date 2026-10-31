@@ -270,6 +270,46 @@ module Auth::App::Up
       assert_nil props.fetch("error_heading")
     end
 
+    test "suspended SMS retains the initial signup challenge and displays an unavailable response" do
+      OutboundSms.stub(:suspended?, true) do
+        assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
+          post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+            client_telephone: { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+            "cf-turnstile-response": "test",
+          }
+        end
+      end
+
+      assert_response :service_unavailable
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      telephone = ClientTelephone.find(flow.pending_contact_id)
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+
+      assert_predicate transaction.otp_generation, :present?
+      assert_equal I18n.t("errors.rate_limit.backend_unavailable"), inertia_props.fetch("description")
+      assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+    end
+
+    test "queue refusal retains the signup challenge and displays an unavailable response" do
+      OutboundSms.stub(:provider, Object.new) do
+        Outbound::SmsDeliveryJob.stub(:perform_later, false) do
+          post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+            client_telephone: { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+            "cf-turnstile-response": "test",
+          }
+        end
+      end
+
+      assert_response :service_unavailable
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      telephone = ClientTelephone.find(flow.pending_contact_id)
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+
+      assert_predicate transaction.otp_generation, :present?
+      assert_equal I18n.t("errors.rate_limit.backend_unavailable"), inertia_props.fetch("description")
+      assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+    end
+
     test "create binds a new telephone candidate to the signed OTP continuation" do
       assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do
         assert_difference("ClientTelephone.count", 1) do
@@ -538,6 +578,40 @@ module Auth::App::Up
       io.string
     ensure
       Rails.logger = original
+    end
+
+    test "signup telephone OTP rejects an unregistered verification result explicitly" do
+      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+        user_telephone: { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+        "cf-turnstile-response": "test",
+      }
+
+      assert_response :redirect
+      target = URI.parse(response.location).request_uri
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      telephone = ClientTelephone.find(flow.pending_contact_id)
+      unexpected = TelephoneSignUpOtpVerificationResult.new(status: :unregistered_result, telephone: telephone)
+
+      TelephoneSignUpOtpVerificationCommitter.stub(:call, unexpected) do
+        assert_raises(ArgumentError) do
+          patch target, params: { client_telephone: { pass_code: "123456" }, "cf-turnstile-response": "test" }
+        end
+      end
+    end
+
+    test "signup telephone OTP rejects an unregistered resend result explicitly" do
+      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+        user_telephone: { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+        "cf-turnstile-response": "test",
+      }
+
+      assert_response :redirect
+      target = URI.parse(response.location).request_uri
+      unexpected = TelephoneSignUpOtpIssueResult.new(status: :unregistered_result, transaction: nil, code: nil)
+
+      TelephoneSignUpOtpDeliveryIssuer.stub(:call, unexpected) do
+        assert_raises(ArgumentError) { post target }
+      end
     end
 
     test "should update telephone with valid otp" do
@@ -1078,6 +1152,101 @@ module Auth::App::Up
       assert_equal 200, browsers.last.response.status
     end
 
+    test "suspended SMS retains the replacement signup challenge" do
+      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+        client_telephone: { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+        "cf-turnstile-response": "test",
+      }
+
+      assert_response :redirect
+      target = URI.parse(response.location).request_uri
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      telephone = ClientTelephone.find(flow.pending_contact_id)
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+      old_generation = transaction.otp_generation
+      decision_time = telephone.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+      travel_to decision_time do
+        ClientTelephone.stub(:database_now, decision_time) do
+          OutboundSms.stub(:suspended?, true) do
+            assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
+              post target
+            end
+          end
+        end
+      end
+
+      assert_response :service_unavailable
+      assert_withheld("the new OTP generation is retained") { old_generation != transaction.reload.otp_generation }
+      assert_equal I18n.t("errors.rate_limit.backend_unavailable"), inertia_props.fetch("description")
+      assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+    end
+
+    test "resend at the expired signup telephone OTP deadline refuses without mutation or delivery" do
+      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+        :client_telephone => { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+        "cf-turnstile-response" => "test",
+      }
+
+      assert_response :redirect
+      target = URI.parse(response.location).request_uri
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      telephone = ClientTelephone.find(flow.pending_contact_id)
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+      flow_facts = flow.attributes
+      telephone_facts = telephone.attributes
+      transaction_facts = transaction.attributes
+      locator = session.fetch(:app_sign_up_flow_locator).to_h
+      decision_time = transaction.otp_expires_at
+
+      travel_to decision_time do
+        ClientTelephone.stub(:database_now, decision_time) do
+          ClientTelephoneCeremonyTransaction.stub(:database_now, decision_time) do
+            ClientSignUpFlow.stub(:database_now, decision_time) do
+              assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
+                post target
+              end
+            end
+          end
+        end
+      end
+
+      assert_response :unprocessable_content
+      assert_withheld("expired resend preserves Flow, candidate and proof") {
+        flow_facts == flow.reload.attributes && telephone_facts == telephone.reload.attributes &&
+          transaction_facts == transaction.reload.attributes
+      }
+      assert_withheld("expired resend preserves the browser binding") {
+        locator == session.fetch(:app_sign_up_flow_locator).to_h
+      }
+    end
+
+    test "resend queue refusal retains the replacement signup challenge" do
+      post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+        :client_telephone => { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+        "cf-turnstile-response" => "test",
+      }
+
+      assert_response :redirect
+      target = URI.parse(response.location).request_uri
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      telephone = ClientTelephone.find(flow.pending_contact_id)
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+      old_generation = transaction.otp_generation
+      decision_time = telephone.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+      travel_to decision_time do
+        ClientTelephone.stub(:database_now, decision_time) do
+          OutboundSms.stub(:provider, Object.new) do
+            Outbound::SmsDeliveryJob.stub(:perform_later, false) { post target }
+          end
+        end
+      end
+
+      assert_response :service_unavailable
+      assert_not_equal old_generation, transaction.reload.otp_generation
+      assert_equal I18n.t("errors.rate_limit.backend_unavailable"), inertia_props.fetch("description")
+      assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+    end
+
     test "resend sends code for active registration session after the initial delivery cooldown" do
       post auth_app_sign_up_telephone_url(ri: "jp"), params: {
         user_telephone: {
@@ -1301,6 +1470,7 @@ module Auth::App::Up
     test "create rejects signup for a telephone number blocked by an in-force registration_blocked Identifier " \
          "Effect, sending no OTP" do
       operator = operators(:one)
+      principal = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       the_case = AppEnforcementCase.new(
         kind: "permanent_ban",
         duration_mode: "permanent",
@@ -1308,7 +1478,7 @@ module Auth::App::Up
         release_mode: "break_glass_only",
         effective_at: Time.current,
         reason_code: "abuse",
-        principal_public_id: "some_prior_client_public_id",
+        principal_public_id: principal.public_id,
         applied_by_operator_public_id: operator.public_id,
       )
       digest = EnforcementIdentifierDigest.for_telephone(realm: "app", value: "+15551234567")
@@ -1583,7 +1753,6 @@ class Auth::App::Up::TelephonesControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -1642,23 +1811,6 @@ class Auth::App::Up::TelephonesControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -1673,17 +1825,9 @@ class Auth::App::Up::TelephonesControllerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -1872,38 +2016,6 @@ class Auth::App::Up::TelephonesControllerTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

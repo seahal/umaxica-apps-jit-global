@@ -20,8 +20,6 @@ class AuthenticationSessionRevoker
       ::ClientToken.where(user_id: resource.id)
     when ::Operator
       ::OperatorToken.where(staff_id: resource.id)
-    when ::Visitor
-      ::VisitorToken.where(visitor_id: resource.id)
     else
       raise ArgumentError, "Unsupported resource type: #{resource.class}"
     end

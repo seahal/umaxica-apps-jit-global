@@ -3,7 +3,7 @@
 
 require "test_helper"
 
-# D-141 / D-156: the APP and COM recovery send branch verifies visible Turnstile before the
+# D-141 / D-156: the APP recovery send branch verifies visible Turnstile before the
 # address is resolved; the verify branch (`pass_code`) does not require it.
 class BaseIdentityRecoveryTurnstileTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
@@ -12,7 +12,6 @@ class BaseIdentityRecoveryTurnstileTest < ActionDispatch::IntegrationTest
 
   SURFACES = {
     app: ["PUBLIC_BASE_SERVICE_URL", :base_app_identity_recovery_session_url],
-    com: ["PUBLIC_BASE_CORPORATE_URL", :base_com_identity_recovery_session_url],
   }.freeze
 
   teardown do

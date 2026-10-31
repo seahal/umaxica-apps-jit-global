@@ -28,8 +28,8 @@ export type ChromeRestrictedMode = {
 export type ChromeCookieControls = {
   hidden: boolean;
   scope: string;
-  /** Same-origin path the server declared for this page's consent reads and writes. */
-  endpoint_url: string;
+  /** Same-origin consent endpoint, or null for the read-only link to Base. */
+  endpoint_url: string | null;
   settings_url: string;
   title: string;
   description_html: string;
@@ -55,6 +55,7 @@ export type ChromeThemeControls = {
 export type SurfaceChrome = {
   family_label: string | null;
   surface: string;
+  locale?: string;
   brand: { name: string; href: string };
   banner: ChromeBanner | null;
   /** Non-null for a Restricted Mode (Emergency Access) session only. */

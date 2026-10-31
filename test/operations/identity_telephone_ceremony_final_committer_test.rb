@@ -134,6 +134,43 @@ class IdentityTelephoneCeremonyFinalCommitterTest < ActiveSupport::TestCase
     end
   end
 
+  test "a withdrawn owner is rejected before its Telephone ceremony result is consumed" do
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE, withdrawn_at: 1.minute.ago,
+    )
+    contact = ClientTelephone.create!(user_id: actor.id, number: "+819012345683", confirm_policy: "1")
+    now = ClientTelephoneCeremonyTransaction.database_now
+    parent = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: "withdrawn-owner-browser", operation: "registration",
+      telephone_candidate_ref: contact.public_id, normalized_number_digest: contact.number_digest, now: now,
+    )
+    result_token = IdentityTelephoneCeremonyResult.issue(
+      { surface: "app",
+        actor_ref: actor.public_id,
+        session_ref: parent.session_ref,
+        transaction_id: parent.transaction_id,
+        grant_jti: parent.grant_jti,
+        result_jti: SecureRandom.uuid,
+        operation: parent.operation,
+        verified_at: now.to_i,
+        challenge_id: SecureRandom.uuid,
+        expires_at: parent.expires_at.to_i,
+        telephone_candidate_ref: contact.public_id,
+        normalized_number_digest: contact.number_digest, },
+      issuer_id: IdentityTelephoneCeremonyContract.sign_issuer_id("app"), now: now,
+    )
+
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyFinalCommitter.call!(
+        result_token: result_token,
+        actor_context: ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base),
+        actor: actor, session_ref: parent.session_ref, surface: "app", now: now,
+      )
+    end
+    assert_not parent.reload.consumed?
+    assert_equal ClientTelephoneStatus::UNVERIFIED, contact.reload.user_telephone_status_id
+  end
+
   test "commits through the locked record and writes the app Source audit" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     contact = ClientTelephone.create!(user_id: actor.id, number: "+819012345682", confirm_policy: "1")
@@ -235,6 +272,14 @@ class IdentityTelephoneCeremonyFinalCommitterTest < ActiveSupport::TestCase
     def initialize(id:, public_id:)
       @id = id
       @public_id = public_id
+    end
+
+    def with_lock
+      yield
+    end
+
+    def active?
+      true
     end
 
     def blank?

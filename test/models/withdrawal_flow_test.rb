@@ -6,7 +6,6 @@ require "test_helper"
 class WithdrawalFlowTest < ActiveSupport::TestCase
   CYCLE_CLASSES = [
     ClientWithdrawalFlow,
-    VisitorWithdrawalFlow,
   ].freeze
 
   test "withdrawal status reference tables use the agreed fixed ids" do
@@ -95,7 +94,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
 
   test "withdrawal termination completes the cycle" do
     now = Time.zone.local(2026, 5, 19, 12, 0, 0)
-    cycle = VisitorWithdrawalFlow.create!(visitor: create_visitor)
+    cycle = ClientWithdrawalFlow.create!(client: create_client)
     cycle.confirm_withdrawal!
     cycle.discard_withdrawal!
 
@@ -108,9 +107,9 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     assert_predicate cycle, :withdrawal_terminated?
     assert_equal now, cycle.completed_at
 
-    event = VisitorWithdrawalFlowEvent.where(visitor_withdrawal_flow_id: cycle.id).order(:id).last
+    event = ClientWithdrawalFlowEvent.where(client_withdrawal_flow_id: cycle.id).order(:id).last
 
-    assert_equal VisitorWithdrawalFlowStatus::TERMINATED, event.to_status_id
+    assert_equal ClientWithdrawalFlowStatus::TERMINATED, event.to_status_id
     assert_equal "purged", event.reason
   end
 
@@ -129,12 +128,11 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
 
   test "default_status_id returns REQUESTED status id" do
     assert_equal ClientWithdrawalFlowStatus::REQUESTED, ClientWithdrawalFlow.default_status_id
-    assert_equal VisitorWithdrawalFlowStatus::REQUESTED, VisitorWithdrawalFlow.default_status_id
   end
 
   test "status_name_for returns the correct status name" do
     assert_equal "REQUESTED", ClientWithdrawalFlow.status_name_for(ClientWithdrawalFlowStatus::REQUESTED)
-    assert_equal "TERMINATED", VisitorWithdrawalFlow.status_name_for(VisitorWithdrawalFlowStatus::TERMINATED)
+    assert_equal "TERMINATED", ClientWithdrawalFlow.status_name_for(ClientWithdrawalFlowStatus::TERMINATED)
   end
 
   test "can_transition_to? accepts valid next status" do
@@ -153,9 +151,9 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     assert_not recovered.valid?
     assert_not_empty recovered.errors[:completed_at]
 
-    failed = VisitorWithdrawalFlow.new(
-      visitor: create_visitor,
-      status_id: VisitorWithdrawalFlowStatus::FAILED,
+    failed = ClientWithdrawalFlow.new(
+      client: create_client,
+      status_id: ClientWithdrawalFlowStatus::FAILED,
     )
 
     assert_not failed.valid?
@@ -178,17 +176,4 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     )
   end
 
-  def create_visitor
-    VisitorStatus.ensure_defaults!
-    VisitorVisibility.ensure_defaults!
-    VisitorMfaStatus.ensure_defaults!
-
-    Visitor.create!(
-      public_id: PublicId.generate,
-      status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-    )
-  end
 end

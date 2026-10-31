@@ -6,6 +6,12 @@ stateDiagram-v2
     state "terminated predicate" as terminated
     state "withdrawn_at fact (overlapping)" as withdrawn
     [*] --> active
+    note right of active
+        Deactivation checks for another capability-eligible
+        operator; lifecycle
+        stops and administrative locks share a transaction lock.
+        OP stop delivery follows actor transaction commit.
+    end note
     active --> suspended: suspend / withdraw
     active --> terminated: terminate
     active --> active: restore

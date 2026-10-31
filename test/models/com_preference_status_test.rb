@@ -14,19 +14,19 @@ class ComPreferenceStatusTest < ActiveSupport::TestCase
   fixtures :com_preference_statuses
 
   test "has correct constants" do
-    assert_equal 1, ComPreferenceStatus::DELETED
-    assert_equal 2, ComPreferenceStatus::NOTHING
+    assert_equal 1, ComPreferenceStatus::RETIRED
+    assert_equal 2, ComPreferenceStatus::ACTIVE
   end
 
   test "defaults includes DELETED and NOTHING" do
-    assert_includes ComPreferenceStatus::DEFAULTS, ComPreferenceStatus::DELETED
-    assert_includes ComPreferenceStatus::DEFAULTS, ComPreferenceStatus::NOTHING
+    assert_includes ComPreferenceStatus::DEFAULTS, ComPreferenceStatus::RETIRED
+    assert_includes ComPreferenceStatus::DEFAULTS, ComPreferenceStatus::ACTIVE
   end
 
   test "returns all statuses" do
     ids = ComPreferenceStatus.pluck(:id)
 
-    assert_equal [ComPreferenceStatus::DELETED, ComPreferenceStatus::NOTHING], ids.sort
+    assert_equal [ComPreferenceStatus::RETIRED, ComPreferenceStatus::ACTIVE], ids.sort
   end
 
   test "ensure_defaults! does nothing when defaults exist" do

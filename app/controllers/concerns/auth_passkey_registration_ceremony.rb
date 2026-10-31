@@ -105,7 +105,6 @@ module AuthPasskeyRegistrationCeremony
     passkeys =
       case actor
       when Client then actor.client_passkeys
-      when Visitor then actor.visitor_passkeys
       when Operator then actor.staff_passkeys
       else raise ArgumentError, "unsupported passkey registration actor"
       end

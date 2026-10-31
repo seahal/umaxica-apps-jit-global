@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Shared identity logic for Client, Operator, and Visitor.
+# Shared identity logic for Client and Operator.
 # These are the authenticatable principals that own credentials and sessions.
 module Identity
   extend ActiveSupport::Concern
@@ -10,7 +10,7 @@ module Identity
 
   public
 
-  # `status_id` numericality is declared by each host class (Client, Operator, Visitor) so the
+  # `status_id` numericality is declared by each host class (Client, Operator) so the
   # validation is visible where the attribute lives, rather than injected by inclusion.
   def login_allowed?
     active? && self.class::LOGIN_BLOCKED_STATUS_IDS.exclude?(status_id)

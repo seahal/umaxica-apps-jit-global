@@ -24,7 +24,6 @@ class OidcAuthorizeRequestResolver < ApplicationService
   SUPPORTED_PROMPTS = %w(login none create).freeze
   PROMPTS_BY_RESOURCE_TYPE = {
     "client" => %w(none login create),
-    "visitor" => %w(none login create),
     "operator" => %w(none login),
   }.freeze
   # RFC 7636 4.2: an S256 challenge is BASE64URL(SHA-256) without padding.
@@ -160,12 +159,12 @@ class OidcAuthorizeRequestResolver < ApplicationService
   end
 
   def resource_type
-    return given_resource_type.to_s if given_resource_type.present?
+    return OidcSubject.normalize_resource_type(given_resource_type) unless given_resource_type.nil?
 
     case resource
     when ::Operator then "operator"
-    when ::Visitor then "visitor"
-    else "client"
+    when ::Client then "client"
+    else raise ArgumentError, "unsupported OIDC resource"
     end
   end
 

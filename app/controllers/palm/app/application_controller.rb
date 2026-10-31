@@ -11,7 +11,6 @@ module Palm
       include ::JumpRtReturnVerification
       include ::Session
       include ::PreferenceGlobal
-      include ::PreferenceAdoption
       include ::BrowserRpAuthentication
       include ::AuthenticationWithdrawalGate
       include ::BrowserRpSafeRequestRefresh

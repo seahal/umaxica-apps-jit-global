@@ -365,9 +365,8 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
   end
 
   test "applying a new open method effect closes the prior open row for the same slot" do
-    clients(:one)
     operator = operators(:one)
-    principal_public_id = "test-#{SecureRandom.uuid}"
+    principal_public_id = clients(:one).public_id
 
     first_case = AppEnforcementCase.new(
       kind: "method_protection",

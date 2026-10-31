@@ -13,7 +13,6 @@ class AvatarAuthorityClient
     end
 
   CLIENTS = { "app" => ["base-app-ww", "client"],
-              "com" => ["base-com-ww", "visitor"],
               "org" => ["base-org-ww", "operator"], }.freeze
   STATUSES = { 200 => :ok,
                201 => :ok,

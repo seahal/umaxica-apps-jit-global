@@ -23,7 +23,6 @@ class OperatorTokenPolicyTest < ActiveSupport::TestCase
 
   def test_index_denies_other_actor_types
     assert_not OperatorTokenPolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
-    assert_not OperatorTokenPolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
   end
 
   def test_destroy_allows_owner_operator_token
@@ -50,13 +49,6 @@ class OperatorTokenPolicyTest < ActiveSupport::TestCase
         id: 123,
       ),
     ).destroy?
-    assert_not OperatorTokenPolicy.new(
-      token,
-      user: Visitor.new(
-        security_mode_id: SecurityModeConfigurable::NORMAL,
-        id: 123,
-      ),
-    ).destroy?
   end
 
   def test_revoke_others_allows_operator_token_class_for_operator
@@ -66,7 +58,6 @@ class OperatorTokenPolicyTest < ActiveSupport::TestCase
 
   def test_revoke_others_denies_non_operators_and_instances
     assert_not OperatorTokenPolicy.new(OperatorToken, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).revoke_others?
-    assert_not OperatorTokenPolicy.new(OperatorToken, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).revoke_others?
     assert_not OperatorTokenPolicy.new(OperatorToken.new, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)).revoke_others?
   end
 

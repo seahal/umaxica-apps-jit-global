@@ -9,8 +9,6 @@ class IdentifierHmacEmergencyRotation
     :user_telephones_updated,
     :staff_emails_updated,
     :staff_telephones_updated,
-    :visitor_emails_updated,
-    :visitor_telephones_updated,
     :records_failed,
   )
 
@@ -43,20 +41,6 @@ class IdentifierHmacEmergencyRotation
       digest_method: :bidx_for_telephone,
       result_key: :staff_telephones_updated,
     },
-    {
-      model: VisitorEmail,
-      digest_column: :address_digest,
-      identifier_column: :address,
-      digest_method: :bidx_for_email,
-      result_key: :visitor_emails_updated,
-    },
-    {
-      model: VisitorTelephone,
-      digest_column: :number_digest,
-      identifier_column: :number,
-      digest_method: :bidx_for_telephone,
-      result_key: :visitor_telephones_updated,
-    },
   ].freeze
 
   public
@@ -72,8 +56,6 @@ class IdentifierHmacEmergencyRotation
       when ["app", "telephone"] then IDENTIFIER_TARGETS.fetch(1)
       when ["org", "email"] then IDENTIFIER_TARGETS.fetch(2)
       when ["org", "telephone"] then IDENTIFIER_TARGETS.fetch(3)
-      when ["com", "email"] then IDENTIFIER_TARGETS.fetch(4)
-      when ["com", "telephone"] then IDENTIFIER_TARGETS.fetch(5)
       else raise ArgumentError, "unsupported identifier rotation domain"
       end
     unless maintenance_connection.is_a?(PG::Connection)
@@ -102,8 +84,6 @@ class IdentifierHmacEmergencyRotation
       user_telephones_updated: counts[:user_telephones_updated],
       staff_emails_updated: counts[:staff_emails_updated],
       staff_telephones_updated: counts[:staff_telephones_updated],
-      visitor_emails_updated: counts[:visitor_emails_updated],
-      visitor_telephones_updated: counts[:visitor_telephones_updated],
       records_failed: counts[:records_failed],
     )
   end
@@ -153,9 +133,9 @@ class IdentifierHmacEmergencyRotation
     record = model.unscoped.find(record_id)
     digest =
       case record
-      when ClientEmail, VisitorEmail, OperatorEmail
+      when ClientEmail, OperatorEmail
         IdentifierBlindIndex.bidx_for_email(record.address, realm: model.identifier_hmac_realm)
-      when ClientTelephone, VisitorTelephone, OperatorTelephone
+      when ClientTelephone, OperatorTelephone
         IdentifierBlindIndex.bidx_for_telephone(record.number, realm: model.identifier_hmac_realm)
       else
         raise ArgumentError, "unsupported identifier rotation model"
@@ -166,8 +146,6 @@ class IdentifierHmacEmergencyRotation
       case record
       when ClientEmail then "public.rotate_client_emails_hmac"
       when ClientTelephone then "public.rotate_client_telephones_hmac"
-      when VisitorEmail then "public.rotate_visitor_emails_hmac"
-      when VisitorTelephone then "public.rotate_visitor_telephones_hmac"
       when OperatorEmail then "public.rotate_operator_emails_hmac"
       when OperatorTelephone then "public.rotate_operator_telephones_hmac"
       else raise ArgumentError, "unsupported identifier rotation model"

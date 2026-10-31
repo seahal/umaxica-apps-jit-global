@@ -6,7 +6,7 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   test "Auth sign out uses same TLD public Base through Jump and direct ceremony entry is refused" do
-    %w(app com org).each do |tld|
+    %w(app org).each do |tld|
       host! "auth.umaxica.#{tld}"
       https!
       get "/sign/in", params: { ri: "us" }
@@ -34,7 +34,7 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
   end
 
   test "Core and Warp sign entry POST uses Jump with public Base even on the same site" do
-    %w(app com org).each do |tld|
+    %w(app org).each do |tld|
       ["jp.umaxica.#{tld}", "www-jp.umaxica.#{tld}"].each do |host|
         host! host
         https!

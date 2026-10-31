@@ -7,9 +7,7 @@
 # Database name: com_setting
 #
 #  id              :bigint           not null, primary key
-#  consent_version :uuid
 #  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
 #  functional      :boolean          default(FALSE), not null
 #  performant      :boolean          default(FALSE), not null
 #  targetable      :boolean          default(FALSE), not null
@@ -30,8 +28,13 @@ require "test_helper"
 
 class ComPreferenceCookieTest < ActiveSupport::TestCase
   setup do
-    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::NOTHING)
-    @preference = ComPreference.create!(status_id: ComPreferenceStatus::NOTHING)
+    ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::ACTIVE)
+    @preference = ComPreference.create!(
+      jti: SecureRandom.uuid,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+      status_id: ComPreferenceStatus::ACTIVE,
+    )
   end
 
   test "belongs to preference" do

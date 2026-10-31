@@ -17,7 +17,6 @@ class OidcDiscoveryRouteStabilityTest < ActionDispatch::IntegrationTest
 
   SURFACES = [
     { resource_type: "client" },
-    { resource_type: "visitor" },
     { resource_type: "operator" },
   ].freeze
 
@@ -52,7 +51,6 @@ class OidcDiscoveryRouteStabilityTest < ActionDispatch::IntegrationTest
       hosts = Rails.configuration.x.boot_config.fetch(:hosts)
       host = {
         "client" => hosts.visa_service.host,
-        "visitor" => hosts.visa_corporate.host,
         "operator" => hosts.visa_staff.host,
       }.fetch(surface.fetch(:resource_type))
       document = OidcDiscoveryDocument.for_resource_type(surface[:resource_type])

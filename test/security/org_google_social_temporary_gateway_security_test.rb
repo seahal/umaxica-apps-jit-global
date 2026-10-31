@@ -53,31 +53,18 @@ class OrgComNoSocialCleanupSecurityTest < ActiveSupport::TestCase
     assert_no_match(/resource\(?\s*:secret|resource :totp|resources :totps/, org_block)
   end
 
-  test "com pages do not expose social auth helpers" do
-    # Both the controllers that build these pages\' props and the components that render them.
-    source = [
-      "app/controllers/auth/com/sign/ins_controller.rb",
-      "app/controllers/auth/com/sign/ups_controller.rb",
-      "src/pages/auth/com/sign_ins/new.tsx",
-      "src/pages/auth/com/sign_ups/new.tsx",
-    ].map { |path| read(path) }.join("\n")
-
-    assert_no_match(/social_authentication|google|apple|microsoft/i, source)
-  end
-
-  test "com routes expose no social provider callback" do
+  test "the corporate Auth host has no credential gateway block" do
+    # two.md WU-3: com is an anonymous public surface, so there is no com social, email or passkey
+    # credential block left to inspect.
     source = read("config/routes/auth.rb")
-    com_block = surface_block(source, "# Corporate credential gateway host", "# Staff credential gateway host")
 
-    assert_match(/resource :email, only: %i\(new create edit update destroy\)/, com_block)
-    assert_match(/resource :passkey, only: :new/, com_block)
-    assert_no_match(/resource\(?\s*:secret|namespace\s*\(?\s*:social|google|apple|microsoft/i, com_block)
+    assert_no_match(/Corporate credential gateway host/, source)
   end
 
   test "app routes and omniauth config keep app social providers" do
     routes = surface_block(
       read("config/routes/auth.rb"), "# User credential gateway host",
-      "# Corporate credential gateway host",
+      "# Staff credential gateway host",
     )
     omniauth = read("config/initializers/omniauth.rb")
 

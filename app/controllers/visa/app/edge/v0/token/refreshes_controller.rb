@@ -3,7 +3,6 @@
 
 class Visa::App::Edge::V0::Token::RefreshesController < Visa::App::AuthorityController
   include SignEdgeV0JsonApi
-  include ::PreferenceWebCookieEndpoint
 
   AUTHENTICATION_MODE = :deny_all
 
@@ -36,7 +35,6 @@ class Visa::App::Edge::V0::Token::RefreshesController < Visa::App::AuthorityCont
     credentials = refresh_access_token(refresh_plain)
 
     if credentials
-      sync_consented_buffer_cookie_safely!
       render json: { refreshed: true, dbsc: credentials[:dbsc] }, status: :ok
     else
       status = refresh_failure_status

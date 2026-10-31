@@ -9,16 +9,12 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
 
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   [
     [:app, "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", "BASE_APP", ClientSignUpFlow,
      ClientTelephone, ClientToken, ClientContactAuditOutbox, :client_telephone, :user_id,],
-    [:com, "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", "BASE_COM", VisitorSignUpFlow,
-     VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_telephone, :visitor_id,],
   ].each do |surface, base_host_key, auth_host_key, _issuer_name, flow_class, contact_class, token_class,
     outbox, scope, owner_key|
     %i(verify_contact enter_guardrail enter_checkpoint clear_requirement).each_with_index do |failed_event, index|
@@ -122,7 +118,7 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         source_state = contact.reload.attributes.slice("otp_attempts_count", "otp_last_sent_at")
 
         assert_equal 0, source_state.fetch("otp_attempts_count")
-        transaction_model = (surface == :app) ? ClientTelephoneCeremonyTransaction : VisitorTelephoneCeremonyTransaction
+        transaction_model = ClientTelephoneCeremonyTransaction
         transaction = transaction_model.find_by!(telephone_candidate_ref: contact.public_id)
         job_arguments = enqueued_jobs.find { |job| job.fetch(:job) == Outbound::SmsDeliveryJob }.fetch(:args)
         encrypted = job_arguments.fetch(0).fetch("encrypted_payload")

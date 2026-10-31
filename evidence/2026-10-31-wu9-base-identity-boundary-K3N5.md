@@ -1,0 +1,8 @@
+# WU-9 Base identity resolution boundary review
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had 3,440 lines of staged, unstaged, and untracked changes when checked.
+- Reviewed `two.md` §6.4, `RuntimeRole`, `config/database.yml`, `BrowserRpAuthentication`, `RpCellLocalSession`, Base APP/ORG controllers, Base self-RP identity/session models, and the existing owner API adapter/controller pattern.
+- `RuntimeRole` assigns Base APP/ORG browser and preference routes to the `rp-base-app-ww` / `rp-base-org-ww` cells. `BrowserRpAuthentication#resolve_rp_cell_access` returns the verified cell-local principal. `RpCellLocalSession` explicitly states that an RP cell does not read the OP store or canonical actor. The identity binding does retain issuer, realm, client ID, and the verified subject.
+- `two.md` §6.4 requires Base to resolve the canonical subject to a Zenith Client/Operator before account Preference access, and prohibits using the local principal ID or request/cookie values as identity authority. A direct Zenith DB lookup in these self-RP routes would cross the currently stated RP-cell ownership boundary. Existing Base owner APIs show an authenticated owner-call pattern, but no canonical identity resolver endpoint was found in the inspected Base API routes.
+- No canonical resolver was implemented. Choosing a direct database lookup versus an authenticated OP-owned resolver endpoint changes the trust boundary and requires an explicit architecture disposition before a safe implementation. This review does not establish that every BL-13 callback or RFC7009 item is required by WU-9.
+- No test, database operation, or application code change was performed for this review.

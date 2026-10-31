@@ -1,132 +1,69 @@
 # typed: false
 # frozen_string_literal: true
 
-# == Schema Information
-#
-# Table name: client_preferences
-# Database name: app_principal
-#
-#  id              :bigint           not null, primary key
-#  consent_version :uuid
-#  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
-#  currency        :string           default("jpy"), not null
-#  date_format     :string           default("iso"), not null
-#  density         :string           default("standard"), not null
-#  functional      :boolean          default(FALSE), not null
-#  language        :string           default("ja"), not null
-#  motion          :string           default("standard"), not null
-#  page_size       :string           default("infinity"), not null
-#  performant      :boolean          default(FALSE), not null
-#  region          :string           default("jp"), not null
-#  targetable      :boolean          default(FALSE), not null
-#  theme           :string           default("sy"), not null
-#  time_format     :string           default("24"), not null
-#  timezone        :string           default("Asia/Tokyo"), not null
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
-#  public_id       :string(21)
-#  user_id         :bigint           not null
-#
-# Indexes
-#
-#  index_client_preferences_on_public_id  (public_id) UNIQUE
-#  index_client_preferences_on_user_id    (user_id) UNIQUE
-#
-# Foreign Keys
-#
-#  fk_rails_...  (user_id => clients.id) ON DELETE => cascade
-#
 require "test_helper"
 
 class ClientPreferenceTest < ActiveSupport::TestCase
-  test "belongs to user" do
-    pref = client_preferences(:one)
+  test "belongs to the owning client and retains one child for each display field" do
+    preference = client_preferences(:one)
 
-    assert_predicate pref.user, :present?
+    assert_same clients(:one), preference.client
+    assert_predicate preference.client_preference_language, :present?
+    assert_predicate preference.client_preference_timezone, :present?
+    assert_predicate preference.client_preference_region, :present?
+    assert_predicate preference.client_preference_theme, :present?
   end
 
-  test "has one language child" do
-    pref = client_preferences(:one)
+  test "new actor preference has active status and explicit metadata starts empty" do
+    preference = ClientPreference.create!(client: clients(:sample_user))
 
-    assert_predicate pref.user_preference_language, :present?
+    assert_equal ClientPreferenceStatus::ACTIVE, preference.status_id
+    assert_empty preference.explicit_fields
+    assert_equal 21, preference.public_id.length
   end
 
-  test "has one timezone child" do
-    pref = client_preferences(:one)
-
-    assert_predicate pref.user_preference_timezone, :present?
-  end
-
-  test "has one region child" do
-    pref = client_preferences(:one)
-
-    assert_predicate pref.user_preference_region, :present?
-  end
-
-  test "has one theme child" do
-    pref = client_preferences(:one)
-
-    assert_predicate pref.user_preference_theme, :present?
-  end
-
-  test "user_id is unique" do
-    pref = client_preferences(:one)
-    duplicate = ClientPreference.new(user_id: pref.user_id)
-
-    assert_not duplicate.valid?
-  end
-
-  test "cookie consent defaults to false" do
-    user = clients(:sample_user)
-    pref = ClientPreference.new(user: user)
-
-    assert_not pref.consented
-    assert_not pref.functional
-    assert_not pref.performant
-    assert_not pref.targetable
-  end
-
-  test "generates public_id on create" do
-    user = clients(:sample_user)
-    pref = ClientPreference.create!(user: user)
-
-    assert_not_nil pref.public_id
-    assert_equal 21, pref.public_id.length
-  end
-
-  test "does not overwrite existing public_id" do
-    user = clients(:sample_user)
-    pref = ClientPreference.create!(user: user, public_id: "user_pref_custom_1xxx")
-
-    assert_equal "user_pref_custom_1xxx", pref.public_id
-  end
-
-  test "loading an existing preference preserves stored defaults" do
-    pref = client_preferences(:one)
-    pref.update!(
-      consented: true,
-      functional: true,
-      performant: true,
-      targetable: true,
+  test "active actor preference uniqueness permits a retired historical row" do
+    client = clients(:one)
+    active = client_preferences(:one)
+    retired = ClientPreference.create!(
+      client:, status_id: ClientPreferenceStatus::RETIRED, explicit_fields: [],
     )
 
-    loaded = ClientPreference.find(pref.id)
-
-    assert loaded.consented
-    assert loaded.functional
-    assert loaded.performant
-    assert loaded.targetable
+    assert_equal client.id, retired.client_id
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      ClientPreference.transaction(requires_new: true) do
+        ClientPreference.create!(client:, status_id: ClientPreferenceStatus::ACTIVE, explicit_fields: [])
+      end
+    end
+    assert_equal ClientPreferenceStatus::ACTIVE, active.reload.status_id
   end
 
-  test "1:1 relationship with user" do
-    user = clients(:one)
+  test "explicit display snapshot reads marked child values and excludes region itself" do
+    preference = client_preferences(:one)
+    preference.update!(explicit_fields: %w(language theme region adult_content_gate))
+    preference.client_preference_language.update!(option_id: ClientPreferenceLanguageOption::EN)
+    preference.client_preference_theme.update!(option_id: ClientPreferenceThemeOption::DARK)
 
-    assert_predicate user.user_preference, :present?
-    assert_equal user.id, user.user_preference.user_id
+    assert_equal({ "language" => "en", "theme" => "dark" }, preference.explicit_display_snapshot)
+    assert_equal %w(language theme region adult_content_gate), preference.reload.explicit_fields
+  end
+
+  test "explicit display snapshot fails when a marked child is missing" do
+    preference = client_preferences(:one)
+    preference.update!(explicit_fields: ["language"])
+    preference.client_preference_language.destroy!
+    preference.reload
+
+    assert_raises(ActiveRecord::RecordNotFound) { preference.explicit_display_snapshot }
+  end
+
+  test "client exposes its current actor preference" do
+    client = clients(:one)
+
+    assert_same client_preferences(:one), client.client_preference
   end
 
   test "public_id is a fixed 21-character NanoID" do
-    assert_public_id_fixed_length(::ClientPreference)
+    assert_public_id_fixed_length(ClientPreference)
   end
 end

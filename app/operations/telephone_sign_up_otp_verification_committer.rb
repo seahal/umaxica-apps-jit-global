@@ -8,18 +8,19 @@ class TelephoneSignUpOtpVerificationCommitter
       owner, transaction_model, pending_status, surface = components(flow, telephone)
       source_failure_state = nil
       verification =
-        flow.with_lock do
-          unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-              session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
-            next result(:session_mismatch, telephone)
-          end
-          unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
-              code.match?(/\A[0-9]{6}\z/)
-            next result(:invalid_code, telephone)
-          end
+        owner.with_lock do
+          telephone.with_lock do
+            flow.with_lock do
+              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
+                  flow.nonce_matches?(session_nonce)
+                next result(:session_mismatch, telephone)
+              end
+              unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
+                  code.match?(/\A[0-9]{6}\z/)
+                next result(:invalid_code, telephone)
+              end
 
-          owner.with_lock do
-            telephone.with_lock do
               now = flow.class.database_now
               if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
                 next result(:inactive_flow, telephone)
@@ -49,11 +50,6 @@ class TelephoneSignUpOtpVerificationCommitter
 
         [Client.find(telephone.user_id), ClientTelephoneCeremonyTransaction,
          ClientStatus::UNVERIFIED_WITH_SIGN_UP, :app,]
-      when VisitorSignUpFlow
-        raise ArgumentError, "COM signup requires its own Telephone" unless telephone.is_a?(VisitorTelephone)
-
-        [Visitor.find(telephone.visitor_id), VisitorTelephoneCeremonyTransaction,
-         VisitorStatus::UNVERIFIED_WITH_SIGN_UP, :com,]
       else raise ArgumentError, "unsupported Telephone signup realm"
       end
     end
@@ -62,7 +58,6 @@ class TelephoneSignUpOtpVerificationCommitter
       owner_id =
         case telephone
         when ClientTelephone then telephone.user_id
-        when VisitorTelephone then telephone.visitor_id
         else raise ArgumentError, "unsupported Telephone signup candidate"
         end
       flow.principal_id == owner.id && flow.pending_contact_type == "telephone" &&
@@ -82,7 +77,9 @@ class TelephoneSignUpOtpVerificationCommitter
       )
       return result(:missing_challenge, telephone) unless transactions.exists?
 
-      transaction = transactions.sole
+      transaction = transactions.lock.sole
+      return result(:missing_challenge, telephone) unless transaction.expires_at == flow.expires_at
+
       binding = {
         purpose: "sign_up",
         actor_ref: owner.public_id,
@@ -155,9 +152,9 @@ class TelephoneSignUpOtpVerificationCommitter
     end
 
     def reset_fresh_attempts(flow, telephone, owner, transaction_model, pending_status, code, source_failure_state)
-      flow.with_lock do
-        owner.with_lock do
-          telephone.with_lock do
+      owner.with_lock do
+        telephone.with_lock do
+          flow.with_lock do
             now = flow.class.database_now
             if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
               next result(:inactive_flow, telephone)
@@ -170,7 +167,9 @@ class TelephoneSignUpOtpVerificationCommitter
             transaction = transaction_model.where(
               operation: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
               telephone_candidate_ref: telephone.public_id, normalized_number_digest: telephone.number_digest,
-            ).sole
+            ).lock.sole
+            next result(:result_expired, telephone) unless transaction.expires_at == flow.expires_at
+
             unless transaction.telephone_otp_verified_evidence?(
               code: code, purpose: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
               operation: "sign_up", candidate_ref: telephone.public_id,

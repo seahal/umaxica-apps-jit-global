@@ -48,12 +48,14 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
         PasskeyRegistrationOperation.call!(
           actor: actor, passkey_class: OperatorPasskey,
           attributes: { webauthn_id: SecureRandom.uuid, public_key: "slot-public-key-#{index}" },
+          audit: { event_type: "passkey.registered.settings", surface: "org" },
         )
       end
     passkeys.first.destroy!
     replacement = PasskeyRegistrationOperation.call!(
       actor: actor, passkey_class: OperatorPasskey,
       attributes: { webauthn_id: SecureRandom.uuid, public_key: "replacement-public-key" },
+      audit: { event_type: "passkey.registered.settings", surface: "org" },
     )
 
     assert_predicate replacement, :persisted?
@@ -67,6 +69,7 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
       PasskeyRegistrationOperation.call!(
         actor: owner, passkey_class: OperatorPasskey,
         attributes: { webauthn_id: SecureRandom.uuid, public_key: "limit-public-key-#{index}" },
+        audit: { event_type: "passkey.registered.settings", surface: "org" },
       )
     end
     tenth = OperatorPasskey.new(staff: owner, webauthn_id: SecureRandom.uuid, public_key: "tenth-public-key")
@@ -158,6 +161,7 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
       PasskeyRegistrationOperation.call!(
         actor: staff, passkey_class: OperatorPasskey,
         attributes: { webauthn_id: SecureRandom.uuid, public_key: "slot-public-key-#{i}" },
+        audit: { event_type: "passkey.registered.settings", surface: "org" },
       )
     end
     error =
@@ -165,6 +169,7 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
         PasskeyRegistrationOperation.call!(
           actor: staff, passkey_class: OperatorPasskey,
           attributes: { webauthn_id: SecureRandom.uuid, public_key: "overflow-key" },
+          audit: { event_type: "passkey.registered.settings", surface: "org" },
         )
       end
     assert_match(/exceeds maximum passkeys/, error.record.errors[:base].join)

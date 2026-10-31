@@ -8,12 +8,9 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
 
   setup do
     ClientIdentityState.ensure_defaults!
-    VisitorIdentityState.ensure_defaults!
     OperatorIdentityState.ensure_defaults!
     PersonaMembershipKind.ensure_defaults! if defined?(PersonaMembershipKind)
     PersonaMembershipState.ensure_defaults! if defined?(PersonaMembershipState)
-    IndividualMembershipKind.ensure_defaults! if defined?(IndividualMembershipKind)
-    IndividualMembershipState.ensure_defaults! if defined?(IndividualMembershipState)
     AgentMembershipKind.ensure_defaults! if defined?(AgentMembershipKind)
     AgentMembershipState.ensure_defaults! if defined?(AgentMembershipState)
   end
@@ -21,9 +18,9 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   test "covers each concrete resource and never treats a legacy binding as an owner" do
     configurations = AuthorityOwnerMigrationInventory::RESOURCE_CONFIGS
 
-    assert_equal %w(agent bureau client_persona company enterprise individual),
+    assert_equal %w(agent bureau client_persona enterprise),
                  configurations.map { |configuration| configuration.fetch(:resource_kind).to_s }.sort
-    assert_equal %w(app app com com org org),
+    assert_equal %w(app app org org),
                  configurations.map { |configuration| configuration.fetch(:surface).to_s }.sort
 
     configurations.each do |configuration|
@@ -34,7 +31,7 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
     end
   end
 
-  test "fixes the approved six surface-local principal-to-resource mappings" do
+  test "fixes the approved surface-local principal-to-resource mappings" do
     mappings =
       AuthorityOwnerMigrationInventory::RESOURCE_CONFIGS.to_h do |configuration|
         key = [configuration.fetch(:surface).to_s, configuration.fetch(:resource_kind).to_s]
@@ -50,10 +47,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
                  mappings.fetch(["app", "client_persona"])
     assert_equal %w(Client Enterprise EnterpriseOwnership),
                  mappings.fetch(["app", "enterprise"])
-    assert_equal %w(Visitor Individual IndividualOwnership),
-                 mappings.fetch(["com", "individual"])
-    assert_equal %w(Visitor Company CompanyOwnership),
-                 mappings.fetch(["com", "company"])
     assert_equal %w(Operator Agent AgentOwnership),
                  mappings.fetch(["org", "agent"])
     assert_equal %w(Operator Bureau BureauOwnership),
@@ -63,14 +56,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   test "resolves the approved account and organization resource kinds without local remapping" do
     assert_equal :client_persona,
                  AuthorityOwnerMigrationInventory.resource_kind_for(surface: :app, category: :account)
-    assert_equal :individual,
-                 AuthorityOwnerMigrationInventory.resource_kind_for(surface: :com, category: :account)
     assert_equal :agent,
                  AuthorityOwnerMigrationInventory.resource_kind_for(surface: :org, category: :account)
     assert_equal :enterprise,
                  AuthorityOwnerMigrationInventory.resource_kind_for(surface: :app, category: :organization)
-    assert_equal :company,
-                 AuthorityOwnerMigrationInventory.resource_kind_for(surface: :com, category: :organization)
     assert_equal :bureau,
                  AuthorityOwnerMigrationInventory.resource_kind_for(surface: :org, category: :organization)
   end
@@ -139,10 +128,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
       client_identity: client_identity("inventory-inactive-client", status_id: ClientIdentityState::SUSPENDED),
       title: "IncClient",
     )
-    individual = Individual.create!(
-      visitor_identity: visitor_identity("inventory-inactive-visitor", status_id: VisitorIdentityState::SUSPENDED),
-      title: "IncIndiv",
-    )
     agent = Agent.create!(
       operator_identity: operator_identity("inventory-inactive-operator", status_id: OperatorIdentityState::SUSPENDED),
       title: "IncAgent",
@@ -151,10 +136,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
     missing_client_persona = ClientPersona.create!(
       client_identity: client_identity("inventory-missing-client-principal"),
       title: "MissClient",
-    )
-    missing_individual = Individual.create!(
-      visitor_identity: visitor_identity("inventory-missing-visitor-principal"),
-      title: "MissIndiv",
     )
     missing_agent = Agent.create!(
       operator_identity: operator_identity("inventory-missing-operator-principal"),
@@ -170,19 +151,11 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
     )
     assert_equal(
       "inactive_identity_binding",
-      detail_for(details, "individual", individual).fetch("classification"),
-    )
-    assert_equal(
-      "inactive_identity_binding",
       detail_for(details, "agent", agent).fetch("classification"),
     )
     assert_equal(
       "missing_principal",
       detail_for(details, "client_persona", missing_client_persona).fetch("classification"),
-    )
-    assert_equal(
-      "missing_principal",
-      detail_for(details, "individual", missing_individual).fetch("classification"),
     )
     assert_equal(
       "missing_principal",
@@ -218,21 +191,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
       title: "IncClientP",
     )
 
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    individual = Individual.create!(
-      visitor_identity: VisitorIdentity.create!(
-        issuer: "https://id.example.test",
-        subject: "inventory-inactive-visitor-principal",
-        audience: "acme_com",
-        source_record_id: visitor.id,
-        status_id: VisitorIdentityState::ACTIVE,
-      ),
-      title: "IncVisP",
-    )
-
     operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::NOTHING, visibility_id: OperatorVisibility::BOTH,
@@ -253,7 +211,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
 
     [
       ["client_persona", client_persona],
-      ["individual", individual],
       ["agent", agent],
     ].each do |resource_kind, resource|
       detail = detail_for(details, resource_kind, resource)
@@ -294,19 +251,7 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
     assert_equal "manual_review", detail.fetch("recommended_action")
   end
 
-  test "does not promote com or org memberships to ownership" do
-    individual = individual_with_active_owner("inventory-company-member", "ComMember")
-    company = Company.create!(name: "Inventory Company", title: "InvCom")
-    company_unit = CompanyUnit.create!(company:, name: "Root")
-    IndividualMembership.create!(
-      individual:,
-      company:,
-      company_unit: company_unit,
-      membership_kind_id: IndividualMembershipKind::OWNER,
-      membership_state_id: IndividualMembershipState::ACTIVE,
-      primary: true,
-    )
-
+  test "does not promote org memberships to ownership" do
     agent = agent_with_active_owner("inventory-bureau-member", "OrgMember")
     bureau = Bureau.create!(name: "Inventory Bureau", title: "InvBur")
     bureau_unit = BureauUnit.create!(bureau:, name: "Root")
@@ -320,16 +265,13 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
     )
 
     payload = JSON.parse(AuthorityOwnerMigrationInventory.call.to_json)
-    company_detail = detail_for(payload.fetch("details"), "company", company)
     bureau_detail = detail_for(payload.fetch("details"), "bureau", bureau)
 
-    [company_detail, bureau_detail].each do |detail|
-      assert_equal "membership_not_ownership", detail.fetch("classification")
-      assert_equal 1, detail.fetch("active_membership_count")
-      assert_equal ["legacy_binding_candidate"], detail.fetch("candidate_classifications").keys
-      assert_not detail.fetch("source_is_authoritative_owner")
-      assert_equal "manual_review", detail.fetch("recommended_action")
-    end
+    assert_equal "membership_not_ownership", bureau_detail.fetch("classification")
+    assert_equal 1, bureau_detail.fetch("active_membership_count")
+    assert_equal ["legacy_binding_candidate"], bureau_detail.fetch("candidate_classifications").keys
+    assert_not bureau_detail.fetch("source_is_authoritative_owner")
+    assert_equal "manual_review", bureau_detail.fetch("recommended_action")
   end
 
   test "classifies an administrator-only organization without promoting the administrator" do
@@ -385,21 +327,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
     ClientPersona.create!(client_identity: identity, title:)
   end
 
-  def individual_with_active_owner(identity_label, title)
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    identity = VisitorIdentity.create!(
-      issuer: "https://id.example.test",
-      subject: identity_label,
-      audience: "acme_com",
-      source_record_id: visitor.id,
-      status_id: VisitorIdentityState::ACTIVE,
-    )
-    Individual.create!(visitor_identity: identity, title:)
-  end
-
   def agent_with_active_owner(identity_label, title)
     operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
@@ -413,16 +340,6 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
       status_id: OperatorIdentityState::ACTIVE,
     )
     Agent.create!(operator_identity: identity, title:)
-  end
-
-  def visitor_identity(label, status_id: VisitorIdentityState::ACTIVE)
-    VisitorIdentity.create!(
-      issuer: "https://id.example.test",
-      subject: label,
-      audience: "acme_com",
-      source_record_id: Zlib.crc32(label),
-      status_id:,
-    )
   end
 
   def operator_identity(label, status_id: OperatorIdentityState::ACTIVE)

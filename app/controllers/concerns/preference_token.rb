@@ -14,7 +14,7 @@ class PreferenceToken
   AudienceMismatchError = SecurityJwtPreferenceTokenCodec::AudienceMismatchError
 
   class << self
-    def encode(preferences, host:, preference_type:, public_id:, jti:, jwt_issuer_id: nil)
+    def encode(preferences, host:, preference_type:, public_id:, jti:, jwt_issuer_id: nil, issued_at: nil)
       codec.encode(
         preferences,
         host: host,
@@ -22,6 +22,7 @@ class PreferenceToken
         public_id: public_id,
         jti: jti,
         jwt_issuer_id: jwt_issuer_id,
+        issued_at: issued_at,
       )
     end
 

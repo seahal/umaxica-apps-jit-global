@@ -656,8 +656,11 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
          headers: http_headers_0
 
+    assert_equal 403, response.status
     assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
+    assert_equal AuthenticationContextValue::STANDBY_KEY, emergency_token.reload.authentication_context
+    assert_nil emergency_token.last_step_up_at
   end
 
   private

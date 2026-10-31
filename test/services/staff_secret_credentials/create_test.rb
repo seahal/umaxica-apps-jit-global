@@ -51,6 +51,116 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
     assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
   end
 
+  test "a reserved operator cannot create a Secret with previously valid Step-Up" do
+    @staff.update!(status_id: OperatorStatus::RESERVED)
+    requirement = StepUpRequirement.new(
+      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+
+    assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsCreate.call(
+          actor: @staff, staff: @staff, params: { name: "blocked", enabled: true },
+          step_up_token: @token, step_up_requirement: requirement, step_up_bootstrap: false,
+        )
+      end
+    end
+    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  end
+
+  test "a revoked device cannot create a Secret with previously valid Step-Up" do
+    @token.device_session_record!.revoke!
+    requirement = StepUpRequirement.new(
+      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+
+    assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsCreate.call(
+          actor: @staff, staff: @staff, params: { name: "blocked", enabled: true },
+          step_up_token: @token, step_up_requirement: requirement, step_up_bootstrap: false,
+        )
+      end
+    end
+    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  end
+
+  test "a superseded token cannot create a Secret with previously valid Step-Up" do
+    device = @token.device_session_record!
+    replacement = operator_tokens(:one)
+    replacement.update!(device_session_id: device.id)
+    device.update!(current_refresh_token_id: replacement.id)
+    requirement = StepUpRequirement.new(
+      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+
+    assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsCreate.call(
+          actor: @staff, staff: @staff, params: { name: "blocked", enabled: true },
+          step_up_token: @token, step_up_requirement: requirement, step_up_bootstrap: false,
+        )
+      end
+    end
+    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  end
+
+  test "bootstrap creates a Secret for an eligible operator with a current session" do
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
+
+    result = OperatorSecretCredentialsCreate.call(
+      actor: operator, staff: operator, params: { name: "bootstrap", enabled: true },
+      step_up_token: token, step_up_requirement: nil, step_up_bootstrap: true,
+    )
+
+    assert_predicate result.secret_credential, :active?
+    assert_equal operator.id, result.secret_credential.staff_id
+  end
+
+  test "bootstrap refuses an eligible operator whose device was revoked" do
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
+    token.device_session_record!.revoke!
+
+    assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsCreate.call(
+          actor: operator, staff: operator, params: { name: "blocked bootstrap", enabled: true },
+          step_up_token: token, step_up_requirement: nil, step_up_bootstrap: true,
+        )
+      end
+    end
+  end
+
+  test "a standby session cannot bootstrap a Secret even without any passkeys" do
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(
+      authentication_epoch: 0, staff: operator, authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    )
+
+    assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
+      assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
+        OperatorSecretCredentialsCreate.call(
+          actor: operator, staff: operator, params: { name: "standby bootstrap", enabled: true },
+          step_up_token: token, step_up_requirement: nil, step_up_bootstrap: true,
+        )
+      end
+    end
+  end
+
   private
 
   def create_secret(params)

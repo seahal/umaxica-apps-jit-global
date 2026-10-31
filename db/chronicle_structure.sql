@@ -861,200 +861,6 @@ ALTER SEQUENCE public.client_chronicles_id_seq OWNED BY public.client_chronicles
 
 
 --
--- Name: com_document_audit_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_document_audit_events (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_document_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_document_audit_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_document_audit_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_document_audit_events_id_seq OWNED BY public.com_document_audit_events.id;
-
-
---
--- Name: com_document_audit_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_document_audit_levels (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_document_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_document_audit_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_document_audit_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_document_audit_levels_id_seq OWNED BY public.com_document_audit_levels.id;
-
-
---
--- Name: com_document_audits; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_document_audits (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    expires_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT com_document_audits_event_id_non_negative_check CHECK ((event_id >= 0)),
-    CONSTRAINT com_document_audits_level_id_non_negative_check CHECK ((level_id >= 0))
-);
-
-
---
--- Name: com_document_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_document_audits_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_document_audits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_document_audits_id_seq OWNED BY public.com_document_audits.id;
-
-
---
--- Name: com_document_behavior_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_document_behavior_events (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_document_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_document_behavior_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_document_behavior_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_document_behavior_events_id_seq OWNED BY public.com_document_behavior_events.id;
-
-
---
--- Name: com_document_behavior_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_document_behavior_levels (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_document_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_document_behavior_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_document_behavior_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_document_behavior_levels_id_seq OWNED BY public.com_document_behavior_levels.id;
-
-
---
--- Name: com_document_behaviors; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_document_behaviors (
-    id bigint NOT NULL,
-    actor_id bigint,
-    actor_type character varying,
-    created_at timestamp(6) with time zone NOT NULL,
-    event_id bigint NOT NULL,
-    expires_at timestamp(6) with time zone,
-    level_id bigint NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP,
-    subject_id bigint NOT NULL,
-    subject_type character varying NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
-);
-
-
---
--- Name: com_document_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_document_behaviors_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_document_behaviors_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_document_behaviors_id_seq OWNED BY public.com_document_behaviors.id;
-
-
---
 -- Name: com_preference_chronicle_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1153,200 +959,6 @@ CREATE SEQUENCE public.com_preference_chronicles_id_seq
 --
 
 ALTER SEQUENCE public.com_preference_chronicles_id_seq OWNED BY public.com_preference_chronicles.id;
-
-
---
--- Name: com_timeline_audit_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_timeline_audit_events (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_timeline_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_timeline_audit_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_timeline_audit_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_timeline_audit_events_id_seq OWNED BY public.com_timeline_audit_events.id;
-
-
---
--- Name: com_timeline_audit_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_timeline_audit_levels (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_timeline_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_timeline_audit_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_timeline_audit_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_timeline_audit_levels_id_seq OWNED BY public.com_timeline_audit_levels.id;
-
-
---
--- Name: com_timeline_audits; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_timeline_audits (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    expires_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT com_timeline_audits_event_id_non_negative_check CHECK ((event_id >= 0)),
-    CONSTRAINT com_timeline_audits_level_id_non_negative_check CHECK ((level_id >= 0))
-);
-
-
---
--- Name: com_timeline_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_timeline_audits_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_timeline_audits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_timeline_audits_id_seq OWNED BY public.com_timeline_audits.id;
-
-
---
--- Name: com_timeline_behavior_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_timeline_behavior_events (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_timeline_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_timeline_behavior_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_timeline_behavior_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_timeline_behavior_events_id_seq OWNED BY public.com_timeline_behavior_events.id;
-
-
---
--- Name: com_timeline_behavior_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_timeline_behavior_levels (
-    id bigint NOT NULL
-);
-
-
---
--- Name: com_timeline_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_timeline_behavior_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_timeline_behavior_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_timeline_behavior_levels_id_seq OWNED BY public.com_timeline_behavior_levels.id;
-
-
---
--- Name: com_timeline_behaviors; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.com_timeline_behaviors (
-    id bigint NOT NULL,
-    actor_id bigint,
-    actor_type character varying,
-    created_at timestamp(6) with time zone NOT NULL,
-    event_id bigint NOT NULL,
-    expires_at timestamp(6) with time zone,
-    level_id bigint NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP,
-    subject_id bigint NOT NULL,
-    subject_type character varying NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
-);
-
-
---
--- Name: com_timeline_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.com_timeline_behaviors_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: com_timeline_behaviors_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.com_timeline_behaviors_id_seq OWNED BY public.com_timeline_behaviors.id;
 
 
 --
@@ -2160,48 +1772,6 @@ ALTER TABLE ONLY public.client_chronicles ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
--- Name: com_document_audit_events id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audit_events ALTER COLUMN id SET DEFAULT nextval('public.com_document_audit_events_id_seq'::regclass);
-
-
---
--- Name: com_document_audit_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audit_levels ALTER COLUMN id SET DEFAULT nextval('public.com_document_audit_levels_id_seq'::regclass);
-
-
---
--- Name: com_document_audits id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audits ALTER COLUMN id SET DEFAULT nextval('public.com_document_audits_id_seq'::regclass);
-
-
---
--- Name: com_document_behavior_events id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behavior_events ALTER COLUMN id SET DEFAULT nextval('public.com_document_behavior_events_id_seq'::regclass);
-
-
---
--- Name: com_document_behavior_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behavior_levels ALTER COLUMN id SET DEFAULT nextval('public.com_document_behavior_levels_id_seq'::regclass);
-
-
---
--- Name: com_document_behaviors id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behaviors ALTER COLUMN id SET DEFAULT nextval('public.com_document_behaviors_id_seq'::regclass);
-
-
---
 -- Name: com_preference_chronicle_events id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2220,48 +1790,6 @@ ALTER TABLE ONLY public.com_preference_chronicle_levels ALTER COLUMN id SET DEFA
 --
 
 ALTER TABLE ONLY public.com_preference_chronicles ALTER COLUMN id SET DEFAULT nextval('public.com_preference_chronicles_id_seq'::regclass);
-
-
---
--- Name: com_timeline_audit_events id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audit_events ALTER COLUMN id SET DEFAULT nextval('public.com_timeline_audit_events_id_seq'::regclass);
-
-
---
--- Name: com_timeline_audit_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audit_levels ALTER COLUMN id SET DEFAULT nextval('public.com_timeline_audit_levels_id_seq'::regclass);
-
-
---
--- Name: com_timeline_audits id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audits ALTER COLUMN id SET DEFAULT nextval('public.com_timeline_audits_id_seq'::regclass);
-
-
---
--- Name: com_timeline_behavior_events id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behavior_events ALTER COLUMN id SET DEFAULT nextval('public.com_timeline_behavior_events_id_seq'::regclass);
-
-
---
--- Name: com_timeline_behavior_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behavior_levels ALTER COLUMN id SET DEFAULT nextval('public.com_timeline_behavior_levels_id_seq'::regclass);
-
-
---
--- Name: com_timeline_behaviors id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behaviors ALTER COLUMN id SET DEFAULT nextval('public.com_timeline_behaviors_id_seq'::regclass);
 
 
 --
@@ -2598,54 +2126,6 @@ ALTER TABLE ONLY public.client_chronicles
 
 
 --
--- Name: com_document_audit_events com_document_audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audit_events
-    ADD CONSTRAINT com_document_audit_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_document_audit_levels com_document_audit_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audit_levels
-    ADD CONSTRAINT com_document_audit_levels_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_document_audits com_document_audits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audits
-    ADD CONSTRAINT com_document_audits_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_document_behavior_events com_document_behavior_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behavior_events
-    ADD CONSTRAINT com_document_behavior_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_document_behavior_levels com_document_behavior_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behavior_levels
-    ADD CONSTRAINT com_document_behavior_levels_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_document_behaviors com_document_behaviors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behaviors
-    ADD CONSTRAINT com_document_behaviors_pkey PRIMARY KEY (id);
-
-
---
 -- Name: com_preference_chronicle_events com_preference_chronicle_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2667,54 +2147,6 @@ ALTER TABLE ONLY public.com_preference_chronicle_levels
 
 ALTER TABLE ONLY public.com_preference_chronicles
     ADD CONSTRAINT com_preference_chronicles_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_timeline_audit_events com_timeline_audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audit_events
-    ADD CONSTRAINT com_timeline_audit_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_timeline_audit_levels com_timeline_audit_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audit_levels
-    ADD CONSTRAINT com_timeline_audit_levels_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_timeline_audits com_timeline_audits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audits
-    ADD CONSTRAINT com_timeline_audits_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_timeline_behavior_events com_timeline_behavior_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behavior_events
-    ADD CONSTRAINT com_timeline_behavior_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_timeline_behavior_levels com_timeline_behavior_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behavior_levels
-    ADD CONSTRAINT com_timeline_behavior_levels_pkey PRIMARY KEY (id);
-
-
---
--- Name: com_timeline_behaviors com_timeline_behaviors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behaviors
-    ADD CONSTRAINT com_timeline_behaviors_pkey PRIMARY KEY (id);
 
 
 --
@@ -2927,13 +2359,6 @@ CREATE INDEX idx_on_subject_type_subject_id_occurred_at_2e96c29236 ON public.ope
 
 
 --
--- Name: idx_on_subject_type_subject_id_occurred_at_99ec847a5c; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_subject_type_subject_id_occurred_at_99ec847a5c ON public.com_timeline_audits USING btree (subject_type, subject_id, occurred_at);
-
-
---
 -- Name: idx_on_subject_type_subject_id_occurred_at_a29eb711dd; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2952,13 +2377,6 @@ CREATE INDEX idx_on_subject_type_subject_id_occurred_at_app_pref ON public.app_p
 --
 
 CREATE INDEX idx_on_subject_type_subject_id_occurred_at_bf53171ad0 ON public.org_document_audits USING btree (subject_type, subject_id, occurred_at);
-
-
---
--- Name: idx_on_subject_type_subject_id_occurred_at_c40361e81b; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_subject_type_subject_id_occurred_at_c40361e81b ON public.com_document_audits USING btree (subject_type, subject_id, occurred_at);
 
 
 --
@@ -3361,83 +2779,6 @@ CREATE INDEX index_client_chronicles_on_subject_id ON public.client_chronicles U
 
 
 --
--- Name: index_com_document_audits_on_actor_id_and_occurred_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_audits_on_actor_id_and_occurred_at ON public.com_document_audits USING btree (actor_id, occurred_at);
-
-
---
--- Name: index_com_document_audits_on_event_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_audits_on_event_id ON public.com_document_audits USING btree (event_id);
-
-
---
--- Name: index_com_document_audits_on_expires_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_audits_on_expires_at ON public.com_document_audits USING btree (expires_at);
-
-
---
--- Name: index_com_document_audits_on_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_audits_on_level_id ON public.com_document_audits USING btree (level_id);
-
-
---
--- Name: index_com_document_audits_on_occurred_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_audits_on_occurred_at ON public.com_document_audits USING btree (occurred_at);
-
-
---
--- Name: index_com_document_audits_on_subject_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_audits_on_subject_id ON public.com_document_audits USING btree (subject_id);
-
-
---
--- Name: index_com_document_behaviors_on_actor_type_and_actor_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_behaviors_on_actor_type_and_actor_id ON public.com_document_behaviors USING btree (actor_type, actor_id);
-
-
---
--- Name: index_com_document_behaviors_on_event_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_behaviors_on_event_id ON public.com_document_behaviors USING btree (event_id);
-
-
---
--- Name: index_com_document_behaviors_on_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_behaviors_on_level_id ON public.com_document_behaviors USING btree (level_id);
-
-
---
--- Name: index_com_document_behaviors_on_subject_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_behaviors_on_subject_id ON public.com_document_behaviors USING btree (subject_id);
-
-
---
--- Name: index_com_document_behaviors_on_subject_type_and_subject_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_document_behaviors_on_subject_type_and_subject_id ON public.com_document_behaviors USING btree (subject_type, subject_id);
-
-
---
 -- Name: index_com_preference_chronicles_on_actor_id_and_occurred_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3484,83 +2825,6 @@ CREATE INDEX index_com_preference_chronicles_on_purge_eligible_at ON public.com_
 --
 
 CREATE INDEX index_com_preference_chronicles_on_subject_id ON public.com_preference_chronicles USING btree (subject_id);
-
-
---
--- Name: index_com_timeline_audits_on_actor_id_and_occurred_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_audits_on_actor_id_and_occurred_at ON public.com_timeline_audits USING btree (actor_id, occurred_at);
-
-
---
--- Name: index_com_timeline_audits_on_event_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_audits_on_event_id ON public.com_timeline_audits USING btree (event_id);
-
-
---
--- Name: index_com_timeline_audits_on_expires_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_audits_on_expires_at ON public.com_timeline_audits USING btree (expires_at);
-
-
---
--- Name: index_com_timeline_audits_on_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_audits_on_level_id ON public.com_timeline_audits USING btree (level_id);
-
-
---
--- Name: index_com_timeline_audits_on_occurred_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_audits_on_occurred_at ON public.com_timeline_audits USING btree (occurred_at);
-
-
---
--- Name: index_com_timeline_audits_on_subject_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_audits_on_subject_id ON public.com_timeline_audits USING btree (subject_id);
-
-
---
--- Name: index_com_timeline_behaviors_on_actor_type_and_actor_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_behaviors_on_actor_type_and_actor_id ON public.com_timeline_behaviors USING btree (actor_type, actor_id);
-
-
---
--- Name: index_com_timeline_behaviors_on_event_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_behaviors_on_event_id ON public.com_timeline_behaviors USING btree (event_id);
-
-
---
--- Name: index_com_timeline_behaviors_on_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_behaviors_on_level_id ON public.com_timeline_behaviors USING btree (level_id);
-
-
---
--- Name: index_com_timeline_behaviors_on_subject_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_behaviors_on_subject_id ON public.com_timeline_behaviors USING btree (subject_id);
-
-
---
--- Name: index_com_timeline_behaviors_on_subject_type_and_subject_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_com_timeline_behaviors_on_subject_type_and_subject_id ON public.com_timeline_behaviors USING btree (subject_type, subject_id);
 
 
 --
@@ -3841,15 +3105,7 @@ CREATE UNIQUE INDEX uniq_operator_chronicles_sign_flow_halted ON public.operator
 --
 
 ALTER TABLE ONLY public.app_document_audits
-    ADD CONSTRAINT fk_rails_04199ae3cc FOREIGN KEY (event_id) REFERENCES public.app_document_audit_events(id) NOT VALID;
-
-
---
--- Name: com_document_behaviors fk_rails_0ed5a466f6; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behaviors
-    ADD CONSTRAINT fk_rails_0ed5a466f6 FOREIGN KEY (level_id) REFERENCES public.com_document_behavior_levels(id);
+    ADD CONSTRAINT fk_rails_04199ae3cc FOREIGN KEY (event_id) REFERENCES public.app_document_audit_events(id);
 
 
 --
@@ -3865,7 +3121,7 @@ ALTER TABLE ONLY public.app_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.org_timeline_audits
-    ADD CONSTRAINT fk_rails_1c8eb96fbb FOREIGN KEY (level_id) REFERENCES public.org_timeline_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1c8eb96fbb FOREIGN KEY (level_id) REFERENCES public.org_timeline_audit_levels(id);
 
 
 --
@@ -3881,15 +3137,7 @@ ALTER TABLE ONLY public.org_document_behaviors
 --
 
 ALTER TABLE ONLY public.app_timeline_audits
-    ADD CONSTRAINT fk_rails_2babaf0d7d FOREIGN KEY (event_id) REFERENCES public.app_timeline_audit_events(id) NOT VALID;
-
-
---
--- Name: com_timeline_behaviors fk_rails_30821c7e45; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behaviors
-    ADD CONSTRAINT fk_rails_30821c7e45 FOREIGN KEY (event_id) REFERENCES public.com_timeline_behavior_events(id);
+    ADD CONSTRAINT fk_rails_2babaf0d7d FOREIGN KEY (event_id) REFERENCES public.app_timeline_audit_events(id);
 
 
 --
@@ -3897,7 +3145,7 @@ ALTER TABLE ONLY public.com_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.org_preference_chronicles
-    ADD CONSTRAINT fk_rails_3829eb3d72 FOREIGN KEY (event_id) REFERENCES public.org_preference_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3829eb3d72 FOREIGN KEY (event_id) REFERENCES public.org_preference_chronicle_events(id);
 
 
 --
@@ -3909,19 +3157,11 @@ ALTER TABLE ONLY public.chronicle_visibilities
 
 
 --
--- Name: com_document_audits fk_rails_3f934103f6; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audits
-    ADD CONSTRAINT fk_rails_3f934103f6 FOREIGN KEY (event_id) REFERENCES public.com_document_audit_events(id) NOT VALID;
-
-
---
 -- Name: operator_chronicles fk_rails_46a8075569; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.operator_chronicles
-    ADD CONSTRAINT fk_rails_46a8075569 FOREIGN KEY (level_id) REFERENCES public.operator_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_46a8075569 FOREIGN KEY (level_id) REFERENCES public.operator_chronicle_levels(id);
 
 
 --
@@ -3929,7 +3169,7 @@ ALTER TABLE ONLY public.operator_chronicles
 --
 
 ALTER TABLE ONLY public.org_document_audits
-    ADD CONSTRAINT fk_rails_46d3b866ce FOREIGN KEY (event_id) REFERENCES public.org_document_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_46d3b866ce FOREIGN KEY (event_id) REFERENCES public.org_document_audit_events(id);
 
 
 --
@@ -3945,15 +3185,7 @@ ALTER TABLE ONLY public.chronicle_visibilities
 --
 
 ALTER TABLE ONLY public.com_preference_chronicles
-    ADD CONSTRAINT fk_rails_592279f49b FOREIGN KEY (level_id) REFERENCES public.com_preference_chronicle_levels(id) NOT VALID;
-
-
---
--- Name: com_timeline_audits fk_rails_683656739c; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audits
-    ADD CONSTRAINT fk_rails_683656739c FOREIGN KEY (level_id) REFERENCES public.com_timeline_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_592279f49b FOREIGN KEY (level_id) REFERENCES public.com_preference_chronicle_levels(id);
 
 
 --
@@ -3961,7 +3193,7 @@ ALTER TABLE ONLY public.com_timeline_audits
 --
 
 ALTER TABLE ONLY public.chronicle_outbox_entries
-    ADD CONSTRAINT fk_rails_6a19517853 FOREIGN KEY (chronicle_id) REFERENCES public.chronicles(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_6a19517853 FOREIGN KEY (chronicle_id) REFERENCES public.chronicles(id) ON DELETE SET NULL;
 
 
 --
@@ -3973,27 +3205,11 @@ ALTER TABLE ONLY public.org_timeline_behaviors
 
 
 --
--- Name: com_timeline_audits fk_rails_7c9a165758; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_audits
-    ADD CONSTRAINT fk_rails_7c9a165758 FOREIGN KEY (event_id) REFERENCES public.com_timeline_audit_events(id) NOT VALID;
-
-
---
 -- Name: client_chronicles fk_rails_829f1830de; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_chronicles
-    ADD CONSTRAINT fk_rails_829f1830de FOREIGN KEY (event_id) REFERENCES public.client_chronicle_events(id) NOT VALID;
-
-
---
--- Name: com_document_audits fk_rails_851991baee; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_audits
-    ADD CONSTRAINT fk_rails_851991baee FOREIGN KEY (level_id) REFERENCES public.com_document_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_829f1830de FOREIGN KEY (event_id) REFERENCES public.client_chronicle_events(id);
 
 
 --
@@ -4001,7 +3217,7 @@ ALTER TABLE ONLY public.com_document_audits
 --
 
 ALTER TABLE ONLY public.client_chronicles
-    ADD CONSTRAINT fk_rails_868bedb021 FOREIGN KEY (level_id) REFERENCES public.client_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_868bedb021 FOREIGN KEY (level_id) REFERENCES public.client_chronicle_levels(id);
 
 
 --
@@ -4041,7 +3257,7 @@ ALTER TABLE ONLY public.org_document_behaviors
 --
 
 ALTER TABLE ONLY public.app_document_audits
-    ADD CONSTRAINT fk_rails_a9e9b70220 FOREIGN KEY (level_id) REFERENCES public.app_document_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_a9e9b70220 FOREIGN KEY (level_id) REFERENCES public.app_document_audit_levels(id);
 
 
 --
@@ -4049,7 +3265,7 @@ ALTER TABLE ONLY public.app_document_audits
 --
 
 ALTER TABLE ONLY public.app_timeline_audits
-    ADD CONSTRAINT fk_rails_b95cff528f FOREIGN KEY (level_id) REFERENCES public.app_timeline_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b95cff528f FOREIGN KEY (level_id) REFERENCES public.app_timeline_audit_levels(id);
 
 
 --
@@ -4057,15 +3273,7 @@ ALTER TABLE ONLY public.app_timeline_audits
 --
 
 ALTER TABLE ONLY public.com_preference_chronicles
-    ADD CONSTRAINT fk_rails_c194bd8de2 FOREIGN KEY (event_id) REFERENCES public.com_preference_chronicle_events(id) NOT VALID;
-
-
---
--- Name: com_timeline_behaviors fk_rails_d2b5cbb977; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_timeline_behaviors
-    ADD CONSTRAINT fk_rails_d2b5cbb977 FOREIGN KEY (level_id) REFERENCES public.com_timeline_behavior_levels(id);
+    ADD CONSTRAINT fk_rails_c194bd8de2 FOREIGN KEY (event_id) REFERENCES public.com_preference_chronicle_events(id);
 
 
 --
@@ -4073,7 +3281,7 @@ ALTER TABLE ONLY public.com_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.app_preference_chronicles
-    ADD CONSTRAINT fk_rails_d693b46c45 FOREIGN KEY (event_id) REFERENCES public.app_preference_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_d693b46c45 FOREIGN KEY (event_id) REFERENCES public.app_preference_chronicle_events(id);
 
 
 --
@@ -4081,15 +3289,7 @@ ALTER TABLE ONLY public.app_preference_chronicles
 --
 
 ALTER TABLE ONLY public.app_preference_chronicles
-    ADD CONSTRAINT fk_rails_da47dd8941 FOREIGN KEY (level_id) REFERENCES public.app_preference_chronicle_levels(id) NOT VALID;
-
-
---
--- Name: com_document_behaviors fk_rails_e0b73c346a; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.com_document_behaviors
-    ADD CONSTRAINT fk_rails_e0b73c346a FOREIGN KEY (event_id) REFERENCES public.com_document_behavior_events(id);
+    ADD CONSTRAINT fk_rails_da47dd8941 FOREIGN KEY (level_id) REFERENCES public.app_preference_chronicle_levels(id);
 
 
 --
@@ -4105,7 +3305,7 @@ ALTER TABLE ONLY public.app_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.org_timeline_audits
-    ADD CONSTRAINT fk_rails_eae8a241e3 FOREIGN KEY (event_id) REFERENCES public.org_timeline_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_eae8a241e3 FOREIGN KEY (event_id) REFERENCES public.org_timeline_audit_events(id);
 
 
 --
@@ -4113,7 +3313,7 @@ ALTER TABLE ONLY public.org_timeline_audits
 --
 
 ALTER TABLE ONLY public.org_document_audits
-    ADD CONSTRAINT fk_rails_ed52fec6a9 FOREIGN KEY (level_id) REFERENCES public.org_document_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ed52fec6a9 FOREIGN KEY (level_id) REFERENCES public.org_document_audit_levels(id);
 
 
 --
@@ -4121,7 +3321,7 @@ ALTER TABLE ONLY public.org_document_audits
 --
 
 ALTER TABLE ONLY public.operator_chronicles
-    ADD CONSTRAINT fk_rails_f0451c267b FOREIGN KEY (event_id) REFERENCES public.operator_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f0451c267b FOREIGN KEY (event_id) REFERENCES public.operator_chronicle_events(id);
 
 
 --
@@ -4137,7 +3337,7 @@ ALTER TABLE ONLY public.chronicles
 --
 
 ALTER TABLE ONLY public.org_preference_chronicles
-    ADD CONSTRAINT fk_rails_f932dbadd7 FOREIGN KEY (level_id) REFERENCES public.org_preference_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f932dbadd7 FOREIGN KEY (level_id) REFERENCES public.org_preference_chronicle_levels(id);
 
 
 --
@@ -4147,6 +3347,7 @@ ALTER TABLE ONLY public.org_preference_chronicles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261029120000'),
 ('20261022205322'),
 ('20261022205321'),
 ('20261022205320'),

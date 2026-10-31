@@ -7,7 +7,7 @@ class IdentityStepUpPasskeyVerificationCommitter
     public
 
     def call!(actor:, transaction:, session_record:, config:, reference:, credential_params:)
-      validate_binding!(actor, transaction, session_record)
+      with_current_binding!(actor, transaction, session_record)
       challenge = session_record.consume_bound_passkey_challenge!(
         transaction: transaction, reference: reference, rp_id: config.rp_id, origin: config.origin,
       )
@@ -32,15 +32,25 @@ class IdentityStepUpPasskeyVerificationCommitter
           credential.update!(sign_count: context.sign_count, uv_verified_at: context.verified_at)
         end
       end
-      transaction.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: context.user_verified,
-        verified_at: context.verified_at, verified_credential_ref: credential_reference(credential),
-      )
+      actor.class.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          unless actor.login_allowed? && credential_scope(actor).lock.exists?(id: credential.id)
+            raise IdentityStepUpCeremonyContract::Error, "actor or Passkey unavailable"
+          end
+
+          with_current_binding!(actor, transaction, session_record) do
+            transaction.record_verification!(
+              method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: context.user_verified,
+              verified_at: context.verified_at, verified_credential_ref: credential_reference(credential),
+            )
+          end
+        end
+      end
     end
 
     private
 
-    def validate_binding!(actor, transaction, session_record)
+    def with_current_binding!(actor, transaction, session_record)
       token =
         case actor
         when Client
@@ -49,12 +59,6 @@ class IdentityStepUpPasskeyVerificationCommitter
           end
 
           ClientToken.find(session_record.user_token_id)
-        when Visitor
-          unless transaction.is_a?(VisitorStepUpCeremonyTransaction) && session_record.is_a?(VisitorStepUpSession)
-            raise IdentityStepUpCeremonyContract::Error, "step-up surface mismatch"
-          end
-
-          VisitorToken.find(session_record.visitor_token_id)
         when Operator
           unless transaction.is_a?(OperatorStepUpCeremonyTransaction) && session_record.is_a?(OperatorStepUpSession)
             raise IdentityStepUpCeremonyContract::Error, "step-up surface mismatch"
@@ -64,16 +68,58 @@ class IdentityStepUpPasskeyVerificationCommitter
         else
           raise IdentityStepUpCeremonyContract::Error, "step-up actor type mismatch"
         end
-      unless transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
-          token_owned_by?(actor, token) && token.active_status?
+      token.class.connection_class_for_self.connected_to(role: :writing) do
+        device = token.device_session_record!
+        device.with_lock do
+          token.with_lock do
+            transaction.with_lock do
+              session_record.with_lock do
+                validate_current_binding!(actor, token, device, transaction, session_record)
+                if block_given?
+                  validate_pending_binding!(transaction, session_record)
+                  yield
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+    def validate_current_binding!(actor, token, device, transaction, record)
+      now = transaction.class.database_now
+      device_owner_matches =
+        case [actor, device]
+        in [Client, ClientDeviceSession] then device.user_id == actor.id
+        in [Operator, OperatorDeviceSession] then device.staff_id == actor.id
+        else false
+        end
+      record_token_matches =
+        case record
+        when ClientStepUpSession then record.user_token_id == token.id
+        when OperatorStepUpSession then record.staff_token_id == token.id
+        end
+      unless device_owner_matches && device.usable? && token.device_session_id == device.id &&
+          device.current_refresh_token_id == token.id && token_owned_by?(actor, token) && token.active_status?(now) &&
+          record_token_matches && record.step_up_ceremony_transaction_ref == transaction.transaction_id &&
+          transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id
         raise IdentityStepUpCeremonyContract::Error, "step-up actor or session mismatch"
       end
+    end
+
+    def validate_pending_binding!(transaction, record)
+      now = transaction.class.database_now
+      return if record.status == "PENDING" && record.discard_at > now &&
+        %w(step_up reauthentication).include?(transaction.purpose) &&
+        transaction.allowed_methods_array.include?("passkey") && transaction.status == "pending" &&
+        !transaction.expired?(now: now)
+
+      raise IdentityStepUpCeremonyContract::Error, "step-up ceremony unavailable"
     end
 
     def token_owned_by?(actor, token)
       case actor
       when Client then token.user_id == actor.id
-      when Visitor then token.visitor_id == actor.id
       when Operator then token.staff_id == actor.id && !token.standby_authentication_context?
       end
     end
@@ -81,14 +127,13 @@ class IdentityStepUpPasskeyVerificationCommitter
     def credential_scope(actor)
       case actor
       when Client then actor.client_passkeys.active.where("discard_at > clock_timestamp()")
-      when Visitor then actor.visitor_passkeys.active.where("discard_at > clock_timestamp()")
       when Operator then actor.staff_passkeys.active
       end
     end
 
     def credential_reference(credential)
       case credential
-      when ClientPasskey, VisitorPasskey then credential.public_id
+      when ClientPasskey then credential.public_id
       when OperatorPasskey then credential.external_id
       else
         raise IdentityStepUpCeremonyContract::Error, "unsupported credential reference"

@@ -6,7 +6,7 @@
 module SignInFlowTestFactory
   module_function
 
-  MODELS = { "app" => ClientSignInFlow, "com" => VisitorSignInFlow, "org" => OperatorSignInFlow }.freeze
+  MODELS = { "app" => ClientSignInFlow, "org" => OperatorSignInFlow }.freeze
 
   def create!(surface:, principal_id:)
     model = MODELS.fetch(surface.to_s)

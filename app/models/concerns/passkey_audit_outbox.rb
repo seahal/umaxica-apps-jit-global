@@ -44,7 +44,6 @@ module PasskeyAuditOutbox
     def surface_name
       case name
       when "ClientPasskeyAuditOutbox" then "app"
-      when "VisitorPasskeyAuditOutbox" then "com"
       when "OperatorPasskeyAuditOutbox" then "org"
       else raise ArgumentError, "unsupported Passkey audit outbox #{name}"
       end
@@ -57,7 +56,6 @@ module PasskeyAuditOutbox
     def source_for(passkey)
       case passkey
       when ClientPasskey then ClientPasskeyAuditOutbox
-      when VisitorPasskey then VisitorPasskeyAuditOutbox
       when OperatorPasskey then OperatorPasskeyAuditOutbox
       else raise ArgumentError, "unsupported Passkey audit subject #{passkey.class}"
       end

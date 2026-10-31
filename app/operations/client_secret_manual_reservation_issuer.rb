@@ -13,13 +13,19 @@ class ClientSecretManualReservationIssuer
     def call!(actor_context:, token:, operation_id:, expires_after:)
       validate_input!(actor_context, token, operation_id, expires_after)
 
-      # All capacity changes lock Client first. Ticket is read/locked only and
-      # remains locked until the Zenith reservation and source audit commit.
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            actor_context.subject.with_lock(requires_new: true) do
-              reserve!(actor_context, token, operation_id, expires_after)
+      # Keep the Client lock while checking the browser and reserving capacity.
+      AppZenithRecord.connected_to(role: :writing) do
+        actor_context.subject.with_lock(requires_new: true) do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientToken.transaction do
+              device = token.device_session_record!
+              device.with_lock do
+                unless device.usable? && device.user_id == actor_context.subject.id
+                  raise Denied, "Secret reservation device is unavailable"
+                end
+
+                reserve!(actor_context, token, operation_id, expires_after, device)
+              end
             end
           end
         end
@@ -44,7 +50,7 @@ class ClientSecretManualReservationIssuer
 
     end
 
-    def reserve!(context, token, operation_id, duration)
+    def reserve!(context, token, operation_id, duration, device)
       actor = context.subject
       unless actor.login_allowed? && ClientSecretCredentialPolicy.new(
         ClientSecretCredential,
@@ -53,7 +59,7 @@ class ClientSecretManualReservationIssuer
         raise Denied, "Secret reservation actor is unavailable"
       end
 
-      current = verify_session!(actor, token)
+      current = verify_session!(actor, token, device)
       if ClientSecretAuditOutbox.exists?(operation_ref: operation_id, event_name: "secret.issuance_purged")
         raise Denied, "Secret reservation operation has already been retired"
       end
@@ -90,9 +96,11 @@ class ClientSecretManualReservationIssuer
       issuance
     end
 
-    def verify_session!(actor, token)
+    def verify_session!(actor, token, device)
       current = ClientToken.lock.find_by(id: token.id, user_id: actor.id, public_id: token.public_id)
-      raise Denied, "Secret reservation session is unavailable" unless current
+      unless current && current.device_session_id == device.id && device.current_refresh_token_id == current.id
+        raise Denied, "Secret reservation session is unavailable"
+      end
 
       now = ClientToken.database_now
       requirement = StepUpRequirement.new(

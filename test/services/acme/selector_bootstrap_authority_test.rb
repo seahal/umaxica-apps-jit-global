@@ -116,35 +116,23 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     end
   end
 
-  test "com and org bootstrap do not create app avatars" do
-    visitor = create_visitor!
+  test "org bootstrap does not create app avatars" do
     operator = create_operator!
 
-    com_result = nil
     org_result = nil
 
     assert_no_difference -> { Avatar.count } do
-      com_result = BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
       org_result = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     end
 
-    assert_equal 1, VisitorAccount.where(visitor_id: visitor.id).count
     assert_equal 1, OperatorAccount.where(staff_id: operator.id).count
-    assert_equal "Indiv01", com_result.account.title
     assert_equal "Agent01", org_result.account.title
-    assert_equal "Org01", com_result.collective.title
     assert_equal "Org01", org_result.collective.title
-    assert_equal visitor.id, com_result.account.reload.ownership.visitor_id
-    assert_equal "active", com_result.account.lifecycle.state
-    assert_equal visitor.id, com_result.collective.reload.ownership.visitor_id
-    assert_equal "active", com_result.collective.lifecycle.state
     assert_equal operator.id, org_result.account.reload.ownership.operator_id
     assert_equal "active", org_result.account.lifecycle.state
     assert_equal operator.id, org_result.collective.reload.ownership.operator_id
     assert_equal "active", org_result.collective.lifecycle.state
-    assert_nil com_result.avatar
     assert_nil org_result.avatar
-    assert_equal 1, IndividualAssignment.count
     assert_equal 1, AgentAssignment.count
   end
 
@@ -184,11 +172,9 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
   def ensure_reference_rows!
     [
       ClientStatus, ClientVisibility, ClientMfaStatus,
-      VisitorStatus, VisitorVisibility, VisitorMfaStatus,
       OperatorStatus, OperatorVisibility, OperatorMfaStatus,
-      ClientIdentityState, VisitorIdentityState, OperatorIdentityState,
+      ClientIdentityState, OperatorIdentityState,
       PersonaMembershipKind, PersonaMembershipState,
-      IndividualMembershipKind, IndividualMembershipState,
       AgentMembershipKind, AgentMembershipState,
       HandleStatus,
     ].each { |klass| klass.ensure_defaults! if klass.respond_to?(:ensure_defaults!) }
@@ -197,13 +183,6 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
   def create_client!
     Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-  end
-
-  def create_visitor!
-    Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
   end
 
   def create_operator!

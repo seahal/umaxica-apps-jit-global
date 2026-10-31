@@ -1,0 +1,7 @@
+# Operator availability predicate
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; uncommitted worktree changes affected the result.
+- The two last-available checks previously counted other Operators whose status was `RESERVED`, even though `Operator#capability_eligible?` excludes that status. Both focused tests failed before the repair (2 runs, 3 assertions, 2 failures).
+- Both checks now use a shared query matching the current capability eligibility conditions for access state, withdrawal/deactivation, status and retention deadline. A lifecycle test also covers other Operators that have started withdrawal. No persisted shape was changed.
+- `PARALLEL_WORKERS=1 bin/rails test test/services/org_operator_lifecycle_execute_test.rb test/services/org/operator_lifecycle/execute_test.rb test/services/administrative_access_lock_test.rb test/concurrency/operator_availability_serialization_test.rb test/concurrency/enforcement_reconciliation_end_race_test.rb` passed: 36 runs, 189 assertions, no failures or errors. Scoped RuboCop passed on the three implementation files and two test files after test formatting.
+- The shared availability mutex currently covers the administrative-lock and lifecycle stop writers. This does not prove that every status, credential or other capability-affecting writer participates, or that an eligible Operator possesses credentials and grants usable in practice.

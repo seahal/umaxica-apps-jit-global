@@ -8,10 +8,9 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
     @staff = operators(:one)
-    @visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
   end
 
-  test "overwrites stale identifier digests across user staff and visitor records" do
+  test "overwrites stale identifier digests across user and staff records" do
     user_email = ClientEmail.create!(
       user: @user,
       raw_address: "hmac-rotation-user-#{SecureRandom.hex(4)}@example.com",
@@ -34,24 +33,12 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
       confirm_policy: true,
       confirm_using_mfa: true,
     )
-    visitor_email = VisitorEmail.create!(
-      visitor: @visitor,
-      raw_address: "hmac-rotation-visitor-#{SecureRandom.hex(4)}@example.com",
-      confirm_policy: true,
-    )
-    visitor_telephone = VisitorTelephone.create!(
-      visitor: @visitor,
-      raw_number: "+1 (555) #{rand(100..999)}-#{rand(1000..9999)}",
-      visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-    )
 
     records = [
       [user_email, :address, :address_digest, :bidx_for_email],
       [user_telephone, :number, :number_digest, :bidx_for_telephone],
       [staff_email, :address, :address_digest, :bidx_for_email],
       [staff_telephone, :number, :number_digest, :bidx_for_telephone],
-      [visitor_email, :address, :address_digest, :bidx_for_email],
-      [visitor_telephone, :number, :number_digest, :bidx_for_telephone],
     ]
 
     records.each do |record, _identifier_column, digest_column, _digest_method|
@@ -59,7 +46,6 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
     end
 
     app_connection = AppZenithRecord.lease_connection.raw_connection
-    com_connection = ComZenithRecord.lease_connection.raw_connection
     org_connection = OrgZenithRecord.lease_connection.raw_connection
     app_email = IdentifierHmacEmergencyRotation.new(
       realm: "app", channel: "email", maintenance_connection: app_connection,
@@ -73,20 +59,12 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
     org_telephone = IdentifierHmacEmergencyRotation.new(
       realm: "org", channel: "telephone", maintenance_connection: org_connection,
     ).call
-    com_email = IdentifierHmacEmergencyRotation.new(
-      realm: "com", channel: "email", maintenance_connection: com_connection,
-    ).call
-    com_telephone = IdentifierHmacEmergencyRotation.new(
-      realm: "com", channel: "telephone", maintenance_connection: com_connection,
-    ).call
 
     assert_operator app_email.user_emails_updated, :>=, 1
     assert_operator app_telephone.user_telephones_updated, :>=, 1
     assert_operator org_email.staff_emails_updated, :>=, 1
     assert_operator org_telephone.staff_telephones_updated, :>=, 1
-    assert_operator com_email.visitor_emails_updated, :>=, 1
-    assert_operator com_telephone.visitor_telephones_updated, :>=, 1
-    [app_email, app_telephone, org_email, org_telephone, com_email, com_telephone].each do |result|
+    [app_email, app_telephone, org_email, org_telephone].each do |result|
       assert_equal 0, result.records_failed
     end
 
@@ -94,9 +72,9 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
       record.reload
       expected =
         case record
-        when ClientEmail, VisitorEmail, OperatorEmail
+        when ClientEmail, OperatorEmail
           IdentifierBlindIndex.bidx_for_email(record.address, realm: record.class.identifier_hmac_realm)
-        when ClientTelephone, VisitorTelephone, OperatorTelephone
+        when ClientTelephone, OperatorTelephone
           IdentifierBlindIndex.bidx_for_telephone(record.number, realm: record.class.identifier_hmac_realm)
         end
 
@@ -132,7 +110,6 @@ class IdentifierHmacEmergencyRotationTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -170,13 +147,6 @@ class IdentifierHmacEmergencyRotationTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -198,23 +168,6 @@ class IdentifierHmacEmergencyRotationTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -229,17 +182,9 @@ class IdentifierHmacEmergencyRotationTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -424,31 +369,6 @@ class IdentifierHmacEmergencyRotationTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

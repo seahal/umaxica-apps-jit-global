@@ -24,7 +24,6 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   test "new actors default status to unconfigured" do
     assert_equal ClientMfaStatus::UNCONFIGURED, Client.new(security_mode_id: SecurityModeConfigurable::NORMAL).mfa_status_id
     assert_equal OperatorMfaStatus::UNCONFIGURED, Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED).mfa_status_id
-    assert_equal VisitorMfaStatus::UNCONFIGURED, Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL).mfa_status_id
   end
 
   test "user refreshes to unconfigured without app step up methods" do
@@ -124,19 +123,6 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     )
 
     assert_equal OperatorMfaStatus::ACTIVE, operator.reload.mfa_status_id
-  end
-
-  test "visitor refreshes to active with verified email" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-
-    VisitorEmail.create!(
-      visitor: visitor,
-      address: "mfs-visitor-#{SecureRandom.hex(4)}@example.com",
-      binding_finalized_at: VisitorEmail.database_now,
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
-
-    assert_equal VisitorMfaStatus::ACTIVE, visitor.reload.mfa_status_id
   end
 
   private

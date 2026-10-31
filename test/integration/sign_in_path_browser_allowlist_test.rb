@@ -13,8 +13,8 @@ class SignInPathBrowserAllowlistTest < ActionDispatch::IntegrationTest
                      "(KHTML, like Gecko) Version/16.0 Safari/605.1.15"
   BOOT_HOSTS = Rails.configuration.x.boot_config.fetch(:hosts)
 
-  test "Auth sign-in pages answer an outdated browser with 406 on every surface" do
-    [BOOT_HOSTS.auth_service.host, BOOT_HOSTS.auth_corporate.host, BOOT_HOSTS.auth_staff.host].each do |host|
+  test "Auth sign-in pages answer an outdated browser with 406 on every credential surface" do
+    [BOOT_HOSTS.auth_service.host, BOOT_HOSTS.auth_staff.host].each do |host|
       host! host
       https!
 
@@ -25,7 +25,7 @@ class SignInPathBrowserAllowlistTest < ActionDispatch::IntegrationTest
   end
 
   test "the token endpoint is not gated on the browser version" do
-    host! BOOT_HOSTS.base_service.host
+    host! BOOT_HOSTS.visa_service.host
     https!
 
     post "/oauth/token", params: { grant_type: "authorization_code" }, headers: { "User-Agent" => OUTDATED_BROWSER }
@@ -41,4 +41,5 @@ class SignInPathBrowserAllowlistTest < ActionDispatch::IntegrationTest
 
     assert_not_includes [404, 406], response.status
   end
+
 end

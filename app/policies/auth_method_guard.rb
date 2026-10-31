@@ -10,14 +10,6 @@ class AuthMethodGuard
     ClientTelephoneStatus::VERIFIED,
     ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP,
   ].freeze
-  VISITOR_VERIFIED_EMAIL_STATUSES = [
-    VisitorEmailStatus::VERIFIED,
-    VisitorEmailStatus::VERIFIED_WITH_SIGN_UP,
-  ].freeze
-  VISITOR_VERIFIED_TELEPHONE_STATUSES = [
-    VisitorTelephoneStatus::VERIFIED,
-    VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP,
-  ].freeze
 
   # Consolidation ADR 2.2: an ADVANCED actor keeps at least two active Passkeys; a deletion from two
   # to one is refused whatever authentication preceded it. Callers evaluate this under the owner lock.
@@ -28,7 +20,7 @@ class AuthMethodGuard
   end
 
   def self.active_passkeys_remaining(actor, passkey)
-    surface = Webauthn::Surface.for({ Client => :app, Visitor => :com, Operator => :org }.fetch(actor.class))
+    surface = Webauthn::Surface.for({ Client => :app, Operator => :org }.fetch(actor.class))
     surface.passkey_class.where(
       surface.actor_foreign_key => actor.id,
       :status_id => surface.passkey_status_class::ACTIVE,

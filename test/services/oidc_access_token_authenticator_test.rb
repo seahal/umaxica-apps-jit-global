@@ -9,6 +9,95 @@ require "test_helper"
 class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  %w(client operator).each do |resource_type|
+    test "#{resource_type} Access JWT respects the administrative cutoff around its issued second" do
+      client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
+        .find { _1 && OidcIssuer.resource_type_for_client(_1) == resource_type }
+      actor, root, grant =
+        if resource_type == "client"
+          user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          token = ClientToken.create!(authentication_epoch: 0, user: user)
+          session = OpAppGrant.create!(
+            authentication_epoch: 0, client_token: token, oidc_client_id: client.client_id,
+            oidc_scope: "openid", oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+          )
+          [user, token, session]
+        else
+          operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
+          session = OpOrgGrant.create!(
+            authentication_epoch: 0, operator_token: token, oidc_client_id: client.client_id,
+            oidc_scope: "openid", oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+          )
+          [operator, token, session]
+        end
+      host = OidcIssuer.host_for_resource_type(resource_type)
+      access_token = AuthenticationTokenService.encode(
+        actor, host:, resource_type:, session_public_id: root.public_id, base_session_public_id: root.public_id,
+               oidc_sid: grant.public_id, oidc_jti: grant.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid),
+               issuer: OidcIssuer.for_resource_type(resource_type), audiences: [client.aud],
+               subject: OidcSubject.for(actor, resource_type:),
+               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+               client_id: client.client_id,
+      )
+      issued_at = Time.zone.at(JWT.decode(access_token, nil, false).first.fetch("iat"))
+      microsecond = Rational(1, 1_000_000)
+
+      { before: -microsecond, equal: 0, after: microsecond }.each do |label, offset|
+        actor.update!(token_valid_after_at: issued_at + offset)
+        result = OidcAccessTokenAuthenticator.call(access_token:, resource_type:, host:)
+
+        if label == :after
+          assert_not result.success?, label
+          assert_equal "invalid_token", result.error
+        else
+          assert_predicate result, :success?, label
+        end
+      end
+    end
+  end
+
+  test "administrative unlock keeps old Access JWTs revoked and allows a new root" do
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    host = OidcIssuer.host_for_resource_type("client")
+    issue_token =
+      lambda do |root|
+        grant = OpAppGrant.create!(
+          authentication_epoch: root.authentication_epoch, client_token: root, oidc_client_id: oidc_client.client_id,
+          oidc_scope: "openid", oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+        )
+        AuthenticationTokenService.encode(
+          user, host:, resource_type: "client", session_public_id: root.public_id,
+                base_session_public_id: root.public_id,
+                oidc_sid: grant.public_id, oidc_jti: grant.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid),
+                issuer: OidcIssuer.for_resource_type("client"), audiences: [oidc_client.aud],
+                subject: OidcSubject.for(user, resource_type: "client"),
+                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client), client_id: oidc_client.client_id,
+        )
+      end
+    authenticate = ->(token) { OidcAccessTokenAuthenticator.call(access_token: token, resource_type: "client", host:) }
+    old_root = ClientToken.create!(authentication_epoch: user.authentication_epoch, user: user)
+    old_token = issue_token.call(old_root)
+
+    assert_predicate authenticate.call(old_token), :success?
+    AdministrativeAccessLock.lock!(account: user, operator:, reason_code: "security_incident")
+
+    assert_equal "invalid_token", authenticate.call(old_token).error
+    AdministrativeAccessLock.unlock!(account: user, operator:, reason_code: "operator_error_recovery")
+
+    assert_equal "invalid_token", authenticate.call(old_token).error
+    assert_predicate old_root.reload, :revoked?
+
+    travel_to(user.reload.token_valid_after_at + 2.seconds) do
+      new_root = ClientToken.create!(authentication_epoch: user.authentication_epoch, user: user)
+      fresh_token = issue_token.call(new_root)
+
+      assert_predicate authenticate.call(fresh_token), :success?
+    end
+  end
+
   test "a well-formed client Access JWT for an active Base Browser Session authenticates" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
@@ -198,9 +287,8 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     assert_equal %i(writing writing), roles
   end
 
-  test "operator and visitor Access JWTs resolve against their own Base Session and actor" do
-    { "operator" => [Operator, OperatorToken, OpOrgGrant, :staff, :operator_token],
-      "visitor" => [Visitor, VisitorToken, OpComGrant, :visitor, :visitor_token], }.each do |type, spec|
+  test "operator Access JWTs resolve against their own Base Session and actor" do
+    { "operator" => [Operator, OperatorToken, OpOrgGrant, :staff, :operator_token] }.each do |type, spec|
       actor_class, token_class, session_class, actor_key, root_key = spec
       client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
         .find { _1 && OidcIssuer.resource_type_for_client(_1) == type }

@@ -42,9 +42,11 @@ module Base
             actor: current_client, token: current_session_token, email: @user_email,
             preferences: email_preference_params.to_h,
           )
-          redirect_to(edit_base_app_identity_email_path(@user_email.public_id, ri: params[:ri]), status: :see_other)
+          redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
         rescue IdentityEmailPreferenceCommitter::Denied
           render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
+        rescue IdentityEmailPreferenceCommitter::DependencyFailure
+          head :service_unavailable
         rescue ActiveRecord::RecordInvalid
           render(
             inertia: "base/app/identity/emails/edit",
@@ -62,14 +64,25 @@ module Base
             return redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
           end
 
-          IdentityCredentialRemovalCommitter.call!(
+          removed = IdentityCredentialRemovalCommitter.call!(
             actor: current_client, credential: @user_email, current_session: current_session, request: request,
             actor_context: current_actor,
           )
+          return render plain: t("errors.messages.invalid_request"), status: :unprocessable_content unless removed
+
           redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
         end
 
         private
+
+        def step_up_requirement(scope:, **options)
+          if scope == "settings_email" && %w(edit update destroy).include?(action_name)
+            email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
+            return super(scope: scope, **options.merge(resource_ref: email.public_id))
+          end
+
+          super
+        end
 
         def authorize_emails! = authorize!(ClientEmail, to: :index?)
 

@@ -141,13 +141,13 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
   end
 
   test "surface actor class must match cycle class" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      public_id: "v#{SecureRandom.hex(10)}", status_id: VisitorStatus::ACTIVE,
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE,
     )
     cycle = create_cycle("MFA_PENDING", principal_id: @client.id)
 
-    assert_not_predicate ClientSignInFlowPolicy.new(cycle, user: visitor), :show_mfa?
+    assert_not_predicate ClientSignInFlowPolicy.new(cycle, user: operator), :show_mfa?
   end
 
   private

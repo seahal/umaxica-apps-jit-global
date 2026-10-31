@@ -6,17 +6,9 @@ module SignUpSequenceControllerSupport
 
   include SignUpFlowEntry
 
-  AGE_RESTRICTED_I18N_KEYS = {
-    "app" => "sign.app.registration.checkpoint.age_restricted",
-    "com" => "sign.com.registration.checkpoint.age_restricted",
-  }.freeze
-  private_constant :AGE_RESTRICTED_I18N_KEYS
-
   private
 
   def load_sign_up_ticket
-    return render_sign_up_age_restricted if sign_up_session_state.age_restricted?
-
     @sign_up_ticket = current_sign_up_flow_ticket
     return if @sign_up_ticket
 
@@ -143,25 +135,18 @@ module SignUpSequenceControllerSupport
       return
     end
 
-    # D-178: the age is decided on the validated, unsaved value, so a birthdate below the minimum age
-    # is never written.
+    # D-178: the date is decided on the validated, unsaved value, so an ineligible birthdate is
+    # never written. The only ineligible birthdate left by
+    # ADR `sign-up-one-day-minimum-age-and-feature-level-age-restrictions` is one of today or
+    # later, which `HasBirthdate#birthdate_not_future` already refuses.
     actor.birthdate = sign_up_birthdate_param
-    unless actor.valid?
-      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
-      return
-    end
-
-    unless SignUpEligibilityPolicy.minimum_age_reached?(
+    unless actor.valid? && SignUpEligibilityPolicy.eligible?(
       actor.birthdate,
       surface: sign_up_surface,
       today: Time.zone.today,
     )
       actor.restore_attributes([:birthdate])
-      sign_up_session_state.age_restricted = true
-      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :halt, actor_context: Actor.authn)
-      return render_sign_up_result(result) unless result.success? || result.status == :failed
-
-      render_sign_up_age_restricted
+      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
       return
     end
 
@@ -188,45 +173,22 @@ module SignUpSequenceControllerSupport
     render_sign_up_checkpoint
   end
 
-  def render_sign_up_age_restricted
-    response.headers["Cache-Control"] = "no-store, private"
-    i18n_key =
-      AGE_RESTRICTED_I18N_KEYS.fetch(sign_up_surface.to_s) do
-        raise ArgumentError, "Unknown sign_up_surface for age-restricted lookup: #{sign_up_surface.inspect}"
-      end
-    @sign_up_age_restricted_message = I18n.t(i18n_key)
-    @sign_up_age_restricted_restart_path = sign_up_restart_path
-    render "auth/#{sign_up_surface}/sign/up/checkpoints/age_restricted", status: :ok
-  end
-
   def finalize_sign_up_from_checkpoint!(json: false)
     context = sign_up_finalization_context
     return render_sign_up_finalization_forbidden(json: json) unless context
     return render_sign_up_finalization_forbidden(json: json) unless
       allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
 
-    # This is the shared sign-up completion boundary for all surfaces.
+    # The shared sign-up completion boundary: its credential work has already happened inside
+    # `finalize_sign_up_side_effect!`, and app is the only surface routed through this path.
     #
-    # Surface matrix:
-    # - app: email, google, apple, telephone
-    # - com: email, telephone
-    # - org: not routed through this sign-up finalize path
-    #
-    # The surface-specific credential work happens before this method
-    # returns, inside `finalize_sign_up_side_effect!`. After that, the
-    # durable identity graph is provisioned, then the actor is handed off
-    # to the sign-in boundary.
+    # The cycle lock serializes finalize/handoff/complete. Without it, two concurrent finalizes
+    # for the same cycle each see CHECKPOINT_PENDING and both mutate the actor: one fails on
+    # rp_account uniqueness and leaves a half-built principal, and only afterwards the state
+    # machine rejects the duplicate transition. Holding the lock from the policy re-check through
+    # `:complete` keeps the actor mutation and the cycle transition atomic with peers.
     finalized = nil
     sign_in_result = nil
-
-    # Serialize the entire finalize/handoff/complete sequence under the
-    # cycle's row-level lock. Without this, two concurrent finalize
-    # requests for the same cycle each see CHECKPOINT_PENDING, both
-    # mutate the actor (one fails on rp_account uniqueness, leaving a
-    # half-built state), and only afterwards the StateMachine catches
-    # the duplicate transition. Holding the lock from the policy
-    # re-check through `:complete` keeps the actor mutation and the
-    # cycle transition atomic with respect to peers.
     outcome =
       sign_up_ticket_record_class.connected_to(role: :writing) do
         @sign_up_ticket.with_cycle_lock do
@@ -236,6 +198,8 @@ module SignUpSequenceControllerSupport
           return render_sign_up_finalization_forbidden(json: json) unless context &&
             allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
 
+          # D-105 / D-131: the deadline is decided on the Binding's OP clock under the Flow lock;
+          # at or after it nothing is registered. A checkpoint already left is an invalid transition.
           unless @sign_up_ticket.sign_up_checkpoint_pending?
             finalized = SignUpResult.build(
               status: :invalid_transition,
@@ -245,8 +209,6 @@ module SignUpSequenceControllerSupport
             next
           end
 
-          # D-105 / D-131: the deadline is decided on the Binding's OP clock under the Flow lock;
-          # at or after it nothing is registered.
           unless sign_up_flow_within_curfew?
             finalized = SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["curfew passed"])
             next
@@ -275,6 +237,15 @@ module SignUpSequenceControllerSupport
         end
       end
 
+    handle_sign_up_checkpoint_finalization_outcome!(
+      outcome: outcome, finalized: finalized, sign_in_result: sign_in_result, json: json,
+    )
+  end
+
+  # The post-transaction half of the checkpoint cycle lock scope:
+  # expiry fallback, completion bookkeeping and sign-in handoff all stay next to each other here,
+  # so a caller of `finalize_sign_up_from_checkpoint!` never re-orders them.
+  def handle_sign_up_checkpoint_finalization_outcome!(outcome:, finalized:, sign_in_result:, json:)
     if outcome.is_a?(FlowTransitionResult)
       finalized = SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["ticket is expired"])
     end
@@ -308,8 +279,7 @@ module SignUpSequenceControllerSupport
     explicit_birthdate =
       params[:birthdate].presence ||
       params.dig(:sign_up, :birthdate).presence ||
-      params.dig(:client, :birthdate).presence ||
-      params.dig(:visitor, :birthdate).presence
+      params.dig(:client, :birthdate).presence
     return explicit_birthdate if explicit_birthdate.present?
 
     sign_up_split_birthdate_param
@@ -411,8 +381,6 @@ module SignUpSequenceControllerSupport
     case telephone
     when ClientTelephone
       telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-    when VisitorTelephone
-      telephone.visitor_telephone_status_id == VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
     else
       false
     end
@@ -422,8 +390,6 @@ module SignUpSequenceControllerSupport
     case sign_up_surface
     when :app
       :user_telephone_registration
-    when :com
-      :visitor_telephone_registration
     end
   end
 
@@ -439,20 +405,13 @@ module SignUpSequenceControllerSupport
   end
 
   def telephone_passkey_required_i18n_key
-    case sign_up_surface
-    when :com
-      "sign.com.registration.telephone.update.passkey_required"
-    else
-      "sign.app.registration.telephone.update.passkey_required"
-    end
+    "sign.app.registration.telephone.update.passkey_required"
   end
 
   def sign_up_telephone_edit_path
     case sign_up_surface
     when :app
       auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri])
-    when :com
-      auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri])
     else
       sign_up_default_sign_in_path
     end
@@ -473,14 +432,11 @@ module SignUpSequenceControllerSupport
     actor = sign_up_pending_actor
     return :failed unless actor
 
-    # The ticket type decides which surface finalizer to run.
-    # App and com share the same finalize boundary, but they differ in
-    # which contact types are accepted and what credential work is needed.
+    # The ticket type decides which surface finalizer to run; the contact types it accepts and
+    # the credential work it needs differ per surface.
     case @sign_up_ticket
     when ClientSignUpFlow
       finalize_app_sign_up_actor!(actor)
-    when VisitorSignUpFlow
-      finalize_com_sign_up_actor!(actor)
     else
       :failed
     end
@@ -525,51 +481,11 @@ module SignUpSequenceControllerSupport
     :failed
   end
 
-  def finalize_com_sign_up_actor!(actor)
-    case @sign_up_ticket.pending_contact_type
-    when "telephone"
-      # Com sign-up has its own telephone finalizer because the checkpoint
-      # requirements are different from app, but the graph handoff is shared.
-      telephone = VisitorTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
-      return :failed unless telephone
-
-      SignComUpTelephoneRegistrationFinalizer.call(
-        telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
-        flow: @sign_up_ticket, session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
-      )
-    when "email"
-      # Email sign-up has no additional com-side credential finalizer here.
-      actor.with_lock do
-        raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
-
-        email = VisitorEmail.lock.find(@sign_up_ticket.pending_contact_id)
-        raise ActiveRecord::RecordNotFound unless email.visitor_id == actor.id
-
-        finalize_sign_up_email_binding!(actor, email)
-        # D-128 / D-131: the registered status is the decisive commit.
-        actor.promote_finished_registration!
-      end
-    else
-      return :failed
-    end
-
-    @sign_up_recovery_passcode_reveal_url =
-      issue_sign_up_recovery_passcodes!(
-        surface: :com,
-        actor: actor,
-      )
-
-    :accepted
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved
-    :failed
-  end
-
   def finalize_sign_up_email_binding!(actor, email)
     retained = email.binding_finalized_at.present?
     nonce =
       case email
       when ClientEmail then session.dig(:app_sign_up_flow_locator, "nonce")
-      when VisitorEmail then session.dig(:com_sign_up_flow_locator, "nonce")
       else raise ArgumentError, "unsupported signup email owner"
       end
     email.finalize_sign_up_binding!(flow: @sign_up_ticket, session_nonce: nonce)
@@ -577,7 +493,6 @@ module SignUpSequenceControllerSupport
       model, realm, role =
         case email
         when ClientEmail then [ClientContactAuditOutbox, :app, :client]
-        when VisitorEmail then [VisitorContactAuditOutbox, :com, :visitor]
         else raise ArgumentError, "unsupported signup email owner"
         end
       context = current_actor
@@ -691,8 +606,6 @@ module SignUpSequenceControllerSupport
     case @sign_up_ticket
     when ClientSignUpFlow
       OpBaseAppRecord
-    when VisitorSignUpFlow
-      OpBaseComRecord
     else
       @sign_up_ticket.class
     end
@@ -702,8 +615,6 @@ module SignUpSequenceControllerSupport
     case sign_up_surface
     when :app
       auth_app_sign_in_path(ri: params[:ri])
-    when :com
-      auth_com_sign_in_path(ri: params[:ri])
     else
       "/"
     end
@@ -713,8 +624,6 @@ module SignUpSequenceControllerSupport
     case sign_up_surface
     when :app
       auth_app_sign_up_path(ri: params[:ri])
-    when :com
-      auth_com_sign_up_path(ri: params[:ri])
     else
       "/"
     end
@@ -724,8 +633,6 @@ module SignUpSequenceControllerSupport
     case @sign_up_ticket
     when ClientSignUpFlow
       Client
-    when VisitorSignUpFlow
-      Visitor
     end
   end
 
@@ -733,14 +640,11 @@ module SignUpSequenceControllerSupport
     case @sign_up_ticket
     when ClientSignUpFlow
       ClientTelephone
-    when VisitorSignUpFlow
-      VisitorTelephone
     end
   end
 
   def sign_up_handoff_pt
     return @sign_up_handoff_pt if defined?(@sign_up_handoff_pt)
-    return @sign_up_recovery_passcode_reveal_url if @sign_up_recovery_passcode_reveal_url.present?
 
     ticket_return_to = @sign_up_ticket&.return_to.presence
     current_return_to =
@@ -749,48 +653,5 @@ module SignUpSequenceControllerSupport
       end
 
     @sign_up_handoff_pt = path_from_signed_pt(signed_pt_param) || ticket_return_to || current_return_to
-  end
-
-  def issue_sign_up_recovery_passcodes!(surface:, actor:)
-    config = sign_up_recovery_passcode_config(surface)
-    existing = IdentityOneTimeReveal.resume_for_operation!(
-      actor: actor, session_nonce: actor.public_id, purpose: config.fetch(:reveal_purpose),
-      operation_ref: @sign_up_ticket.public_id,
-    )
-    return config.fetch(:reveal_url).call(existing.token) if existing
-
-    top_up = RecoveryPasscodeTopUp.call(
-      actor: actor,
-      credential_class: config.fetch(:credential_class),
-      target_count: RecoveryPasscodeTopUp::TARGET_ACTIVE_RECOVERY_PASSCODES,
-    )
-    return if top_up.raw_values.empty?
-
-    reveal = IdentityOneTimeReveal.issue!(
-      actor: actor,
-      session_nonce: actor.public_id,
-      value: top_up.raw_values,
-      purpose: config.fetch(:reveal_purpose),
-      metadata: { surface: surface.to_s,
-                  issued_count: top_up.issued_count,
-                  delivery_operation_ref: @sign_up_ticket.public_id, },
-    )
-
-    config.fetch(:reveal_url).call(reveal.token)
-  end
-
-  def sign_up_recovery_passcode_config(surface)
-    case surface.to_sym
-    when :com
-      {
-        credential_class: VisitorSecretCredential,
-        reveal_purpose: "visitor.recovery_secret_credential",
-        reveal_url: ->(token) {
-          base_com_identity_recovery_secret_path(ri: params[:ri], token: token)
-        },
-      }
-    else
-      raise ArgumentError, "unsupported sign up surface for recovery passcodes: #{surface.inspect}"
-    end
   end
 end

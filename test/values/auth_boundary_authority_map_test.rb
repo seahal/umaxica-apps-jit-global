@@ -7,11 +7,10 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "first-party RP client ids are unique and named" do
     ids = AuthBoundaryAuthorityMap.first_party_rp_client_ids
 
-    assert_equal 12, ids.size
+    assert_equal 9, ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_includes ids, "core-app-jp"
     assert_includes ids, "edit-org-ww"
-    assert_includes ids, "warp-com-jp"
     assert_includes ids, "palm-app-jp"
     assert_includes ids, "tech-org-ww"
   end
@@ -25,8 +24,8 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   end
 
   test "approved map contains regional clients plus global Edit, Palm, and Tech clients" do
-    assert_equal 15, AuthBoundaryAuthorityMap.approved_rp_client_ids.size
-    assert_equal 12, AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.size
+    assert_equal 11, AuthBoundaryAuthorityMap.approved_rp_client_ids.size
+    assert_equal 8, AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.size
     assert_equal %w(edit-org-ww palm-app-jp tech-org-ww), AuthBoundaryAuthorityMap.approved_rp_client_ids.last(3)
     assert_equal AuthBoundaryAuthorityMap.approved_rp_client_ids.sort,
                  AuthBoundaryAuthorityMap.approved_rp_faces.keys.sort
@@ -46,8 +45,9 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "approved regional client metadata never crosses surface or region" do
     metadata = AuthBoundaryAuthorityMap.approved_rp_faces
 
-    assert_equal %w(client visitor operator),
-                 %w(app com org).map { |face| metadata.fetch("core-#{face}-jp").fetch(:actor) }
+    assert_equal %w(client operator),
+                 %w(app org).map { |face| metadata.fetch("core-#{face}-jp").fetch(:actor) }
+    assert_not metadata.key?("core-com-jp")
     assert_equal "jp", metadata.fetch("core-app-jp").fetch(:region)
     assert_equal "us", metadata.fetch("core-app-us").fetch(:region)
     assert_equal "core", metadata.fetch("core-app-jp").fetch(:surface)
@@ -62,7 +62,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
 
       assert_equal expected_surface, meta.fetch(:surface)
       assert_equal expected_face, meta.fetch(:face)
-      assert_includes %w(client visitor operator), meta.fetch(:actor)
+      assert_includes %w(client operator), meta.fetch(:actor)
       assert_equal "/oidc/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
       assert_equal "/sign/out/completion", AuthBoundaryAuthorityMap.sign_out_path_for(client_id)
     end
@@ -81,7 +81,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "Base is the authority surface and Auth is the ceremony surface" do
     assert_equal "base", AuthBoundaryAuthorityMap.authority_surface
     assert_equal "auth", AuthBoundaryAuthorityMap.ceremony_surface
-    assert_equal %w(app com org), AuthBoundaryAuthorityMap::BASE_AUTHORITY_FACES
-    assert_equal %w(app com org), AuthBoundaryAuthorityMap::AUTH_CEREMONY_FACES
+    assert_equal %w(app org), AuthBoundaryAuthorityMap::BASE_AUTHORITY_FACES
+    assert_equal %w(app org), AuthBoundaryAuthorityMap::AUTH_CEREMONY_FACES
   end
 end

@@ -11,7 +11,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   # Resolution writers commit chronicle rows, which later owner-scoped history tests would read.
   CHRONICLE_CLASSES = [ClientChronicle, OperatorChronicle].freeze
-  AUTHORITY_STOP_CLASSES = [OpAppAuthorityStop, OpComAuthorityStop, OpOrgAuthorityStop].freeze
+  AUTHORITY_STOP_CLASSES = [OpAppAuthorityStop, OpOrgAuthorityStop].freeze
 
   setup do
     @chronicle_watermarks = CHRONICLE_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
@@ -134,40 +134,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     assert_predicate resolution, :open?
   end
 
-  test "visitor and operator resolutions use their own realm state and token ownership" do
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-    visitor_flow_record =
-      begin
-        fv5028 = visitor
-        fv5027 = VisitorSignInFlow.database_now
-        VisitorSignInFlow.create!(
-          principal_id: fv5028.id,
-          state_id: VisitorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
-          nonce_digest: VisitorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-          issued_at: fv5027,
-          expires_at: fv5027 + 5.minutes,
-        )
-      end
-    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, skip_session_limit_check: true)
-    visitor_binding = SecureRandom.urlsafe_base64(32)
-    visitor_issuance = VisitorSessionLimitResolutionTransaction.issue!(
-      sign_in_flow: visitor_flow_record,
-      actor: visitor,
-      browser_binding_digest: VisitorSessionLimitResolutionTransaction.digest_challenge(visitor_binding),
-    )
-    visitor_resolution = visitor_issuance.transaction
-    visitor_resolution.select_session!(
-      actor: visitor,
-      challenge: visitor_issuance.challenge,
-      session_ref: visitor_token.public_id,
-      browser_binding_digest: VisitorSessionLimitResolutionTransaction.digest_challenge(visitor_binding),
-    )
-    visitor_resolution.cancel!(
-      actor: visitor,
-      challenge: visitor_issuance.challenge,
-      browser_binding_digest: VisitorSessionLimitResolutionTransaction.digest_challenge(visitor_binding),
-    )
-
+  test "operator resolution uses its realm state and token ownership" do
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     operator_flow_record =
       begin
@@ -191,11 +158,8 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     operator_resolution = operator_issuance.transaction
     operator_resolution.expire!
 
-    assert_equal VisitorSessionLimitResolutionTransaction::CANCELLED, visitor_resolution.reload.state_id
     assert_equal OperatorSessionLimitResolutionTransaction::EXPIRED, operator_resolution.reload.state_id
-    assert_nil visitor_resolution.waiting_slot
     assert_nil operator_resolution.waiting_slot
-    assert_predicate visitor_token.reload, :currently_usable?
     assert_predicate operator_token.reload, :currently_usable?
   end
 
@@ -378,14 +342,15 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       )
     end
 
-    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     assert_raises(ArgumentError) do
-      VisitorSessionLimitResolutionTransaction.issue!(
+      OperatorSessionLimitResolutionTransaction.issue!(
         sign_in_flow: flow,
-        actor: visitor,
+        actor: operator,
         browser_binding_digest: "b" * 64,
       )
     end
+
   end
 
   test "resolution expiry uses the parent deadline and rejects at -1, exact, and +1" do
@@ -640,8 +605,6 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   [
     ["app", Base::App::AuthorityController, "PUBLIC_BASE_SERVICE_URL", ClientToken, :user_id,
      ClientToken::MAX_SESSIONS_PER_USER, ClientSessionLimitResolutionTransaction,],
-    ["com", Base::Com::AuthorityController, "PUBLIC_BASE_CORPORATE_URL", VisitorToken, :visitor_id,
-     VisitorToken::MAX_SESSIONS_PER_VISITOR, VisitorSessionLimitResolutionTransaction,],
     ["org", Base::Org::AuthorityController, "PUBLIC_BASE_STAFF_URL", OperatorToken, :staff_id,
      OperatorToken::MAX_SESSIONS_PER_STAFF, OperatorSessionLimitResolutionTransaction,],
   ].each do |surface, controller_class, host_env, token_class, owner_key, limit, resolution_class|
@@ -653,11 +616,6 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
         when "app"
           [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
            ClientSignInFlow,]
-        when "com"
-          [Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
-          ),
-           VisitorSignInFlow,]
         when "org"
           [Operator.create!(
             security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
@@ -736,8 +694,6 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   [
     ["app", Base::App::AuthorityController, "PUBLIC_BASE_SERVICE_URL", ClientToken, :user_id,
      ClientToken::MAX_SESSIONS_PER_USER, ClientSessionLimitResolutionTransaction,],
-    ["com", Base::Com::AuthorityController, "PUBLIC_BASE_CORPORATE_URL", VisitorToken, :visitor_id,
-     VisitorToken::MAX_SESSIONS_PER_VISITOR, VisitorSessionLimitResolutionTransaction,],
     ["org", Base::Org::AuthorityController, "PUBLIC_BASE_STAFF_URL", OperatorToken, :staff_id,
      OperatorToken::MAX_SESSIONS_PER_STAFF, OperatorSessionLimitResolutionTransaction,],
   ].each do |surface, controller_class, host_env, token_class, owner_key, limit, resolution_class|
@@ -758,24 +714,6 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
                 nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
                 issued_at: fv5004,
                 expires_at: fv5004 + 5.minutes,
-              )
-            end
-          },]
-        when "com"
-          visitor = Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL,
-            status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
-          )
-          [visitor, Array.new(2) {
-            begin
-              fv5003 = visitor
-              fv5002 = VisitorSignInFlow.database_now
-              VisitorSignInFlow.create!(
-                principal_id: fv5003.id,
-                state_id: VisitorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
-                nonce_digest: VisitorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-                issued_at: fv5002,
-                expires_at: fv5002 + 5.minutes,
               )
             end
           },]
@@ -855,7 +793,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   # Revoking a selected session commits an OP authority stop that references the token.
   def delete_actor_tokens!(token_class, owner_key, actor)
-    realm = { ClientToken => "app", VisitorToken => "com", OperatorToken => "org" }.fetch(token_class)
+    realm = { ClientToken => "app", OperatorToken => "org" }.fetch(token_class)
     delete_authority_stops_for!(realm:, root_ids: token_class.where(owner_key => actor.id).pluck(:id))
     token_class.where(owner_key => actor.id).delete_all
   end

@@ -16,10 +16,11 @@ module Email::Org
       @public_id = params[:public_id]
       @verification_url = verification_url
 
-      mail(
+      message = mail(
         to: params[:email_address],
         subject: I18n.t("mail.email.org.otp_mailer.create.subject"),
       )
+      OtpSmtpDelivery.wrap!(message)
     end
 
     private

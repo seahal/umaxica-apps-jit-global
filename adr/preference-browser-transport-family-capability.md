@@ -1,9 +1,9 @@
 # Preference browser transport: family capability and host-local endpoints
 
-- Status: accepted
-- Date: decision approved 2026-10-01; implemented 2026-10-02
-- Approval source: the user's preference transport cleanup instruction (2026-10-01), including the
-  approved implementation plan.
+Superseded on 2026-10-31 by
+[`preference-realm-jwt-and-host-bound-browser-binding.md`](preference-realm-jwt-and-host-bound-browser-binding.md).
+Retained as historical rationale for family-and-surface capability and endpoint ownership. Its
+host-local preference credential and lifecycle clauses are not normative.
 
 ## Context
 

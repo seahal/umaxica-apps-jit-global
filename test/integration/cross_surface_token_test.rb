@@ -5,7 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 # require "helpers/auth_helpers"
 
-# Surface boundary: an access token minted for one surface (app/com/org) must
+# Surface boundary: an access token minted for one surface (app/org) must
 # never authenticate on another surface's endpoint, even though every surface
 # exposes the same `/edge/v0/token/check` path. The binding is enforced by the
 # per-surface JWT issuer/audience, not by sharing a DB. These tests pin that
@@ -65,58 +65,40 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
                "org-issued token must not authenticate on the app surface"
   end
 
-  test "app preference token is ignored by the com cookie endpoint" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  test "app preference token is ignored by the org cookie endpoint" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     token = preference_token_for(
       host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       preference_type: "AppPreference",
       public_id: "app-pref-public-id",
       preferences: { "consented" => true },
     )
-    cookies[PreferenceCookieName.access] = token
+    cookies[PreferenceCookieName.anonymous_jwt] = token
 
     with_preference_jwt_keys(host: host) do
       get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
     assert_response :ok
-    assert response.parsed_body["show_banner"], "app preference token must not suppress the com banner"
+    assert response.parsed_body["show_banner"], "app preference token must not suppress the org banner"
   end
 
-  test "com preference token is ignored by the org cookie endpoint" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    token = preference_token_for(
-      host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-      preference_type: "ComPreference",
-      public_id: "com-pref-public-id",
-      preferences: { "consented" => true },
-    )
-    cookies[PreferenceCookieName.access] = token
-
-    with_preference_jwt_keys(host: host) do
-      get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
-    end
-
-    assert_response :ok
-    assert response.parsed_body["show_banner"], "com preference token must not suppress the org banner"
-  end
-
-  test "org preference token is ignored by the com cookie endpoint" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  test "org preference token is ignored by the app cookie endpoint" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     token = preference_token_for(
       host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       preference_type: "OrgPreference",
       public_id: "org-pref-public-id",
       preferences: { "consented" => true },
     )
-    cookies[PreferenceCookieName.access] = token
+    cookies[PreferenceCookieName.anonymous_jwt] = token
 
     with_preference_jwt_keys(host: host) do
       get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
     assert_response :ok
-    assert response.parsed_body["show_banner"], "org preference token must not suppress the com banner"
+    assert response.parsed_body["show_banner"], "org preference token must not suppress the app banner"
   end
 
   private
@@ -190,13 +172,10 @@ class CrossSurfaceTokenTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -228,11 +207,11 @@ class CrossSurfaceTokenTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
+  def ensure_staff_token_reference_records!
+    OperatorTokenKind.find_or_create_by!(id: OperatorTokenKind::BROWSER_WEB)
+    OperatorTokenStatus.find_or_create_by!(id: OperatorTokenStatus::ACTIVE)
+    OperatorTokenBindingMethod.find_or_create_by!(id: OperatorTokenBindingMethod::LEGACY)
+    OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
@@ -256,23 +235,6 @@ class CrossSurfaceTokenTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -287,17 +249,9 @@ class CrossSurfaceTokenTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -485,31 +439,6 @@ class CrossSurfaceTokenTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
-
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
@@ -523,8 +452,7 @@ class CrossSurfaceTokenTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

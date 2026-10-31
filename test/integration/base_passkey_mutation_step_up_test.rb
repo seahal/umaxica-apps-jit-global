@@ -4,10 +4,55 @@ require "test_helper"
 
 class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
+  skip_transactional_tests_for_database :op_base_app
+  skip_transactional_tests_for_database :op_base_org
 
-  test "Base passkey rename and deletion require scoped step-up in app com and org" do
+  setup do
+    @op_actors = []
+  end
+
+  teardown do
+    @op_actors.each do |actor, token, existing_transaction_ids|
+      if actor.is_a?(Client)
+        tokens = ClientToken.where(id: token.id)
+        transactions = ClientStepUpCeremonyTransaction.where(actor_ref: actor.public_id)
+        transactions = transactions.where.not(id: existing_transaction_ids)
+        ClientStepUpSession.where(user_token_id: tokens.select(:id)).delete_all
+        ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transactions.select(:id)).delete_all
+        ClientAuthCeremonySession.where(
+          step_up_ceremony_transaction_ref: transactions.select(:transaction_id),
+        ).delete_all
+        transactions.delete_all
+        OpAppGrant.where(client_token_id: tokens.select(:id)).includes(:logout_hint).destroy_all
+        ClientDeviceSession.where(id: token.device_session_id).update_all(current_refresh_token_id: nil)
+        tokens.delete_all
+        ClientDeviceSession.where(id: token.device_session_id).delete_all
+
+        assert_not ClientToken.exists?(id: token.id)
+        assert_empty transactions
+      else
+        tokens = OperatorToken.where(id: token.id)
+        transactions = OperatorStepUpCeremonyTransaction.where(actor_ref: actor.public_id)
+        transactions = transactions.where.not(id: existing_transaction_ids)
+        OperatorStepUpSession.where(staff_token_id: tokens.select(:id)).delete_all
+        OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transactions.select(:id)).delete_all
+        OperatorAuthCeremonySession.where(
+          step_up_ceremony_transaction_ref: transactions.select(:transaction_id),
+        ).delete_all
+        transactions.delete_all
+        OpOrgGrant.where(operator_token_id: tokens.select(:id)).includes(:logout_hint).destroy_all
+        OperatorDeviceSession.where(id: token.device_session_id).update_all(current_refresh_token_id: nil)
+        tokens.delete_all
+        OperatorDeviceSession.where(id: token.device_session_id).delete_all
+
+        assert_not OperatorToken.exists?(id: token.id)
+        assert_empty transactions
+      end
+    end
+  end
+
+  test "Base passkey rename and deletion require scoped step-up in app and org" do
     [[Client, ClientPasskey, ClientToken, OpAppGrant, :user_id, :client_token, "app", "client"],
-     [Visitor, VisitorPasskey, VisitorToken, OpComGrant, :visitor_id, :visitor_token, "com", "visitor"],
      [Operator, OperatorPasskey, OperatorToken, OpOrgGrant, :staff_id, :operator_token,
       "org", "operator",],].each do |actor_class, key_class, token_class, rp_class, owner_key, root_key, surface, type|
       actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
@@ -15,6 +60,8 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
         :authentication_epoch => 0, owner_key => actor.id,
         :root_login_established_at => Time.current,
       )
+      transaction_class = (surface == "app") ? ClientStepUpCeremonyTransaction : OperatorStepUpCeremonyTransaction
+      @op_actors << [actor, token, transaction_class.where(actor_ref: actor.public_id).pluck(:id)]
       metadata = (key_class == OperatorPasskey) ? {} : { uv_verified_at: Time.current }
       # D-132: ADVANCED Operators keep two active Passkeys after the removal.
       ((key_class == OperatorPasskey) ? 2 : 1).times do
@@ -51,12 +98,52 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
       path =
         case surface
         when "app" then base_app_identity_passkey_path(ref, ri: "jp")
-        when "com" then base_com_identity_passkey_path(ref, ri: "jp")
         when "org" then base_org_identity_passkey_path(ref, ri: "jp")
         else raise ArgumentError, "unsupported test surface"
         end
       headers = { "Sec-Fetch-Site" => "same-origin", "Origin" => "https://#{host}" }
 
+      browser.get(path, headers: headers)
+
+      assert_equal 302, browser.response.status, surface
+      verification = URI.parse(browser.response.location)
+      query = Rack::Utils.parse_query(verification.query)
+
+      assert_equal "/verification", verification.path
+      assert_equal "settings_passkey", query.fetch("scope")
+      browser.get(verification.request_uri, headers: headers)
+
+      assert_equal 200, browser.response.status, surface
+      transaction_class = (surface == "app") ? ClientStepUpCeremonyTransaction : OperatorStepUpCeremonyTransaction
+      before = transaction_class.where(actor_ref: actor.public_id).pluck(:id)
+      browser.post(verification.path, params: { scope: "settings_passkey", pt: query.fetch("pt") }, headers: headers)
+
+      assert_equal 303, browser.response.status, surface
+      transaction = transaction_class.where(actor_ref: actor.public_id).where.not(id: before).sole
+
+      assert_equal ref, transaction.resource_ref
+      foreign_actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
+      foreign_key = key_class.create!(
+        owner_key => foreign_actor.id, :webauthn_id => SecureRandom.uuid, :public_key => "foreign-key", **metadata,
+      )
+      foreign_ref = (key_class == OperatorPasskey) ? foreign_key.external_id : foreign_key.public_id
+      foreign_target = ActiveSupport::MessageVerifier.new(
+        Rails.application.key_generator.generate_key("path_target_token", 32),
+        digest: "SHA256", serializer: JSON, url_safe: true,
+      ).generate(
+        { "flow" => "step_up.bootstrap",
+          "surface" => surface,
+          "session_nonce" => token.public_id,
+          "pt" => path.sub(ref, foreign_ref), },
+        purpose: :path_target, expires_in: 15.minutes,
+      )
+      browser.get(
+        "/verification", params: { scope: "settings_passkey", pt: foreign_target, ri: "jp" },
+                         headers: headers,
+      )
+
+      assert_equal 400, browser.response.status, surface
+      assert IdentityStepUpCeremonyCancellationCommitter.call!(actor: actor, token: token, transaction: transaction)
       browser.patch(path, params: { passkey: { description: "Changed" } }, headers: headers)
 
       assert_equal 401, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
@@ -71,7 +158,7 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
         last_step_up_credential_ref: ref, last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{surface}",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_full_reauthentication: false,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: ref,
       )
       [{ last_step_up_scope: "settings_email" }, { last_step_up_at: 16.minutes.ago }].each do |invalid|
         token.update!({ last_step_up_scope: "settings_passkey", last_step_up_at: Time.current }.merge(invalid))
@@ -84,11 +171,37 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
         assert_equal 401, browser.response.status
         assert_equal 1, target.reload.status_id
       end
-      token.update!(last_step_up_scope: "settings_passkey", last_step_up_at: Time.current)
+      token.update!(
+        last_step_up_scope: "settings_passkey", last_step_up_at: Time.current,
+        last_step_up_resource_ref: nil,
+      )
 
       assert_base_passkey_registration_options!(
         browser:, surface:, token:, headers:,
       )
+      token.reload.update!(last_step_up_resource_ref: ref)
+      failure = ->(**) { raise IdentityPasskeyNameCommitter::DependencyFailure, "injected storage failure" }
+      IdentityPasskeyNameCommitter.stub(:call!, failure) do
+        browser.patch(path, params: { passkey: { description: "Changed" } }, headers: headers)
+
+        assert_equal 503, browser.response.status, surface
+        assert_equal "Original", target.reload.description
+        assert_predicate token.reload.last_step_up_at, :present?
+      end
+      op_record = (surface == "app") ? OpBaseAppRecord : OpBaseOrgRecord
+      evidence_at = token.reload.last_step_up_at
+      [false, true].each do |savepoint|
+        op_record.transaction do
+          op_record.transaction(requires_new: savepoint) do
+            browser.patch(path, params: { passkey: { description: "Changed" } }, headers: headers)
+
+            assert_equal 503, browser.response.status, "#{surface}, savepoint #{savepoint}"
+            assert_equal "Original", target.reload.description
+            assert_equal evidence_at, token.reload.last_step_up_at
+          end
+          raise ActiveRecord::Rollback
+        end
+      end
       browser.patch(path, params: { passkey: { description: "Changed" } }, headers: headers)
 
       assert_equal 303, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
@@ -103,7 +216,7 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
         last_step_up_credential_ref: ref, last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{surface}",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_full_reauthentication: false,
+        last_step_up_full_reauthentication: false, last_step_up_resource_ref: ref,
       )
       browser.delete(path, headers: headers)
 
@@ -178,7 +291,6 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
   def auth_service_host(surface)
     {
       "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-      "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
       "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
     }.fetch(surface)
   end
@@ -186,7 +298,6 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
   def auth_admission_binding(surface, reference)
     {
       "app" => ClientAuthAdmissionBinding,
-      "com" => VisitorAuthAdmissionBinding,
       "org" => OperatorAuthAdmissionBinding,
     }.fetch(surface).find_by!(entry_ref: reference)
   end

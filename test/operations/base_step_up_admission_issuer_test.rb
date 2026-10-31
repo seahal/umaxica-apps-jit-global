@@ -3,7 +3,7 @@
 require "test_helper"
 
 class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} an expired predecessor is closed rather than treated as a conflicting intent" do
       actor_id = SecureRandom.random_number(1 << 60) + 1_000_000_000
       actor, token =
@@ -11,9 +11,6 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: actor_id, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor)]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: actor_id, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor)]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: actor_id)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor)]
@@ -49,15 +46,12 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "each realm reuses exact intent and refuses changed scope target or purpose without extending authority" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       actor, token, model =
         case surface
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientStepUpCeremonyTransaction]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorStepUpCeremonyTransaction]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorStepUpCeremonyTransaction]
@@ -133,16 +127,13 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "issuance rejects revoked devices and displaced refresh roots in every realm without creating a parent" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       %i(revoked displaced).each do |condition|
         actor, token, model =
           case surface
           when "app"
             actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
             [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientStepUpCeremonyTransaction]
-          when "com"
-            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorStepUpCeremonyTransaction]
           when "org"
             actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
             [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorStepUpCeremonyTransaction]
@@ -174,17 +165,13 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "restart form lookup preserves each realm parent and rejects foreign proof or changed intent" do
-    %w(app com org).each do |surface|
+    %w(app org).each do |surface|
       actor, token, other_token =
         case surface
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor),
            ClientToken.create!(authentication_epoch: 0, user: actor),]
-        when "com"
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor),
-           VisitorToken.create!(authentication_epoch: 0, visitor: actor),]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor),
@@ -241,7 +228,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
     end
   end
 
-  %i(app com org).each do |surface|
+  %i(app org).each do |surface|
     test "#{surface} Base refuses adjacent operation paths and invalid target types without creating authority" do
       case surface
       when :app
@@ -249,11 +236,6 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         token = ClientToken.create!(authentication_epoch: 0, user: actor)
         parents = ClientStepUpCeremonyTransaction
         sessions = ClientStepUpSession
-      when :com
-        actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-        token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, skip_session_limit_check: true)
-        parents = VisitorStepUpCeremonyTransaction
-        sessions = VisitorStepUpSession
       when :org
         actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
         token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
@@ -287,18 +269,15 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   self.fixture_table_names = []
 
-  fixtures :clients, :client_statuses, :visitors, :visitor_statuses
+  fixtures :clients, :client_statuses
 
   test "regular registration requires existing Base proof and produces registration-only authority on each surface" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       actor, token, parents =
         case surface
         when :app
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_112_000_000_000)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientStepUpCeremonyTransaction]
-        when :com
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_112_000_000_000)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorStepUpCeremonyTransaction]
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_112_000_000_000)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorStepUpCeremonyTransaction]
@@ -824,44 +803,6 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
     assert_equal deadline, second.transaction.expires_at
     assert_not_equal first.reference, second.reference
     assert_predicate binding.reload.retired_at, :present?
-  end
-
-  test "COM rejects TOTP and Base actor mismatch before creating a transaction" do
-    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, skip_session_limit_check: true)
-
-    assert_no_difference("VisitorStepUpCeremonyTransaction.count") do
-      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        BaseStepUpAdmissionIssuer.call!(
-          actor: actor, token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
-            audience: "step_up:com", session_binding: token.public_id,
-            token_binding: token.public_id, require_session_binding: true,
-            actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
-        )
-      end
-      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        BaseStepUpAdmissionIssuer.call!(
-          actor: clients(:one), token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id,
-            token_binding: token.public_id, require_session_binding: true,
-            actor_ref: clients(:one).public_id, resource_ref: nil, tenant_ref: nil,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
-        )
-      end
-    end
   end
 
   private

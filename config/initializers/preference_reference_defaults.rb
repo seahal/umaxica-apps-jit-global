@@ -18,10 +18,6 @@ Rails.application.config.after_initialize do
     AppPreferenceChronicleLevel, ComPreferenceChronicleLevel, OrgPreferenceChronicleLevel,
     # Audit events
     AppPreferenceChronicleEvent, ComPreferenceChronicleEvent, OrgPreferenceChronicleEvent,
-    # Binding methods
-    AppPreferenceBindingMethod, ComPreferenceBindingMethod, OrgPreferenceBindingMethod,
-    # DBSC statuses
-    AppPreferenceDbscStatus, ComPreferenceDbscStatus, OrgPreferenceDbscStatus,
   ]
 
   reference_classes.each do |klass|

@@ -7,13 +7,11 @@ class ContactRegistrationRequirementTest < ActiveSupport::TestCase
   [
     [Client, ClientToken, ClientEmail, ClientEmailPolicy, :user_id, "app", "settings_email"],
     [Client, ClientToken, ClientTelephone, ClientTelephonePolicy, :user_id, "app", "settings_telephone"],
-    [Visitor, VisitorToken, VisitorEmail, VisitorEmailPolicy, :visitor_id, "com", "settings_email"],
-    [Visitor, VisitorToken, VisitorTelephone, VisitorTelephonePolicy, :visitor_id, "com", "settings_telephone"],
   ].each do |owner_model, root_model, contact_model, policy_model, owner_key, surface, scope|
     test "#{surface} #{scope} policy owns the complete registration requirement and refuses foreign bindings" do
       owner = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+        status_id: ClientStatus::ACTIVE,
       )
       root = root_model.create!(:authentication_epoch => 0, owner_key => owner.id, :discard_at => 1.day.from_now)
       root.rotate_refresh_token!
@@ -40,7 +38,7 @@ class ContactRegistrationRequirementTest < ActiveSupport::TestCase
 
       other = owner_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+        status_id: ClientStatus::ACTIVE,
       )
       foreign_root = root_model.create!(
         :authentication_epoch => 0, owner_key => other.id,

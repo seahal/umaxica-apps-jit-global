@@ -3,13 +3,13 @@
 
 require "test_helper"
 
-# A signed-in principal's preference change is written to the browser preference and mirrored to
-# the principal's own account preference in the same operation, so the choice follows the
-# principal to the next device. Anonymous browsers only change the browser preference.
+# A signed-in principal's explicitly submitted preference is written to the anonymous browser
+# snapshot and the principal's own option-backed preference. Anonymous browsers only change the
+# browser snapshot.
 class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :operators, :visitors
+  fixtures :clients, :operators
 
-  test "a signed-in client's region change is mirrored to the account preference with its regional defaults" do
+  test "a signed-in client's region choice updates its explicit option-backed preference" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     client = clients(:one)
@@ -82,10 +82,11 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
           params: { preference_region: { option_id: "US" } }, headers: headers
 
     assert_response :redirect
-    account = ClientPreference.includes(:user_preference_region, :user_preference_language).find_by!(user_id: client.id)
+    account = ClientPreference.includes(:client_preference_region, :client_preference_language)
+      .find_by!(client_id: client.id)
 
-    assert_equal ClientPreferenceRegionOption::US, account.user_preference_region.option_id
-    assert_equal ClientPreferenceLanguageOption::EN, account.user_preference_language.option_id
+    assert_equal ClientPreferenceRegionOption::US, account.client_preference_region.option_id
+    assert_equal ClientPreferenceLanguageOption::EN, account.client_preference_language.option_id
   end
 
   test "an anonymous region change leaves no account preference behind" do
@@ -103,24 +104,16 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
     assert_equal AppPreferenceRegionOption::US, preference.app_preference_region.option_id
   end
 
-  test "a signed-in operator's and visitor's region changes are mirrored to their own account preferences" do
+  test "a signed-in operator's region choice updates its explicit option-backed preference" do
     [
       [ENV.fetch("PUBLIC_BASE_STAFF_URL"), operators(:one), :as_staff_headers, :base_org_preference_path,
-       :base_org_preference_region_path, OperatorPreference, :staff_id, OperatorPreferenceRegion,
+       :base_org_preference_region_path, OperatorPreference, :operator_id, OperatorPreferenceRegion,
        OperatorPreferenceRegionOption::US,],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), visitors(:reserved_visitor), :as_visitor_headers,
-       :base_com_preference_path, :base_com_preference_region_path, VisitorPreference, :visitor_id,
-       VisitorPreferenceRegion,
-       VisitorPreferenceRegionOption::US,],
     ].each do |host, actor, headers_method, page, region_path, account_class, fk, region_class, us|
       host! host
       headers = public_send(headers_method, actor, host: host)
       token_model, rp_model, root_association, resource_type, client_id =
-        if actor.is_a?(Operator)
-          [OperatorToken, OpOrgGrant, :operator_token, "operator", "base-org-ww"]
-        else
-          [VisitorToken, OpComGrant, :visitor_token, "visitor", "base-com-ww"]
-        end
+        [OperatorToken, OpOrgGrant, :operator_token, "operator", "base-org-ww"]
       token = token_model.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
       token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
       rp_client = OidcClientRegistry.find!(client_id)

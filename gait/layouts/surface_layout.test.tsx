@@ -95,6 +95,28 @@ afterEach(() => {
 });
 
 describe("SurfaceLayout", () => {
+  test("com Inertia navigation updates document language from the current server page", () => {
+    document.documentElement.lang = "ja";
+    const first = { ...minimalChrome, surface: "com", locale: "ja" };
+    const { rerender } = render(first);
+
+    expect(document.documentElement.lang).toBe("ja");
+    page.props.chrome = { ...first, locale: "en" };
+    rerender(
+      <SurfaceLayout>
+        <p>page body</p>
+      </SurfaceLayout>,
+    );
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  test("app page metadata does not change the document language", () => {
+    document.documentElement.lang = "ja";
+    render({ ...minimalChrome, locale: "en" });
+
+    expect(document.documentElement.lang).toBe("ja");
+  });
+
   test("omits theme and cookie chrome when the server sent none", () => {
     render({
       ...minimalChrome,

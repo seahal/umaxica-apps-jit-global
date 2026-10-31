@@ -282,8 +282,8 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
       pid_queue = Queue.new
       waited = false
       principal_available = false
-      clock_now = OpBaseAppRecord.database_now
-      OpBaseAppRecord.stub(:database_now, -> { clock_now }) do
+      clock_now = ClientSignUpFlow.database_now
+      ClientSignUpFlow.stub(:database_now, -> { clock_now }) do
         OpBaseAppRecord.transaction do
           ClientSignUpFlow.lock.find(@flow.id)
           @worker =
@@ -486,7 +486,10 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     later_binding.confirm_base!(base_token: nil, browser_digest: later_binding.base_browser_digest)
     sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     @browser.cookies[sid_key] = later_sid
-    @browser.get("/sign/in", params: { entry_ref: later_admission.reference, ri: "jp" }, headers: @headers)
+    @browser.get(
+      "/sign/in", params: { entry_ref: later_admission.reference, ri: "jp" },
+                  headers: @headers.merge("Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document"),
+    )
 
     assert_equal 303, @browser.response.status
     @browser.get(@browser.response.location, headers: @headers)

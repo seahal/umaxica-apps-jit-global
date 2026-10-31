@@ -47,7 +47,6 @@ class IdentityEmailBootstrapCommitter
       valid =
         case actor
         when Client then client_email_binding_valid?(actor, token, transaction, credential)
-        when Visitor then visitor_email_binding_valid?(actor, token, transaction, credential)
         when Operator then operator_email_binding_valid?(actor, token, transaction, credential)
         else false
         end
@@ -60,12 +59,6 @@ class IdentityEmailBootstrapCommitter
       token.is_a?(ClientToken) && transaction.is_a?(ClientStepUpCeremonyTransaction) &&
         credential.is_a?(ClientEmail) && token.user_id == actor.id && credential.user_id == actor.id &&
         credential.user_email_status_id == ClientEmailStatus::VERIFIED
-    end
-
-    def visitor_email_binding_valid?(actor, token, transaction, credential)
-      token.is_a?(VisitorToken) && transaction.is_a?(VisitorStepUpCeremonyTransaction) &&
-        credential.is_a?(VisitorEmail) && token.visitor_id == actor.id && credential.visitor_id == actor.id &&
-        credential.visitor_email_status_id == VisitorEmailStatus::VERIFIED
     end
 
     def operator_email_binding_valid?(actor, token, transaction, credential)
@@ -93,7 +86,6 @@ class IdentityEmailBootstrapCommitter
     def principal_class(actor)
       case actor
       when Client then Client
-      when Visitor then Visitor
       when Operator then Operator
       else refuse!("email bootstrap actor type mismatch", "session_binding_mismatch")
       end
@@ -102,7 +94,6 @@ class IdentityEmailBootstrapCommitter
     def ticket_record_class(actor)
       case actor
       when Client then OpBaseAppRecord
-      when Visitor then OpBaseComRecord
       when Operator then OpBaseOrgRecord
       else refuse!("email bootstrap actor type mismatch", "session_binding_mismatch")
       end
@@ -111,7 +102,6 @@ class IdentityEmailBootstrapCommitter
     def step_up_session_class(actor)
       case actor
       when Client then ClientStepUpSession
-      when Visitor then VisitorStepUpSession
       when Operator then OperatorStepUpSession
       else refuse!("email bootstrap actor type mismatch", "session_binding_mismatch")
       end
@@ -120,7 +110,6 @@ class IdentityEmailBootstrapCommitter
     def session_foreign_key(actor)
       case actor
       when Client then :user_token_id
-      when Visitor then :visitor_token_id
       when Operator then :staff_token_id
       else refuse!("email bootstrap actor type mismatch", "session_binding_mismatch")
       end

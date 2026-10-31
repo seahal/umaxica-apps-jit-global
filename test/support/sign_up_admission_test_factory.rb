@@ -6,7 +6,7 @@
 module SignUpAdmissionTestFactory
   module_function
 
-  SURFACES = { ClientSignUpFlow => "app", VisitorSignUpFlow => "com" }.freeze
+  SURFACES = { ClientSignUpFlow => "app" }.freeze
 
   def binding_for!(flow_class)
     binding!(surface: SURFACES.fetch(flow_class))

@@ -2,7 +2,7 @@
 
 # Base's half of Passkey registration. Auth has verified the attestation and stored only a
 # transaction-bound candidate; this operation is the sole writer that turns that candidate into an
-# effective credential. The three realms deliberately share the lifecycle but keep their actor,
+# effective credential. The remaining realms deliberately share the lifecycle but keep their actor,
 # Ticket, session and credential classes explicit.
 class IdentityPasskeyRegistrationFinalCommitter
   CONFIG = {
@@ -19,19 +19,6 @@ class IdentityPasskeyRegistrationFinalCommitter
       token_key: :user_token_id,
       audit_event_id: ClientChronicleEvent::PASSKEY_REGISTERED,
       surface: "app",
-    },
-    "com" => {
-      ticket_class: OpBaseComRecord,
-      actor_class: Visitor,
-      token_class: VisitorToken,
-      transaction_class: VisitorStepUpCeremonyTransaction,
-      session_class: VisitorStepUpSession,
-      ceremony_class: VisitorAuthCeremonySession,
-      candidate_class: VisitorPasskeyCeremonyCandidate,
-      passkey_class: VisitorPasskey,
-      owner_key: :visitor_id,
-      token_key: :visitor_token_id,
-      surface: "com",
     },
     "org" => {
       ticket_class: OpBaseOrgRecord,
@@ -133,20 +120,26 @@ class IdentityPasskeyRegistrationFinalCommitter
     def commit_ticket!(config, actor, token, transaction, payload, digest, _ip_address, _user_agent)
       config.fetch(:ticket_class).connected_to(role: :writing) do
         config.fetch(:ticket_class).transaction do
-          token.device_session_record!.with_lock do
-            commit_under_device_lock!(config, actor, token, transaction, payload, digest)
+          device = token.device_session_record!
+          device.with_lock do
+            commit_under_device_lock!(config, actor, token, transaction, payload, digest, device)
           end
         end
       end
     end
 
-    def commit_under_device_lock!(config, actor, token, transaction, payload, digest)
+    def commit_under_device_lock!(config, actor, token, transaction, payload, digest, device)
       token.with_lock do
-        record = config.fetch(:session_class).lock.find_by!(
-          config.fetch(:token_key) => token.id,
-          :step_up_ceremony_transaction_ref => transaction.transaction_id,
-        )
+        if token.is_a?(OperatorToken) && token.standby_authentication_context?
+          refuse!("passkey registration binding mismatch")
+        end
+
+        validate_registration_device!(actor, token, device)
         transaction.with_lock do
+          record = config.fetch(:session_class).lock.find_by!(
+            config.fetch(:token_key) => token.id,
+            :step_up_ceremony_transaction_ref => transaction.transaction_id,
+          )
           ceremony = config.fetch(:ceremony_class).lock.find(payload.fetch("ceremony_session_ref"))
           candidate = config.fetch(:candidate_class).lock.find_by!(
             step_up_ceremony_transaction_ref: transaction.transaction_id,
@@ -156,7 +149,7 @@ class IdentityPasskeyRegistrationFinalCommitter
           validate_ticket!(config, actor, token, transaction, record, digest, payload, now)
           validate_candidate!(config, actor, token, transaction, candidate, now)
           validate_continuity!(ceremony, transaction, now)
-          return existing_credential!(actor, transaction, candidate, ceremony, config) if transaction.consumed?
+          return existing_credential!(actor, transaction, candidate, ceremony) if transaction.consumed?
 
           refuse!("passkey registration already ended") if candidate.consumed_at || ceremony.completed?
           ensure_current_registration_authority!(actor, token, transaction)
@@ -165,12 +158,25 @@ class IdentityPasskeyRegistrationFinalCommitter
           consume_registration_step_up!(actor, token, transaction)
           candidate.update!(consumed_at: now)
           transaction.commit_registration_consumption!(
-            now: now, method: "passkey", registered_credential_ref: credential.public_id,
+            now: now, method: "passkey", registered_credential_ref: credential_reference(credential),
           )
           ceremony.complete!(now: now)
           credential
         end
       end
+    end
+
+    def validate_registration_device!(actor, token, device)
+      owner_matches =
+        case actor
+        when Client then device.user_id == actor.id && token.user_id == actor.id
+        when Operator then device.staff_id == actor.id && token.staff_id == actor.id
+        else false
+        end
+      return if owner_matches && device.usable? && token.device_session_id == device.id &&
+        device.current_refresh_token_id == token.id
+
+      refuse!("passkey registration device or session unavailable")
     end
 
     def create_credential!(config, actor, transaction, candidate)
@@ -214,7 +220,6 @@ class IdentityPasskeyRegistrationFinalCommitter
     def registration_policy(actor)
       case actor
       when Client then ClientPasskeyPolicy.new(ClientPasskey, user: actor)
-      when Visitor then VisitorPasskeyPolicy.new(VisitorPasskey, user: actor)
       when Operator then OperatorPasskeyPolicy.new(OperatorPasskey, user: actor)
       else refuse!("unsupported passkey registration actor")
       end
@@ -282,9 +287,21 @@ class IdentityPasskeyRegistrationFinalCommitter
       refuse!("passkey registration continuity unavailable") unless valid
     end
 
-    def existing_credential!(actor, transaction, candidate, ceremony, config)
-      credential = config.fetch(:passkey_class).where(config.fetch(:owner_key) => actor.id)
-        .active.lock.find_by!(public_id: transaction.verified_credential_ref)
+    def credential_reference(credential)
+      case credential
+      when ClientPasskey then credential.public_id
+      when OperatorPasskey then credential.external_id
+      else refuse!("unsupported passkey registration credential")
+      end
+    end
+
+    def existing_credential!(actor, transaction, candidate, ceremony)
+      credential =
+        case actor
+        when Client then actor.client_passkeys.active.lock.find_by!(public_id: transaction.verified_credential_ref)
+        when Operator then actor.staff_passkeys.active.lock.find_by!(external_id: transaction.verified_credential_ref)
+        else refuse!("unsupported passkey registration owner")
+        end
       return credential if candidate.consumed_at == transaction.consumed_at && ceremony.completed? &&
         credential.webauthn_id == candidate.webauthn_id &&
         ActiveSupport::SecurityUtils.secure_compare(credential.public_key, candidate.public_key)

@@ -12,6 +12,7 @@ module Auth
               include SignUpContactOtpControllerSupport
 
               AUTHENTICATION_MODE = :guest
+              sign_entry_classification! :sign_up
               skip_before_action :enforce_email_flow!
 
               def show
@@ -29,7 +30,11 @@ module Auth
                 @user_email = current_registration_email
                 return redirect_invalid_session unless @user_email
 
-                result = issue_otp_ceremony!
+                begin
+                  result = issue_otp_ceremony!
+                rescue ActiveJob::EnqueueError
+                  return render_signup_email_delivery_unavailable
+                end
                 return render_otp_ceremony_result(result) unless result.success?
 
                 redirect_to(
@@ -112,13 +117,17 @@ module Auth
               end
 
               def render_otp_ceremony_result(result)
-                if result.status == :rate_limited
+                case result.status
+                when :rate_limited
                   @user_email.errors.add(:base, t("sign.app.registration.email.create.otp_resend_too_soon"))
-                  return render_sign_up_email_edit(status: :too_many_requests)
+                  render_sign_up_email_edit(status: :too_many_requests)
+                when :invalid_code, :result_expired, :session_mismatch, :missing_challenge, :inactive_flow,
+                     :inactive_candidate, :binding_mismatch, :closed_challenge, :locked
+                  @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
+                  render_sign_up_email_edit(status: :unprocessable_content)
+                else
+                  raise ArgumentError, "unsupported Email signup OTP result"
                 end
-
-                @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
-                render_sign_up_email_edit(status: :unprocessable_content)
               end
 
               def render_code_required

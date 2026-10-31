@@ -17,7 +17,6 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   SURFACES = {
     app: { host_env: "PUBLIC_BASE_SERVICE_URL" },
-    com: { host_env: "PUBLIC_BASE_CORPORATE_URL" },
     org: { host_env: "PUBLIC_BASE_STAFF_URL" },
   }.freeze
 
@@ -87,11 +86,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       cookies[ACCESS] =
         begin
           rc8_actor = resource
-          rc8_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc8_actor.class)
-          rc8_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc8_type)
+          rc8_type = { Client => "client", Operator => "operator" }.fetch(rc8_actor.class)
+          rc8_realm = { "client" => "app", "operator" => "org" }.fetch(rc8_type)
           rc8_root_model = {
             "client" => ClientToken,
-            "visitor" => VisitorToken,
             "operator" => OperatorToken,
           }.fetch(rc8_type)
           rc8_root = rc8_root_model.find_by(public_id: "missing#{SecureRandom.hex(6)}") || surface_token(
@@ -101,18 +99,15 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           rc8_registered = OidcClientRegistry.find!(
             {
               "app" => "base-app-ww",
-              "com" => "base-com-ww",
               "org" => "base-org-ww",
             }.fetch(rc8_realm),
           )
           rc8_rp_model = {
             "client" => OpAppGrant,
-            "visitor" => OpComGrant,
             "operator" => OpOrgGrant,
           }.fetch(rc8_type)
           rc8_fk = {
             "client" => :client_token_id,
-            "visitor" => :visitor_token_id,
             "operator" => :operator_token_id,
           }.fetch(rc8_type)
           rc8_rp = rc8_rp_model.create!(
@@ -149,11 +144,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       cookies[ACCESS] =
         begin
           rc7_actor = resource
-          rc7_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc7_actor.class)
-          rc7_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc7_type)
+          rc7_type = { Client => "client", Operator => "operator" }.fetch(rc7_actor.class)
+          rc7_realm = { "client" => "app", "operator" => "org" }.fetch(rc7_type)
           rc7_root_model = {
             "client" => ClientToken,
-            "visitor" => VisitorToken,
             "operator" => OperatorToken,
           }.fetch(rc7_type)
           rc7_root = rc7_root_model.find_by(public_id: token.public_id) || surface_token(
@@ -163,18 +157,15 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           rc7_registered = OidcClientRegistry.find!(
             {
               "app" => "base-app-ww",
-              "com" => "base-com-ww",
               "org" => "base-org-ww",
             }.fetch(rc7_realm),
           )
           rc7_rp_model = {
             "client" => OpAppGrant,
-            "visitor" => OpComGrant,
             "operator" => OpOrgGrant,
           }.fetch(rc7_type)
           rc7_fk = {
             "client" => :client_token_id,
-            "visitor" => :visitor_token_id,
             "operator" => :operator_token_id,
           }.fetch(rc7_type)
           rc7_rp = rc7_rp_model.create!(
@@ -212,11 +203,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       cookies[ACCESS] =
         begin
           rc6_actor = resource
-          rc6_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc6_actor.class)
-          rc6_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc6_type)
+          rc6_type = { Client => "client", Operator => "operator" }.fetch(rc6_actor.class)
+          rc6_realm = { "client" => "app", "operator" => "org" }.fetch(rc6_type)
           rc6_root_model = {
             "client" => ClientToken,
-            "visitor" => VisitorToken,
             "operator" => OperatorToken,
           }.fetch(rc6_type)
           rc6_root = rc6_root_model.find_by(public_id: token.public_id) || surface_token(
@@ -226,18 +216,15 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           rc6_registered = OidcClientRegistry.find!(
             {
               "app" => "base-app-ww",
-              "com" => "base-com-ww",
               "org" => "base-org-ww",
             }.fetch(rc6_realm),
           )
           rc6_rp_model = {
             "client" => OpAppGrant,
-            "visitor" => OpComGrant,
             "operator" => OpOrgGrant,
           }.fetch(rc6_type)
           rc6_fk = {
             "client" => :client_token_id,
-            "visitor" => :visitor_token_id,
             "operator" => :operator_token_id,
           }.fetch(rc6_type)
           rc6_rp = rc6_rp_model.create!(
@@ -315,29 +302,25 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(authentication_epoch: 0, user: resource)
     cookies[ACCESS] = begin
       rc5_actor = resource
-      rc5_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc5_actor.class)
-      rc5_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc5_type)
+      rc5_type = { Client => "client", Operator => "operator" }.fetch(rc5_actor.class)
+      rc5_realm = { "client" => "app", "operator" => "org" }.fetch(rc5_type)
       rc5_root_model = {
         "client" => ClientToken,
-        "visitor" => VisitorToken,
         "operator" => OperatorToken,
       }.fetch(rc5_type)
       rc5_root = rc5_root_model.find_by(public_id: token.public_id) || surface_token(rc5_realm.to_sym, rc5_actor)
       rc5_registered = OidcClientRegistry.find!(
         {
           "app" => "base-app-ww",
-          "com" => "base-com-ww",
           "org" => "base-org-ww",
         }.fetch(rc5_realm),
       )
       rc5_rp_model = {
         "client" => OpAppGrant,
-        "visitor" => OpComGrant,
         "operator" => OpOrgGrant,
       }.fetch(rc5_type)
       rc5_fk = {
         "client" => :client_token_id,
-        "visitor" => :visitor_token_id,
         "operator" => :operator_token_id,
       }.fetch(rc5_type)
       rc5_rp = rc5_rp_model.create!(
@@ -380,11 +363,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       cookies[ACCESS] =
         begin
           rc4_actor = resource
-          rc4_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc4_actor.class)
-          rc4_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc4_type)
+          rc4_type = { Client => "client", Operator => "operator" }.fetch(rc4_actor.class)
+          rc4_realm = { "client" => "app", "operator" => "org" }.fetch(rc4_type)
           rc4_root_model = {
             "client" => ClientToken,
-            "visitor" => VisitorToken,
             "operator" => OperatorToken,
           }.fetch(rc4_type)
           rc4_root = rc4_root_model.find_by(public_id: token.public_id) || surface_token(
@@ -394,18 +376,15 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           rc4_registered = OidcClientRegistry.find!(
             {
               "app" => "base-app-ww",
-              "com" => "base-com-ww",
               "org" => "base-org-ww",
             }.fetch(rc4_realm),
           )
           rc4_rp_model = {
             "client" => OpAppGrant,
-            "visitor" => OpComGrant,
             "operator" => OpOrgGrant,
           }.fetch(rc4_type)
           rc4_fk = {
             "client" => :client_token_id,
-            "visitor" => :visitor_token_id,
             "operator" => :operator_token_id,
           }.fetch(rc4_type)
           rc4_rp = rc4_rp_model.create!(
@@ -445,29 +424,25 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     cookies[ACCESS] =
       begin
         rc3_actor = resource
-        rc3_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc3_actor.class)
-        rc3_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc3_type)
+        rc3_type = { Client => "client", Operator => "operator" }.fetch(rc3_actor.class)
+        rc3_realm = { "client" => "app", "operator" => "org" }.fetch(rc3_type)
         rc3_root_model = {
           "client" => ClientToken,
-          "visitor" => VisitorToken,
           "operator" => OperatorToken,
         }.fetch(rc3_type)
         rc3_root = rc3_root_model.find_by(public_id: token.public_id) || surface_token(rc3_realm.to_sym, rc3_actor)
         rc3_registered = OidcClientRegistry.find!(
           {
             "app" => "base-app-ww",
-            "com" => "base-com-ww",
             "org" => "base-org-ww",
           }.fetch(rc3_realm),
         )
         rc3_rp_model = {
           "client" => OpAppGrant,
-          "visitor" => OpComGrant,
           "operator" => OpOrgGrant,
         }.fetch(rc3_type)
         rc3_fk = {
           "client" => :client_token_id,
-          "visitor" => :visitor_token_id,
           "operator" => :operator_token_id,
         }.fetch(rc3_type)
         rc3_rp = rc3_rp_model.create!(
@@ -522,29 +497,25 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     cookies[ACCESS] =
       begin
         rc2_actor = user
-        rc2_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc2_actor.class)
-        rc2_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc2_type)
+        rc2_type = { Client => "client", Operator => "operator" }.fetch(rc2_actor.class)
+        rc2_realm = { "client" => "app", "operator" => "org" }.fetch(rc2_type)
         rc2_root_model = {
           "client" => ClientToken,
-          "visitor" => VisitorToken,
           "operator" => OperatorToken,
         }.fetch(rc2_type)
         rc2_root = rc2_root_model.find_by(public_id: token.public_id) || surface_token(rc2_realm.to_sym, rc2_actor)
         rc2_registered = OidcClientRegistry.find!(
           {
             "app" => "base-app-ww",
-            "com" => "base-com-ww",
             "org" => "base-org-ww",
           }.fetch(rc2_realm),
         )
         rc2_rp_model = {
           "client" => OpAppGrant,
-          "visitor" => OpComGrant,
           "operator" => OpOrgGrant,
         }.fetch(rc2_type)
         rc2_fk = {
           "client" => :client_token_id,
-          "visitor" => :visitor_token_id,
           "operator" => :operator_token_id,
         }.fetch(rc2_type)
         rc2_rp = rc2_rp_model.create!(
@@ -579,71 +550,12 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   # --- Surface separation ------------------------------------------------------------------------
 
-  test "app recovery neither writes a Domain cookie nor disturbs a valid com session" do
-    com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    visitor = surface_resource(:com)
-    com_token = surface_token(:com, visitor)
-    com_access =
-      begin
-        rc1_actor = visitor
-        rc1_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc1_actor.class)
-        rc1_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc1_type)
-        rc1_root_model = {
-          "client" => ClientToken,
-          "visitor" => VisitorToken,
-          "operator" => OperatorToken,
-        }.fetch(rc1_type)
-        rc1_root = rc1_root_model.find_by(public_id: com_token.public_id) || surface_token(
-          rc1_realm.to_sym,
-          rc1_actor,
-        )
-        rc1_registered = OidcClientRegistry.find!(
-          {
-            "app" => "base-app-ww",
-            "com" => "base-com-ww",
-            "org" => "base-org-ww",
-          }.fetch(rc1_realm),
-        )
-        rc1_rp_model = {
-          "client" => OpAppGrant,
-          "visitor" => OpComGrant,
-          "operator" => OpOrgGrant,
-        }.fetch(rc1_type)
-        rc1_fk = {
-          "client" => :client_token_id,
-          "visitor" => :visitor_token_id,
-          "operator" => :operator_token_id,
-        }.fetch(rc1_type)
-        rc1_rp = rc1_rp_model.create!(
-          :authentication_epoch => 0,
-          rc1_fk => rc1_root.id, :device_session_id => rc1_root.device_session_id,
-          :oidc_client_id => rc1_registered.client_id, :oidc_scope => "openid profile",
-          :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
-          :refresh_token_expires_at => 10.minutes.from_now,
-        )
-        AuthenticationTokenService.encode(
-          rc1_actor, host: com_host, resource_type: rc1_type,
-                     session_public_id: rc1_root.public_id, base_session_public_id: rc1_root.public_id,
-                     oidc_sid: rc1_rp.public_id, oidc_jti: rc1_rp.oidc_jti,
-                     expires_at: 5.minutes.from_now, scopes: %w(openid profile),
-                     issuer: OidcIssuer.for_resource_type(rc1_type), audiences: [rc1_registered.aud],
-                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc1_registered),
-                     subject: OidcSubject.for(rc1_actor, resource_type: rc1_type), client_id: rc1_registered.client_id,
-        )
-      end
-
+  test "app recovery does not write a Domain cookie" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     get "/?ri=jp", headers: { "Cookie" => "#{ACCESS}=malformed" }
 
     assert_cookie_deleted(ACCESS)
     assert(set_cookie_entries(ACCESS).none? { |entry| entry.key?(:domain) }, "the deletion must stay host-only")
-
-    host! com_host
-    get "/dashboard?ri=jp", headers: { "Cookie" => "#{ACCESS}=#{com_access}" }
-
-    assert_operator response.status, :<, 400
-    assert_no_set_cookie(ACCESS)
-    assert_predicate com_token.reload.discard_at, :future?
   end
 
   # --- Refresh and DBSC cookies (JSON refresh endpoint) ------------------------------------------
@@ -799,29 +711,25 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     cookies[ACCESS] =
       begin
         rc0_actor = resource
-        rc0_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc0_actor.class)
-        rc0_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc0_type)
+        rc0_type = { Client => "client", Operator => "operator" }.fetch(rc0_actor.class)
+        rc0_realm = { "client" => "app", "operator" => "org" }.fetch(rc0_type)
         rc0_root_model = {
           "client" => ClientToken,
-          "visitor" => VisitorToken,
           "operator" => OperatorToken,
         }.fetch(rc0_type)
         rc0_root = rc0_root_model.find_by(public_id: token.public_id) || surface_token(rc0_realm.to_sym, rc0_actor)
         rc0_registered = OidcClientRegistry.find!(
           {
             "app" => "base-app-ww",
-            "com" => "base-com-ww",
             "org" => "base-org-ww",
           }.fetch(rc0_realm),
         )
         rc0_rp_model = {
           "client" => OpAppGrant,
-          "visitor" => OpComGrant,
           "operator" => OpOrgGrant,
         }.fetch(rc0_type)
         rc0_fk = {
           "client" => :client_token_id,
-          "visitor" => :visitor_token_id,
           "operator" => :operator_token_id,
         }.fetch(rc0_type)
         rc0_rp = rc0_rp_model.create!(
@@ -879,10 +787,6 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   def surface_resource(surface)
     case surface
     when :app then clients(:one)
-    when :com then Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR,
-    )
     when :org then operators(:one)
     end
   end
@@ -890,7 +794,6 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   def surface_token(surface, resource)
     case surface
     when :app then ClientToken.create!(authentication_epoch: 0, user: resource)
-    when :com then VisitorToken.create!(authentication_epoch: 0, visitor: resource)
     when :org then OperatorToken.create!(authentication_epoch: 0, staff: resource)
     end
   end

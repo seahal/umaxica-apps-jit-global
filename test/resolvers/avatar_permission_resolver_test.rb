@@ -82,15 +82,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
     )
   end
 
-  test "com and unsupported membership permissions fail closed" do
-    assert_not AvatarPermissionResolver.call(
-      actor: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL),
-      surface: :com,
-      subject_public_id: "individual-public-id",
-      owner_collective_public_id: "company-public-id",
-      permission: "avatar.view",
-    )
-
+  test "unsupported membership permissions fail closed" do
     assert_raises(ArgumentError) do
       AvatarPermissionResolver.call(
         actor: @client,

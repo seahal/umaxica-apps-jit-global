@@ -58,35 +58,30 @@ module Security
       assert_equal :deny_all, MixedController.authentication_mode_for(:show)
     end
 
-    test "Visa com token refresh is fail-closed by default while create remains explicitly open" do
-      controller = Visa::Com::Edge::V0::Token::RefreshesController
-
-      assert_equal :deny_all, controller.authentication_mode_for(:show)
-      assert_equal :open, controller.authentication_mode_for(:create)
-    end
-
     test "surface application controllers default to deny_all" do
       [
         Auth::App::ApplicationController,
-        Auth::Com::ApplicationController,
         Auth::Org::ApplicationController,
         Base::App::ApplicationController,
-        Base::Com::ApplicationController,
         Base::Org::ApplicationController,
         Core::App::ApplicationController,
-        Core::Com::ApplicationController,
         Core::Org::ApplicationController,
         Warp::App::ApplicationController,
-        Warp::Com::ApplicationController,
         Warp::Org::ApplicationController,
       ].each do |controller_class|
         assert_equal :deny_all, controller_class.authentication_mode_for(:index), controller_class.name
       end
     end
 
+    # The com surfaces no longer include AuthenticationBase, so the inventory covers the
+    # controllers that still carry an authentication boundary. Anonymous com controllers are checked
+    # by Base::Com::ApplicationControllerTest and the Warp::Com controller tests instead.
     test "controller files declare a local authentication mode" do
       missing =
         Rails.root.glob("app/controllers/**/*_controller.rb").filter_map do |path|
+          controller_class = controller_class_for(path)
+          next unless controller_class&.include?(AuthenticationBase)
+
           relative_path = path.relative_path_from(Rails.root).to_s
           content = File.binread(path).encode("UTF-8", invalid: :replace, undef: :replace)
           relative_path unless content.match?(/\bAUTHENTICATION_MODE\s*=/)
@@ -132,6 +127,8 @@ module Security
           controller_class = "#{controller_name.camelize}Controller".safe_constantize
           next if controller_class.blank?
           next unless application_controller_class?(controller_class)
+          # Anonymous com controllers carry no authentication boundary to declare.
+          next unless controller_class.include?(AuthenticationBase)
           next if controller_class.const_defined?(:AUTHENTICATION_MODE, false)
           next if controller_class.respond_to?(:local_authentication_mode_rules) &&
             controller_class.local_authentication_mode_rules.present?
@@ -143,6 +140,11 @@ module Security
     end
 
     private
+
+    def controller_class_for(path)
+      relative = path.relative_path_from(Rails.root.join("app/controllers")).to_s.delete_suffix(".rb")
+      "#{relative.camelize}Controller".safe_constantize
+    end
 
     def application_controller_class?(controller_class)
       controller_class.name.start_with?("Auth::", "Base::", "Core::", "Jump::", "Warp::", "Inertia")

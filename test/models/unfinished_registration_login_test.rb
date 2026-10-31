@@ -23,17 +23,4 @@ class UnfinishedRegistrationLoginTest < ActiveSupport::TestCase
       assert_predicate client, :sign_in_allowed?, status_id.to_s
     end
   end
-
-  test "a COM Visitor in an unfinished registration status cannot sign in" do
-    visitor = Visitor.create!(status_id: VisitorStatus::UNVERIFIED_WITH_SIGN_UP, security_mode_id: SecurityModeConfigurable::NORMAL)
-
-    assert_not visitor.sign_in_allowed?
-    assert_predicate visitor, :login_allowed?
-  end
-
-  test "a COM Visitor promoted at Finalization can sign in" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, security_mode_id: SecurityModeConfigurable::NORMAL)
-
-    assert_predicate visitor, :sign_in_allowed?
-  end
 end

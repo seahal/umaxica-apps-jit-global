@@ -16,6 +16,7 @@ module Auth
               include AppSignUpCheckpointPage
 
               AUTHENTICATION_MODE = :guest
+              sign_entry_classification! :sign_up
 
               before_action :load_sign_up_ticket
               before_action :load_sign_up_actor

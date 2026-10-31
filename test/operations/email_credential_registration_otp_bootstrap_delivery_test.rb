@@ -3,19 +3,17 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpBootstrapDeliveryTest < ActiveSupport::TestCase
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     %i(cancel expiry_before expiry_at expiry_after return_target scope).each do |change|
       test "#{surface} Email bootstrap delivery refuses #{change} of its original unconsumed parent" do
         actor_model, token_model, email_model, auth_model, owner_key =
           if surface == :app
             [Client, ClientToken, ClientEmail, ClientAuthCeremonySession, :user_id]
-          else
-            [Visitor, VisitorToken, VisitorEmail, VisitorAuthCeremonySession, :visitor_id]
           end
         actor = actor_model.create!(
           security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
-          status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+          status_id: ClientStatus::ACTIVE,
         )
         token = token_model.create!(
           :authentication_epoch => 0,

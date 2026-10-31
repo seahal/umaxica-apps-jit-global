@@ -10,12 +10,6 @@ class OtpAdapterTest < ActiveSupport::TestCase
     assert_instance_of OtpEmailNotifierAdapter, adapter
   end
 
-  test "for returns the Noticed adapter for com email" do
-    adapter = OtpAdapter.for(surface: :com, channel: :email)
-
-    assert_instance_of OtpEmailNotifierAdapter, adapter
-  end
-
   test "for returns the Noticed adapter for org email" do
     adapter = OtpAdapter.for(surface: :org, channel: :email)
 
@@ -24,12 +18,6 @@ class OtpAdapterTest < ActiveSupport::TestCase
 
   test "for returns OtpTelephoneAdapter for app/telephone" do
     adapter = OtpAdapter.for(surface: :app, channel: :telephone)
-
-    assert_instance_of OtpTelephoneAdapter, adapter
-  end
-
-  test "for returns OtpTelephoneAdapter for com/telephone" do
-    adapter = OtpAdapter.for(surface: :com, channel: :telephone)
 
     assert_instance_of OtpTelephoneAdapter, adapter
   end
@@ -55,7 +43,7 @@ class OtpAdapterTest < ActiveSupport::TestCase
   end
 
   test "for keeps telephone delivery on the telephone adapter" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       assert_instance_of OtpTelephoneAdapter, OtpAdapter.for(surface: surface, channel: :telephone)
     end
   end

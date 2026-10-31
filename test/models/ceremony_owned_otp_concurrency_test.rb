@@ -6,7 +6,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
-  [ClientEmailCeremonyTransaction, VisitorEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
+  [ClientEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} concurrent verification succeeds exactly once" do
       transaction = model.create_transaction!(
         actor_ref: "concurrent-actor", session_ref: "concurrent-browser",
@@ -52,8 +52,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephoneCeremonyTransaction, VisitorTelephoneCeremonyTransaction,
-   OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
     test "#{model.name} concurrent verification succeeds exactly once" do
       transaction = model.create_transaction!(
         actor_ref: "concurrent-actor", session_ref: "concurrent-browser",

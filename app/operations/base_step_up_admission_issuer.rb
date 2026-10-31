@@ -104,7 +104,13 @@ class BaseStepUpAdmissionIssuer
       methods = requirement.allowed_methods.map(&:to_s) & binding.methods
       deny!("step-up method unavailable", "unsupported_method") if methods.empty?
 
-      pending = binding.session_model.lock.find_by(binding.token_foreign_key => token.id)
+      session_scope = binding.session_model.where(binding.token_foreign_key => token.id)
+      parent_ref = session_scope.pick(:step_up_ceremony_transaction_ref)
+      binding.transaction_model.lock.find_by!(transaction_id: parent_ref) if parent_ref
+      pending = session_scope.lock.first
+      unless pending&.step_up_ceremony_transaction_ref == parent_ref
+        deny!("step-up session changed before admission", "session_binding_mismatch")
+      end
       transaction = existing_transaction(
         pending, binding:, requirement:, token:, actor:, return_to:, base_browser_nonce:, base_token:, restart_of:,
       )
@@ -217,16 +223,6 @@ class BaseStepUpAdmissionIssuer
           surface: "app", transaction_model: ClientStepUpCeremonyTransaction,
           session_model: ClientStepUpSession, token_foreign_key: :user_token_id,
           methods: %w(passkey totp email_otp), scope_catalog: StepUpScopeCatalog::APP,
-        )
-      when VisitorToken
-        unless actor.is_a?(Visitor) && token.visitor_id == actor.id
-          deny!("Base actor mismatch", "session_binding_mismatch")
-        end
-
-        Binding.new(
-          surface: "com", transaction_model: VisitorStepUpCeremonyTransaction,
-          session_model: VisitorStepUpSession, token_foreign_key: :visitor_token_id,
-          methods: %w(passkey email_otp), scope_catalog: StepUpScopeCatalog::COM,
         )
       when OperatorToken
         unless actor.is_a?(Operator) && token.staff_id == actor.id
@@ -345,7 +341,7 @@ class BaseStepUpAdmissionIssuer
         passkey_challenge: nil, passkey_challenge_ref: nil, passkey_rp_id: nil, passkey_origin: nil,
         passkey_challenge_expires_at: nil, passkey_challenge_consumed_at: nil,
       )
-      if pending.is_a?(ClientStepUpSession) || pending.is_a?(VisitorStepUpSession)
+      if pending.is_a?(ClientStepUpSession)
         pending.assign_attributes(
           email_credential_ref: nil, email_code_digest: nil, email_code_generation: 0,
           email_code_issued_at: nil, email_code_expires_at: nil, email_code_consumed_at: nil,

@@ -9,8 +9,6 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
     ClientIdentityState.ensure_defaults!
     ClientStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
-    VisitorStatus.ensure_defaults!
-    VisitorVisibility.ensure_defaults!
     OperatorStatus.ensure_defaults!
     OperatorVisibility.ensure_defaults!
   end
@@ -209,9 +207,8 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rejects an explicit owner from another surface" do
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
     )
     enterprise = I18n.with_locale(:en) { Enterprise.create!(name: "Cross Surface", title: "Cross") }
 
@@ -219,35 +216,7 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
       surface: :app,
       resource_kind: :enterprise,
       resource_public_id: enterprise.public_id,
-      owner_public_id: visitor.public_id,
-    )
-
-    assert_equal :manual_review, result.status
-    assert_equal :cross_surface_owner_candidate, result.reason
-    assert_not EnterpriseOwnership.exists?(enterprise_id: enterprise.id)
-  end
-
-  test "rejects an owner identifier that collides across principal surfaces" do
-    shared_public_id = "cross-surface-ownerxx"
-    Client.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      public_id: shared_public_id,
-      status_id: ClientStatus::ACTIVE,
-      visibility_id: ClientVisibility::USER,
-    )
-    Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      public_id: shared_public_id,
-      status_id: VisitorStatus::ACTIVE,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    enterprise = I18n.with_locale(:en) { Enterprise.create!(name: "Collision", title: "Collision") }
-
-    result = AuthorityOwnerDirectBindingBackfillOperation.call(
-      surface: :app,
-      resource_kind: :enterprise,
-      resource_public_id: enterprise.public_id,
-      owner_public_id: shared_public_id,
+      owner_public_id: operator.public_id,
     )
 
     assert_equal :manual_review, result.status

@@ -22,8 +22,31 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
     end
   end
 
-  test "a conflicting Chronicle event UUID is never acknowledged in either Source realm" do
-    [ClientContactAuditOutbox, VisitorContactAuditOutbox].each do |model|
+  test "a conflicting Contact audit does not starve later pages" do
+    poison = ClientContactAuditOutbox.record!(
+      contact_kind: "email", event_name: "finalized", owner_ref: "owner-one",
+      contact_ref: "contact-one", operation_ref: SecureRandom.uuid, actor_ref: "owner-one",
+    )
+    later = ClientContactAuditOutbox.record!(
+      contact_kind: "email", event_name: "finalized", owner_ref: "owner-two",
+      contact_ref: "contact-two", operation_ref: SecureRandom.uuid, actor_ref: "owner-two",
+    )
+    policy = ChronicleRetentionPolicy.find_by!(code: "security")
+    Chronicle.create!(
+      event_uuid: poison.event_uuid, action: "contact.email.finalized", result: "succeeded",
+      occurred_at: poison.occurred_at, request_id: poison.operation_ref, metadata: { "owner_ref" => "wrong-owner" },
+      changeset: {}, chronicle_retention_policy: policy,
+      erasable_at: ChronicleRecordPolicy.erasable_at_for(policy: policy, occurred_at: poison.occurred_at),
+    )
+
+    assert_raises(ArgumentError) { ContactAuditDeliveryJob.perform_now(batch_size: 1) }
+    assert_nil poison.reload.acknowledged_at
+    assert_predicate later.reload.acknowledged_at, :present?
+    assert_equal 1, Chronicle.where(event_uuid: later.event_uuid).count
+  end
+
+  test "a conflicting Chronicle event UUID is never acknowledged in the Source" do
+    [ClientContactAuditOutbox].each do |model|
       model.transaction(requires_new: true) do
         event = model.record!(
           contact_kind: "telephone", event_name: "released", owner_ref: "owner",
@@ -47,8 +70,8 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
     end
   end
 
-  test "Source acknowledgment rollback preserves Chronicle and rescan delivers each realm once" do
-    [ClientContactAuditOutbox, VisitorContactAuditOutbox].each do |model|
+  test "Source acknowledgment rollback preserves Chronicle and rescan delivers the Source once" do
+    [ClientContactAuditOutbox].each do |model|
       event =
         model.transaction do
           model.record!(
@@ -78,7 +101,7 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
       assert_equal event.owner_ref, audit.metadata.fetch("owner_ref")
       assert_equal event.contact_ref, audit.metadata.fetch("contact_ref")
       assert_equal event.actor_ref, audit.metadata.fetch("actor_ref")
-      assert_equal((model == ClientContactAuditOutbox) ? "app" : "com", audit.metadata.fetch("surface"))
+      assert_equal "app", audit.metadata.fetch("surface")
     end
   end
 
@@ -104,12 +127,12 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "invalid Contact audit event cannot commit its binding" do
-    owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-    contact = VisitorTelephone.create!(visitor_id: owner.id, number: "+819012345681", confirm_policy: "1")
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    contact = ClientTelephone.create!(user_id: owner.id, number: "+819012345681", confirm_policy: "1")
     assert_raises(ActiveRecord::RecordInvalid) do
-      VisitorTelephone.transaction(requires_new: true) do
+      ClientTelephone.transaction(requires_new: true) do
         contact.finalize_binding!
-        VisitorContactAuditOutbox.record!(
+        ClientContactAuditOutbox.record!(
           contact_kind: "telephone", event_name: "unknown", owner_ref: owner.public_id,
           contact_ref: contact.public_id, operation_ref: SecureRandom.uuid, actor_ref: nil,
         )

@@ -12,6 +12,60 @@ require "test_helper"
 # pinned before #871 moves them into app/operations. Both use real failures rather than stubbed
 # collaborators, per generic/no-test-only-code.mdc.
 class EnforcementCaseApplyOrderingTest < ActiveSupport::TestCase
+  test "reconciling a released Case does not clear a later administrative lock" do
+    client = clients(:one)
+    operator = operators(:one)
+    the_case = blocking_case_for(client, operator_public_id: operator.public_id)
+    EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+    EnforcementCaseEndOperation.call(enforcement_case: the_case, reason: "revoked")
+    AdministrativeAccessLock.lock!(account: client, operator: operator, reason_code: "security_incident")
+
+    EnforcementCaseEndOperation.new(enforcement_case: the_case, reason: "revoked").reconcile
+
+    assert_predicate client.reload, :admin_locked?
+  end
+
+  test "end reconciliation retries a missing release audit after unlock committed" do
+    client = clients(:one)
+    operator = operators(:one)
+    the_case = blocking_case_for(client, operator_public_id: operator.public_id)
+    EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+
+    AccountAccessEvent.stub(:create!, ->(**) { raise ActiveRecord::RecordNotUnique }) do
+      assert_raises(ActiveRecord::RecordNotUnique) do
+        EnforcementCaseEndOperation.call(enforcement_case: the_case, reason: "revoked")
+      end
+    end
+
+    assert_predicate client.reload, :access_enabled?
+    assert_predicate the_case.reload.ended_at, :present?
+    EnforcementCaseEndOperation.new(enforcement_case: the_case, reason: "revoked").reconcile
+
+    assert_predicate AccountAccessEvent.where(
+      account_type: "Client", account_id: client.id, event_type: AccountAccessEvent::EVENT_TYPE_ADMIN_UNLOCK,
+    ).where("metadata @> ?::jsonb", { enforcement_case_public_id: the_case.public_id }.to_json), :exists?
+  end
+
+  test "reconciling an already released Case does not advance the account token cutoff" do
+    client = clients(:one)
+    operator = operators(:one)
+    the_case = blocking_case_for(client, operator_public_id: operator.public_id)
+    EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: operator.public_id)
+    EnforcementCaseEndOperation.call(enforcement_case: the_case, reason: "revoked")
+    cutoff = client.reload.token_valid_after_at
+    release_events = AccountAccessEvent.where(
+      account_type: "Client", account_id: client.id, event_type: AccountAccessEvent::EVENT_TYPE_ADMIN_UNLOCK,
+    )
+
+    travel 1.second do
+      assert_no_difference -> { release_events.count } do
+        EnforcementCaseEndOperation.new(enforcement_case: the_case, reason: "revoked").reconcile
+      end
+    end
+
+    assert_equal cutoff, client.reload.token_valid_after_at
+  end
+
   test "a side effect failing after the transaction leaves the case active" do
     client = clients(:one)
 

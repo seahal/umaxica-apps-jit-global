@@ -2,7 +2,7 @@
 
 Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A and Phase B files below are local documentation artifacts.
 
-## Individual diagrams (125)
+## Individual diagrams (128)
 
 - [idp-client-sign-in.mmd](./idp-client-sign-in.mmd) — STATE_MACHINE / client.
 - [idp-client-sign-up.mmd](./idp-client-sign-up.mmd) — STATE_MACHINE / client.
@@ -76,21 +76,22 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-client-dpop-nonce.mmd](./idp-client-dpop-nonce.mmd) — WORKFLOW_STATE / client.
 - [idp-client-administrative-access.mmd](./idp-client-administrative-access.mmd) — WORKFLOW_STATE / client.
 - [idp-client-email-verification-challenge.mmd](./idp-client-email-verification-challenge.mmd) — WORKFLOW_STATE / client.
-- [idp-client-preference-dbsc.mmd](./idp-client-preference-dbsc.mmd) — WORKFLOW_STATE / client.
+- [idp-app-preference-status.mmd](./idp-app-preference-status.mmd) — STATUS_AXIS / app.
+- [idp-client-preference-status.mmd](./idp-client-preference-status.mmd) — STATUS_AXIS / client.
 - [idp-client-email-otp.mmd](./idp-client-email-otp.mmd) — DERIVED_STATE / client.
 - [idp-client-telephone-otp.mmd](./idp-client-telephone-otp.mmd) — DERIVED_STATE / client.
 - [idp-visitor-secret-credential.mmd](./idp-visitor-secret-credential.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-dpop-nonce.mmd](./idp-visitor-dpop-nonce.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-administrative-access.mmd](./idp-visitor-administrative-access.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-email-verification-challenge.mmd](./idp-visitor-email-verification-challenge.mmd) — WORKFLOW_STATE / visitor.
-- [idp-visitor-preference-dbsc.mmd](./idp-visitor-preference-dbsc.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-email-otp.mmd](./idp-visitor-email-otp.mmd) — DERIVED_STATE / visitor.
 - [idp-visitor-telephone-otp.mmd](./idp-visitor-telephone-otp.mmd) — DERIVED_STATE / visitor.
 - [idp-operator-secret-credential.mmd](./idp-operator-secret-credential.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-dpop-nonce.mmd](./idp-operator-dpop-nonce.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-administrative-access.mmd](./idp-operator-administrative-access.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-email-verification-challenge.mmd](./idp-operator-email-verification-challenge.mmd) — WORKFLOW_STATE / operator.
-- [idp-operator-preference-dbsc.mmd](./idp-operator-preference-dbsc.mmd) — WORKFLOW_STATE / operator.
+- [idp-org-preference-status.mmd](./idp-org-preference-status.mmd) — STATUS_AXIS / org.
+- [idp-operator-preference-status.mmd](./idp-operator-preference-status.mmd) — STATUS_AXIS / operator.
 - [idp-operator-email-otp.mmd](./idp-operator-email-otp.mmd) — DERIVED_STATE / operator.
 - [idp-operator-telephone-otp.mmd](./idp-operator-telephone-otp.mmd) — DERIVED_STATE / operator.
 - [idp-client-withdrawal.mmd](./idp-client-withdrawal.mmd) — STATE_MACHINE / client.

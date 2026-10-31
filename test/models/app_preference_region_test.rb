@@ -30,7 +30,7 @@ class AppPreferenceRegionTest < ActiveSupport::TestCase
 
   setup do
     AppPreferenceStatus.ensure_defaults!
-    @preference = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING)
+    @preference = AppPreference.create!(status_id: AppPreferenceStatus::ACTIVE)
   end
 
   test "belongs to preference" do

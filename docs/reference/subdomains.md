@@ -13,13 +13,14 @@ staff, and corporate surfaces:
 | `org`   | `base.org.localhost` | Staff and organization surface |
 | `com`   | `base.com.localhost` | Public and corporate surface   |
 
-The credential gateway uses the `auth.*` label for the same audience families:
+The credential gateway uses the `auth.*` label for the app and org audience families. The
+corporate (`com`) hosts are anonymous: they serve the public preference entry and public read-only
+pages, so `auth.com.localhost` has no credential route.
 
 | Audience | Default local host   |
 | -------- | -------------------- |
 | `app`    | `auth.app.localhost` |
 | `org`    | `auth.org.localhost` |
-| `com`    | `auth.com.localhost` |
 
 The gateway also answers on `sign.*.localhost`, which is the boot-config default that applies when
 `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset.

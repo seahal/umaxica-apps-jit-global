@@ -3,18 +3,44 @@
 require "test_helper"
 
 class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
-  %w(app com org).each do |surface|
+  test "APP queued reentry Email is withheld after binding release or loss of verified status" do
+    %w(recovery withdrawal).product(%i(released unverified)).each do |operation, change|
+      client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      email = client.client_emails.create!(
+        raw_address: "delivery-reentry-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+        user_email_status_id: ClientEmailStatus::VERIFIED,
+      )
+      email.finalize_binding!
+      transaction = EmailReentryOtpIssuer.call(email: email, operation: operation, session_ref: SecureRandom.uuid)
+
+      assert_predicate transaction, :persisted?
+      if change == :released
+        email.release_binding!
+      else
+        email.update!(user_email_status_id: ClientEmailStatus::UNVERIFIED)
+      end
+      assert_no_difference "ActionMailer::Base.deliveries.size" do
+        perform_enqueued_jobs(only: OtpNotifierEmailDeliveryJob)
+      end
+      assert_nil transaction.reload.otp_consumed_at
+    end
+  end
+
+  %w(app org).each do |surface|
     test "#{surface} email worker refuses foreign actor destination generation realm and consumed proof" do
       email_model, transaction_model, owner_key, owner =
         case surface
         when "app" then [ClientEmail, ClientEmailCeremonyTransaction, :user_id, clients(:one)]
-        when "com" then [VisitorEmail, VisitorEmailCeremonyTransaction, :visitor_id, visitors(:reserved_visitor)]
         when "org" then [OperatorEmail, OperatorEmailCeremonyTransaction, :staff_id, operators(:one)]
         end
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "ceremony-binding-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true,
       )
+      if surface == "app"
+        email.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+        email.finalize_binding!
+      end
       transaction = transaction_model.create_transaction!(
         actor_ref: owner.public_id, session_ref: SecureRandom.uuid, operation: "withdrawal",
         email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
@@ -41,7 +67,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5095 =
             case fv5097
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -68,7 +93,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5086 =
             case fv5088
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -98,7 +122,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
               fv5077 =
                 case fv5079
                 when "app" then Notify::App::OtpNotifier
-                when "com" then Notify::Com::OtpNotifier
                 when "org" then Notify::Org::OtpNotifier
                 else raise ArgumentError, "unsupported test delivery surface"
                 end
@@ -126,7 +149,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5068 =
             case fv5070
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -141,7 +163,7 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           )
           perform_enqueued_jobs(only: OtpNotifierEmailDeliveryJob)
         end
-        foreign_surface = (surface == "app") ? "com" : "app"
+        foreign_surface = (surface == "app") ? "org" : "app"
         begin
           fv5062 = { email: email, **payload.merge(surface: foreign_surface) }
           fv5056 = fv5062.fetch(:email)
@@ -153,7 +175,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5059 =
             case fv5061
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -185,7 +206,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5050 =
             case fv5052
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -207,13 +227,16 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
       email_model, transaction_model, owner_key, owner =
         case surface
         when "app" then [ClientEmail, ClientEmailCeremonyTransaction, :user_id, clients(:one)]
-        when "com" then [VisitorEmail, VisitorEmailCeremonyTransaction, :visitor_id, visitors(:reserved_visitor)]
         when "org" then [OperatorEmail, OperatorEmailCeremonyTransaction, :staff_id, operators(:one)]
         end
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "ceremony-delivery-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true,
       )
+      if surface == "app"
+        email.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+        email.finalize_binding!
+      end
       transaction = transaction_model.create_transaction!(
         actor_ref: owner.public_id, session_ref: SecureRandom.uuid, operation: "recovery",
         email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
@@ -241,7 +264,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5041 =
             case fv5043
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -272,7 +294,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5032 =
             case fv5034
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end
@@ -306,7 +327,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
             fv5023 =
               case fv5025
               when "app" then Notify::App::OtpNotifier
-              when "com" then Notify::Com::OtpNotifier
               when "org" then Notify::Org::OtpNotifier
               else raise ArgumentError, "unsupported test delivery surface"
               end
@@ -340,7 +360,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
               fv5014 =
                 case fv5016
                 when "app" then Notify::App::OtpNotifier
-                when "com" then Notify::Com::OtpNotifier
                 when "org" then Notify::Org::OtpNotifier
                 else raise ArgumentError, "unsupported test delivery surface"
                 end
@@ -371,7 +390,6 @@ class EmailReentryOtpDeliveryTest < ActiveJob::TestCase
           fv5005 =
             case fv5007
             when "app" then Notify::App::OtpNotifier
-            when "com" then Notify::Com::OtpNotifier
             when "org" then Notify::Org::OtpNotifier
             else raise ArgumentError, "unsupported test delivery surface"
             end

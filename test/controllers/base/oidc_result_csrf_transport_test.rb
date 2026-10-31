@@ -3,7 +3,7 @@
 require "test_helper"
 
 class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     # One admitted result spans refusals, success and replay to prove refusals never consume it.
     test "#{surface} Visa result requires a browser navigation and legacy POST cannot issue a root" do # rubocop:disable Minitest/MultipleAssertions
       protection = ActionController::Base.allow_forgery_protection
@@ -13,9 +13,6 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
         when "app"
           ["core-app-jp", "client", ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), Client,
            ClientToken, :user_id, ClientStatus::ACTIVE,]
-        when "com"
-          ["core-com-jp", "visitor", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-           Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE,]
         when "org"
           ["core-org-jp", "operator", ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), Operator,
            OperatorToken, :staff_id, OperatorStatus::ACTIVE,]

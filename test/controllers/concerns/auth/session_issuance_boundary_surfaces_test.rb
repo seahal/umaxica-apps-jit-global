@@ -3,7 +3,7 @@
 
 require "test_helper"
 
-# The final session issuance boundary (AuthenticationBase#log_in) is shared by app, com, and org.
+# The final session issuance boundary (AuthenticationBase#log_in) is shared by app and org.
 # Each surface is exercised through its real Base application controller so the surface's own token
 # table, limit, and cookies are used (adr/root-login-establishment-boundary.md).
 class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
@@ -19,20 +19,6 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
         Client.create!(
           security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
           birthdate: "2000-01-01",
-        )
-      },
-    },
-    com: {
-      controller: Base::Com::AuthorityController,
-      host: "PUBLIC_BASE_CORPORATE_URL",
-      token_class: VisitorToken,
-      foreign_key: :visitor_id,
-      limit: VisitorToken::MAX_SESSIONS_PER_VISITOR,
-      flow_class: VisitorSignInFlow,
-      resource: -> {
-        Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-          visibility_id: VisitorVisibility::VISITOR,
         )
       },
     },
@@ -84,11 +70,6 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
         security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01",
       ),
        ClientSignInFlow, ClientToken, :user_id, Base::App::AuthorityController, ENV.fetch("PUBLIC_BASE_SERVICE_URL"),],
-      [Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
-      ),
-       VisitorSignInFlow, VisitorToken, :visitor_id, Base::Com::AuthorityController,
-       ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),],
       [Operator.create!(
         security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
       ),

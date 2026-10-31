@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class TelephoneSignUpOtpDeliveryIssuer
+  class DeliveryUnavailable < StandardError; end
+
   class << self
     public
 
@@ -11,7 +13,6 @@ class TelephoneSignUpOtpDeliveryIssuer
       surface =
         case flow
         when ClientSignUpFlow then :app
-        when VisitorSignUpFlow then :com
         else raise ArgumentError, "unsupported Telephone signup delivery realm"
         end
       accepted = false
@@ -27,7 +28,8 @@ class TelephoneSignUpOtpDeliveryIssuer
           )
           accepted = delivery.accepted?
         end
-      return issued if current && accepted
+      raise DeliveryUnavailable, "SMS delivery is unavailable" if current && !accepted
+      return issued if current
 
       TelephoneSignUpOtpIssueResult.new(status: :delivery_refused, transaction: nil, code: nil)
     end

@@ -8,8 +8,8 @@ require "test_helper"
 module Security
   module Invariants
     # Authorization codes, token usages, and OIDC connection records live on the
-    # per-surface ticket databases (OpBaseAppRecord / OpBaseComRecord /
-    # OpBaseOrgRecord), which are separate connections from ActiveRecord::Base.
+    # per-surface ticket databases (OpBaseAppRecord / OpBaseOrgRecord), which are
+    # separate connections from ActiveRecord::Base.
     #
     # `ActiveRecord::Base.transaction` therefore opens a transaction on the
     # primary connection and wraps none of those writes. A `lock!` taken inside
@@ -19,7 +19,7 @@ module Security
     class TicketTransactionConnectionInvariantTest < ActiveSupport::TestCase
       self.fixture_table_names = []
 
-      TICKET_CONNECTION_CLASSES = %w(OpBaseAppRecord OpBaseComRecord OpBaseOrgRecord).freeze
+      TICKET_CONNECTION_CLASSES = %w(OpBaseAppRecord OpBaseOrgRecord).freeze
 
       # Services that lock or consume ticket-owned rows. None may open its
       # transaction on ActiveRecord::Base.

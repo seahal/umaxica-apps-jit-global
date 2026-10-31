@@ -5,21 +5,16 @@ require "test_helper"
 class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
-  %w(app com).each do |surface|
+  %w(app).each do |surface|
     test "#{surface} Telephone signup retries a generated transaction reference collision" do
       owner_model, telephone_model, flow_model, transaction_model, owner_key, status =
         case surface
         when "app"
           [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -66,9 +61,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -115,9 +107,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       namespace = "telephone-signup-receipt:#{SecureRandom.hex(12)}"
       connection = Umaxica::Valkey::Connection.new(namespace: namespace)
@@ -179,7 +168,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -220,7 +208,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -240,13 +227,13 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         lambda do |&work|
           calls += 1
           telephone_model.find(telephone.id).increment_attempts! if calls == 2
-          flow.class.transaction(requires_new: true) do
-            flow.lock!
+          telephone.class.transaction(requires_new: true) do
+            telephone.lock!
             work.call
           end
         end
       verified =
-        flow.stub(:with_lock, interleaved_lock) do
+        telephone.stub(:with_lock, interleaved_lock) do
           TelephoneSignUpOtpVerificationCommitter.call(
             flow: flow, telephone: telephone, session_nonce: nonce, code: issued.code,
           )
@@ -261,7 +248,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
         owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
@@ -298,7 +284,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       issued = nil
       telephone = nil
@@ -347,9 +332,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction,
            :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
-           :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -400,7 +382,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       owner_model, telephone_model, flow_model, owner_key, status =
         case surface
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-        when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -424,6 +405,31 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         destination: telephone.number,
         code: issued.code,
       }
+      before_timeout = issued.transaction.reload.attributes.slice("otp_generation", "otp_expires_at", "otp_consumed_at")
+      slow_provider = Object.new
+      slow_provider.define_singleton_method(:send_message) { |**| sleep 1 }
+
+      OutboundSms.stub(:provider, slow_provider) do
+        assert_raises(Net::ReadTimeout) do
+          TelephoneSignUpOtpDeliveryGuard.call(**arguments) do
+            OutboundSms.deliver_now(to: telephone.number, title: "Verification", body: "code", timeout: 0.05)
+          end
+        end
+      end
+      assert_equal before_timeout, issued.transaction.reload.attributes.slice(*before_timeout.keys)
+
+      encrypted = OutboundSensitivePayload.encrypt_sms_delivery(
+        to: telephone.number, title: "Verification code", body: "Your verification code: #{issued.code}",
+        otp_binding: ["app", "sign_up", flow.public_id, issued.transaction.transaction_id,
+                      issued.transaction.otp_generation,], otp_code: issued.code,
+      )
+      delivery_timeouts = []
+      OutboundSms.stub(:deliver_now, ->(**message) { delivery_timeouts << message.fetch(:timeout) }) do
+        Outbound::SmsDeliveryJob.perform_now(encrypted_payload: encrypted)
+      end
+
+      assert_equal [Outbound::SmsDeliveryJob::OTP_TRANSPORT_TIMEOUT], delivery_timeouts
+
       transported = 0
       delivered = TelephoneSignUpOtpDeliveryGuard.call(**arguments) { transported += 1 }
 
@@ -447,9 +453,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction, :user_id,
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction, :visitor_id,
-           VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -465,8 +468,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
       )
       original = telephone.attributes.slice(
-        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
-        "staff_id",
+        "public_id", "address_digest", "number_digest", "user_id", "staff_id",
       )
       denied = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: flow.public_id)
 
@@ -538,9 +540,6 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app"
           [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction, :user_id,
            ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
-        when "com"
-          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction, :visitor_id,
-           VisitorStatus::UNVERIFIED_WITH_SIGN_UP,]
         end
       owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
@@ -556,8 +555,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
       )
       original = telephone.attributes.slice(
-        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
-        "staff_id",
+        "public_id", "address_digest", "number_digest", "user_id", "staff_id",
       )
       resend = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
       scope = { flow: flow, telephone: telephone, session_nonce: nonce }

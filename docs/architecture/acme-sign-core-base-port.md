@@ -45,9 +45,9 @@ Every first-party RP is a confidential client that uses the authorization code f
 
 | Surface | Client IDs                                                  | Actor                       |
 | ------- | ----------------------------------------------------------- | --------------------------- |
-| Core    | `core-app-jp`, `core-com-jp`, `core-org-jp` (+ `-us` faces) | client / visitor / operator |
-| Warp    | `warp-app-jp`, `warp-com-jp`, `warp-org-jp` (+ `-us` faces) | client / visitor / operator |
-| Base    | `base-app-ww`, `base-com-ww`, `base-org-ww` (self-RP)       | client / visitor / operator |
+| Core    | `core-app-jp`, `core-org-jp` (+ approved `-us` faces)       | client / operator           |
+| Warp    | `warp-app-jp`, `warp-org-jp` (+ approved `-us` faces)       | client / operator           |
+| Base    | `base-app-ww`, `base-org-ww` (self-RP)                     | client / operator           |
 | Edit    | `edit-org-ww`                                               | operator                    |
 | Palm    | `palm-app-jp`                                               | client                      |
 | Tech    | `tech-org-ww` (requires `tech.access`)                      | operator                    |
@@ -68,7 +68,7 @@ The `docs`, `news`, and `help` surfaces are content surfaces, not OIDC RPs.
 
 ## Session Hierarchy
 
-Identity → Base Browser Session (`ClientToken` / `VisitorToken` / `OperatorToken`) → RP Session per
+Identity → Base Browser Session (`ClientToken` / `OperatorToken`) → RP Session per
 registered client. RP surfaces share no cookies or sessions with each other or with Base. Each RP
 cell has its own session store (`config/database.yml` `rp_*` connections), keyed by client ID.
 

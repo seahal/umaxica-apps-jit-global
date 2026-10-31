@@ -8,9 +8,9 @@ class EmailSignUpOtpDeliveryGuard
       raise ArgumentError, "Email signup delivery requires a transport block" unless block_given?
 
       owner, pending_status = components(flow, email, transaction)
-      flow.with_lock do
-        owner.with_lock do
-          email.with_lock do
+      owner.with_lock do
+        email.with_lock do
+          flow.with_lock do
             next false unless current_parent_and_source?(flow, email, owner, pending_status)
 
             session_ref = Digest::SHA256.hexdigest(
@@ -23,7 +23,7 @@ class EmailSignUpOtpDeliveryGuard
               next false unless transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
                 transaction.session_ref == session_ref && transaction.actor_ref == owner.public_id &&
                 transaction.email_candidate_ref == email.public_id &&
-                transaction.normalized_email_digest == email.address_digest
+                transaction.normalized_email_digest == email.address_digest && transaction.expires_at == flow.expires_at
               next false unless destination.is_a?(String) && destination.encoding.ascii_compatible? &&
                 destination.valid_encoding? &&
                 IdentifierBlindIndex.bidx_for_email(
@@ -49,12 +49,6 @@ class EmailSignUpOtpDeliveryGuard
         end
 
         [Client.find(email.user_id), ClientStatus::UNVERIFIED_WITH_SIGN_UP]
-      when VisitorSignUpFlow
-        unless email.is_a?(VisitorEmail) && transaction.is_a?(VisitorEmailCeremonyTransaction)
-          raise ArgumentError, "COM signup delivery requires its own Email ceremony"
-        end
-
-        [Visitor.find(email.visitor_id), VisitorStatus::UNVERIFIED_WITH_SIGN_UP]
       else raise ArgumentError, "unsupported Email signup delivery realm"
       end
     end
@@ -64,7 +58,6 @@ class EmailSignUpOtpDeliveryGuard
       owner_id =
         case email
         when ClientEmail then email.user_id
-        when VisitorEmail then email.visitor_id
         else raise ArgumentError, "unsupported Email signup candidate"
         end
       !flow.sign_up_terminal? && flow.expires_at > now && !flow.lapsed?(now) &&

@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Runtime kill switch for outbound delivery channels that depend on a third party
-# (Amazon SNS for SMS, the SMTP relay for email, APNs/FCM for push).
+# (Amazon SNS for SMS, the SMTP relay for email).
 #
 # Polarity is deliberate and the opposite of
 # ExternalAuthentication::FlipperProviderAvailabilityAdapter: the feature names a
@@ -16,7 +16,6 @@ class OutboundChannelSuspension
     sms: :outbound_sms_suspended,
     email: :outbound_email_suspended,
     promotional_email: :outbound_promotional_email_suspended,
-    push: :outbound_push_suspended,
   }.freeze
 
   def self.suspended?(channel, flipper: Flipper)

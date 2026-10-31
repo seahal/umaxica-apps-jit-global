@@ -1,0 +1,7 @@
+# WU-7 com preference status names
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- Renamed the com reference constants to `ACTIVE` (existing ID 2) and `RETIRED` (existing ID 1), updated com callers and tests, retained app/org status constants, and updated the com status diagram and transition inventory. No reference-row or schema migration was executed in this slice.
+- Before the change, the status, com write-journey and retired-consent tests passed: 47 runs, 336 assertions. After the change, these tests plus the com Web Push initialization and API tests passed: 89 runs, 841 assertions, no failures, errors or skips.
+- The shared `acme_preference_test` and preference base concern test produced 147 runs, 1,176 assertions, four failures and zero errors. All four failing com test names also occur in the earlier full-suite output `/tmp/wu7-rails-test-20261030.log`; that observation does not establish that they belong to the original baseline. They cover timezone presentation/validation and reset audit/cookie expectations. The current combined run did not pass.
+- RuboCop passed for the changed status and three shared concern files; `git diff --check` passed for the inspected files. No full suite was run. The named transition writer, final issuance snapshot, legacy column removal, concurrency and WU-7 completion are not established by this change.

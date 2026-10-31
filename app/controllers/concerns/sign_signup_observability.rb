@@ -23,8 +23,6 @@ module SignSignupObservability
   def sign_signup_observability_surface
     if respond_to?(:sign_in_surface, true)
       sign_in_surface
-    elsif self.class.name.start_with?("Sign::Com::")
-      :com
     elsif self.class.name.start_with?("Sign::Org::")
       :org
     else

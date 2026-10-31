@@ -1,20 +1,28 @@
 # Sign-Up Sequence
 
+> **Current scope:** COM authentication and Visitor sign-up have been retired. APP sign-up remains
+> active; ORG invitation creation currently refuses new invitations. The route inventories and
+> implementation descriptions below include historical COM material and require reconciliation
+> before they can be used as a current route or lifecycle reference. See
+> [Sign-Up Eligibility Policy](../policy/signup-eligibility.md) for the current birthdate rule.
+
 ## Effective admission intent
 
 At issuance, `AuthEntryIntentResolver` selects Sign In for an ordinary OIDC request, Sign Up for the
 OP's persisted `prompt=create`, or the explicit Switch target when switching. The Binding stores the
 resulting immutable `entry_intent` as `sign_in` or `sign_up`. Re-verification purposes store the
 explicit value `not_applicable`; every realm's database rejects a missing intent or a purpose/intent
-mismatch. Auth entry GETs, redemption POSTs, admitted ceremony checks and Base's confirmation return
+mismatch. Auth entry GETs, confirmed GET redemption, admitted ceremony checks and Base's confirmation return
 target use the same resolver and retained fact. Changing a route or browser parameter cannot change
 the selected intent; wrong-intent entry refuses before consumption.
 
 Every Binding stores an immutable, required `curfew_at` from its OP writer's issuance clock plus 30
 minutes, without a database default. A Switch requires the original redeemed/cancelled Binding and
-copies that deadline; repeated Switches never extend it. The short-lived acceptance expiry is a
-separate fact. WU-24c/d add storage only: consumer deadline alignment is WU-06, so this storage does
-not yet guarantee a 30-minute end-to-end ceremony.
+copies that deadline; repeated Switches never extend it. Switch handoff issuance refuses a missing
+deadline and refuses at or after that deadline, using the OP database clock. Handoff receipt also
+checks its expiry against that clock. The short-lived acceptance expiry is a
+separate fact. An APP sign-up Flow's expiry is capped at its Binding's curfew when the Flow is
+created. This cap alone does not establish an end-to-end deadline for every ceremony consumer.
 
 APP Social results also resolve their Flow through the required `auth_admission_binding_id`. The
 signed result's session reference must identify a redeemed sign-up Binding that owns that Flow.
@@ -26,7 +34,7 @@ Social receiver until WU-05 replaces that transport with shared Finalization.
 
 ## Contact entry validation and replacement
 
-APP and COM email and telephone entry POSTs accept consent only as the checkbox value `"1"` or the
+APP email and telephone entry POSTs accept consent only as the checkbox value `"1"` or the
 JSON boolean `true`. Missing, null, empty, unchecked and unsupported values are rejected with the
 existing validation response. Telephone entry requires both policy and MFA-use consent. This
 request-boundary normalization preserves the shared contact models' other creation workflows.
@@ -38,7 +46,7 @@ locator, pending contact, principal and proof stay as they are and no OTP is que
 end or clean an earlier attempt to admit a new one. A new attempt after release starts from a new
 Base admission; a session hint naming the released attempt of an earlier admission is then dropped.
 
-`RetentionPurgeJob` reports stuck APP/COM registrations after its cleanup and retention work using
+`RetentionPurgeJob` reports stuck APP registrations after its cleanup and retention work using
 the read-only `SignUpStuckRegistrationReportQuery`. The structured event contains the surface, case,
 count and public identifiers, never contact values. A report failure is logged without stopping the
 job. The report itself never releases a registration, and no operator command inspects or retries
@@ -49,10 +57,8 @@ An unfinished principal/contact whose Flow is missing has no safe existing relea
 remains held for escalation. ORG has no matching status and cleanup attempt schema, so it is outside
 this report.
 
-A birthdate below the surface's minimum age is decided on the validated, unsaved value and is never
-written (D-178). The refusal ends the attempt as HALTED through `SignUpTermination`, which removes the
-pending artifacts in the same request; if that removal fails, the existing cleanup-pending state,
-the contact hold and the retention cleanup retry apply unchanged.
+APP sign-up accepts a birthdate before the service date. Today and future dates are refused with
+422 without persisting the birthdate; an under-age HALTED branch is no longer part of the policy.
 
 The reason completed App/Com registration enters the canonical Sign In admission before session
 issuance is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md)

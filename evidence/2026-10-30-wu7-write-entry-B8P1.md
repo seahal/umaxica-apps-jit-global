@@ -1,0 +1,6 @@
+# WU-7 com preference write entrance
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree contained uncommitted changes affecting the result.
+- Replaced the com-specific entry name with `write_preference!(operation:, actor:, submitted:)` for the seven com save and reset call sites. The entry checks the current anonymous com actor, the allowed controller/action/operation and submitted container before decoding the token and locking the setting row. Validated changes pass to the existing narrowly scoped setting writers. App/org remain on their current WU-9 paths.
+- The focused pre-change selection passed: 16 runs, 522 assertions. After the change, a broad com write, binding, failure, invariant, concurrency and authorization selection passed: 109 runs, 1,469 assertions, zero failures, errors or skips. RuboCop autocorrection completed without remaining offenses in the seven changed Ruby files.
+- One attempted broad command specified a nonexistent concurrency file and did not run tests; the corrected command above used `com_preference_consent_writes_test.rb`. The two databases still commit independently; this change does not establish cross-database atomic commit. Full-suite comparison and WU-7 completion remain unverified.

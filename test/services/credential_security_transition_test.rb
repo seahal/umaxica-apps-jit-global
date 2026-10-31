@@ -5,7 +5,7 @@ require "test_helper"
 
 class CredentialSecurityTransitionTest < ActiveSupport::TestCase
   test "credential changes end only owned unfinished sign-in flows without revoking retained root sessions" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       [true, false].each_with_index do |revoke_step_up, index|
         actor, foreign, token, =
           case surface
@@ -17,15 +17,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
               ClientToken.create!(authentication_epoch: 0, user: actor),
               ClientSignInFlow,
               ClientAuthCeremonySession,
-            ]
-          when :com
-            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_119_000_000_000 + index)
-            [
-              actor,
-              Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_120_000_000_000 + index),
-              VisitorToken.create!(authentication_epoch: 0, visitor: actor),
-              VisitorSignInFlow,
-              VisitorAuthCeremonySession,
             ]
           when :org
             actor = Operator.create!(
@@ -76,7 +67,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
   end
 
   test "credential changes end a sign-in flow immediately before at and after its expiry" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       [-1, 0, 1].each_with_index do |microseconds, index|
         actor, token, flow_model, =
           case surface
@@ -84,10 +75,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
             actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_122_000_000_000 + index)
             [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientSignInFlow,
              ClientAuthCeremonySession,]
-          when :com
-            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_122_000_000_000 + index)
-            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorSignInFlow,
-             VisitorAuthCeremonySession,]
           when :org
             actor = Operator.create!(
               security_mode_id: SecurityModeConfigurable::ADVANCED,
@@ -120,7 +107,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
   end
 
   test "credential changes expire only owned unfinished OIDC authentication and preserve consumed history" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       actor, foreign, token, transactions, ceremonies =
         case surface
         when :app
@@ -129,12 +116,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
             security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_124_000_000_000,
           ), ClientToken.create!(authentication_epoch: 0, user: actor),
            ClientOidcAuthorizationTransaction, ClientAuthCeremonySession,]
-        when :com
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_123_000_000_000)
-          [actor, Visitor.create!(
-            security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_124_000_000_000,
-          ), VisitorToken.create!(authentication_epoch: 0, visitor: actor),
-           VisitorOidcAuthorizationTransaction, VisitorAuthCeremonySession,]
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_123_000_000_000)
           [actor, Operator.create!(
@@ -219,17 +200,13 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
   end
 
   test "OIDC continuity failure rolls back authorization expiry and preserves the retained root token" do
-    %i(app com org).each do |surface|
+    %i(app org).each do |surface|
       actor, token, transactions, ceremonies =
         case surface
         when :app
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_126_000_000_000)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientOidcAuthorizationTransaction,
            ClientAuthCeremonySession,]
-        when :com
-          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_126_000_000_000)
-          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorOidcAuthorizationTransaction,
-           VisitorAuthCeremonySession,]
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_126_000_000_000)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorOidcAuthorizationTransaction,
@@ -274,7 +251,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     end
   end
 
-  %i(app com org).each do |surface|
+  %i(app org).each do |surface|
     %i(other_actor other_surface).each do |mismatch|
       test "#{surface} credential transition refuses current-session #{mismatch} before changing tokens" do
         case surface
@@ -286,20 +263,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
               ClientToken.create!(authentication_epoch: 0, user: clients(:two))
             else
               OperatorToken.create!(authentication_epoch: 0, staff: operators(:one))
-            end
-        when :com
-          actor = visitors(:reserved_visitor)
-          owned_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
-          foreign_token =
-            if mismatch == :other_actor
-              VisitorToken.create!(
-                authentication_epoch: 0,
-                visitor: Visitor.create!(
-                  security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-                ),
-              )
-            else
-              ClientToken.create!(authentication_epoch: 0, user: clients(:one))
             end
         when :org
           actor = operators(:one)
@@ -328,10 +291,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
         actor = clients(:one)
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
         token = ClientToken.create!(authentication_epoch: 0, user: actor)
-      when :com
-        actor = visitors(:reserved_visitor)
-        AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-        token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
       when :org
         actor = operators(:one)
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
@@ -362,11 +321,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
           current_token = ClientToken.create!(authentication_epoch: 0, user: actor)
           other_token = ClientToken.create!(authentication_epoch: 0, user: actor)
-        when :com
-          actor = visitors(:reserved_visitor)
-          AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-          current_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
-          other_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
         when :org
           actor = operators(:one)
           AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
@@ -385,33 +339,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
         assert_nil other_token.last_step_up_at
       end
     end
-  end
-
-  test "COM credential changes enumerate revocation targets on the writer inside a reading request" do
-    actor = visitors(:reserved_visitor)
-    AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-    current_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
-    other_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
-    roles = []
-    subscriber =
-      lambda do |_name, _start, _finish, _id, payload|
-        if payload.fetch(:sql).match?(/\ASELECT .*FROM "visitor_tokens"/)
-          roles << payload.fetch(:connection).pool.role
-        end
-      end
-
-    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-      OpBaseComRecord.connected_to(role: :reading, prevent_writes: true) do
-        CredentialSecurityTransition.call(
-          actor: actor, current_session: current_token, reason: :email_address_verified, affected_surface: "com",
-        )
-      end
-    end
-
-    assert_not_empty roles
-    assert_equal [:writing], roles.uniq
-    assert_predicate current_token.reload, :currently_usable?
-    assert_predicate other_token.reload, :revoked?
   end
 
   test "ORG credential changes enumerate revocation targets on the writer inside a reading request" do

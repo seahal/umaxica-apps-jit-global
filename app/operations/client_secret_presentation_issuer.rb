@@ -110,18 +110,32 @@ class ClientSecretPresentationIssuer
     def with_authorization(context, token, issuance)
       validate_presentation_context!(context, token, issuance)
 
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientToken.transaction do
-          AppZenithRecord.connected_to(role: :writing) do
-            context.subject.with_lock do
-              current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: context.subject.id)
-              owned = ClientSecretIssuance.lock.find_by(
-                id: issuance.id, public_id: issuance.public_id,
-                client_id: context.subject.id,
-              )
-              now = Client.database_now
-              validate_owned_presentation!(context, current, owned, now)
-              yield owned, context, now
+      AppZenithRecord.connected_to(role: :writing) do
+        context.subject.with_lock do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientToken.transaction do
+              device = token.device_session_record!
+              device.with_lock do
+                unless device.usable? && device.user_id == context.subject.id
+                  raise Denied, "Secret presentation device is unavailable"
+                end
+
+                current = ClientToken.lock.find_by(
+                  id: token.id, public_id: token.public_id, user_id: context.subject.id,
+                )
+                unless current && current.device_session_id == device.id &&
+                    device.current_refresh_token_id == current.id
+                  raise Denied, "Secret presentation session is unavailable"
+                end
+
+                owned = ClientSecretIssuance.lock.find_by(
+                  id: issuance.id, public_id: issuance.public_id,
+                  client_id: context.subject.id,
+                )
+                now = Client.database_now
+                validate_owned_presentation!(context, current, owned, now)
+                yield owned, context, now
+              end
             end
           end
         end
@@ -158,7 +172,7 @@ class ClientSecretPresentationIssuer
         full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
         session_binding: current.public_id, token_binding: current.public_id,
         require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: context.subject.public_id, resource_ref: nil, tenant_ref: nil,
+        actor_ref: context.subject.public_id, resource_ref: owned.public_id, tenant_ref: nil,
       )
     end
   end

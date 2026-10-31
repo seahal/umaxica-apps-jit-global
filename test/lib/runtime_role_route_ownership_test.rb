@@ -44,14 +44,15 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
 
   test "Base identity and credential pages belong to the realm RP" do
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/identity/birthdates")
-    assert_equal "rp-base-com-ww", RuntimeRole.route_owner("base/com/verification/setups")
+    assert_equal "rp-base-com-ww", RuntimeRole.route_owner("base/com/roots")
     assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/identity/secret_credentials")
     assert_equal "op-base-app", RuntimeRole.route_owner("base/app/ceremony_binding_confirmations")
     assert_equal "op-base-org", RuntimeRole.route_owner("visa/org/oauth/tokens")
   end
 
   test "Visa roots and logout completion and credential endpoints are OP owned in every realm" do
-    %w(app com org).each do |realm|
+    # two.md WU-3: the corporate Visa host no longer routes, so it owns no protocol controller.
+    %w(app org).each do |realm|
       %w(roots oidc/logouts/completions edge/v0/token/checks edge/v0/token/refreshes).each do |path|
         controller = "visa/#{realm}/#{path}"
 
@@ -64,7 +65,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
 
   test "Base Self-RP entry, callback, Refresh, logout receiver and relay pages belong to the Base cell" do
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/sign/entries")
-    assert_equal "rp-base-com-ww", RuntimeRole.route_owner("base/com/oidc/callbacks")
+    assert_equal RuntimeRole::ANY_ROLE, RuntimeRole.route_owner("base/com/preferences")
     assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/oidc/closures")
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/avatars")
   end
@@ -76,12 +77,12 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
   end
 
   test "RP families map to their own cell" do
-    assert_equal "rp-core-com-jp", RuntimeRole.route_owner("core/com/roots")
+    assert_equal "rp-core-org-jp", RuntimeRole.route_owner("core/org/roots")
     assert_equal "rp-warp-org-jp", RuntimeRole.route_owner("warp/org/roots")
     assert_equal "rp-palm-app-jp", RuntimeRole.route_owner("palm/app/roots")
     assert_equal "rp-edit-org-ww", RuntimeRole.route_owner("edit/org/roots")
     assert_equal "rp-tech-org-ww", RuntimeRole.route_owner("tech/org/roots")
-    assert_equal "auth-com", RuntimeRole.route_owner("auth/com/sign/in/emails")
+    assert_equal "auth-org", RuntimeRole.route_owner("auth/org/sign/in/emails")
   end
 
   test "a prefix matches whole path segments only" do
@@ -100,7 +101,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
 
     assert RuntimeRole.serves?("core/app/roots", "rp-core-app-jp")
     assert RuntimeRole.serves?("base/app/healths", "rp-core-app-jp")
-    assert_not RuntimeRole.serves?("core/com/roots", "rp-core-app-jp")
+    assert_not RuntimeRole.serves?("core/org/roots", "rp-core-app-jp")
     assert RuntimeRole.serves?("base/app/identity/birthdates", "rp-base-app-ww")
     assert_not RuntimeRole.serves?("base/app/ceremony_binding_confirmations", "rp-base-app-ww")
     assert_not RuntimeRole.serves?("base/app/avatars", "op-base-app")

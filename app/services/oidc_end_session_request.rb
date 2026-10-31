@@ -139,7 +139,6 @@ class OidcEndSessionRequest < ApplicationService
     host = request.host.to_s
 
     return "operator" if host_matches?(host, OidcIssuer.host_for_resource_type("operator"))
-    return "visitor" if host_matches?(host, OidcIssuer.host_for_resource_type("visitor"))
 
     "client"
   end

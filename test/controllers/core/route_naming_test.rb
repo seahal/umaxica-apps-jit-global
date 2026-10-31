@@ -8,7 +8,6 @@ class CoreRouteNamingTest < ActionDispatch::IntegrationTest
   BOOT_HOSTS = Rails.configuration.x.boot_config.fetch(:hosts)
   SURFACES = {
     app: ENV.fetch("PUBLIC_CORE_SERVICE_URL", BOOT_HOSTS.core_service.host),
-    com: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", BOOT_HOSTS.core_corporate.host),
     org: ENV.fetch("PUBLIC_CORE_STAFF_URL", BOOT_HOSTS.core_staff.host),
   }.freeze
 
@@ -24,10 +23,6 @@ class CoreRouteNamingTest < ActionDispatch::IntegrationTest
       assert_respond_to self, :"core_#{surface}_api_v0_preferences_theme_path"
       assert_equal "/api/v0/preferences/theme",
                    public_send(:"core_#{surface}_api_v0_preferences_theme_path")
-
-      assert_respond_to self, :"core_#{surface}_api_v0_preferences_dbsc_path"
-      assert_equal "/api/v0/preferences/dbsc",
-                   public_send(:"core_#{surface}_api_v0_preferences_dbsc_path")
 
       assert_respond_to self, :"core_#{surface}_csp_violation_report_path"
       assert_equal "/csp-violation-report", public_send(:"core_#{surface}_csp_violation_report_path")

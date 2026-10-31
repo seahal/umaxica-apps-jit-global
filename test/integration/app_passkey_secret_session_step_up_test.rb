@@ -88,6 +88,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal 200, base.response.status
+    assert_equal "strict-origin", base.response.headers["Referrer-Policy"]
     csrf = base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     assert_difference("ClientAuthAdmissionBinding.count", 1) do
       base.post(base_app_identity_totps_path(ri: "jp"), params: { authenticity_token: csrf }, headers: headers)
@@ -108,13 +109,16 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     auth = open_session
     auth.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
     auth.https!
-    auth.get(entry_uri.to_s)
+    auth.get(entry_uri.to_s, headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" })
 
     assert_equal [303, "/ceremony_bindings", nil],
                  [auth.response.status, URI.parse(auth.response.location).path,
                   binding.reload.auth_ceremony_session_id,]
     auth_headers = {
-      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+      "Sec-Fetch-Site" => "same-origin",
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
     }
     auth.get(auth.response.location, headers: auth_headers)
 
@@ -199,6 +203,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     base.get(confirmation_url)
 
     assert_equal 200, base.response.status
+    assert_equal "strict-origin", base.response.headers["Referrer-Policy"]
     assert_nil binding.reload.base_confirmed_at
     csrf = base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     base.post(confirmation_url, params: { authenticity_token: csrf, ri: "jp" }, headers: headers)
@@ -367,6 +372,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal 200, base.response.status
+    assert_equal "strict-origin", base.response.headers["Referrer-Policy"]
     csrf = base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     assert_no_difference("ClientStepUpCeremonyTransaction.count") do
       base.post(base_app_identity_passkeys_path(ri: "jp"), params: { authenticity_token: csrf }, headers: headers)

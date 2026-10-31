@@ -54,7 +54,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: reference }, headers: headers
 
@@ -90,60 +90,6 @@ module Auth
         assert_nil inertia_props.fetch("registration_link")
       end
 
-      test "should get new with existing preference refresh cookie" do
-        token, verifier = AppPreference.generate_refresh_token(public_id: "app-pref-existingxxxx")
-        preference = AppPreference.create!(
-          public_id: "app-pref-existingxxxx",
-          token_digest: AppPreference.digest_refresh_token(verifier),
-          jti: SecureRandom.uuid,
-          status_id: AppPreferenceStatus::NOTHING,
-          binding_method_id: AppPreferenceBindingMethod::LEGACY,
-          dbsc_status_id: AppPreferenceDbscStatus::NOTHING,
-          expires_at: 20.years.from_now,
-        )
-        AppPreferenceCookie.create!(preference: preference)
-        cookies[::PreferenceCookieName.refresh(surface: :app)] = token
-
-        entry_params = { ri: "jp" }
-        issuance =
-          OidcAuthorizationTransactionCoordinator.issue!(
-            surface: "app",
-            intent: "authentication",
-            params: {
-              response_type: "code",
-              client_id: "core-app-jp",
-              redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-              code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-              code_challenge_method: "S256",
-              state: SecureRandom.urlsafe_base64(16),
-              nonce: SecureRandom.urlsafe_base64(16),
-              scope: "openid profile",
-            },
-          )
-        reference = BaseAuthAdmissionCoordinator.issue_handoff!(
-          transaction: issuance.transaction,
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: nil,
-        ).reference
-        binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
-
-        get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
-
-        assert_response :see_other
-        assert_equal "/ceremony_bindings", URI.parse(response.location).path
-        get response.location, headers: headers
-
-        assert_response :see_other
-        binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-        get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
-
-        assert_response :see_other
-        follow_redirect!
-
-        assert_response :success
-      end
-
       test "authentication links carry pt" do
         pt = Base64.urlsafe_encode64("https://log.umaxica.app/settings/sessions?ri=jp", padding: false)
 
@@ -169,7 +115,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -215,7 +161,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -260,7 +206,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -306,7 +252,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -351,7 +297,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -394,7 +340,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -449,7 +395,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 
@@ -495,7 +441,7 @@ module Auth
           base_token: nil,
         ).reference
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: reference)
-        headers = { "Host" => @host }
+        headers = { "Host" => @host, "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
 
         get auth_app_sign_in_path, params: entry_params.merge(entry_ref: reference), headers: headers
 

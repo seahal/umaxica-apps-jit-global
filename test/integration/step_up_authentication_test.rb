@@ -6,7 +6,7 @@ require "test_helper"
 require "base64"
 
 class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
-  fixtures :clients
+  fixtures :clients, :client_secret_credentials
 
   setup do
     @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
@@ -66,6 +66,497 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       address: "stepup-auth-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+  end
+
+  test "Secret rename verification binds the owned Secret from its signed return path" do
+    credential = client_secret_credentials(:one)
+    ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get edit_base_app_secret_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    verification = URI.parse(response.location)
+    query = Rack::Utils.parse_query(verification.query)
+
+    assert_equal "/verification", verification.path
+    assert_equal "settings_secret_credential", query.fetch("scope")
+    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
+    post base_app_verification_url(ri: "jp", host: @base_host),
+         params: { scope: "settings_secret_credential", pt: query.fetch("pt") }, headers: @headers
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
+
+    assert_equal credential.public_id, transaction.resource_ref
+  end
+
+  test "a signed verification return path cannot bind another actor's Secret" do
+    credential = client_secret_credentials(:two)
+    path = edit_base_app_secret_path(credential.public_id, ri: "jp")
+    target = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
+      purpose: :path_target, expires_in: 15.minutes,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_secret_credential", pt: target),
+          headers: @headers
+    end
+
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "an issuance-bound verification permits Secret presentation and confirmation once" do
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    )
+    context = ActorValuesContext.empty.with(subject: @user, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    @token.reload.update!(last_step_up_resource_ref: issuance.public_id)
+    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :success
+    post base_app_secret_issuance_presentation_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :success
+    assert_equal "strict-origin", response.headers["Referrer-Policy"]
+    assert_equal "strict-origin", response.parsed_body.at_css('meta[name="referrer"]')["content"]
+    assert_predicate issuance.reload.presented_at, :present?
+    assert_nil issuance.confirmed_at
+    patch base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host),
+          params: { stored: "1" }, headers: @headers
+
+    assert_response :see_other
+    assert_predicate issuance.reload.confirmed_at, :present?
+    assert_nil @token.reload.last_step_up_at
+    assert_equal 1, ClientSecretCredential.where(issuance_id: issuance.id, client_id: @user.id).count
+  end
+
+  test "a Secret issuance cannot request a Step-Up scope for another origin" do
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "passkey_registration", attempt_number: 1,
+      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
+    )
+    path = base_app_secret_issuance_path(issuance.public_id, ri: "jp")
+    target = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
+      purpose: :path_target, expires_in: 15.minutes,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_secret_credential", pt: target),
+          headers: @headers
+    end
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "a signed Secret issuance target cannot cross an owner or browser session" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: @user)
+    [
+      { client: other, browser_session_ref: @token.public_id },
+      { client: @user, browser_session_ref: other_token.public_id },
+    ].each do |binding|
+      issuance = ClientSecretIssuance.create!(
+        **binding, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+                   planned_count: 1, expires_at: Client.database_now + 1.minute,
+      )
+      path = base_app_secret_issuance_path(issuance.public_id, ri: "jp")
+      target = ActiveSupport::MessageVerifier.new(
+        Rails.application.key_generator.generate_key("path_target_token", 32),
+        digest: "SHA256", serializer: JSON, url_safe: true,
+      ).generate(
+        { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
+        purpose: :path_target, expires_in: 15.minutes,
+      )
+
+      assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+        get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_secret_credential", pt: target),
+            headers: @headers
+      end
+      assert_response :bad_request
+    end
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "Passkey-origin Secret issuance verification binds its own target" do
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "passkey_registration", attempt_number: 1,
+      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
+    )
+    ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    verification = URI.parse(response.location)
+    query = Rack::Utils.parse_query(verification.query)
+
+    assert_equal "/verification", verification.path
+    assert_equal "settings_passkey", query.fetch("scope")
+    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
+    post base_app_verification_url(ri: "jp", host: @base_host),
+         params: { scope: "settings_passkey", pt: query.fetch("pt") }, headers: @headers
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
+
+    assert_equal issuance.public_id, transaction.resource_ref
+  end
+
+  test "Secret issuance verification binds its owned issuance and session" do
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
+    )
+    ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    verification = URI.parse(response.location)
+    query = Rack::Utils.parse_query(verification.query)
+
+    assert_equal "/verification", verification.path
+    assert_equal "settings_secret_credential", query.fetch("scope")
+    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
+    post base_app_verification_url(ri: "jp", host: @base_host),
+         params: { scope: "settings_secret_credential", pt: query.fetch("pt") }, headers: @headers
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
+
+    assert_equal issuance.public_id, transaction.resource_ref
+  end
+
+  test "Secret storage confirmation reports dependency failures as unavailable" do
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
+    )
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: issuance.public_id,
+    )
+    failure = ->(**) { raise ClientSecretStorageConfirmationCommitter::DependencyFailure, "injected storage failure" }
+    ClientSecretStorageConfirmationCommitter.stub(:call!, failure) do
+      patch base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host),
+            params: { stored: "1" }, headers: @headers
+
+      assert_response :service_unavailable
+      assert_nil issuance.reload.confirmed_at
+      assert_predicate @token.reload.last_step_up_at, :present?
+    end
+  end
+
+  test "Secret revocation reports storage dependency failures as unavailable" do
+    credential = client_secret_credentials(:one)
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
+    )
+    failure = ->(**) { raise ClientSecretRevocationCommitter::DependencyFailure, "injected storage failure" }
+    ClientSecretRevocationCommitter.stub(:call!, failure) do
+      delete base_app_secret_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+
+      assert_response :service_unavailable
+      assert_nil credential.reload.revoked_at
+      assert_predicate @token.reload.last_step_up_at, :present?
+    end
+
+    @user.client_passkeys.create!(
+      webauthn_id: "secret-revocation-step-up-test", public_key: "synthetic-public-key",
+      status_id: ClientPasskeyStatus::ACTIVE,
+    )
+    delete base_app_secret_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :see_other
+    assert_predicate credential.reload.revoked_at, :present?
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "Secret rename reports storage dependency failures as unavailable" do
+    credential = client_secret_credentials(:one)
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: credential.public_id,
+    )
+    failure = ->(**) { raise ClientSecretNameCommitter::DependencyFailure, "injected storage failure" }
+    ClientSecretNameCommitter.stub(:call!, failure) do
+      patch base_app_secret_url(credential.public_id, ri: "jp", host: @base_host),
+            params: { name: "Renamed" }, headers: @headers
+
+      assert_response :service_unavailable
+      assert_equal "Fixture Secret 1", credential.reload.name
+      assert_predicate @token.reload.last_step_up_at, :present?
+    end
+
+    patch base_app_secret_url(credential.public_id, ri: "jp", host: @base_host),
+          params: { name: "Renamed" }, headers: @headers
+
+    assert_response :see_other
+    assert_equal "Renamed", credential.reload.name
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "TOTP name verification binds the owned credential from its signed return path" do
+    credential = ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    verification = URI.parse(response.location)
+    query = Rack::Utils.parse_query(verification.query)
+
+    assert_equal "/verification", verification.path
+    assert_equal "settings_totp", query.fetch("scope")
+    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
+    post base_app_verification_url(ri: "jp", host: @base_host),
+         params: { scope: "settings_totp", pt: query.fetch("pt") }, headers: @headers
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
+
+    assert_equal credential.public_id, transaction.resource_ref
+  end
+
+  test "a refused TOTP removal is not reported as successful" do
+    credential = ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "totp",
+      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false, last_step_up_credential_ref: credential.public_id,
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: credential.public_id,
+    )
+    IdentityCredentialRemovalCommitter.stub(:call!, false) do
+      delete base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+
+      assert_response :unprocessable_content
+      assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
+    end
+  end
+
+  test "TOTP-specific Step-Up cannot open another owned TOTP credential" do
+    first = @user.client_totp_credentials.find_by(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    first ||= ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    second = ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "totp",
+      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false, last_step_up_credential_ref: first.public_id,
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: first.public_id,
+    )
+
+    get base_app_identity_totp_url(second.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    assert_equal "/verification", URI.parse(response.location).path
+    assert_equal first.public_id, @token.reload.last_step_up_resource_ref
+  end
+
+  test "another actor's TOTP credential cannot start a verification" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    credential = ClientTotpCredential.create_for_user!(
+      user: other, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+    end
+
+    assert_response :not_found
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "a signed verification return path cannot bind another actor's TOTP" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    credential = ClientTotpCredential.create_for_user!(
+      user: other, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    path = base_app_identity_totp_path(credential.public_id, ri: "jp")
+    target = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
+      purpose: :path_target, expires_in: 15.minutes,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_totp", pt: target), headers: @headers
+    end
+
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "a signed verification return path cannot bind another actor's Telephone" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    telephone = ClientTelephone.create!(user: other, number: "+819012345686", confirm_policy: "1")
+    path = edit_base_app_identity_telephone_path(telephone.public_id, ri: "jp")
+    target = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
+      purpose: :path_target, expires_in: 15.minutes,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_telephone", pt: target),
+          headers: @headers
+    end
+
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "Telephone removal verification binds the owned target from its signed return path" do
+    telephone = ClientTelephone.create!(
+      user: @user, number: "+819012345685", confirm_policy: "1",
+      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+    )
+    telephone.finalize_binding!
+    ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get edit_base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    verification = URI.parse(response.location)
+    query = Rack::Utils.parse_query(verification.query)
+
+    assert_equal "/verification", verification.path
+    assert_equal "settings_telephone", query.fetch("scope")
+    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
+    post base_app_verification_url(ri: "jp", host: @base_host),
+         params: { scope: "settings_telephone", pt: query.fetch("pt") }, headers: @headers
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
+
+    assert_equal telephone.public_id, transaction.resource_ref
+  end
+
+  test "email preference verification binds the owned Email target from its signed return path" do
+    email = ClientEmail.find_by!(user_id: @user.id, user_email_status_id: ClientEmailStatus::VERIFIED)
+    ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get edit_base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    verification = URI.parse(response.location)
+    query = Rack::Utils.parse_query(verification.query)
+
+    assert_equal "/verification", verification.path
+    assert_equal "settings_email", query.fetch("scope")
+    assert_predicate query.fetch("pt"), :present?
+    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
+    post base_app_verification_url(ri: "jp", host: @base_host),
+         params: { scope: "settings_email", pt: query.fetch("pt") }, headers: @headers
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
+
+    assert_equal email.public_id, transaction.resource_ref
+  end
+
+  test "Email-specific Step-Up cannot open another owned Email preference" do
+    first = ClientEmail.find_by!(user_id: @user.id, user_email_status_id: ClientEmailStatus::VERIFIED)
+    second = ClientEmail.create!(
+      user: @user, address: "stepup-other-#{SecureRandom.hex(6)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    @token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
+      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false, last_step_up_credential_ref: "test-step-up",
+      last_step_up_full_reauthentication: false, last_step_up_resource_ref: first.public_id,
+    )
+
+    get edit_base_app_identity_email_url(second.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :redirect
+    assert_equal "/verification", URI.parse(response.location).path
+    assert_equal first.public_id, @token.reload.last_step_up_resource_ref
+  end
+
+  test "another actor's Email cannot start a preference verification" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    email = ClientEmail.create!(
+      user: other, address: "stepup-foreign-#{SecureRandom.hex(6)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get edit_base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host), headers: @headers
+    end
+
+    assert_response :not_found
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "a signed verification return path cannot bind another actor's Email" do
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    email = ClientEmail.create!(
+      user: other, address: "stepup-foreign-target-#{SecureRandom.hex(6)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    path = edit_base_app_identity_email_path(email.public_id, ri: "jp")
+    target = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
+      purpose: :path_target, expires_in: 15.minutes,
+    )
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_email", pt: target), headers: @headers
+    end
+
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
   end
 
   test "GET sensitive page redirects to verification when step-up is not satisfied" do
@@ -498,13 +989,10 @@ class StepUpAuthenticationTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
         "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
       else
         "APP"
       end
@@ -536,13 +1024,6 @@ class StepUpAuthenticationTest
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
 
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(
@@ -564,23 +1045,6 @@ class StepUpAuthenticationTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -595,17 +1059,9 @@ class StepUpAuthenticationTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -791,31 +1247,6 @@ class StepUpAuthenticationTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

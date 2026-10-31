@@ -17,8 +17,6 @@ class EmailCredentialRegistrationOtpVerificationCommitter
       case [actor, token, email, transaction]
       in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction]
         ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
-      in [Visitor, VisitorToken, VisitorEmail, VisitorEmailCeremonyTransaction]
-        ["com", VisitorEmailStatus::UNVERIFIED, VisitorStepUpCeremonyTransaction]
       in [Operator, OperatorToken, OperatorEmail, OperatorEmailCeremonyTransaction]
         ["org", OperatorEmailStatus::UNVERIFIED, OperatorStepUpCeremonyTransaction]
       else raise ArgumentError, "unsupported Email registration verification realm"
@@ -112,8 +110,6 @@ class EmailCredentialRegistrationOtpVerificationCommitter
     case actor
     when Client
       token.user_id == actor.id && token_device_session.user_id == actor.id && email.user_id == actor.id
-    when Visitor
-      token.visitor_id == actor.id && token_device_session.visitor_id == actor.id && email.visitor_id == actor.id
     when Operator
       token.staff_id == actor.id && token_device_session.staff_id == actor.id && email.staff_id == actor.id
     end
@@ -121,7 +117,7 @@ class EmailCredentialRegistrationOtpVerificationCommitter
 
   def root_current?(now)
     token.active_status?(now) && token_device_session.usable? &&
-      token_device_session.current_refresh_token_id == token.id
+      token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
   def token_device_session
@@ -142,7 +138,6 @@ class EmailCredentialRegistrationOtpVerificationCommitter
     pending =
       case email
       when ClientEmail then email.user_email_status_id == pending_status
-      when VisitorEmail then email.visitor_email_status_id == pending_status
       when OperatorEmail then email.staff_email_status_id == pending_status
       end
     return result(:unavailable) unless pending && source_unfinalized?
@@ -160,7 +155,7 @@ class EmailCredentialRegistrationOtpVerificationCommitter
 
   def source_binding_available?(now)
     case email
-    when ClientEmail, VisitorEmail then email.accessible?(now) && !email.binding_released?
+    when ClientEmail then email.accessible?(now) && !email.binding_released?
     when OperatorEmail
       [OperatorEmailStatus::UNVERIFIED, OperatorEmailStatus::VERIFIED].include?(email.staff_email_status_id)
     else raise ArgumentError, "unsupported Email registration candidate"
@@ -169,7 +164,7 @@ class EmailCredentialRegistrationOtpVerificationCommitter
 
   def source_unfinalized?
     case email
-    when ClientEmail, VisitorEmail then !email.binding_finalized_at
+    when ClientEmail then !email.binding_finalized_at
     when OperatorEmail then email.staff_email_status_id == pending_status
     else raise ArgumentError, "unsupported Email registration candidate"
     end

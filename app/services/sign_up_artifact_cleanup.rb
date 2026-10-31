@@ -29,7 +29,7 @@ class SignUpArtifactCleanup
   end
 
   def self.cleanup_pending!(now: nil, batch_size: BATCH_SIZE)
-    [ClientSignUpFlow, VisitorSignUpFlow].each do |cycle_class|
+    [ClientSignUpFlow].each do |cycle_class|
       cycle_now = now || cycle_class.database_now
       cleanup_pending_for(cycle_class, now: cycle_now, batch_size: batch_size)
     end
@@ -128,7 +128,6 @@ class SignUpArtifactCleanup
     owner, actor_class =
       case cycle
       when ClientSignUpFlow then [AppZenithRecord, Client]
-      when VisitorSignUpFlow then [ComZenithRecord, Visitor]
       else raise ArgumentError, "unsupported sign-up cleanup flow"
       end
 
@@ -146,11 +145,11 @@ class SignUpArtifactCleanup
             next
           end
 
-          if record.is_a?(ClientPasskey) || record.is_a?(VisitorPasskey)
+          if record.is_a?(ClientPasskey)
             PasskeyAuditOutbox.record_for!(
               passkey: record,
               event_type: "passkey.registration_cancelled",
-              surface: record.is_a?(ClientPasskey) ? "app" : "com",
+              surface: "app",
               actor_ref: nil,
               operation_ref: cycle.public_id,
               occurred_at: record.class.database_now,
@@ -180,8 +179,6 @@ class SignUpArtifactCleanup
     case cycle
     when ClientSignUpFlow
       client_dependent_records(actor)
-    when VisitorSignUpFlow
-      visitor_dependent_records(actor)
     else
       []
     end
@@ -243,49 +240,8 @@ class SignUpArtifactCleanup
     end
   end
 
-  def visitor_dependent_records(actor)
-    # D-128: a Visitor past its decisive commit is registered and never removed as sign-up cleanup.
-    return [] unless actor&.status_id == VisitorStatus::UNVERIFIED_WITH_SIGN_UP
-
-    contact = visitor_pending_contact(actor)
-    return [] unless visitor_pending_contact?(contact)
-
-    [contact, visitor_pending_passkey(actor), actor].compact
-  end
-
-  def visitor_pending_contact(actor)
-    return unless actor
-
-    case cycle.pending_contact_type
-    when "email"
-      VisitorEmail.find_by(id: cycle.pending_contact_id, visitor_id: actor.id)
-    when "telephone"
-      VisitorTelephone.find_by(id: cycle.pending_contact_id, visitor_id: actor.id)
-    end
-  end
-
-  def visitor_pending_passkey(actor)
-    return unless actor && cycle.pending_contact_type == "telephone"
-    return unless cycle.has_attribute?(:pending_passkey_registration_id)
-    return if cycle.pending_passkey_registration_id.blank?
-
-    VisitorPasskey.find_by(id: cycle.pending_passkey_registration_id, visitor_id: actor.id)
-  end
-
-  def visitor_pending_contact?(contact)
-    case contact
-    when VisitorEmail
-      contact.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
-    when VisitorTelephone
-      contact.visitor_telephone_status_id == VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-    else
-      false
-    end
-  end
-
   def deleted_status_column(record)
-    %i(status_id user_email_status_id user_identity_telephone_status_id visitor_email_status_id
-       visitor_telephone_status_id).find { |column| record.has_attribute?(column) }
+    %i(status_id user_email_status_id user_identity_telephone_status_id).find { |column| record.has_attribute?(column) }
   end
 
   def deleted_status_id(record)
@@ -293,9 +249,6 @@ class SignUpArtifactCleanup
     when ClientEmail then deleted_status_id_for(ClientEmailStatus)
     when ClientTelephone then deleted_status_id_for(ClientTelephoneStatus)
     when ClientPasskey then deleted_status_id_for(ClientPasskeyStatus)
-    when VisitorEmail then deleted_status_id_for(VisitorEmailStatus)
-    when VisitorTelephone then deleted_status_id_for(VisitorTelephoneStatus)
-    when VisitorPasskey then deleted_status_id_for(VisitorPasskeyStatus)
     end
   end
 
@@ -309,7 +262,7 @@ class SignUpArtifactCleanup
   end
 
   # Fallback for dependent records that do not include Retainable. Most do,
-  # but Client/Visitor for example use bespoke lifecycle columns rather than
+  # but Client for example uses bespoke lifecycle columns rather than
   # the Retainable contract.
   def retention_attrs(record)
     discard_at = [record.created_at, now].compact.max

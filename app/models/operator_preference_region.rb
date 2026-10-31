@@ -23,10 +23,10 @@
 #  fk_staff_preference_regions_on_preference_id  (preference_id => operator_preferences.id)
 #
 class OperatorPreferenceRegion < OrgPrincipalRecord
-  belongs_to :preference, class_name: "OperatorPreference", inverse_of: :staff_preference_region
+  belongs_to :preference, class_name: "OperatorPreference", inverse_of: :operator_preference_region
   belongs_to :option,
              class_name: "OperatorPreferenceRegionOption",
-             inverse_of: :staff_preference_regions
+             inverse_of: :operator_preference_regions
   validates :preference_id, uniqueness: true
   before_validation :set_option_id
 

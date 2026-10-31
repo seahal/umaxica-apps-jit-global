@@ -3,7 +3,7 @@
 require "test_helper"
 require_relative "../support/rp_cell_session_helper"
 
-# R5-WU17 per-cell readiness (AT-R5-17, source side): as its own `rp-*` process each of the twelve
+# R5-WU17 per-cell readiness (AT-R5-17, source side): as its own `rp-*` process each of the nine
 # JP-development cells authenticates a protected request from its local session and the OP-verified
 # Access JWT only, refuses the same Access JWT without that session, and refuses it once the local
 # OP binding is revoked (a back-channel logout tombstone).
@@ -13,13 +13,10 @@ class RpCellLocalSessionReadinessTest < ActionDispatch::IntegrationTest
   # client_id => [host env, protected GET path]
   CELLS = {
     "base-app-ww" => ["PUBLIC_BASE_SERVICE_URL", "/accounts"],
-    "base-com-ww" => ["PUBLIC_BASE_CORPORATE_URL", "/accounts"],
     "base-org-ww" => ["PUBLIC_BASE_STAFF_URL", "/accounts"],
     "core-app-jp" => ["PUBLIC_CORE_SERVICE_URL", "/api/v0/session"],
-    "core-com-jp" => ["PUBLIC_CORE_CORPORATE_URL", "/api/v0/session"],
     "core-org-jp" => ["PUBLIC_CORE_STAFF_URL", "/api/v0/session"],
     "warp-app-jp" => ["PUBLIC_WARP_SERVICE_URL", "/dashboard"],
-    "warp-com-jp" => ["PUBLIC_WARP_CORPORATE_URL", "/dashboard"],
     "warp-org-jp" => ["PUBLIC_WARP_STAFF_URL", "/dashboard"],
     "palm-app-jp" => ["PUBLIC_PALM_SERVICE_URL", "/dashboard"],
     "edit-org-ww" => ["PUBLIC_EDIT_STAFF_URL", "/dashboard"],
@@ -84,10 +81,6 @@ class RpCellLocalSessionReadinessTest < ActionDispatch::IntegrationTest
     actor =
       case RpCellBinding.for_client(client_id).realm
       when "app" then clients(:one)
-      when "com" then Visitor.create!(
-        security_mode_id: SecurityModeConfigurable::NORMAL,
-        status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR,
-      )
       else operators(:one)
       end
     grant_tech_access(actor) if client_id == "tech-org-ww"

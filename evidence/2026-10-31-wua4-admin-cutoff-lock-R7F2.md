@@ -1,0 +1,7 @@
+# Administrative access token cutoff under lock contention
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`. The worktree had substantial uncommitted changes affecting the implementation and tests.
+- Before the change, two independent-connection Client cases held the account row, observed a lock or unlock worker blocked in PostgreSQL, and sampled a marker before releasing it. Both resulting token cutoffs preceded that marker: 2 runs, 4 assertions, 2 failures.
+- Both writers now sample their existing application clock after obtaining the account row lock and completing their in-transaction checks, before updating state and cutoff. The marker therefore preceded the stored cutoff in the tested orderings.
+- `PARALLEL_WORKERS=1 bin/rails test test/concurrency/administrative_access_lock_clock_test.rb test/services/administrative_access_lock_test.rb test/concurrency/operator_availability_serialization_test.rb test/models/concerns/administrative_access_lockable_test.rb test/operations/enforcement_case_apply_failure_test.rb test/operations/enforcement_case_apply_concurrency_test.rb test/operations/enforcement_case_end_missing_principal_test.rb test/operations/enforcement_case_apply_authority_test.rb`: 26 runs, 114 assertions, no failures, errors or skips. Scoped RuboCop passed.
+- The clock remains `Time.current`; cross-host clock skew, Operator cutoff contention, actual token acceptance, real OP delivery and a full suite were not verified.

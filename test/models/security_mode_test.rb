@@ -5,14 +5,14 @@ require "test_helper"
 # adr/authentication-security-mode.md A2/A3/A5: NORMAL=3 and ADVANCED=7 are the only modes; every
 # other value, including 0 and NULL, permits nothing.
 class SecurityModeTest < ActiveSupport::TestCase
-  [ClientSecurityMode, VisitorSecurityMode, OperatorSecurityMode].each do |model|
+  [ClientSecurityMode, OperatorSecurityMode].each do |model|
     test "#{model.name} defines exactly NORMAL and ADVANCED and its rows exist" do
       assert_equal [3, 7], model::DEFAULTS
       assert_equal [3, 7], model.order(:id).pluck(:id)
     end
   end
 
-  { Client => :user_status, Visitor => :visitor_status, Operator => :staff_status }.each_key do |actor_class|
+  { Client => :user_status, Operator => :staff_status }.each_key do |actor_class|
     [[nil, false, false, false], [0, false, false, false], [1, false, false, false], [3, true, true, false],
      [5, false, false, false], [7, true, false, true], [9, false, false, false],].each do |id, valid, normal, advanced|
       test "#{actor_class.name} security mode #{id.inspect} is valid=#{valid} normal=#{normal} advanced=#{advanced}" do

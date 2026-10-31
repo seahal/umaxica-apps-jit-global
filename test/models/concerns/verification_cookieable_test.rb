@@ -8,7 +8,6 @@ class VerificationCookieableTest < ActiveSupport::TestCase
     {
       ClientVerification => "verification",
       OperatorVerification => "verification",
-      VisitorVerification => "verification",
     }.each do |klass, plain_name|
       JitSessionCookieConfig.stub(:force_secure?, false) do
         assert_equal plain_name, klass.cookie_name

@@ -8,7 +8,8 @@ stateDiagram-v2
     Recoverable --> Acknowledged: Identity-matched rescan and Source clock
     Acknowledged --> Acknowledged: Duplicate scan does not deliver again
     note right of Pending
-        Separate app and com Zenith owners.
-        Missing retention policy or conflicting Chronicle facts raises.
+        App Zenith owns the remaining Contact source intents.
+        A failed event stays pending; later pages are still attempted.
+        The job reports the failure after the bounded scan.
         Undelivered events are retained; no purge owner is introduced.
     end note

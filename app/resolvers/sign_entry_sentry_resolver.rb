@@ -1,15 +1,13 @@
 # typed: false
 # frozen_string_literal: true
 
-# Resolves the six explicit Sign Entry Sentry switches.  The request never
+# Resolves the four explicit Sign Entry Sentry switches.  The request never
 # supplies a feature name: surface and flow are selected by the routed
 # controller and the effective Admission intent.
 class SignEntrySentryResolver < ApplicationService
   ENTRY_FLAGS = {
     %w(app sign_in) => :sign_in_available_app,
     %w(app sign_up) => :sign_up_available_app,
-    %w(com sign_in) => :sign_in_available_com,
-    %w(com sign_up) => :sign_up_available_com,
     %w(org sign_in) => :sign_in_available_org,
     %w(org sign_up) => :sign_up_available_org,
   }.freeze

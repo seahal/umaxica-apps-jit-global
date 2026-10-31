@@ -3,7 +3,7 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpDeliveryGuardTest < ActiveSupport::TestCase
-  %w(app com org).each do |surface|
+  %w(app org).each do |surface|
     test "#{surface} Email registration late delivery checks its current Root destination and generation" do
       actor, token, email =
         case surface
@@ -18,13 +18,6 @@ class EmailCredentialRegistrationOtpDeliveryGuardTest < ActiveSupport::TestCase
           owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
           root = OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now)
           candidate = owner.staff_emails.create!(
-            raw_address: "registration-delivery-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
-          )
-          [owner, root, candidate]
-        when "com"
-          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
-          candidate = owner.visitor_emails.create!(
             raw_address: "registration-delivery-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
           )
           [owner, root, candidate]

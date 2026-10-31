@@ -21,20 +21,6 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
       client_persona_ownership_transfer_requests
       enterprise_ownership_transfer_requests
     ),
-    com: %w(
-      visitor_authority_locks
-      individual_ownerships
-      individual_administration_grants
-      individual_delegation_grants
-      individual_usage_grants
-      individual_view_grants
-      company_ownerships
-      company_administration_grants
-      company_delegation_grants
-      company_view_grants
-      individual_ownership_transfer_requests
-      company_ownership_transfer_requests
-    ),
     org: %w(
       operator_authority_locks
       agent_ownerships
@@ -53,31 +39,26 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
 
   MIGRATIONS = {
     app: "db/app_zenith_migrate/20260917120000_create_app_authority_relations.rb",
-    com: "db/com_zenith_migrate/20260917120001_create_com_authority_relations.rb",
     org: "db/org_zenith_migrate/20260917120002_create_org_authority_relations.rb",
   }.freeze
 
   LIFECYCLE_MIGRATIONS = {
     app: "db/app_zenith_migrate/20260923170000_create_app_authority_resource_lifecycles.rb",
-    com: "db/com_zenith_migrate/20260923170001_create_com_authority_resource_lifecycles.rb",
     org: "db/org_zenith_migrate/20260923170002_create_org_authority_resource_lifecycles.rb",
   }.freeze
 
   EXPECTED_LIFECYCLE_TABLES = {
     app: %w(client_persona_lifecycles enterprise_lifecycles),
-    com: %w(individual_lifecycles company_lifecycles),
     org: %w(agent_lifecycles bureau_lifecycles),
   }.freeze
 
   CUTOVER_MIGRATIONS = {
     app: "db/app_zenith_migrate/20260923180000_create_app_authority_cutovers.rb",
-    com: "db/com_zenith_migrate/20260923180001_create_com_authority_cutovers.rb",
     org: "db/org_zenith_migrate/20260923180002_create_org_authority_cutovers.rb",
   }.freeze
 
   EXPECTED_CUTOVER_TABLES = {
     app: %w(client_persona_authority_cutovers enterprise_authority_cutovers),
-    com: %w(individual_authority_cutovers company_authority_cutovers),
     org: %w(agent_authority_cutovers bureau_authority_cutovers),
   }.freeze
 
@@ -148,16 +129,11 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
 
   test "authority tables are surface-local concrete classes" do
     assert_operator ClientPersonaOwnership, :<, AppRpRecord
-    assert_operator IndividualOwnership, :<, ComRpRecord
     assert_operator AgentOwnership, :<, OrgRpRecord
     assert_equal "personas", ClientPersona.table_name
-    assert_equal "individuals", Individual.table_name
     assert_equal "agents", Agent.table_name
     [ClientPersonaLifecycle, EnterpriseLifecycle].each do |lifecycle_class|
       assert_operator lifecycle_class, :<, AppRpRecord
-    end
-    [IndividualLifecycle, CompanyLifecycle].each do |lifecycle_class|
-      assert_operator lifecycle_class, :<, ComRpRecord
     end
     [AgentLifecycle, BureauLifecycle].each do |lifecycle_class|
       assert_operator lifecycle_class, :<, OrgRpRecord
@@ -165,8 +141,6 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
 
     assert_operator ClientPersonaAuthorityCutover, :<, AppRpRecord
     assert_operator EnterpriseAuthorityCutover, :<, AppRpRecord
-    assert_operator IndividualAuthorityCutover, :<, ComRpRecord
-    assert_operator CompanyAuthorityCutover, :<, ComRpRecord
     assert_operator AgentAuthorityCutover, :<, OrgRpRecord
     assert_operator BureauAuthorityCutover, :<, OrgRpRecord
   end
@@ -186,8 +160,6 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
     [
       ClientPersonaOwnership,
       EnterpriseOwnership,
-      IndividualOwnership,
-      CompanyOwnership,
       AgentOwnership,
       BureauOwnership,
     ].each do |ownership_class|

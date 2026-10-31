@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import SurfaceDashboard, { type SurfaceDashboardProps } from "@/features/auth/SurfaceDashboard";
 import BaseAppDashboardsShow from "@/pages/base/app/dashboards/show";
-import BaseComDashboardsShow from "@/pages/base/com/dashboards/show";
 import BaseOrgDashboardsShow from "@/pages/base/org/dashboards/show";
 
 const props: SurfaceDashboardProps = {
@@ -64,7 +63,6 @@ describe("Base Dashboard identity navigation", () => {
 
   it.each([
     ["base/app", BaseAppDashboardsShow],
-    ["base/com", BaseComDashboardsShow],
     ["base/org", BaseOrgDashboardsShow],
   ])("%s uses the shared Dashboard renderer", (_surface, Page) => {
     expect(Page).toBe(SurfaceDashboard);

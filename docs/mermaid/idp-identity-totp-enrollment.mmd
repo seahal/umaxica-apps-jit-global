@@ -11,7 +11,7 @@ stateDiagram-v2
     expired --> consumed: store.delete
     consumed --> consumed: store.delete
     available --> expired: clock reaches deadline
-    unverified --> available: accepted enrollment code
+    unverified --> available: accepted code, current usable device
     available --> consumed: Base enrollment final commit
     unverified --> expired: clock reaches deadline
     consumed --> [*]

@@ -23,10 +23,10 @@
 #  fk_staff_preference_themes_on_preference_id  (preference_id => operator_preferences.id)
 #
 class OperatorPreferenceTheme < OrgPrincipalRecord
-  belongs_to :preference, class_name: "OperatorPreference", inverse_of: :staff_preference_theme
+  belongs_to :preference, class_name: "OperatorPreference", inverse_of: :operator_preference_theme
   belongs_to :option,
              class_name: "OperatorPreferenceThemeOption",
-             inverse_of: :staff_preference_themes
+             inverse_of: :operator_preference_themes
   validates :preference_id, uniqueness: true
   before_validation :set_option_id
 

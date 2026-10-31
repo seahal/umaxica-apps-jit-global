@@ -10,6 +10,7 @@ module Auth
             include SignUpExplicitStepControllerSupport
 
             AUTHENTICATION_MODE = :open
+            sign_entry_classification! :sign_up
 
             def show
               gate = SignUpStepGate.for_entry(

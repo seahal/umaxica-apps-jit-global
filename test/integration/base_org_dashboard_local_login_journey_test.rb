@@ -5,6 +5,8 @@ require "minitest/mock"
 require "webauthn/fake_client"
 
 class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
   fixtures :operators, :operator_statuses, :operator_passkey_statuses
 
@@ -111,13 +113,13 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     browser = open_session
     browser.host!(auth_host)
     browser.https!
-    browser.get(target.request_uri)
+    browser.get(target.request_uri, headers: NAVIGATION_HEADERS)
     automatic_relay_responses << ["GET", target.path, browser.response.status]
     entry_target = URI.parse(browser.response.location)
-    browser.get(entry_target.request_uri)
+    browser.get(entry_target.request_uri, headers: NAVIGATION_HEADERS)
     automatic_relay_responses << ["GET", entry_target.path, browser.response.status]
     attach_target = URI.parse(browser.response.location)
-    browser.get(attach_target.request_uri)
+    browser.get(attach_target.request_uri, headers: NAVIGATION_HEADERS)
     automatic_relay_responses << ["GET", attach_target.path, browser.response.status]
     confirmation_target = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
@@ -132,7 +134,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     auth_target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
 
     assert_equal auth_host, auth_target.host
-    browser.get(auth_target.request_uri)
+    browser.get(auth_target.request_uri, headers: NAVIGATION_HEADERS)
     automatic_relay_responses << ["GET", auth_target.path, browser.response.status]
     clean_entry_target = URI.parse(browser.response.location)
     browser.get(clean_entry_target.request_uri)

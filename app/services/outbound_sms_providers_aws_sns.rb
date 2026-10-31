@@ -28,7 +28,7 @@ class OutboundSmsProvidersAwsSns
   def client_options
     options = {
       access_key_id: Rails.app.creds.require(:AWS_ACCESS_KEY_ID),
-      secret_credential_access_key: Rails.app.creds.require(:AWS_SECRET_ACCESS_KEY),
+      secret_access_key: Rails.app.creds.require(:AWS_SECRET_ACCESS_KEY),
       region: Rails.application.config.aws_region || "ap-northeast-1",
     }
     session_token = Rails.app.creds.option(:AWS_SESSION_TOKEN)

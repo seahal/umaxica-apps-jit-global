@@ -1,0 +1,7 @@
+# WU-7 com preference write and purge commit order
+
+- HEAD: `336811e5072a93c0523e484f905082635b28f48f`; staged, unstaged and untracked changes affected the result.
+- Added nontransactional integration coverage for save and reset against lifecycle collection in both lock orders. Tests use HTTP requests, separately committed PostgreSQL connections, and an observed advisory-lock wait. The test creates a newly signed token referencing an already expired database generation to exercise the stale-generation boundary; this intentionally constructed state is not a claim that a normally issued unexpired token outlives its persisted expiry. Before the test, the test database contained no preferences eligible for collection. The test removes its own synthetic data.
+- `PARALLEL_WORKERS=1 bin/rails test test/concurrency/com_preference_write_purge_test.rb` passed after formatting: 4 runs, 36 assertions, no failures, errors or skips. RuboCop passed for the test file.
+- Read-only inspection confirmed migration versions `20261030211212`, `20261030213406`, `20261030213804`, and `20261030215026` are present in the local test com setting database. Earlier evidence records their destructive application and local reset; this check did not execute migrations or access production or Neon.
+- This does not establish rollback after an interrupted child deletion, external hold-system integration, direct SQL lock participation, production operation, full-suite results, or WU-7 completion.

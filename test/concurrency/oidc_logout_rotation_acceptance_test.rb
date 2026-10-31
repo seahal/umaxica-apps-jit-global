@@ -7,7 +7,7 @@ class OidcLogoutRotationAcceptanceTest < ActiveSupport::TestCase
   include AuthorityStopCleanup
 
   self.use_transactional_tests = false
-  fixtures :clients, :visitors, :operators
+  fixtures :clients, :operators
 
   setup do
     @actor = clients(:one)
@@ -84,10 +84,8 @@ class OidcLogoutRotationAcceptanceTest < ActiveSupport::TestCase
     first&.join(10)
     second&.join(10)
   end
-  test "COM and ORG committed rotations are stopped across connections and subsequent refresh is refused" do
+  test "ORG committed rotations are stopped across connections and subsequent refresh is refused" do
     [
-      ["com", VisitorToken, OpComGrant, VisitorDeviceSession, OpComAuthorityStopRootTarget,
-       visitors(:reserved_visitor), :visitor, :visitor_token, "visitor", OpBaseComRecord,],
       ["org", OperatorToken, OpOrgGrant, OperatorDeviceSession, OpOrgAuthorityStopRootTarget,
        operators(:one), :staff, :operator_token, "operator", OpBaseOrgRecord,],
     ].each do |realm, token_class, grant_class, device_class, target_class, actor, owner, parent, type, record_class|

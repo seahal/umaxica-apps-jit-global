@@ -8,7 +8,6 @@ class AuthCeremonySessionConcurrencyTest < ActiveSupport::TestCase
 
   CASES = [
     ClientAuthCeremonySession,
-    VisitorAuthCeremonySession,
     OperatorAuthCeremonySession,
   ].freeze
 

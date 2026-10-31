@@ -29,29 +29,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "deactivated visitor status requires com withdrawal ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    host! host
-    visitor = create_visitor
-    visitor.update!(
-      withdrawal_started_at: 2.hours.ago,
-      deactivated_at: 90.minutes.ago,
-      discard_at: 31.days.from_now,
-      purge_eligible_at: 31.days.from_now,
-    )
-
-    get edit_base_com_identity_withdrawal_url(ri: "jp", host: host)
-
-    assert_response :see_other
-    assert_redirected_to new_base_com_identity_withdrawal_session_path(ri: "jp")
-
-    ceremony = VisitorWithdrawalCeremony.issue!(subject: visitor, request: ActionDispatch::TestRequest.create)
-    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
-
-    get edit_base_com_identity_withdrawal_url(ri: "jp", host: host)
-
-    assert_response :success
-  end
 
   test "client recovery consumes ceremony and does not create normal auth cookie" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
@@ -75,26 +52,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
-  test "app ceremony cannot access com withdrawal status" do
-    app_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    client = create_client
-    client.update!(
-      withdrawal_started_at: 2.hours.ago,
-      deactivated_at: 90.minutes.ago,
-      discard_at: 31.days.from_now,
-      purge_eligible_at: 31.days.from_now,
-    )
-    ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
-    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
-
-    host! com_host
-    get edit_base_com_identity_withdrawal_url(ri: "jp", host: com_host)
-
-    assert_response :see_other
-    assert_redirected_to new_base_com_identity_withdrawal_session_path(ri: "jp")
-    assert_equal app_host, ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-  end
 
   test "expired revoked and consumed ceremonies are rejected" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
@@ -154,30 +111,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_predicate ceremony.reload, :active?
   end
 
-  test "com status ceremony cannot authorize irreversible termination" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    host! host
-    visitor = create_visitor
-    visitor.update_columns(
-      created_at: 9.days.ago,
-      withdrawal_started_at: 8.days.ago,
-      deactivated_at: 8.days.ago,
-      discard_at: 8.days.ago,
-      purge_eligible_at: 23.days.from_now,
-    )
-    ceremony = VisitorWithdrawalCeremony.issue!(
-      subject: visitor,
-      purpose: "status",
-      request: ActionDispatch::TestRequest.create,
-    )
-    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
-
-    delete base_com_identity_withdrawal_url(ri: "jp", host: host), headers: browser_headers
-
-    assert_response :redirect
-    assert_not_predicate visitor.reload, :terminated?
-    assert_predicate ceremony.reload, :active?
-  end
 
   test "termination clears Inertia history on the next app page" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -211,37 +144,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert inertia_page.fetch("clearHistory")
   end
 
-  test "termination clears Inertia history on the next com page" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    host! host
-    visitor = create_visitor
-    visitor.update_columns(
-      created_at: 9.days.ago,
-      withdrawal_started_at: 8.days.ago,
-      deactivated_at: 8.days.ago,
-      discard_at: 8.days.ago,
-      purge_eligible_at: 23.days.from_now,
-      withdrawn_at: 8.days.ago,
-    )
-    visitor.visitor_withdrawal_flows.create!(
-      status_id: VisitorWithdrawalFlowStatus::DISCARDED, began_at: 8.days.ago, discard_at: Float::INFINITY,
-    )
-    ceremony = VisitorWithdrawalCeremony.issue!(
-      subject: visitor,
-      purpose: "termination",
-      request: ActionDispatch::TestRequest.create,
-    )
-    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
-
-    delete base_com_identity_withdrawal_url(ri: "jp", host: host), headers: browser_headers
-
-    assert_response :see_other
-    assert_predicate visitor.reload, :terminated?
-    get base_com_root_url(ri: "jp", host: host)
-
-    assert_response :success
-    assert inertia_page.fetch("clearHistory")
-  end
 
   private
 
@@ -267,18 +169,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
       visibility_id: ClientVisibility::USER,
       security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
-    )
-  end
-
-  def create_visitor
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    Visitor.create!(
-      status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-      security_mode_id: SecurityModeConfigurable::NORMAL,
-      mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
   end
 end

@@ -17,6 +17,7 @@ module Auth
           include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
+          sign_entry_classification! :sign_up
 
           REGISTRATION_EMAIL_PERMITTED_KEYS = %i(raw_address address confirm_policy promotional notifiable).freeze
 
@@ -105,6 +106,8 @@ module Auth
             end
 
             progress_email_flow!(:create)
+            return render_signup_email_delivery_unavailable if @otp_delivery_unavailable
+
             redirect_params = {}
             sanitize_redirect_params!(redirect_params)
             redirect_to(auth_app_sign_up_check_email_otp_path(sign_up_flow_binding_params.merge(redirect_params)))
@@ -115,6 +118,12 @@ module Auth
           def sign_up_surface = :app
 
           def email_otp_purpose = :sign_up
+
+          def render_signup_email_delivery_unavailable
+            log_sign_signup_event("sign.signup.email.delivery.unavailable", step: "email_otp")
+            @otp_delivery_unavailable = true
+            render_sign_up_email_edit(status: :service_unavailable)
+          end
 
           def create_and_send_verified_email!
             return false if @user_email.errors.details.except(:user, :user_id).any?
@@ -151,6 +160,9 @@ module Auth
             )
             raise ArgumentError, "initial Email signup challenge was refused" unless issued.success?
 
+            true
+          rescue ActiveJob::EnqueueError
+            @otp_delivery_unavailable = true
             true
           end
 
@@ -225,7 +237,10 @@ module Auth
           def sign_up_email_edit_props
             {
               title: t("sign.app.authentication.email.edit.page_title"),
-              description: t("sign.app.registration.email.create.verification_code_sent"),
+              description: t(
+                @otp_delivery_unavailable ? "errors.rate_limit.backend_unavailable" :
+                  "sign.app.registration.email.create.verification_code_sent",
+              ),
               action: auth_app_sign_up_check_email_otp_path(
                 **sign_up_flow_binding_params, ri: params[:ri],
                                                pt: signed_pt_param,

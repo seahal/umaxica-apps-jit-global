@@ -1,66 +1,23 @@
 # frozen_string_literal: true
 # typed: false
 
-# == Schema Information
-#
-# Table name: org_preferences
-# Database name: org_setting
-#
-#  id                       :bigint           not null, primary key
-#  dbsc_challenge           :text
-#  dbsc_challenge_issued_at :datetime
-#  dbsc_public_key          :jsonb
-#  discard_at             :datetime         default(Infinity), not null
-#  explicit_fields          :jsonb            not null
-#  jti                      :string
-#  purge_eligible_at                :datetime         default(Infinity), not null
-#  token_digest             :binary
-#  used_at                  :datetime
-#  created_at               :datetime         not null
-#  updated_at               :datetime         not null
-#  binding_method_id        :bigint           default(0), not null
-#  dbsc_session_id          :string
-#  dbsc_status_id           :bigint           default(0), not null
-#  public_id                :string           not null
-#  replaced_by_id           :bigint
-#  status_id                :bigint           default(2), not null
-#
-# Indexes
-#
-#  index_org_preferences_on_binding_method_id  (binding_method_id)
-#  index_org_preferences_on_dbsc_session_id    (dbsc_session_id) UNIQUE
-#  index_org_preferences_on_dbsc_status_id     (dbsc_status_id)
-#  index_org_preferences_on_jti                (jti) UNIQUE
-#  index_org_preferences_on_public_id          (public_id) UNIQUE
-#  index_org_preferences_on_purge_eligible_at          (purge_eligible_at)
-#  index_org_preferences_on_replaced_by_id     (replaced_by_id)
-#  index_org_preferences_on_status_id          (status_id)
-#  index_org_preferences_on_token_digest       (token_digest)
-#  index_org_preferences_on_used_at            (used_at)
-#
-# Foreign Keys
-#
-#  fk_org_preferences_on_binding_method_id  (binding_method_id => org_preference_binding_methods.id)
-#  fk_org_preferences_on_dbsc_status_id     (dbsc_status_id => org_preference_dbsc_statuses.id)
-#  fk_org_preferences_on_status_id          (status_id => org_preference_statuses.id)
-#  fk_rails_...                             (replaced_by_id => org_preferences.id) ON DELETE => nullify
-#
-
 require "test_helper"
 
 class OrgPreferenceTest < ActiveSupport::TestCase
   PREFERENCE_CHILD_ASSOCIATIONS = %i(org_preference_cookie org_preference_region org_preference_timezone
                                      org_preference_language org_preference_theme org_preference_currency
                                      org_preference_date_format org_preference_time_format org_preference_motion
-                                     org_preference_density org_preference_page_size org_preference_adult_content_gate
+                                     org_preference_density org_preference_page_size org_preference_consent_receipt
+                                     org_preference_browser_binding org_preference_web_push
+                                     org_preference_adult_content_gate
                                      org_preference_chronicles replacements).freeze
 
   setup do
-    OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::NOTHING)
+    OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::ACTIVE)
   end
 
   test "generates public_id on create" do
-    preference = OrgPreference.create!
+    preference = create_preference!
 
     assert_not_nil preference.public_id
     assert_equal 21, preference.public_id.length
@@ -75,13 +32,13 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "does not overwrite existing public_id" do
     custom_id = "custom_public_id_123x"
-    preference = OrgPreference.create!(public_id: custom_id)
+    preference = create_preference!(public_id: custom_id)
 
     assert_equal custom_id, preference.public_id
   end
 
   test "has one org_preference_cookie" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_cookie).find(preference.id)
     cookie = preference.create_org_preference_cookie!
 
@@ -91,7 +48,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys org_preference_cookie when destroyed" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_cookie).find(preference.id)
     cookie = preference.create_org_preference_cookie!
     cookie_id = cookie.id
@@ -101,8 +58,60 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     assert_nil OrgPreferenceCookie.find_by(id: cookie_id)
   end
 
+  test "persists org browser binding consent receipt and Web Push option as preference children" do
+    preference = create_preference!
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
+    OrgPreferenceWebPushOption.ensure_defaults!
+
+    web_push = preference.create_org_preference_web_push!
+    binding = preference.create_org_preference_browser_binding!(digest: "a" * 64)
+    receipt = preference.create_org_preference_consent_receipt!(
+      version: SecureRandom.uuid, recorded_at: Time.current,
+    )
+
+    assert_equal OrgPreferenceWebPushOption::DISABLED, web_push.option_id
+    assert_equal "disabled", web_push.option.name
+    assert_equal preference.id, binding.preference_id
+    assert_equal "a" * 64, binding.digest
+    assert_equal preference.id, receipt.preference_id
+    assert_predicate receipt.version, :present?
+    assert_predicate receipt.recorded_at, :present?
+
+    web_push.update!(option_id: OrgPreferenceWebPushOption::ENABLED)
+
+    assert_equal "enabled", web_push.reload.option.name
+  end
+
+  test "destroys org supplemental children with their preference" do
+    preference = create_preference!
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
+    OrgPreferenceWebPushOption.ensure_defaults!
+    binding = preference.create_org_preference_browser_binding!(digest: "b" * 64)
+    receipt = preference.create_org_preference_consent_receipt!(
+      version: SecureRandom.uuid, recorded_at: Time.current,
+    )
+    web_push = preference.create_org_preference_web_push!
+    child_ids = [binding.id, receipt.id, web_push.id]
+
+    OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id).destroy!
+
+    assert_nil OrgPreferenceBrowserBinding.find_by(id: child_ids.fetch(0))
+    assert_nil OrgPreferenceConsentReceipt.find_by(id: child_ids.fetch(1))
+    assert_nil OrgPreferenceWebPush.find_by(id: child_ids.fetch(2))
+  end
+
+  test "rejects malformed org browser binding digests and unsupported Web Push options" do
+    preference = create_preference!
+
+    binding = OrgPreferenceBrowserBinding.new(preference:, digest: "A" * 64)
+    web_push = OrgPreferenceWebPush.new(preference:, option_id: 2)
+
+    assert_not_predicate binding, :valid?
+    assert_not_predicate web_push, :valid?
+  end
+
   test "has one org_preference_region" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_region).find(preference.id)
     region = preference.create_org_preference_region!
 
@@ -112,7 +121,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys org_preference_region when destroyed" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_region).find(preference.id)
     region = preference.create_org_preference_region!
     region_id = region.id
@@ -123,7 +132,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one org_preference_timezone" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_timezone).find(preference.id)
     timezone = preference.create_org_preference_timezone!
 
@@ -133,7 +142,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys org_preference_timezone when destroyed" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_timezone).find(preference.id)
     timezone = preference.create_org_preference_timezone!
     timezone_id = timezone.id
@@ -144,7 +153,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one org_preference_language" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_language).find(preference.id)
     language = preference.create_org_preference_language!
 
@@ -154,7 +163,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys org_preference_language when destroyed" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_language).find(preference.id)
     language = preference.create_org_preference_language!
     language_id = language.id
@@ -165,7 +174,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "has one org_preference_theme" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_theme).find(preference.id)
     theme = preference.create_org_preference_theme!
 
@@ -175,7 +184,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "destroys org_preference_theme when destroyed" do
-    preference = OrgPreference.create!
+    preference = create_preference!
     preference = OrgPreference.includes(:org_preference_theme).find(preference.id)
     theme = preference.create_org_preference_theme!
     theme_id = theme.id
@@ -183,65 +192,6 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     preference.destroy!
 
     assert_nil OrgPreferenceTheme.find_by(id: theme_id)
-  end
-
-  test "consume_once_by_digest! is replay-detectable" do
-    digest = OrgPreference.digest_refresh_token("org-consume-once")
-    preference = OrgPreference.create!(
-      status_id: OrgPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      token_digest: digest,
-      jti: SecureRandom.uuid,
-    )
-
-    first = OrgPreference.consume_once_by_digest!(digest: digest)
-
-    assert_equal preference.id, first.id
-    assert_predicate first.used_at, :present?
-    assert_nil OrgPreference.consume_once_by_digest!(digest: digest)
-    assert_predicate preference.reload, :replay?
-  end
-
-  test "consume_once_by_digest! rejects revoked compromised and expired rows" do
-    revoked = OrgPreference.create!(
-      status_id: OrgPreferenceStatus::NOTHING,
-      token_digest: OrgPreference.digest_refresh_token("org-revoked"),
-      discard_at: Time.current,
-      jti: SecureRandom.uuid,
-    )
-    compromised = OrgPreference.create!(
-      status_id: OrgPreferenceStatus::NOTHING,
-      token_digest: OrgPreference.digest_refresh_token("org-compromised"),
-      discard_at: Time.current,
-      jti: SecureRandom.uuid,
-    )
-    expired = OrgPreference.create!(
-      status_id: OrgPreferenceStatus::NOTHING,
-      discard_at: 1.minute.ago,
-      token_digest: OrgPreference.digest_refresh_token("org-expired"),
-      jti: SecureRandom.uuid,
-    )
-
-    assert_nil OrgPreference.consume_once_by_digest!(digest: revoked.token_digest)
-    assert_nil OrgPreference.consume_once_by_digest!(digest: compromised.token_digest)
-    assert_nil OrgPreference.consume_once_by_digest!(digest: expired.token_digest)
-  end
-
-  test "rotate! creates replacement row and replacement link" do
-    digest = OrgPreference.digest_refresh_token("org-rotate")
-    original = OrgPreference.create!(
-      status_id: OrgPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      token_digest: digest,
-      jti: SecureRandom.uuid,
-    )
-
-    rotated = OrgPreference.rotate!(presented_digest: digest, now: Time.current)
-
-    assert_predicate rotated, :present?
-    assert_predicate rotated.issued_refresh_token, :present?
-    assert_not_equal original.id, rotated.id
-    assert_equal rotated.id, original.reload.replaced_by_id
   end
 
   test "adult_content_gate returns nothing when no gate is set" do
@@ -259,5 +209,14 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "public_id is a fixed 21-character NanoID" do
     assert_public_id_fixed_length(::OrgPreference)
+  end
+
+  private
+
+  def create_preference!(**attributes)
+    now = Time.current
+    OrgPreference.create!(
+      { jti: SecureRandom.uuid, last_issued_at: now, last_issued_expires_at: now + 400.days }.merge(attributes),
+    )
   end
 end

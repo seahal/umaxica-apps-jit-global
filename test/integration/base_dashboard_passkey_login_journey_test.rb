@@ -4,9 +4,10 @@ require "test_helper"
 require "webauthn/fake_client"
 
 class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   self.fixture_table_names = []
-  fixtures :client_statuses, :client_email_statuses, :visitor_statuses, :visitor_email_statuses,
-           :visitor_passkey_statuses
+  fixtures :client_statuses, :client_email_statuses
 
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
@@ -25,7 +26,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  %i(app com).each do |surface|
+  %i(app).each do |surface|
     test "A12-1: #{surface} Dashboard returns through automatic relays and canonical Base login" do
       automatic_relay_responses = []
       case surface
@@ -48,25 +49,6 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
         handoff_path = auth_app_sign_oidc_handoff_path(ri: "jp")
         selector_path = base_app_selector_path(ri: "jp")
         identifier = "app-dashboard@example.com"
-      when :com
-        actor = Visitor.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
-          birthdate: "2000-01-01",
-        )
-        actor.visitor_emails.create!(
-          address: "com-dashboard@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-        ).finalize_binding!
-        base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-        auth_host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-        flow_model = VisitorOidcAuthorizationTransaction
-        token_model = VisitorToken
-        sign_in_entry_path = auth_com_sign_in_path(ri: "jp")
-        passkey_page_path = new_auth_com_sign_in_passkey_path(ri: "jp")
-        options_path = auth_com_sign_in_passkey_options_path(ri: "jp")
-        verification_path = auth_com_sign_in_passkey_verification_path(ri: "jp")
-        handoff_path = auth_com_sign_oidc_handoff_path(ri: "jp")
-        selector_path = base_com_selector_path(ri: "jp")
-        identifier = "com-dashboard@example.com"
       end
 
       origin = "https://#{auth_host}"
@@ -81,11 +63,6 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
         actor.client_passkeys.create!(
           webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
           status_id: ClientPasskeyStatus::ACTIVE, description: "Dashboard journey",
-        )
-      when :com
-        actor.visitor_passkeys.create!(
-          webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
-          status_id: VisitorPasskeyStatus::ACTIVE, description: "Dashboard journey",
         )
       end
 
@@ -130,19 +107,19 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       browser = open_session
       browser.host!(auth_host)
       browser.https!
-      browser.get(target.request_uri)
+      browser.get(target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", target.path, browser.response.status]
       auth_entry_target = URI.parse(browser.response.location)
 
       assert_equal URI.parse(sign_in_entry_path).path, auth_entry_target.path
       entry_params = Rack::Utils.parse_nested_query(auth_entry_target.query)
       entry_params.fetch("entry_ref")
-      browser.get(auth_entry_target.request_uri)
+      browser.get(auth_entry_target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", auth_entry_target.path, browser.response.status]
       attach_target = URI.parse(browser.response.location)
 
       assert_equal "/ceremony_bindings", attach_target.path
-      browser.get(attach_target.request_uri)
+      browser.get(attach_target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", attach_target.path, browser.response.status]
       confirmation_target = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
@@ -158,7 +135,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
 
       assert_equal auth_host, auth_target.host
       browser.host!(auth_host)
-      browser.get(auth_target.request_uri)
+      browser.get(auth_target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", auth_target.path, browser.response.status]
 
       assert_equal URI.parse(auth_app_sign_in_path(ri: "jp")).path, URI.parse(browser.response.location).path

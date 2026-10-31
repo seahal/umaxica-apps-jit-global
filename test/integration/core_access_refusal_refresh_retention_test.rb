@@ -10,7 +10,6 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     [
       [ENV.fetch("PUBLIC_CORE_SERVICE_URL"), "client", "core-app-jp", clients(:one)],
-      [ENV.fetch("PUBLIC_CORE_CORPORATE_URL"), "visitor", "core-com-jp", visitors(:reserved_visitor)],
       [ENV.fetch("PUBLIC_CORE_STAFF_URL"), "operator", "core-org-jp", operators(:one)],
     ].each do |hostname, resource_type, client_id, resource|
       reset!
@@ -32,13 +31,6 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
           OpAppGrant.create!(
             authentication_epoch: 0,
             client_token: token,
-            oidc_client_id: client_id, **attributes,
-          )
-        when "visitor"
-          token = VisitorToken.create!(authentication_epoch: 0, visitor: resource, discard_at: deadline)
-          OpComGrant.create!(
-            authentication_epoch: 0,
-            visitor_token: token,
             oidc_client_id: client_id, **attributes,
           )
         when "operator"

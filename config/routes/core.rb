@@ -44,7 +44,6 @@ scope module: :core, as: :core do
             patch :cookie, to: "cookies#update"
             get :theme, to: "themes#show"
             patch :theme, to: "themes#update"
-            resource :dbsc, only: :create
           end
 
           # Machine-readable health and revision. The literal ".json" is part of the path, not a
@@ -90,91 +89,6 @@ scope module: :core, as: :core do
     end
   end
 
-  # Corporate BFF host.
-  # Two request paths reach this surface with different Host headers, so both names are
-  # listed. Requests forwarded by cloudflared carry the browser-facing PUBLIC_* site name,
-  # which boot_config resolves; requests that arrive directly on the compose `frontend`
-  # network carry the PRIVATE_* ingress alias. See docs/architecture/cloudflare-request-paths.md.
-  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).core_corporate.host,
-                     ENV["PRIVATE_CORE_CORPORATE_URL"],].compact do
-    scope module: :com, as: :com do
-      # Thin landing endpoint.
-      root to: "roots#index"
-
-      # Well-known public keys.
-      namespace :well_known, path: ".well-known" do
-        # JWKS endpoint; keep fixed JSON suffix.
-        resource :jwks, only: :show, path: "jwks.json", format: false
-      end
-
-      # Deployment identifier endpoint.
-      resource :revision, only: :show, format: false
-
-      # Health summary and probes.
-      resource :health, only: :show, format: false
-      namespace :health do
-        resource :liveness, only: :show, format: false
-        resource :readiness, only: :show, format: false
-        resource :startup, only: :show, format: false
-      end
-
-      # CSP report sink; keep configured report-uri path.
-      resource :csp_violation_report, only: :create, path: "csp-violation-report"
-
-      # Versioned BFF API.
-      namespace :api do
-        namespace :v0 do
-          namespace :preferences do
-            # Keep the established GET + PATCH contract; resource update would add an unapproved PUT.
-            get :cookie, to: "cookies#show"
-            patch :cookie, to: "cookies#update"
-            get :theme, to: "themes#show"
-            patch :theme, to: "themes#update"
-            resource :dbsc, only: :create
-          end
-
-          # Machine-readable health and revision. The literal ".json" is part of the path, not a
-          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
-          # These are JSON-only; the controllers answer 406 to any other `Accept`.
-          resource :health, only: :show, path: "health.json", format: false
-          resource :revision, only: :show, path: "revision.json", format: false
-
-          # Session summary.
-          resource :session, only: :show
-
-          # Token lifecycle endpoints.
-          namespace :token do
-            # Token refresh endpoint.
-            resource :refresh, only: :create
-          end
-        end
-      end
-
-      # RP callback. Browser entry is the neutral /sign contract.
-      # R5-WU16 matching-session RP cookie purge after OP logout.
-      namespace :oidc do
-        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
-        resource :callback, only: :show
-        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resources :closures, only: :create
-      end
-
-      # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
-      scope path: "sign", as: :sign do
-        get "", to: "sign/entries#show", as: :show
-        post "", to: "sign/entries#create", as: :create
-        # D-153: one generic landing for expected abnormal endings of the sign flow.
-        resource :interruption, only: :show, module: :sign
-      end
-
-      namespace :sign do
-        # First-party RP sign-out start and completion resources.
-
-        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
-        resource :out_completion, only: :show, path: "out/completion", controller: :outs
-      end
-    end
-  end
 
   # Staff BFF host.
   # Two request paths reach this surface with different Host headers, so both names are
@@ -216,7 +130,6 @@ scope module: :core, as: :core do
             patch :cookie, to: "cookies#update"
             get :theme, to: "themes#show"
             patch :theme, to: "themes#update"
-            resource :dbsc, only: :create
           end
 
           # Machine-readable health and revision. The literal ".json" is part of the path, not a

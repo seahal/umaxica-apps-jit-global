@@ -45,13 +45,15 @@ module Concerns
       end
     end
 
-    test "all application controllers include ActorSupport" do
+    test "all application controllers include an actor lifecycle" do
       CONTROLLER_FILES.each_value do |controller|
         content = controller[:content]
         controller_name = controller[:name]
 
-        assert_includes content, "ActorSupport",
-                        "#{controller_name} should include ActorSupport"
+        assert(
+          content.include?("ActorSupport") || content.include?("ComAnonymousActorContext"),
+          "#{controller_name} should include ActorSupport or ComAnonymousActorContext",
+        )
       end
     end
 
@@ -79,7 +81,7 @@ module Concerns
       pattern = %r{
         (after_action|append_after_action)\s+:(purge_current|finish_request)
         |
-        (prepend_around_action|around_action)\s+:with_actor_lifecycle
+        (prepend_around_action|around_action)\s+:(with_actor_lifecycle|with_anonymous_context_lifecycle)
     }x
 
       CONTROLLER_FILES.each_value do |controller|
@@ -110,7 +112,7 @@ module Concerns
         controller_name = controller[:path_name]
 
         assert_match(
-          /before_action :set_current_context\s+before_action :reset_flash/,
+          /before_action :(set_current_context|set_anonymous_context)\s+before_action :reset_flash/,
           content,
           "#{controller_name} should set current context before reset flash",
         )
@@ -151,20 +153,12 @@ module Concerns
       end
     end
 
-    test "application controllers with visitor auth include required concerns" do
-      visitor_controllers =
-        CONTROLLER_FILES.values.select do |controller|
-          controller[:content].include?("AuthenticationVisitor")
-        end
-
-      visitor_controllers.each do |controller|
-        content = controller[:content]
-        controller_name = controller[:path_name]
-
-        assert_includes content, "AuthorizationVisitor",
-                        "#{controller_name} should include AuthorizationVisitor when using AuthenticationVisitor"
-        assert_includes content, "VerificationVisitor",
-                        "#{controller_name} should include VerificationVisitor when using AuthenticationVisitor"
+    # The com realm was retired (WU-4); no application controller may reintroduce a visitor
+    # credential boundary. This is the wedge guarding against its return.
+    test "no application controller authenticates a visitor" do
+      CONTROLLER_FILES.each_value do |controller|
+        assert_not_includes controller[:content], "AuthenticationVisitor",
+                            "#{controller[:path_name]} must not authenticate a visitor"
       end
     end
 

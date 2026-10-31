@@ -162,7 +162,7 @@ module AuthenticationBase
     token_refreshed: "TOKEN_REFRESHED",
   }.freeze
 
-  VALID_ACTOR_TYPES = %w(client operator visitor).freeze
+  VALID_ACTOR_TYPES = %w(client operator).freeze
 
   # JWT primitives and gateway-level concerns were extracted out of
   # this 3,000-line module into dedicated files. The constant aliases
@@ -729,8 +729,6 @@ module AuthenticationBase
 
     clear_previous_login_cookies!
 
-    adopt_preference_for!(resource) if respond_to?(:adopt_preference_for!, true)
-
     set_login_auth_cookies(
       token_record, issuance.fetch(:access_token), issuance.fetch(:refresh_plain),
       issuance.fetch(:access_expires_at),
@@ -1086,7 +1084,6 @@ module AuthenticationBase
     surface =
       case resource_type.to_s
       when "client" then "app"
-      when "visitor" then "com"
       when "operator" then "org"
       else raise ArgumentError, "unsupported Sign Entry Sentry resource type: #{resource_type.inspect}"
       end
@@ -1347,7 +1344,6 @@ module AuthenticationBase
   def occurrence_model_class
     return ClientOccurrence if resource_type == "client"
     return OperatorOccurrence if resource_type == "operator"
-    return VisitorOccurrence if resource_type == "visitor"
 
     nil
   end
@@ -2100,7 +2096,6 @@ module AuthenticationBase
     actor_type =
       case resource_type
       when "operator" then :operator
-      when "visitor" then :visitor
       else :client
       end
     authn = Actor::Authentication.new(
@@ -2157,8 +2152,6 @@ module AuthenticationBase
     case resource_type
     when "operator"
       { staff_id: id }
-    when "visitor"
-      { visitor_id: id }
     else
       { user_id: id }
     end
@@ -2536,11 +2529,6 @@ module AuthenticationBase
         staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
         staff_token_dbsc_status_id: pending ? OperatorTokenDbscStatus::PENDING : OperatorTokenDbscStatus::NOTHING,
       }
-    when "visitor"
-      {
-        visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-        visitor_token_dbsc_status_id: pending ? VisitorTokenDbscStatus::PENDING : VisitorTokenDbscStatus::NOTHING,
-      }
     else
       {}
     end
@@ -2555,7 +2543,6 @@ module AuthenticationBase
     case resource_type
     when "client" then token_kind_id == ClientTokenKind::BROWSER_WEB
     when "operator" then token_kind_id == OperatorTokenKind::BROWSER_WEB
-    when "visitor" then token_kind_id == VisitorTokenKind::BROWSER_WEB
     else false
     end
   end
@@ -2566,8 +2553,6 @@ module AuthenticationBase
       { user_token_status_id: token_status_id.presence || ClientTokenStatus::ACTIVE }
     when "operator"
       { staff_token_status_id: token_status_id.presence || OperatorTokenStatus::ACTIVE }
-    when "visitor"
-      { visitor_token_status_id: token_status_id.presence || VisitorTokenStatus::ACTIVE }
     else
       {}
     end
@@ -2587,9 +2572,6 @@ module AuthenticationBase
       when ["client", "BROWSER_WEB"] then ClientTokenKind::BROWSER_WEB
       when ["client", "CLIENT_IOS"] then ClientTokenKind::CLIENT_IOS
       when ["client", "CLIENT_ANDROID"] then ClientTokenKind::CLIENT_ANDROID
-      when ["visitor", "BROWSER_WEB"] then VisitorTokenKind::BROWSER_WEB
-      when ["visitor", "CLIENT_IOS"] then VisitorTokenKind::CLIENT_IOS
-      when ["visitor", "CLIENT_ANDROID"] then VisitorTokenKind::CLIENT_ANDROID
       end
 
     return resolved if resolved
@@ -2638,7 +2620,6 @@ module AuthenticationBase
 
   def token_reference_connection_model(model)
     return OpBaseAppRecord if model <= OpBaseAppRecord
-    return OpBaseComRecord if model <= OpBaseComRecord
 
     OpBaseOrgRecord
   end
@@ -2659,13 +2640,6 @@ module AuthenticationBase
         staff_token_kind_id: OperatorTokenKind,
         staff_token_status_id: OperatorTokenStatus,
       }
-    when "visitor"
-      {
-        visitor_token_binding_method_id: VisitorTokenBindingMethod,
-        visitor_token_dbsc_status_id: VisitorTokenDbscStatus,
-        visitor_token_kind_id: VisitorTokenKind,
-        visitor_token_status_id: VisitorTokenStatus,
-      }
     else
       {}
     end
@@ -2675,7 +2649,6 @@ module AuthenticationBase
     case resource_type
     when "client" then ClientTokenKind
     when "operator" then OperatorTokenKind
-    when "visitor" then VisitorTokenKind
     else
       raise ActiveRecord::RecordNotFound, "Missing token kind model for resource_type=#{resource_type}"
     end
@@ -3113,8 +3086,6 @@ module AuthenticationBase
       ::ClientToken::MAX_SESSIONS_PER_USER
     elsif resource.is_a?(::Operator)
       ::OperatorToken::MAX_SESSIONS_PER_STAFF
-    elsif resource.is_a?(::Visitor)
-      ::VisitorToken::MAX_SESSIONS_PER_VISITOR
     else
       2 # Default fallback
     end
@@ -3134,11 +3105,6 @@ module AuthenticationBase
           .where(staff_id: resource.id, operator_device_sessions: { status_id: OperatorDeviceSession::STATUS_ACTIVE,
                                                                     revoked_at: nil, },)
           .count
-      elsif resource.is_a?(::Visitor)
-        ::VisitorToken.active_status(decision_time).joins(:device_session)
-          .where(visitor_id: resource.id, visitor_device_sessions: { status_id: VisitorDeviceSession::STATUS_ACTIVE,
-                                                                     revoked_at: nil, },)
-          .count
       else
         0
       end
@@ -3146,9 +3112,9 @@ module AuthenticationBase
   end
 
   def scheduled_login_token_attributes(now: Time.current)
-    return {} unless %w(operator visitor).include?(resource_type)
+    return {} unless resource_type == "operator"
 
-    ttl_class = (resource_type == "visitor") ? VisitorToken : OperatorToken
+    ttl_class = OperatorToken
     discard_at = now + ttl_class::LOGIN_SESSION_TTL
     {
       discard_at: discard_at,
@@ -3182,8 +3148,6 @@ module AuthenticationBase
       ::ClientToken
     elsif resource.is_a?(::Operator)
       ::OperatorToken
-    elsif resource.is_a?(::Visitor)
-      ::VisitorToken
     else
       token_class
     end
@@ -3314,8 +3278,6 @@ module AuthenticationBase
         dbsc_route_helper(:auth_app_edge_v0_token_dbsc_path, :sign_app_edge_v0_token_dbsc_path)
       when "operator"
         dbsc_route_helper(:auth_org_edge_v0_token_dbsc_path, :sign_org_edge_v0_token_dbsc_path)
-      when "visitor"
-        dbsc_route_helper(:auth_com_edge_v0_token_dbsc_path, :sign_com_edge_v0_token_dbsc_path)
       end
     # Canonicalize: the advertised DBSC path must not carry per-request context params.
     dbsc_canonical_url(raw)
@@ -3328,8 +3290,6 @@ module AuthenticationBase
         dbsc_route_helper(:auth_app_edge_v0_token_dbsc_url, :sign_app_edge_v0_token_dbsc_url)
       when "operator"
         dbsc_route_helper(:auth_org_edge_v0_token_dbsc_url, :sign_org_edge_v0_token_dbsc_url)
-      when "visitor"
-        dbsc_route_helper(:auth_com_edge_v0_token_dbsc_url, :sign_com_edge_v0_token_dbsc_url)
       end
     # Canonicalize: this URL is the DBSC proof audience and must match registration and
     # refresh byte-for-byte, so it cannot vary with request context (ri/lx/...).
@@ -3402,7 +3362,7 @@ module AuthenticationBase
   # adr/authentication-security-mode.md C1: only ADVANCED requires a second step, and that step is a
   # Passkey. NORMAL signs in with its primary method.
   def mfa_required_for?(resource)
-    return false unless resource.is_a?(::Client) || resource.is_a?(::Operator) || resource.is_a?(::Visitor)
+    return false unless resource.is_a?(::Client) || resource.is_a?(::Operator)
 
     resource.security_mode_advanced?
   end

@@ -637,6 +637,21 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     Flipper.disable(:turnstile_degraded_mode)
   end
 
+  test "initial sign in does not hide programming errors as email queue failure" do
+    email = clients(:one).client_emails.create!(
+      address: "initial-queue-error-#{SecureRandom.hex(8)}@example.test",
+    ).tap(&:finalize_binding!)
+    invalid_job = ->(*) { raise ArgumentError, "invalid delivery metadata" }
+
+    OtpNotifierEmailDeliveryJob.stub(:set, invalid_job) do
+      assert_raises(ArgumentError) do
+        post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+             params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test_token" },
+             headers: { "Host" => @host }
+      end
+    end
+  end
+
   test "post create preserves Source OTP cooldown and enforces the sign-in dispatch window" do
     user = clients(:one)
     test_email = user.client_emails.create!(
@@ -644,6 +659,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     ).tap(&:finalize_binding!)
     test_email.update!(otp_last_sent_at: Time.current)
     source_sent_at = test_email.reload.otp_last_sent_at
+    original_challenge = @current_auth_ceremony.reload.email_otp_context.deep_dup
 
     post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
@@ -658,6 +674,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
     challenge = @current_auth_ceremony.reload.email_otp_context.deep_dup
 
+    challenge_unchanged = original_challenge == challenge
+
+    assert challenge_unchanged, "source cooldown must refuse before changing the challenge"
     assert_equal source_sent_at, test_email.reload.otp_last_sent_at
 
     post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
@@ -1510,7 +1529,6 @@ class Auth::App::Sign::In::EmailsControllerTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")
@@ -1569,23 +1587,6 @@ class Auth::App::Sign::In::EmailsControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
@@ -1600,17 +1601,9 @@ class Auth::App::Sign::In::EmailsControllerTest
     true
   end
 
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
   def step_up_test_audience_for_token(token)
     case token.class.name
     when "OperatorToken" then "step_up:org"
-    when "VisitorToken" then "step_up:com"
     else "step_up:app"
     end
   end
@@ -1799,38 +1792,6 @@ class Auth::App::Sign::In::EmailsControllerTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(
-      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
-      visibility_id: VisitorVisibility::VISITOR,
-    )
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

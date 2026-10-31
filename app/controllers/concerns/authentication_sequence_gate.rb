@@ -38,7 +38,6 @@ module AuthenticationSequenceGate
 
     case sign_in_sequence_surface.to_s
     when "app" then visa_app_sign_in_limitation_path(**attrs)
-    when "com" then visa_com_sign_in_limitation_path(**attrs)
     when "org" then visa_org_sign_in_limitation_path(**attrs)
     else raise ArgumentError, "unsupported sign-in surface: #{sign_in_sequence_surface.inspect}"
     end
@@ -267,8 +266,6 @@ module AuthenticationSequenceGate
       sign_app_selector_path(**attrs)
     elsif respond_to?(:sign_org_selector_path, true)
       sign_org_selector_path(**attrs)
-    elsif respond_to?(:sign_com_selector_path, true)
-      sign_com_selector_path(**attrs)
     else
       path = "/selector"
       query = attrs.compact.to_query
@@ -543,7 +540,7 @@ module AuthenticationSequenceGate
 
   def sign_in_flow_principal(cycle)
     case cycle
-    when ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow
+    when ClientSignInFlow, OperatorSignInFlow
       cycle.association(:principal).tap { |owner| owner.reset_scope }.scope.take
     else raise ArgumentError, "unsupported sign-in flow: #{cycle.class.name}"
     end
@@ -571,7 +568,6 @@ module AuthenticationSequenceGate
   def sign_in_sequence_surface_for_actor(actor)
     case actor
     when ::Client then :app
-    when ::Visitor then :com
     when ::Operator then :org
     else sign_in_sequence_surface
     end
@@ -580,7 +576,6 @@ module AuthenticationSequenceGate
   def sign_in_flow_class_for(resource)
     case resource
     when ::Client then ClientSignInFlow
-    when ::Visitor then VisitorSignInFlow
     when ::Operator then OperatorSignInFlow
     else
       raise ArgumentError, "unsupported sign-in cycle actor"

@@ -28,10 +28,6 @@ module MfaStatusCredential
         raise FlowConfigurationError, "Client MFA credential owner must be user" unless association_name == :user
 
         Client.find_by(id: user_id)
-      when VisitorEmail, VisitorPasskey
-        raise FlowConfigurationError, "Visitor MFA credential owner must be visitor" unless association_name == :visitor
-
-        Visitor.find_by(id: visitor_id)
       when OperatorPasskey
         raise FlowConfigurationError, "Operator MFA credential owner must be staff" unless association_name == :staff
 

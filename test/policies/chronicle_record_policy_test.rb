@@ -94,10 +94,10 @@ class ChronicleRecordPolicyTest < ActiveSupport::TestCase
   end
 
   test "subject_payload extracts subject info" do
-    visitor = visitors(:reserved_visitor)
-    payload = ChronicleRecordPolicy.subject_payload(visitor)
+    client = clients(:one)
+    payload = ChronicleRecordPolicy.subject_payload(client)
 
-    assert_equal "Visitor", payload[:subject_type]
+    assert_equal "Client", payload[:subject_type]
     assert_predicate payload[:subject_id], :present?
   end
 

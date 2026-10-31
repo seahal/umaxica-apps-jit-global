@@ -1,13 +1,13 @@
 # typed: false
 # frozen_string_literal: true
 
-# Terminalizes expired app/com sign-up tickets through the existing domain
+# Terminalizes expired app sign-up tickets through the existing domain
 # operation. The request-time state checks remain authoritative; this job only
 # closes and cleans rows that were not reached while their flow was open.
 class SignUpExpiryJob < ApplicationJob
   queue_as :retention
 
-  TICKET_CLASSES = [ClientSignUpFlow, VisitorSignUpFlow].freeze
+  TICKET_CLASSES = [ClientSignUpFlow].freeze
 
   public
 

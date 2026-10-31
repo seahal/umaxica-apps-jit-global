@@ -70,9 +70,9 @@ module ConfigValues
 
       def base_for_resource_type(resource_type)
         case resource_type.to_s
+        when "client" then base_service
         when "operator", "staff" then base_staff
-        when "visitor", "customer" then base_corporate
-        else base_service
+        else raise ArgumentError, "unsupported Base authority resource type"
         end
       end
 
