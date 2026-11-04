@@ -1,37 +1,71 @@
 # Umaxica Apps Global — Agent Instructions
 
-Ruby on Rails application, not the Rails framework monorepo.
+This is a production Ruby on Rails application, not the Rails framework monorepo. Changes serve real
+users. `README.md` describes topology; its "Routing" section inventories user-facing surfaces. This
+file is the shared entry point for Codex and Claude Code; `CLAUDE.md` imports it. Keep repository
+rules shared and model-independent. Runtime permissions and model selection belong in tool settings.
 
-This repository is built for production deployment, not as a proof of concept. Treat every change as
-code that will run in production and serve real users.
+## Working Agreement
 
-`README.md` describes the repository and its current topology. This file contains only
-repository-wide agent rules that cannot be reliably derived from the code. Task-specific rules under
-`.agents/harnesses/rules/` are canonical within their scope; load only those selected by the Task
-Rule Index before editing.
+- For explanation, review, diagnosis or planning, inspect and report without editing. For changes,
+  complete the in-scope local work and non-destructive verification without additional approval.
+- **MUST:** obtain explicit approval for destructive or irreversible actions, external writes,
+  purchases, material scope expansion or decisions requiring information only the user can provide.
+  Persistence operations such as bulk updates/deletes and irreversible migrations require risk and
+  recovery-plan approval.
+- Preserve unrelated staged, unstaged and untracked work. Keep the existing worktree intact.
+- Communicate in the user's language. Lead with the outcome, explain concrete behavior and report
+  evidence and limits. Use established terms and repository names; explain unfamiliar terms on first
+  use. Do not invent jargon, acronyms or compound labels for an explanation. Describe a new concept
+  before naming it, and distinguish a proposed name from an accepted one.
+- Keep work proportional. Delegate only authorized, independent, substantial work when its benefit
+  exceeds context overhead; do not add a separate verifier pass. Give each delegate the purpose,
+  scope, constraints, acceptance, verification and unresolved issues. Do not assume inherited
+  context.
 
-## Scope and Authorization
+## Principles and Boundaries
 
-- For explanation, review, diagnosis, or planning, inspect and report without changing files.
-- For change, build, or fix requests, make only the in-scope local change and run non-destructive
-  verification without additional approval.
-- Obtain explicit approval before destructive or irreversible actions, external writes, purchases,
-  material scope expansion, or actions requiring information only the user can provide.
-- Preserve unrelated staged, unstaged, and untracked work. Keep the existing worktree intact.
+Security bounds our ability to create value. Within that boundary, performance, experience,
+documentation, longevity and observability are coequal; list order is not priority. **MUST**,
+**SHOULD** and **MAY** follow BCP 14; express requirements positively.
 
-## Application Boundaries
-
-Treat every user-facing surface as an independent trust boundary. Use the `README.md` "Routing"
-section for the current surface inventory and `project/surfaces.mdc` for surface-specific rules.
-
-Preserve each surface's controllers, routes, views, policies, sessions, and state. Cross-surface
-sharing requires an explicit existing abstraction; cross-surface leakage is a security defect.
+- **MUST:** treat each user-facing surface as an independent trust boundary. Preserve its
+  controllers, routes, views, policies, sessions and state; sharing requires an explicit existing
+  abstraction. Cross-surface leakage is a security defect. Apply `project/surfaces.mdc` through the
+  index below.
+- **MUST:** preserve ownership, authentication, authorization, verification, rate limits and
+  security-relevant control order, including CSRF, XSS, SSRF and SQL-injection protections. Use
+  parameterized access, contextual escaping and sanitization; keep untrusted data separate from
+  executable content.
+- **MUST:** protect people from foreseeable harm and prevent disclosure of credentials, tokens,
+  cookies, authorization data and sensitive request data, including in diagnostics.
+- **MUST:** keep orchestration, authorization, domain behavior, persistence and presentation with
+  their owners. Keep request state explicit, outside class variables, globals and `Thread.current`.
+- **MUST:** make invalid state, unsupported workflows, failed prerequisites and missing required
+  configuration explicit and observable. Production must remain independent of test-only
+  requirements.
+- **MUST:** read required Ruby environment variables with one-argument `ENV.fetch("NAME")`; read
+  optional variables with `ENV["NAME"]` and an explicit nil branch. Code-side defaults are defects.
+- **MUST:** represent every persisted state explicitly with NOT NULL columns, status reference
+  tables or enums. Boolean columns are NOT NULL. NULL must not encode a state, decision or third
+  boolean value; code must not branch on whether a persisted column is NULL.
+- **MUST:** preserve unchanged external contracts, persistent data, identity/security state and
+  audit history. Persist authoritative audit, security, compliance and purchase events as records.
+- **SHOULD:** make ownership, visibility, dependencies and failures explicit; implement the smallest
+  coherent solution. Keep adjacent cleanup within authorized scope and abstractions proportional.
+  Preserve replaceability. **MAY:** use bounded transitions needed for safe deployment or migration,
+  recording exit conditions.
+- **SHOULD:** let layout communicate meaning; keep secondary labels and explanations necessary. Code
+  states how, tests what, commits why, and comments why not. Preserve non-obvious decisions in their
+  owning documents and update affected current documentation; historical research needs no general
+  upkeep.
 
 ## Task Rule Index
 
-Rule paths are relative to `.agents/harnesses/rules/`; documentation and ADR paths are relative to
-the repository root. This root `AGENTS.md` is the sole harness-routing entry point; nested
-`AGENTS.md` files are not used for rule loading.
+Resolve `generic/` and `project/` paths below against `.agents/harnesses/rules/`; all other paths
+are repository-relative. This root `AGENTS.md` is the sole harness router; nested `AGENTS.md` files
+are not used. Selected rules are canonical within their scope; read them before editing. Read
+matching files explicitly: a path reference is not an automatic import.
 
 Always load `generic/model-behavior-calibration.mdc` — it applies to every task. Load
 `generic/rails-change-discipline.mdc` for every Ruby on Rails implementation change. Then load only
@@ -65,6 +99,10 @@ the remaining entries matching the task.
   invariants; do not swallow or guess a substitute)
 - Renaming, moving, replacing, removing, restructuring, or migrating an existing implementation:
   `generic/no-compatibility-layer.mdc`
+- Runbooks, or any change that alters an operator procedure for a deployed environment, shared
+  database or external provider (key rotation, rollout, provisioning, incident response):
+  `docs/runbooks/README.md` — every runbook lives in `docs/runbooks/`; update the affected runbook
+  in the same change
 - Compose files, container ports, or devcontainer configuration:
   `docs/operations/development-host-port-exposure.md`
 - Routing or authentication workflows: `project/surfaces.mdc`, `generic/routing.mdc`,
@@ -104,125 +142,67 @@ or service-layer work, use `project/repository-knowledge-tree.mdc` to load and p
 under `research/`, `adr/`, `specs/`, `plans/`, and `docs/`. Surface conflicts between current code
 and an accepted ADR before choosing an implementation path.
 
-## Governing Principles and Constraints
+## Specifications and Repository Content
 
-Security bounds our ability to create value. Within that boundary, performance, experience,
-documentation, longevity and observability are coequal. Category order is not priority. **MUST**,
-**SHOULD**, and **MAY** follow BCP 14; express requirements positively.
+Use `specs/README.md` for scope, lifecycle and traceability, and the `spec-driven-development` Skill
+for significant accepted changes. Keep small obvious edits lightweight. Define purpose, scope and
+observable acceptance before implementation; add plans and ordered tasks when complexity warrants
+them. Consider affected quality priorities above and how to verify them. Follow existing
+authorization; workflow phases alone do not require repeated approval.
 
-- **MUST:** preserve surface trust, ownership, session and state boundaries, and applicable
-  authentication, authorization, web application security controls (including protections against
-  CSRF, XSS, SSRF, and SQL injection), verification, rate limits and security-relevant control
-  order.
-- **MUST:** prevent SQL injection and XSS through parameterized access, contextual escaping and
-  appropriate sanitization; keep untrusted data separate from executable content.
-- **MUST:** protect people from foreseeable harm and protect credentials, tokens, cookies,
-  authorization data and sensitive request data from disclosure, including diagnostic output.
-- **MUST:** keep orchestration, authorization, domain behavior, persistence and presentation with
-  their owners. Keep request state explicit, not in class variables, globals or `Thread.current`.
-- **MUST:** make invalid state, unsupported workflows, failed prerequisites and missing required
-  configuration explicit and observable. Keep production independent of test-only requirements.
-- **MUST:** read required Ruby environment variables with one-argument `ENV.fetch("NAME")`; read
-  optional variables with `ENV["NAME"]` and an explicit nil branch. Code-side defaults are defects.
-- **MUST:** never give database NULL a meaning. NULL must not encode a state, a decision or a third
-  boolean value, and code must not branch on whether a persisted column is NULL. Represent every
-  state explicitly with NOT NULL columns, status reference tables or enums. Boolean columns are NOT
-  NULL.
-- **MUST:** preserve unchanged external contracts, persistent data, identity/security state and
-  audit history. Persist authoritative audit, security, compliance and purchase events as records.
-- **MUST:** obtain explicit risk and recovery-plan approval before destructive or irreversible
-  persistence operations, including bulk updates/deletes and irreversible migrations.
-- **SHOULD:** make ownership, visibility, dependencies and failures explicit; implement the smallest
-  coherent solution. Adjacent cleanup belongs only within the authorized change.
-- **SHOULD:** let the layout communicate meaning and keep secondary labels and explanations to
-  what is necessary.
-- **SHOULD:** preserve replaceability and proportional abstractions. **MAY:** use bounded
-  transitional mechanisms when safe deployment or migration requires them; record their exit
-  conditions.
-- **SHOULD:** code states how, tests state what, commit messages state why, and comments state why
-  not. Preserve non-obvious decisions in their owning knowledge artifacts. Maintain affected current
-  documentation; historical research has no general maintenance obligation.
-- **MUST:** test public contract boundaries immediately below, at and above each range, limit,
-  format or classification boundary. Use the nearest valid/reachable value when necessary and
-  explain the exception in the test name or comment. Cover type-appropriate missing, empty, zero and
-  other reachable sentinel inputs. **SHOULD:** use one representative per equivalence partition
-  unless the contract distinguishes more, and make the technique recoverable from names/assertions.
-
-## Repository Content
-
-Write repository prose in English except explicit localization content, translation fixtures,
-non-English customer copy, or necessary quotations. Conversation language does not override this.
-Follow `docs/reference/repository-language-policy.md`.
-
-- `.agents/skills/` holds skills, each directory with a `SKILL.md` entrypoint.
-- `.agents/harnesses/rules/` is the only harness directory; do not invent other harness locations.
-- Keep task scope in the conversation; do not add `.agents/goals/` files.
-- When a significant implementation cycle closes, keep its working documents (plan, detailed
-  definitions, addenda, acceptance definitions, reports) as a generation-numbered cycle archive
-  under `plans/archive/NNNN-<slug>/`, not as ignored root files. Archives are non-normative, not
-  evidence and deletable; move what must keep holding elsewhere first. See
+- `docs/reference/repository-knowledge-architecture.md` defines ownership. Accepted ADRs, open specs
+  and durable checklists define intended behavior; code and observed execution establish current
+  behavior. Preserve existing implementation patterns where compatible with those contracts. Report
+  conflicts explicitly and resolve them within authorized scope; neither code nor documentation
+  silently overrides the other. Closed specs preserve history; current behavior belongs in docs and
+  durable checklists.
+- Repository prose is English except localization content, translation fixtures, non-English
+  customer copy and necessary quotations. Conversation language does not change this; follow
+  `docs/reference/repository-language-policy.md`.
+- `.agents/skills/` holds skills with a `SKILL.md` entrypoint. `.agents/harnesses/rules/` is the
+  only harness directory. Keep task scope in the conversation; do not add `.agents/goals/` files.
+- At significant implementation-cycle closure, archive working plans, detailed definitions, addenda,
+  acceptance definitions and reports under `plans/archive/NNNN-<slug>/`, not ignored root files.
+  Promote lasting requirements first. Archives are non-normative, deletable and not evidence; follow
   `plans/archive/README.md`.
 
 ## Verification and Reporting
 
 ```bash
-bin/rails test                              # all Ruby tests (Minitest)
-bin/rails test test/path/to/file_test.rb    # one file
+bin/rails test                             # all Ruby tests (Minitest)
+bin/rails test test/path/to/file_test.rb   # one file
 bin/rails test test/path/to/file_test.rb:LINE
-bun run test                                  # JavaScript tests (Vitest)
+bun run test                             # JavaScript tests (Vitest)
 ```
 
-Meaningful behavior changes need risk-appropriate tests covering success, failure, authorization,
-and boundary cases. No placeholder, skipped, TODO, or behavior-mocking tests. Run the narrowest
-relevant checks first, then broaden only when the affected boundary warrants it.
-
-Unit tests cover public methods and functions only. A private or protected subroutine needs no test
-case of its own: it is reached through the public interface that uses it, and a subroutine that
-seems to need a direct test is evidence that the implementation, not the test, needs changing (wrong
-ownership, a missing collaborator, or behavior that belongs on a public boundary). Never widen
-visibility, add a test-only wrapper or accessor, or reach in through `send`, reflection, or a
-redefinition to test one. Any exception carries a comment at the test stating the reason.
-
-Environment and tooling construction is the exception, and it is absolute: never add a Minitest or
-Vitest case whose subject is dependency, configuration, container, or mounted-engine setup. Run the
-thing and record what you observed in `evidence/`. See
-`.agents/harnesses/rules/project/no-environment-tests.mdc`.
-
-Documentation MAY guide investigation, but it is not evidence of current behavior. Before reporting
-a behavioral claim to the user, confirm it against the implementing code, the relevant docs, and the
-tests; when they disagree, report the discrepancy instead of choosing one silently.
-
-When documentation conflicts with existing code, agents **MUST** follow the implementation patterns
-in the existing code and list every discrepancy found in the final response.
-An Accepted ADR records an intended contract, not evidence that the implementation satisfies it.
-Identify a conflict with that contract explicitly and resolve it within the user's authorization;
-do not silently treat the current implementation as proof that the ADR has been fulfilled.
-
-Report only claims supported by results from the current session. State failed, skipped, blocked,
-and unverified checks plainly. Lead with the outcome; keep responses proportional to the task. Do
-not add a separate verifier pass; delegate only independent, substantial work whose parallel
-execution outweighs re-establishing context.
-
-## Spec Driven Development
-
-Use `specs/README.md` for scope, lifecycle and traceability, and the `spec-driven-development` Skill
-when a significant accepted change needs a workflow. Small obvious edits remain lightweight. Current
-knowledge ownership is defined in `docs/reference/repository-knowledge-architecture.md`. Closed
-specs preserve change history; current behavior belongs in docs and durable checklists.
+- Meaningful behavior changes need risk-appropriate tests for success, failure, authorization and
+  boundaries. No placeholder, skipped, TODO or behavior-mocking tests. Start with the narrowest
+  relevant checks; broaden only when the affected boundary warrants it.
+- **MUST:** test immediately below, at and above each public range, limit, format or classification
+  boundary. Use the nearest valid/reachable value when needed and explain the exception in the test
+  name or comment. Cover type-appropriate missing, empty, zero and reachable sentinel inputs.
+  **SHOULD:** use one representative per equivalence partition unless the contract distinguishes
+  more; make the technique recoverable from names/assertions.
+- Unit tests exercise public methods and functions. Reach private/protected subroutines through
+  their public callers; a need to test one directly suggests misplaced behavior or a missing
+  collaborator. Do not widen visibility, add test-only wrappers/accessors, or use `send`, reflection
+  or redefinition to test them. Any exception needs a reason in a comment at the test.
+- Environment/tooling construction is an absolute exception: no Minitest or Vitest tests of
+  dependency, configuration, container or mounted-engine setup. Run it and record observations in
+  `evidence/`; see `.agents/harnesses/rules/project/no-environment-tests.mdc`.
+- Before reporting behavior, check implementing code, relevant docs and tests. Documentation alone
+  does not establish behavior; report every discrepancy found. Claim only results supported in this
+  session and state failed, skipped, blocked and unverified checks plainly. Keep reports
+  proportional.
 
 ### Evidence
 
-Completed tests, validations, verifications, audits, security checks and performance checks leave a
-short record in `evidence/` when retaining the result is useful. Records describe work that was
-actually performed — never plans, intentions, or unverified claims. A check that could not be
-completed is recorded as such, with the reason and whatever was observed. Every record states the
-full git commit hash (`git rev-parse HEAD`) the work was performed against, and notes when the
-worktree had uncommitted changes that affected the result.
+Retain short records in `evidence/` when useful for completed tests, validation, audits, security or
+performance checks. Record actual work, not plans or unverified claims. For incomplete checks, state
+why and what was observed. Include the full commit hash from `git rev-parse HEAD` and whether
+uncommitted changes affected the result.
 
-- `evidence/` is flat; no subdirectories.
-- Only `.md` files.
-- `YYYY-MM-DD-<topic>-XXXX.md`: ISO date, lowercase hyphenated topic, then a 4-character `[0-9A-Z]`
-  suffix picked freely by the writing agent to avoid merge collisions.
-- No raw logs, screenshots, binaries, archives, dumps, generated reports or other large artifacts.
-  Summarize them, and cite the commands, identifiers, hashes, measurements and excerpts that carry
-  the result.
+- Flat directory, Markdown only: `YYYY-MM-DD-<topic>-XXXX.md`, with a freely chosen four-character
+  `[0-9A-Z]` suffix to avoid collisions. Use an ISO date and a lowercase, hyphenated topic.
+- Summarize results and cite commands, identifiers, hashes, measurements and relevant excerpts. Keep
+  raw logs, screenshots, binaries, archives, dumps and large generated reports out of evidence.
