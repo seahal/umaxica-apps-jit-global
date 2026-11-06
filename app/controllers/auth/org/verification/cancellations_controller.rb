@@ -20,13 +20,23 @@ class Auth::Org::Verification::CancellationsController < Auth::Org::ApplicationC
       "cancellation_handoff_issued", transaction: @step_up_ceremony_transaction, outcome: "issued",
                                      stage: "auth_cancellation", state_before: @step_up_ceremony_transaction.status,
     )
-    redirect_to(
-      base_org_verification_cancellation_url(
-        cancellation_ref: issuance.reference,
-        transaction_ref: @step_up_ceremony_transaction.transaction_id, ri: params[:ri],
-        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), protocol: "https",
-      ), status: :see_other, allow_other_host: true,
-    )
+    destination =
+      if issuance.transaction.required_scope == OidcAuthorizeRequestResolver::STEP_UP_SCOPE
+        query = {
+          step_up_cancellation_ref: issuance.reference,
+          step_up_ticket_ref: issuance.transaction.transaction_id,
+          step_up_context_ref: issuance.transaction.resource_ref,
+          ri: params[:ri],
+        }.compact.to_query
+        "#{OidcIssuer.authorization_endpoint("operator")}?#{query}"
+      else
+        base_org_verification_cancellation_url(
+          cancellation_ref: issuance.reference,
+          transaction_ref: @step_up_ceremony_transaction.transaction_id, ri: params[:ri],
+          host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), protocol: "https",
+        )
+      end
+    redirect_to(destination, status: :see_other, allow_other_host: true)
   rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error,
          ActiveRecord::RecordNotFound, ArgumentError => e
     log_step_up_refusal(e, transaction: @step_up_ceremony_transaction, stage: "auth_cancellation")

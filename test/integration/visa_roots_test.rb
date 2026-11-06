@@ -20,6 +20,66 @@ class VisaRootsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "authenticated Visa APP and ORG checks advertise realm-local DBSC registration" do
+    [
+      {
+        host: ENV.fetch("PUBLIC_VISA_SERVICE_URL"),
+        resource_type: "client",
+        owner_attribute: :user,
+        actor: lambda {
+          Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: ClientStatus::ACTIVE,
+          )
+        },
+        token_class: ClientToken,
+      },
+      {
+        host: ENV.fetch("PUBLIC_VISA_STAFF_URL"),
+        resource_type: "operator",
+        owner_attribute: :staff,
+        actor: lambda {
+          Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED,
+            status_id: OperatorStatus::ACTIVE,
+          )
+        },
+        token_class: OperatorToken,
+      },
+    ].each do |configuration|
+      actor = configuration.fetch(:actor).call
+      token_attributes = { authentication_epoch: 0 }
+      token_attributes[configuration.fetch(:owner_attribute)] = actor
+      token = configuration.fetch(:token_class).create!(**token_attributes)
+      token.rotate_refresh_token!
+      host = configuration.fetch(:host)
+      access_token = jwt_access_token_for(
+        actor,
+        host: host,
+        session_public_id: token.public_id,
+        resource_type: configuration.fetch(:resource_type),
+      )
+      browser = open_session
+      browser.host!(host)
+      browser.https!
+      browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+
+      browser.get("/edge/v0/token/check", headers: { "Accept" => "application/json" })
+
+      assert_equal 200, browser.response.status, host
+      assert browser.response.parsed_body.fetch("authenticated")
+
+      registration = browser.response.headers[AuthIoKeys::Headers::SECURE_DBSC_REGISTRATION]
+
+      assert_predicate registration, :present?, host
+      assert_equal registration, browser.response.headers[AuthIoKeys::Headers::DBSC_REGISTRATION], host
+      assert_includes registration, "(ES256 RS256);", host
+      assert_includes registration, 'path="/edge/v0/token/dbsc"', host
+      assert_includes registration, "challenge=", host
+      assert_predicate token.reload.dbsc_challenge, :present?, host
+    end
+  end
+
   test "Visa DBSC challenge expiry is strict at the five-minute boundary for APP and ORG" do
     now = Time.current.change(usec: 0)
     travel_to(now) do
@@ -207,82 +267,13 @@ class VisaRootsTest < ActionDispatch::IntegrationTest
     assert_not browser.response.cookies.key?(AuthenticationBase::DBSC_COOKIE_KEY)
   end
 
-  test "each Visa host serves its own public root without issuing cookies" do
-    {
-      "visa.umaxica.app" => ["visa/app/roots", "Visa App"],
-      "visa.umaxica.org" => ["visa/org/roots", "Visa Org"],
-      "visa.app.localhost" => ["visa/app/roots", "Visa App"],
-      "visa.org.localhost" => ["visa/org/roots", "Visa Org"],
-    }.each do |host, (controller, heading)|
+  test "the Visa hosts route nothing at the root" do
+    %w(visa.umaxica.app visa.umaxica.org visa.app.localhost visa.org.localhost).each do |host|
       host! host
-      get "/"
+      get "/", params: { ri: "jp" }
 
-      assert_response :found
-      assert_equal "jp", Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("ri")
+      assert_response :not_found
       assert_nil response.headers["Set-Cookie"]
-      follow_redirect!
-
-      assert_response :ok
-      assert_equal controller, request.path_parameters[:controller]
-      assert_equal "text/html", response.media_type
-      assert_select "title", heading
-      assert_select "main h1", heading
-      assert_select "header .ui-landing__brand", text: /VISA/
-      assert_select "main .ui-landing__intro p", text: I18n.t("landing.thin_endpoint")
-      assert_select "main a.ui-button", text: I18n.t("landing.sign_in")
-      assert_select "footer nav a", text: I18n.t("ui_presentation.navigation.preferences")
-      assert_includes response.headers.fetch("Cache-Control"), "no-store"
-      assert_nil response.headers["Set-Cookie"]
-
-      head "/", params: { ri: "jp" }
-
-      assert_response :ok
-      assert_empty response.body
-      assert_nil response.headers["Set-Cookie"]
-    end
-  end
-
-  test "landing destinations use the matching Base origin and preserve supplied region" do
-    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    {
-      "visa.app.localhost" => hosts.base_service,
-      "visa.org.localhost" => hosts.base_staff,
-    }.each do |host, origin|
-      host! host
-      get "/", params: { ri: "us" }
-
-      assert_response :ok
-      assert_select "main a.ui-button[href='#{origin}/sign?ri=us']", count: 1
-      assert_select "footer nav a[href='#{origin}/preference?ri=us']", count: 1
-      assert_select "form", count: 0
-      assert_nil response.headers["Set-Cookie"]
-    end
-  end
-
-  test "landing ignores a retired item theme cookie without writing cookies" do
-    host! "visa.app.localhost"
-    cookies[:ct] = "dr"
-    get "/", params: { ri: "jp" }
-
-    assert_response :ok
-    assert_select "html[data-theme=system]"
-    assert_select "a.ui-skip-link[href='#main']"
-    assert_select "main#main[tabindex='-1']"
-    assert_nil response.headers["Set-Cookie"]
-  end
-
-  test "landing copy is available in both supported languages" do
-    host! "visa.app.localhost"
-    %i(en ja).each do |locale|
-      I18n.with_locale(locale) do
-        get "/", params: { ri: "jp" }
-
-        assert_response :ok
-        assert_select "html[lang='#{locale}']"
-        assert_select "main a.ui-button", text: I18n.t("landing.sign_in")
-        assert_select "main .ui-landing__intro p", text: I18n.t("landing.thin_endpoint")
-        assert_nil response.headers["Set-Cookie"]
-      end
     end
   end
 

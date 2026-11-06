@@ -157,7 +157,7 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
     assert_equal 0, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count
   end
 
-  test "an ordinary step-up is not subject to the bootstrap freshness window" do
+  test "full reauthentication is not subject to the bootstrap freshness window" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: 3.hours.ago)
 
@@ -165,9 +165,10 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
       actor: actor,
       token: token,
       requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+        purpose: "reauthentication",
         phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes,
+        full_reauthentication_required: true, ttl: 15.minutes,
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       ),
@@ -176,7 +177,7 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
       base_token: token,
     )
 
-    assert_equal "step_up", issuance.transaction.purpose
+    assert_equal "reauthentication", issuance.transaction.purpose
   end
 
   test "refreshing or using the session does not move the bootstrap freshness anchor" do

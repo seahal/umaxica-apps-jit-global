@@ -45,16 +45,7 @@ module OwnerPageResponses
   end
 
   def require_step_up!(scope:, **)
-    surface = self.class.const_get(:AVATAR_SURFACE, false)
-    methods = avatar_actor.is_a?(Operator) ? [:passkey] : %i(email_otp passkey totp)
-    requirement = StepUpRequirement.new(
-      scope:, step_up_required: true, allowed_methods: methods, phishing_resistant_required: false,
-      user_verification_required: false, full_reauthentication_required: false,
-      session_binding: avatar_root.public_id, token_binding: avatar_root.public_id, ttl: VerificationBase::STEP_UP_TTL,
-      purpose: "step_up", audience: "step_up:#{surface}", require_session_binding: true,
-      actor_ref: avatar_actor.public_id, resource_ref: nil, tenant_ref: nil,
-    )
-    return true if StepUpResolver.call(token: avatar_root, requirement:).satisfied?
+    return true if current_step_up_evidence
 
     render json: { error: "step_up_required", scope: }, status: :forbidden
     false

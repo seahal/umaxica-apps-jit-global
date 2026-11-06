@@ -104,6 +104,27 @@ class AcceptanceWu29RootLoginSentryTest < ActionDispatch::IntegrationTest
       headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
     )
 
+    assert_equal 200, browser.response.status
+    continuation_form = browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+    assert continuation_form, "Visa result GET must render a same-origin POST continuation"
+    continuation_fields =
+      continuation_form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+
+    assert_equal "authenticated", transaction.reload.status_name
+    assert_equal flow_before, sign_in_flow.reload.attributes
+    assert_equal token_count, ClientToken.where(user_id: actor.id).count
+
+    browser.post(
+      continuation_form["action"], params: continuation_fields, headers: {
+        "Host" => visa_host,
+        "Origin" => "https://#{visa_host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      },
+    )
+
     assert_equal [400, "invalid_request", "login_failed"],
                  [browser.response.status, browser.response.parsed_body.fetch("error"),
                   browser.response.parsed_body.fetch("error_description"),]
@@ -114,7 +135,7 @@ class AcceptanceWu29RootLoginSentryTest < ActionDispatch::IntegrationTest
                  ClientChronicle.where(
                    subject_type: "Client", subject_id: actor.id, event_id: ClientChronicleEvent::LOGGED_IN,
                  ).count
-    assert_equal ["authenticated", nil], [transaction.reload.status, transaction.base_finalized_at]
+    assert_equal ["authenticated", nil], [transaction.reload.status_name, transaction.base_finalized_at]
     assert_equal flow_before, sign_in_flow.reload.attributes
     assert_equal "SELECTOR_PENDING", sign_in_flow.state_name_for(sign_in_flow.state_id)
     assert_equal halted_audit_count,

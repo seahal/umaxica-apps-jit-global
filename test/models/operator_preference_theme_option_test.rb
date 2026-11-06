@@ -43,6 +43,7 @@ class OperatorPreferenceThemeOptionTest < ActiveSupport::TestCase
 
   test "ensure_defaults! creates missing records" do
     Prosopite.pause do
+      OperatorPreferenceTheme.where(option_id: OperatorPreferenceThemeOption::DEFAULTS).delete_all
       OperatorPreferenceThemeOption.where(id: OperatorPreferenceThemeOption::DEFAULTS).destroy_all
     end
 

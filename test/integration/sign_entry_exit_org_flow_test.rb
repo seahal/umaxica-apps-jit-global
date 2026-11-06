@@ -7,6 +7,8 @@ require "test_helper"
 # continuation and Base RP commit. Org has no public Sign Up, so it offers Cancel but never Switch.
 # The corporate surface owns no credential ceremony (two.md WU-3), so it has no entry or exit flow.
 class SignEntryExitOrgFlowTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   CONFIG = {
     base_host: "PUBLIC_BASE_STAFF_URL",
     visa_surface: :org,
@@ -48,6 +50,126 @@ class SignEntryExitOrgFlowTest < ActionDispatch::IntegrationTest
     assert_equal "access_denied", query.fetch("error")
     assert_equal "state", query.fetch("state")
     assert_predicate transaction.reload, :canceled?
+  end
+
+  test "Org emergency Passkey entry exposes Cancel and returns access_denied to the RP" do
+    transaction = start_at_auth_sign_in!
+    get "/sign/in/emergency/passkey/new", params: { ri: "jp" }, headers: browser_navigation_headers
+
+    assert_response :success
+    cancel = inertia_props.fetch("parent_cancel")
+
+    assert_equal "post", cancel.fetch("method")
+    assert_equal "/sign/cancellation?ri=jp", cancel.fetch("action")
+    post cancel.fetch("action")
+    query = rp_query(commit_visa_continuation!)
+
+    assert_equal "access_denied", query.fetch("error")
+    assert_not query.key?("code")
+    assert_predicate transaction.reload, :canceled?
+  end
+
+  test "Org Cancel after Entra evidence returns access_denied and preserves the evidence" do
+    transaction = start_at_auth_sign_in!
+    binding = OperatorAuthAdmissionBinding.find_by!(authorization_transaction_id: transaction.id)
+    ceremony = OperatorAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+    ceremony.record_authentication_evidence!(method: "entra")
+    sid_cookie = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    old_sid = cookies[sid_cookie]
+
+    assert_predicate old_sid, :present?
+
+    post "https://#{auth_host}/sign/cancellation?ri=jp"
+
+    assert_response :see_other
+    assert_equal AuthCeremonySession::STATUS_CANCELLED_AFTER_PROGRESS, ceremony.reload.status_id
+    assert_equal "entra", ceremony.authentication_method
+    assert_predicate transaction.reload, :canceled?
+    assert_predicate cookies[sid_cookie], :blank?
+
+    canceled_facts = [transaction.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    first_visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+
+    # A missing browser SID does not establish ownership of the canceled ceremony.
+    cookies.delete(sid_cookie)
+    cleared_cookies = cookies.to_hash
+    post "https://#{auth_host}/sign/cancellation?ri=jp"
+
+    assert_response :conflict
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_not response.headers["Set-Cookie"].to_s.match?(/(?:__Host-)?auth_sid=/)
+    response_header_names = response.headers.to_h.keys.map(&:downcase)
+
+    assert_empty AuthPhaseRefusalResponseBoundary::DBSC_HEADERS & response_header_names
+    assert_equal canceled_facts, [transaction.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    assert_equal cleared_cookies, cookies.to_hash
+
+    # Simulate a lost Auth response: retry only with the exact pre-Cancel browser SID.
+    post "https://#{auth_host}/sign/cancellation?ri=jp", headers: { "Cookie" => "#{sid_cookie}=#{old_sid}" }
+
+    assert_response :see_other
+    assert_predicate cookies[sid_cookie], :blank?
+    assert_equal canceled_facts, [transaction.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    retry_visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+
+    assert_equal first_visa_location.host, retry_visa_location.host
+    assert_equal first_visa_location.path, retry_visa_location.path
+    assert_equal Rack::Utils.parse_nested_query(first_visa_location.query),
+                 Rack::Utils.parse_nested_query(retry_visa_location.query)
+
+    query = rp_query(commit_visa_continuation!(retry_visa_location))
+
+    assert_equal "access_denied", query.fetch("error")
+    assert_equal "state", query.fetch("state")
+    assert_predicate transaction.reload, :canceled?
+    assert_equal "entra", ceremony.reload.authentication_method
+  end
+
+  test "Org replays the committed Cancel without changing its durable outcome" do
+    transaction = start_at_auth_sign_in!
+    binding = OperatorAuthAdmissionBinding.find_by!(authorization_transaction_id: transaction.id)
+    ceremony = OperatorAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+    post "https://#{auth_host}/sign/cancellation?ri=jp"
+    visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    first = commit_visa_continuation!(visa_location)
+    before = [transaction.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    cookie_names = cookies.to_hash.keys.sort
+
+    assert_equal "access_denied", rp_query(first).fetch("error")
+    assert_equal "state", rp_query(first).fetch("state")
+    assert_predicate ceremony, :cancelled?
+
+    # A new Auth admission owns the browser's current auth_sid while the old Visa Cancel is replayed.
+    replacement = OidcTestEntry.issue!(
+      surface: "org", intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    replacement_browser = open_session
+    replacement_browser.host!(auth_host)
+    replacement_browser.https!
+    admit_auth_ceremony_entry!(
+      "/sign/in", reference: replacement.reference,
+                  params: { ri: "jp" }, browser: replacement_browser,
+    )
+    replacement_binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: replacement.reference)
+    replacement_ceremony = OperatorAuthCeremonySession.find(replacement_binding.admitted_auth_ceremony_session_id)
+    replacement_facts = [replacement.transaction.reload.attributes, replacement_binding.reload.attributes,
+                         replacement_ceremony.reload.attributes,]
+    sid_cookie = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    replacement_sid = replacement_browser.cookies[sid_cookie]
+
+    assert_predicate replacement_sid, :present?
+    assert_not_equal cookies[sid_cookie], replacement_sid
+    store_raw_cookies(cookies, "#{sid_cookie}=#{replacement_sid}", URI.parse("https://#{auth_host}/"))
+
+    replay = commit_visa_continuation!(visa_location)
+
+    assert_equal first, replay
+    assert_equal before, [transaction.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    assert_equal cookie_names, cookies.to_hash.keys.sort
+    assert_equal replacement_sid, cookies[sid_cookie]
+    assert_equal replacement_facts, [replacement.transaction.reload.attributes, replacement_binding.reload.attributes,
+                                     replacement_ceremony.reload.attributes,]
   end
 
   test "Org refuses a Switch request even for its neutral parent" do
@@ -127,11 +249,28 @@ class SignEntryExitOrgFlowTest < ActionDispatch::IntegrationTest
     flunk("Auth admission did not settle on a page")
   end
 
-  def commit_visa_continuation!
-    assert_response :see_other
-    visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+  def commit_visa_continuation!(visa_location = nil)
+    if visa_location.nil?
+      assert_response :see_other
+      visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    end
+
     host!(visa_location.host)
     get(visa_location.request_uri, headers: browser_navigation_headers)
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+    assert form, "Visa continuation GET must render a POST form"
+    fields = form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    post(
+      form["action"], params: fields, headers: {
+        "Origin" => "https://#{visa_location.host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      },
+    )
 
     assert_response :see_other
     jump_rt_url_from_location_for_test(response.location)

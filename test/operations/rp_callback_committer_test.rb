@@ -163,7 +163,7 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
       clock =
         lambda do
           observations += 1
-          (observations <= 2) ? base : base + 5
+          base + 5
         end
       RpCoreAppRecord.stub(:database_now, clock) do
         result = RpCallbackCommitter.call(
@@ -172,10 +172,28 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
         )
 
         assert_equal offset.positive? ? :committed : :revoked, result.outcome
+        assert_equal 1, observations
       end
     end
 
     assert_equal 1, RpCoreAppSession.count
+  end
+
+  test "callback reads its database clock once without Prosopite N plus one queries" do
+    clock_reads = 0
+    subscriber =
+      lambda do |event|
+        if event.payload.fetch(:sql).match?(/\ASELECT clock_timestamp\(\)/)
+          clock_reads += 1
+        end
+      end
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      Prosopite.scan do
+        assert_predicate commit(subject: "clock-query-subject", sid: "clock-query-sid"), :success?
+      end
+    end
+
+    assert_equal 1, clock_reads
   end
 
   private

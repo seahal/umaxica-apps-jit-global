@@ -32,10 +32,11 @@ other RPs' databases.
 
 The Auth-to-Visa result is a short-lived opaque Valkey transport capability. Its digest, generation,
 expiry, and Visa finalization references are stored on the matching surface-local PostgreSQL
-authorization transaction. Visa reads the transport only after validating the transaction, then
-rechecks the generation under the locked PostgreSQL row before finalizing. A current result may be
-retried while its transport TTL remains; the authority finalization timestamp makes Root Session
-finalization idempotent and a transaction creates at most one Root Session.
+authorization transaction. The Visa display GET validates the transaction, reads the transport, and
+renders a same-origin continuation without consuming it. The authorization POST rechecks the
+generation under the locked PostgreSQL row before finalizing. A current result may be retried while
+its transport TTL remains; the authority finalization timestamp makes Root Session finalization
+idempotent and a transaction creates at most one Root Session.
 
 The transport is not the authorization grant. Authorization-code aliases may be issued for the same
 durable transaction, while `authorization_grant_redeemed_at` is claimed atomically in the same
@@ -243,9 +244,9 @@ row, actor binding, expiry, provider correlation, or the existing session-issuan
 
 Same-phase reload is allowed. A GET or HEAD with a missing, malformed, expired, cross-surface,
 cross-flow, or contradictory phase binding returns HTTP `409 Conflict` as plain text with the exact
-body `この画面は古くなっています。最初からやり直してください。`. It does not redirect, mutate the flow, issue an OTP or WebAuthn challenge,
-create a session, or perform another side effect. The authentication no-store response policy is
-preserved. This refusal is not a lifecycle edge.
+body `この画面は古くなっています。最初からやり直してください。`. It does not redirect, mutate the
+flow, issue an OTP or WebAuthn challenge, create a session, or perform another side effect. The
+authentication no-store response policy is preserved. This refusal is not a lifecycle edge.
 
 A state-changing request that is bound to the original local flow but uses an obsolete or otherwise
 contradictory phase is handled under the flow row lock after a fresh reload. The original flow is

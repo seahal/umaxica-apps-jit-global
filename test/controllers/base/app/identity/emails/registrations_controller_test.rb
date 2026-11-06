@@ -2,515 +2,61 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../../support/rp_cell_session_helper"
 
-# Registration ceremony for attaching an email address to an existing app
-# client: the two-step OTP flow, the redelivery endpoint, and the Turnstile,
-# missing-code, wrong-code and lock-out branches that guard them.
 class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_statuses, :client_email_statuses,
-           :client_token_kinds, :client_token_statuses, :client_token_binding_methods,
-           :client_token_dbsc_statuses, :client_chronicle_events, :client_chronicle_levels
+  self.fixture_table_names = []
+
+  include RpCellSessionHelper
 
   setup do
-    https!
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
-    @user = clients(:one)
+    https!
+    @actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @token = ClientToken.create!(
       authentication_epoch: 0,
-      user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
+      user: @actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      discard_at: 1.day.from_now,
     )
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
-    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
-    begin
-      rp_cookie_pairs =
-        begin
-          rp_host = @host
-          rp_token = @token
-          rp_client = OidcClientRegistry.find!("base-app-ww")
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if @base_browser_rp_credentials[rp_key] ||
-              (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OpAppGrant.exists?(
-                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                )))
-            unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = OpAppGrant.create!(
-                authentication_epoch: 0,
-                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                @user, host: rp_host, resource_type: "client",
-                       session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                       subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
-              )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            [
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ]
-          else
-            []
-          end
-        end
-      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
-    end
-    # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
-    passkey = @user.client_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
-    )
-    requirement = StepUpRequirement.new(
-      scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
-      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @user.public_id,
-      resource_ref: nil, tenant_ref: nil,
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-    )
-    transaction = BaseStepUpAdmissionIssuer.call!(
-      actor: @user,
-      token: @token,
-      requirement: requirement,
-      return_to: "/identity/emails/registration/new",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-      base_token: @token,
-    ).transaction
-    transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
-      user_verified: true,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
-    )
-    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-    )
-    result = BaseAuthAdmissionCoordinator.issue_result!(
-      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-    )
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: @user, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
-    )
-    access_token = AuthenticationToken.encode(
-      @user, host: @host, session_public_id: @token.public_id,
-             resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    begin
-      rp_cookie_pairs =
-        begin
-          rp_host = @host
-          rp_token = @token
-          rp_client = OidcClientRegistry.find!("base-app-ww")
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if @base_browser_rp_credentials[rp_key] ||
-              (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OpAppGrant.exists?(
-                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                )))
-            unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = OpAppGrant.create!(
-                authentication_epoch: 0,
-                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                @user, host: rp_host, resource_type: "client",
-                       session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                       subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
-              )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            [
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ]
-          else
-            []
-          end
-        end
-      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
-    end
-    @headers = {
-      "Authorization" => "Bearer #{access_token}",
-      "Client-Agent" => "Mozilla/5.0",
-      "Host" => @host,
-    }.freeze
-
-    TurnstileVerifierStub.challenge_enabled = true
-    TurnstileVerifierStub.challenge_response = { "success" => true }
+    sign_in_rp_cell("base-app-ww", actor: @actor, root_token: @token)
   end
 
-  teardown do
-    TurnstileVerifierStub.challenge_enabled = false
-    TurnstileVerifierStub.challenge_response = nil
-  end
+  test "APP local contact registration refuses every write and continuation with no side effects" do
+    before = [
+      ClientEmail.count,
+      ClientEmailCeremonyTransaction.count,
+      enqueued_jobs.size,
+    ]
 
-  test "unavailable credential history cannot authorize initial-contact registration" do
-    %i(revoked_passkey inactive_totp revoked_totp).each do |state|
-      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
-      case state
-      when :revoked_passkey
-        actor.client_passkeys.create!(
-          webauthn_id: SecureRandom.uuid, public_key: "revoked-contact-public-key", sign_count: 0,
-          status_id: ClientPasskeyStatus::REVOKED,
-        )
-      when :inactive_totp, :revoked_totp
-        actor.client_totp_credentials.create!(
-          private_key: ROTP::Base32.random_base32,
-          user_totp_credential_status_id: (state == :inactive_totp) ?
-            ClientTotpCredentialStatus::INACTIVE : ClientTotpCredentialStatus::REVOKED,
-        )
-      end
-      token = ClientToken.create!(authentication_epoch: 0, user: actor)
-      BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
-      BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
-      browser = open_session
-      browser.https!
-      browser.host!(@host)
-      begin
-        rp_cookie_pairs =
-          begin
-            rp_host = @host
-            rp_token = token
-            rp_client = OidcClientRegistry.find!("base-app-ww")
-            rp_key = [rp_client.client_id, rp_token.public_id]
-            @base_browser_rp_credentials ||= {}
-            if @base_browser_rp_credentials[rp_key] ||
-                (rp_token.currently_usable? &&
-                  !(rp_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                  )))
-              unless @base_browser_rp_credentials[rp_key]
-                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-                rp_now = Time.current
-                rp_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                  refresh_token_expires_at: rp_now + 10.minutes,
-                )
-                rp_access = AuthenticationTokenService.encode(
-                  actor, host: rp_host, resource_type: "client",
-                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                         subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
-                )
-                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-              end
-              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-              [
-                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-              ]
-            else
-              []
-            end
-          end
-        browser.cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
-      end
-      browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
-        actor, host: @host, session_public_id: token.public_id,
-               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-      )
+    get new_base_app_identity_emails_registration_path(ri: "jp")
 
-      assert_empty StepUpConfiguredMethodsQuery.call(actor), state.to_s
-      assert_not StepUpBootstrapEligibilityQuery.call(actor: actor), state.to_s
-      assert_no_difference ["ClientEmail.count", "ClientStepUpCeremonyTransaction.count"] do
-        browser.post(
-          base_app_identity_emails_registration_path(ri: "jp"),
-          params: { user_email: { address: "unavailable-app-contact-#{SecureRandom.hex(4)}@example.com" } },
-          headers: { "Client-Agent" => "Mozilla/5.0" }, as: :json,
-        )
-      end
+    assert_response :service_unavailable
 
-      assert_equal 422, browser.response.status, state.to_s
-      assert_nil token.reload.last_step_up_at
-      assert_predicate token, :currently_usable?
-    end
-  end
+    get edit_base_app_identity_emails_registration_path(ri: "jp")
 
-  test "new renders the registration form" do
-    get new_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
+    assert_response :service_unavailable
 
-    assert_response :success
-    assert_nil session[:email_registration_public_id]
-  end
+    post base_app_identity_emails_registration_path(ri: "jp"),
+         params: { user_email: { raw_address: "new-contact@example.test" } }
 
-  test "new links back and cancel to the email index" do
-    get new_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
+    assert_response :service_unavailable
 
-    assert_response :success
-    expected = base_app_identity_emails_url(ri: "jp", host: @host, protocol: request.protocol)
+    patch base_app_identity_emails_registration_path(ri: "jp"),
+          params: { user_email: { pass_code: "123456" } }
 
-    assert_equal expected, inertia_props.dig("back_link", "href")
-    assert_equal expected, inertia_props.dig("cancel_link", "href")
-  end
+    assert_response :service_unavailable
 
-  test "new ships the stealth Turnstile configuration that create verifies" do
-    get new_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
+    post base_app_identity_emails_registration_redelivery_path(ri: "jp")
 
-    assert_response :success
-    turnstile = inertia_props.dig("form", "turnstile")
+    assert_response :service_unavailable
 
-    assert_equal Rails.app.creds.option(:CLOUDFLARE_TURNSTILE_SITE_STEALTH_KEY), turnstile["site_key"]
-    assert_equal "execute", turnstile["mode"]
-  end
-
-  test "edit redirects back to new when no registration is in progress" do
-    get edit_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
-
-    assert_response :redirect
-    assert_match %r{/identity/emails/registration/new}, response.location
-  end
-
-  test "create rejects an address that fails model validation" do
-    assert_no_difference("ClientEmail.count") do
-      post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-           params: { user_email: { raw_address: "not-an-email" } }, headers: @headers
-    end
-
-    assert_response :unprocessable_content
-  end
-
-  test "create stores the pending registration and moves the ceremony to the verification step" do
-    assert_difference("ClientEmail.count", 1) do
-      post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-           params: { user_email: { raw_address: "app_email_reg_created@example.com" } }, headers: @headers
-    end
-
-    assert_response :redirect
-    assert_match %r{/identity/emails/registration/edit}, response.location
-    registered = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-
-    assert_equal @user.id, registered.user_id
-    assert_equal ClientEmailStatus::UNVERIFIED, registered.user_email_status_id
-  end
-
-  test "create verifies the Turnstile token against the stealth secret the form's site key belongs to" do
-    modes = []
-    verify =
-      lambda do |**arguments|
-        modes << arguments[:mode]
-        { "success" => true }
-      end
-
-    TurnstileVerifierStub.stub(:verify, verify) do
-      post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-           params: { user_email: { raw_address: "app_email_reg_stealth@example.com" } }, headers: @headers
-    end
-
-    assert_response :redirect
-    assert_equal [:stealth], modes
-  end
-
-  test "edit renders the verification step while the registration session is valid" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_edit@example.com" } }, headers: @headers
-
-    get edit_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
-
-    assert_response :success
-  end
-
-  test "update rejects the verification when the stealth Turnstile check fails" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_turnstile@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    TurnstileVerifierStub.challenge_response = { "success" => false }
-
-    patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
-          params: { user_email: { pass_code: "123456" } }, headers: @headers
-
-    assert_response :unprocessable_content
-    assert_equal ClientEmailStatus::UNVERIFIED, pending.reload.user_email_status_id
-  end
-
-  test "update rejects a blank verification code before consuming an OTP attempt" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_blank@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    attempts_before = pending.otp_attempts_count
-
-    patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
-          params: { user_email: { pass_code: "" } }, headers: @headers
-
-    assert_response :unprocessable_content
-    assert_equal attempts_before, pending.reload.otp_attempts_count
-  end
-
-  test "update re-renders the verification step when the submitted code is wrong" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_wrong@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    notification = enqueued_jobs.filter_map do |entry|
-      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
-
-      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
-      value if value.fetch(:params)[:public_id] == pending.public_id
-    end.last
-    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
-    wrong_code = (issued_code == "000000") ? "000001" : "000000"
-
-    patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
-          params: { user_email: { pass_code: wrong_code } }, headers: @headers
-
-    assert_response :unprocessable_content
-    assert_equal ClientEmailStatus::UNVERIFIED, pending.reload.user_email_status_id
-  end
-
-  test "update abandons the registration once the attempt limit is exceeded" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_locked@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    notification = enqueued_jobs.filter_map do |entry|
-      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
-
-      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
-      value if value.fetch(:params)[:public_id] == pending.public_id
-    end.last
-    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
-    wrong_code = (issued_code == "000000") ? "000001" : "000000"
-
-    EmailOtpPolicy::MAX_OTP_ATTEMPTS.times do
-      patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
-            params: { user_email: { pass_code: wrong_code } }, headers: @headers
-    end
-
-    assert_response :redirect
-    assert_match %r{/identity/emails/registration/new}, response.location
-    assert_nil session[:email_registration_public_id]
-  end
-
-  test "email replacement keeps the old binding until OTP and commits release and finalization intents together" do
-    previous = @user.client_emails.create!(
-      address: "previous-app-binding@example.test", user_email_status_id: ClientEmailStatus::VERIFIED,
-      confirm_policy: "1",
-    )
-    previous.finalize_binding!
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "replacement-app-binding@example.test" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    notification = enqueued_jobs.filter_map do |entry|
-      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
-
-      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
-      value if value.fetch(:params)[:public_id] == pending.public_id
-    end.last
-    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
-
-    assert_predicate previous.reload, :binding_effective?
-    assert_not pending.reload.binding_effective?
-    operation_ref = session[:email_registration_transaction_ref]
-    flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: operation_ref)
-
-    assert_not pending.attributes.key?("credential_registration_otp_context")
-    assert_not pending.attributes.key?("otp_expires_at")
-    assert flow.email_otp_deliverable?(generation: flow.otp_generation, at: flow.class.database_now)
-
-    assert_not ClientContactAuditOutbox.exists?(operation_ref: operation_ref)
-    patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
-          params: { user_email: { pass_code: code } }, headers: @headers
-
-    assert_response :redirect
-    assert_predicate previous.reload, :binding_released?
-    assert_predicate pending.reload, :binding_effective?
-    assert_equal [pending.id], @user.client_emails.effective_binding.pluck(:id)
-    assert_equal [[previous.public_id, "released"], [pending.public_id, "finalized"]],
-                 ClientContactAuditOutbox.where(operation_ref: operation_ref).order(:id)
-                   .pluck(:contact_ref, :event_name)
-  end
-
-  test "update verifies the address and returns to the identity page on the correct code" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_verified@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    operation_ref = session[:email_registration_transaction_ref]
-    notification = enqueued_jobs.filter_map do |entry|
-      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
-
-      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
-      value if value.fetch(:params)[:public_id] == pending.public_id
-    end.last
-    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
-
-    patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
-          params: { user_email: { pass_code: code } }, headers: @headers
-
-    assert_response :redirect
-    assert_equal ClientEmailStatus::VERIFIED, pending.reload.user_email_status_id
-    intent = ClientContactAuditOutbox.find_by!(contact_ref: pending.public_id, event_name: "finalized")
-
-    assert_equal @user.public_id, intent.owner_ref
-    assert_equal @user.public_id, intent.actor_ref
-    assert_equal operation_ref, intent.operation_ref
-    assert_nil intent.acknowledged_at
-    assert_nil session[:email_registration_public_id]
-    assert_nil session[:email_registration_transaction_ref]
-  end
-
-  test "redelivery issues a new passcode for the pending registration" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_resend@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
-    first_generation = flow.otp_generation
-    original_deadline = flow.otp_expires_at
-    pending.update!(otp_attempts_count: 1)
-
-    decision_time = pending.otp_last_sent_at + 1.minute
-    ClientEmail.stub(:database_now, decision_time) do
-      ClientEmailCeremonyTransaction.stub(:database_now, decision_time) do
-        post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
-      end
-    end
-
-    assert_response :redirect
-    assert_not_equal first_generation, flow.reload.otp_generation
-    assert_equal original_deadline, flow.otp_expires_at
-    assert_equal 1, pending.reload.otp_attempts_count
-  end
-
-  test "redelivery inside the cooldown window does not reissue the passcode" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
-         params: { user_email: { raw_address: "app_email_reg_cooldown@example.com" } }, headers: @headers
-    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
-    first_generation = flow.otp_generation
-
-    post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
-
-    assert_response :redirect
-    assert_equal first_generation, flow.reload.otp_generation
-    assert_equal 0, pending.reload.otp_attempts_count
-  end
-
-  test "redelivery without a pending registration returns to the registration form" do
-    post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
-
-    assert_response :redirect
-    assert_match %r{/identity/emails/registration/new}, response.location
+    assert_equal before, [ClientEmail.count, ClientEmailCeremonyTransaction.count, enqueued_jobs.size]
   end
 end

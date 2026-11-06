@@ -37,33 +37,34 @@ module PreferenceAccessTokenTransport
 
     operation =
       lambda do
-        role = anonymous_preference_claim_shape?(preference_class) ? :reading : :writing
-        with_preference_connection(role) do
-          if anonymous_preference_claim_shape?(preference_class)
-            relation = preference_class.includes(preference_associations_to_preload)
-            preference = relation.find_by(public_id: public_id)
-            if preference&.status_id == preference_class::ACTIVE_STATUS_ID &&
-                preference.issuance_active_at?(now: preference_class.database_now)
-              preference
-            end
-          else
-            preference_class.unconsumed.includes(preference_associations_to_preload)
-              .active.find_by(public_id: public_id)
+        with_preference_connection(:reading) do
+          preference = preference_class.includes(preference_associations_to_preload).find_by(public_id: public_id)
+          if preference&.status_id == preference_class::ACTIVE_STATUS_ID &&
+              preference.issuance_active_at?(now: preference_class.database_now)
+            preference
           end
         end
       end
     @preferences = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     @preferences
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+    raise unless anonymous_com_claim_shape?(preference_class) && (request.get? || request.head?)
+
+    Rails.logger.error(
+      JitLogEvent.format("preference.access_token.read_failed", realm: "com", error_class: e.class.name),
+    )
+    detach_preference_credential!
   end
 
   def preference_access_token_current?(preference, payload)
     current_jti = preference&.jti
-    return true if current_jti.blank?
+    return false unless current_jti.is_a?(String) && current_jti.present?
 
     payload_jti = PreferenceToken.extract_jti(payload)
-    return false if payload_jti.blank?
+    return false unless payload_jti.is_a?(String) && payload_jti.present?
+    return false unless current_jti.bytesize == payload_jti.bytesize
 
-    secure_compare?(current_jti, payload_jti)
+    ActiveSupport::SecurityUtils.secure_compare(current_jti, payload_jti)
   end
 
   def matching_access_token_value
@@ -88,23 +89,15 @@ module PreferenceAccessTokenTransport
 
   def decode_matching_access_token(token)
     if anonymous_preference_claim_shape?(preference_class) && token.to_s.bytesize >
-        SecurityJwtPreferenceTokenCodec::ANONYMOUS_TOKEN_MAX_BYTES
+        SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
       return nil
     end
 
     payload = PreferenceToken.decode(token, host: request.host, jwt_issuer_id: preference_jwt_issuer_id)
     return if payload.blank?
 
-    # The anonymous shape omits preference_type, so check the receiving model explicitly.
-    if payload["preference_type"].blank? &&
-        SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALMS.include?(payload["aud"])
-      return payload if anonymous_preference_claim_shape?(preference_class) &&
-        payload["aud"] == preference_realm_name
-
-      return nil
-    end
-    return nil if anonymous_preference_claim_shape?(preference_class)
-    return if PreferenceToken.extract_preference_type(payload) != preference_class.name
+    return unless anonymous_preference_claim_shape?(preference_class)
+    return unless payload["aud"] == preference_realm_name
 
     payload
   rescue JitSecurityJwtRegistry::ConfigurationError => e
@@ -124,5 +117,4 @@ module PreferenceAccessTokenTransport
       )
     end
   end
-
 end

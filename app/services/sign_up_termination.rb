@@ -63,8 +63,7 @@ class SignUpTermination
     end
 
     result = nil
-    cycle.class.transaction do
-      cycle.lock!
+    cycle.with_cycle_lock do
       result = SignUpStateMachine.call(ticket: cycle, event: event, actor_context: actor_context)
       cycle.reload
       schedule_terminal_retention! if terminal_status_reached?

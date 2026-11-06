@@ -4,23 +4,27 @@
 class ClientAuthAdmissionBinding < OpBaseAppRecord
   include AuthAdmissionBinding
 
+  attribute :status_id, default: AuthAdmissionBinding::ISSUED_STATUS_ID
+
   belongs_to :authorization_transaction, class_name: "ClientOidcAuthorizationTransaction", optional: true
   belongs_to :step_up_ceremony_transaction, class_name: "ClientStepUpCeremonyTransaction", optional: true
   belongs_to :base_token, class_name: "ClientToken", optional: true
   belongs_to :auth_ceremony_session, class_name: "ClientAuthCeremonySession", optional: true
   belongs_to :admitted_auth_ceremony_session, class_name: "ClientAuthCeremonySession", optional: true
+  belongs_to :status, class_name: "ClientAuthAdmissionBindingStatus",
+                      inverse_of: :client_auth_admission_bindings, optional: false
 
   validates :entry_ref, presence: true, uniqueness: true
   validates :purpose, presence: true
   validates :base_browser_digest, presence: true, length: { is: 64 }
   validates :expires_at, :curfew_at, :entry_intent, :created_at, :updated_at, presence: true
+  validates :status_id, inclusion: { in: AuthAdmissionBinding::STATUS_IDS }
   validate :validate_entry_intent
   validate :validate_parent_shape
   validate :validate_purpose_parent
   validate :validate_base_token_requirement
   validate :validate_auth_proof_pair
   validate :validate_redemption_pair
-  validate :validate_terminal_exclusivity
   before_update :reject_immutable_fact_changes
 
   class << self

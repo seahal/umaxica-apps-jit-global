@@ -13,26 +13,36 @@ module AuthAdmissionCurfewGate
     return unless ceremony&.admission_purpose == "authentication_handoff"
 
     binding_model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
-    binding_model.connection_owner.connected_to(role: :writing) do
-      binding_model.transaction do
-        binding = binding_model.lock.find_by(admitted_auth_ceremony_session_id: ceremony.id)
-        return if binding.nil? || binding.purpose != "authentication_handoff"
-        return if AdmissionCurfewValue.for(binding).within?
+    binding = binding_model.find_by(admitted_auth_ceremony_session_id: ceremony.id)
+    return unless binding&.purpose == "authentication_handoff"
+    return if AdmissionCurfewValue.for(binding).within?
 
-        exit_attempt_after_curfew!(ceremony)
-      end
-    end
+    exit_attempt_after_curfew!(ceremony, binding:)
   end
 
-  def exit_attempt_after_curfew!(ceremony)
+  def exit_attempt_after_curfew!(ceremony, binding:)
     transaction = auth_ceremony_authorization_transaction
     return render_curfew_uniform_refusal unless transaction
 
+    binding_model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+    issuance = nil
+    binding_model.connection_owner.connected_to(role: :writing) do
+      binding_model.connection_owner.transaction do
+        issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(
+          transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+        )
+        locked_binding = binding_model.lock.find(binding.id)
+        unless locked_binding.authorization_transaction_id == transaction.id &&
+            locked_binding.admitted_auth_ceremony_session_id == ceremony.id &&
+            locked_binding.purpose == "authentication_handoff" && locked_binding.redeemed? &&
+            !AdmissionCurfewValue.for(locked_binding).within?
+          raise BaseAuthAdmissionCoordinator::Denied.new("curfew binding is unavailable", code: "invalid_admission")
+        end
+
+        ceremony.cancel! unless ceremony.cancelled?
+      end
+    end
     record_sign_in_path_refusal!("curfew_passed")
-    issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(
-      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-    )
-    ceremony.cancel!
     redirect_to_jump_url(
       curfew_exit_url(cancellation_ref: issuance.reference, transaction_ref: transaction.transaction_id),
       status: :see_other,

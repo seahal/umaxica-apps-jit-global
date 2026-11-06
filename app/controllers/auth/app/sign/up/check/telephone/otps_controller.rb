@@ -35,6 +35,13 @@ module Auth
                 rescue ActiveJob::EnqueueError, TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable
                   return render_signup_telephone_delivery_unavailable
                 end
+                if result.status == :registered_destination
+                  return redirect_to(
+                    auth_app_sign_up_check_telephone_otp_path(
+                      **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param,
+                    ),
+                  )
+                end
                 return render_otp_ceremony_result(result) unless result.success?
 
                 registration = (session[:user_telephone_registration] || {}).dup

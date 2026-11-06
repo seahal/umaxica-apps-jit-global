@@ -70,55 +70,52 @@ class RefreshTokenSharedTest < ActiveSupport::TestCase
   end
 
   test "lock_refresh_token_record_by_digest locks only unconsumed unexpired rows" do
-    eligible_digest = AppPreference.digest_refresh_token("eligible-refresh")
-    used_digest = AppPreference.digest_refresh_token("used-refresh")
-    expired_digest = AppPreference.digest_refresh_token("expired-refresh")
-    eligible = AppPreference.create!(
-      status_id: AppPreferenceStatus::ACTIVE,
-      discard_at: 1.hour.from_now,
-      token_digest: eligible_digest,
-      jti: SecureRandom.uuid,
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE,
     )
-    AppPreference.create!(
-      status_id: AppPreferenceStatus::ACTIVE,
+    eligible_digest = ClientToken.digest_refresh_token("eligible-refresh")
+    used_digest = ClientToken.digest_refresh_token("used-refresh")
+    expired_digest = ClientToken.digest_refresh_token("expired-refresh")
+    eligible = ClientToken.create!(
+      authentication_epoch: 0, user: actor, refresh_token_digest: eligible_digest,
       discard_at: 1.hour.from_now,
-      token_digest: used_digest,
-      used_at: Time.current,
-      jti: SecureRandom.uuid,
     )
-    AppPreference.create!(
-      status_id: AppPreferenceStatus::ACTIVE,
+    ClientToken.create!(
+      authentication_epoch: 0, user: actor, refresh_token_digest: used_digest,
+      discard_at: 1.hour.from_now, rotated_at: Time.current,
+    )
+    ClientToken.create!(
+      authentication_epoch: 0, user: actor, refresh_token_digest: expired_digest,
       discard_at: 1.minute.ago,
-      token_digest: expired_digest,
-      jti: SecureRandom.uuid,
     )
 
-    record = AppPreference.lock_refresh_token_record_by_digest(
+    record = ClientToken.lock_refresh_token_record_by_digest(
       eligible_digest,
-      digest_column: :token_digest,
-      unused_column: :used_at,
+      digest_column: :refresh_token_digest,
+      unused_column: :rotated_at,
       expires_at_column: :discard_at,
     )
 
     assert_equal eligible.id, record.id
-    assert_nil AppPreference.lock_refresh_token_record_by_digest(
+    assert_nil ClientToken.lock_refresh_token_record_by_digest(
       used_digest,
-      digest_column: :token_digest,
-      unused_column: :used_at,
+      digest_column: :refresh_token_digest,
+      unused_column: :rotated_at,
       expires_at_column: :discard_at,
     )
-    assert_nil AppPreference.lock_refresh_token_record_by_digest(
+    assert_nil ClientToken.lock_refresh_token_record_by_digest(
       expired_digest,
-      digest_column: :token_digest,
-      unused_column: :used_at,
+      digest_column: :refresh_token_digest,
+      unused_column: :rotated_at,
       expires_at_column: :discard_at,
     )
   end
 
   test "lock_refresh_token_record_by_digest returns nil for blank digests" do
-    assert_nil AppPreference.lock_refresh_token_record_by_digest(
+    assert_nil ClientToken.lock_refresh_token_record_by_digest(
       nil,
-      digest_column: :token_digest,
+      digest_column: :refresh_token_digest,
     )
   end
 end

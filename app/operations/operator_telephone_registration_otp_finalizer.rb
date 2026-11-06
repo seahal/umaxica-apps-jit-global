@@ -11,7 +11,8 @@ class OperatorTelephoneRegistrationOtpFinalizer
 
   public
 
-  def initialize(actor:, actor_context:, token:, telephone:, transaction:, browser_nonce:, code:, requirement:)
+  def initialize(actor:, actor_context:, token:, telephone:, transaction:, browser_nonce:, code:, requirement:,
+                 step_up_evidence: nil)
     unless actor.is_a?(Operator) && token.is_a?(OperatorToken) && telephone.is_a?(OperatorTelephone) &&
         transaction.is_a?(OperatorTelephoneCeremonyTransaction)
       raise ArgumentError, "ORG Telephone finalization requires its own realm"
@@ -19,6 +20,7 @@ class OperatorTelephoneRegistrationOtpFinalizer
 
     @actor, @actor_context, @token, @telephone = actor, actor_context, token, telephone
     @transaction, @browser_nonce, @code, @requirement = transaction, browser_nonce, code, requirement
+    @step_up_evidence = step_up_evidence
   end
 
   def call!
@@ -42,7 +44,8 @@ class OperatorTelephoneRegistrationOtpFinalizer
 
   private
 
-  attr_reader :actor, :actor_context, :token, :telephone, :transaction, :browser_nonce, :code, :requirement
+  attr_reader :actor, :actor_context, :token, :telephone, :transaction, :browser_nonce, :code, :requirement,
+              :step_up_evidence
 
   def token_device_session
     @token_device_session ||= token.device_session_record!
@@ -60,8 +63,6 @@ class OperatorTelephoneRegistrationOtpFinalizer
                 telephone.finalize_telephone_registration!(
                   transaction: transaction, code: code, session_ref: session_ref,
                 )
-                # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it.
-                token.consume_step_up_evidence!(requirement: requirement)
                 true
               end
             end
@@ -72,7 +73,8 @@ class OperatorTelephoneRegistrationOtpFinalizer
   end
 
   def current_authority?(session_ref)
-    context_matches? && current_policy? && source_current? && root_current? && bound_evidence?(session_ref)
+    context_matches? && current_policy? && source_current? && root_current? && bound_evidence?(session_ref) &&
+      StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token)
   end
 
   def source_current?
@@ -87,14 +89,9 @@ class OperatorTelephoneRegistrationOtpFinalizer
 
   def current_policy?
     policy = OperatorTelephonePolicy.new(telephone, user: actor)
-    return false unless token.last_step_up_method == "passkey" &&
-      actor.operator_passkeys.active.lock.exists?(external_id: token.last_step_up_credential_ref)
-
     requirement.is_a?(StepUpRequirement) &&
       requirement.to_h == policy.credential_registration_requirement(token: token).to_h &&
-      policy.create? && policy.update? && StepUpResolver.call(
-        token: token, requirement: requirement, now: OperatorTelephoneCeremonyTransaction.database_now,
-      ).satisfied?
+      policy.create? && policy.update?
   end
 
   def bound_evidence?(session_ref)

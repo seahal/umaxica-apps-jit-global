@@ -3,12 +3,89 @@
 require "test_helper"
 
 class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   %w(app).each do |surface|
+    test "#{surface} Email signup raises without consuming proof if its destination becomes registered" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+      )
+      address = "registered-signup-race-#{SecureRandom.hex(8)}@example.test"
+      email = owner.client_emails.create!(raw_address: address, confirm_policy: true, otp_attempts_count: 2)
+      now = ClientSignUpFlow.database_now
+      nonce = SecureRandom.urlsafe_base64(32)
+      flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+        principal_id: owner.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+        nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+      )
+      issued = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
+      competitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+      )
+      registered = competitor.client_emails.create!(
+        raw_address: address, confirm_policy: true, user_email_status_id: ClientEmailStatus::VERIFIED,
+      )
+      registered.finalize_binding!
+      flow_facts = flow.reload.attributes
+      email_facts = email.reload.attributes
+      ticket_facts = issued.transaction.reload.attributes
+      registered_facts = registered.reload.attributes
+
+      assert_raises(RuntimeError) do
+        EmailSignUpOtpVerificationCommitter.call(
+          flow: flow, email: email, session_nonce: nonce, code: issued.code,
+        )
+      end
+
+      assert_equal flow_facts, flow.reload.attributes
+      assert_equal email_facts, email.reload.attributes
+      assert_equal ticket_facts, issued.transaction.reload.attributes
+      assert_equal registered_facts, registered.reload.attributes
+    end
+
+    test "#{surface} Email signup suppresses OTP issuance for another Client's effective address" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+      )
+      address = "registered-signup-#{SecureRandom.hex(8)}@example.test"
+      email = owner.client_emails.create!(raw_address: address, confirm_policy: true)
+      now = ClientSignUpFlow.database_now
+      nonce = SecureRandom.urlsafe_base64(32)
+      flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+        principal_id: owner.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+        nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+      )
+      competitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+      )
+      registered = competitor.client_emails.create!(
+        raw_address: address, confirm_policy: true, user_email_status_id: ClientEmailStatus::VERIFIED,
+      )
+      registered.finalize_binding!
+      previous_flow = flow.reload.attributes
+      previous_email = email.reload.attributes
+      count = ClientEmailCeremonyTransaction.count
+
+      issued = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
+
+      assert_equal :registered_destination, issued.status
+      assert_nil issued.transaction
+      assert_nil issued.code
+      assert_equal count, ClientEmailCeremonyTransaction.count
+      assert_equal previous_flow, flow.reload.attributes
+      assert_equal previous_email, email.reload.attributes
+      assert_predicate registered.reload, :binding_effective?
+    end
+
     test "#{surface} Email signup refuses a changed destination for the same candidate and Flow" do
       owner = Client.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,

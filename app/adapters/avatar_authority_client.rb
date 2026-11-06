@@ -25,12 +25,14 @@ class AvatarAuthorityClient
   OPEN_TIMEOUT = 2
   READ_TIMEOUT = 5
 
-  def initialize(surface:, access_token:, persona:)
-    @client_id, resource_type = CLIENTS.fetch(surface.to_s)
+  def initialize(surface:, access_token:, persona:, selection: nil)
+    @surface = surface.to_s
+    @client_id, resource_type = CLIENTS.fetch(@surface)
     base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type(resource_type)
     @base = OutboundHttp::LocalBackChannel.url("#{base_origin}/api/v0/avatar/#{surface}")
     @access_token = access_token.to_s
     @persona = persona.to_s
+    @selection = selection
   end
 
   public
@@ -72,8 +74,8 @@ class AvatarAuthorityClient
       url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: OutboundHttp::LocalBackChannel.require_https?(url),
     )
     response = connection.get(
-      uri, { persona: }, { "Authorization" => "Bearer #{access_token}",
-                           "X-Client-Assertion" => assertion, },
+      uri, request_selection_params, { "Authorization" => "Bearer #{access_token}",
+                                       "X-Client-Assertion" => assertion, },
     )
     status = { 200 => :ok, 204 => :no_image, 404 => :not_found, 403 => :forbidden }.fetch(
       response.status.to_i,
@@ -118,7 +120,25 @@ class AvatarAuthorityClient
 
   private
 
-  attr_reader :client_id, :base, :access_token, :persona
+  attr_reader :client_id, :base, :access_token, :persona, :selection, :surface
+
+  def request_selection_params
+    params = { persona: }
+    return params unless surface == "app"
+
+    params.merge(
+      organization_public_id: selection_value(:collective_public_id),
+      organization_unit_public_id: selection_value(:collective_unit_public_id),
+      avatar_public_id: selection_value(:avatar_public_id),
+    )
+  end
+
+  def selection_value(key)
+    return selection.public_send(key) if selection.respond_to?(key)
+    return selection[key] || selection[key.to_s] if selection.is_a?(Hash)
+
+    nil
+  end
 
   def request(verb, path, params = {}, idempotency_key: nil)
     return Result.new(status: :unauthorized, data: nil, errors: {}) if access_token.blank?
@@ -135,7 +155,7 @@ class AvatarAuthorityClient
                 "X-Client-Assertion" => assertion,
                 "Accept" => "application/json", }
     headers["Idempotency-Key"] = idempotency_key if idempotency_key
-    params = params.merge(persona:)
+    params = params.merge(request_selection_params)
     response =
       if verb == :get
         connection.get(uri, params, headers)

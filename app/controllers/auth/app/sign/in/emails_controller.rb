@@ -28,6 +28,7 @@ module Auth
           prepend_before_action :require_sign_in_ceremony_admission!
           ensure_fqdn_gate_first!
           prepend_before_action :apply_default_no_store
+          before_action :refuse_progressed_oidc_email_entry_page!, only: %i(new edit)
           before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
 
           before_action :cache_sign_in_turnstile_validation, only: :create
@@ -227,6 +228,17 @@ module Auth
             "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address, realm: :app)}"
           end
 
+          def refuse_progressed_oidc_email_entry_page!
+            ceremony = admitted_auth_ceremony_session
+            return unless ceremony&.admission_purpose == "authentication_handoff"
+            return unless auth_ceremony_handoff_intent(ceremony) == "sign_in"
+
+            email_page_back = action_name == "new" && ceremony.email_otp_context.present?
+            return unless ceremony.authentication_evidence_recorded? || email_page_back
+
+            render_sign_in_phase_refusal!(reason_code: "phase_violation")
+          end
+
           # The two ceremony pages are rendered from more than one action, so the component name is
           # named rather than derived: `render inertia: true` would derive it from `create`/`update`.
           def render_email_new(status: :ok)
@@ -249,19 +261,22 @@ module Auth
                 action: auth_app_sign_in_email_path(**binding),
                 method: "post",
                 pt: pt,
+                authenticity_token: form_authenticity_token,
                 address_field: {
                   scope: "client_email",
                   field: "address",
                   name: "client_email[address]",
                   label: ClientEmail.human_attribute_name(:address),
                   placeholder: "name@example.com",
+                  value: @user_email.address,
                 },
                 submit_label: t("actions.submit"),
               },
               turnstile: turnstile_visible_props,
               form_errors: form_error_messages(@user_email),
+              cancel: auth_parent_cancellation_form,
               back_link: {
-                label: t("sign.app.authentication.new.back"),
+                label: t("actions.back"),
                 href: auth_app_sign_in_path(pt: pt),
               },
             }
@@ -308,8 +323,9 @@ module Auth
               turnstile: turnstile_visible_props,
               form_errors: form_error_messages(@user_email),
               delivery_help: page_t("#{scope}.delivery_help"),
-              back_link: {
-                label: page_t("#{scope}.return_page"),
+              cancel_button: {
+                label: t("actions.cancel"),
+                parent_action: auth_parent_cancellation_form&.fetch(:action),
               },
             }
           end
@@ -398,7 +414,12 @@ module Auth
 
             :ok
           rescue AuthEmailSignInOtpIssuer::Cooldown
-            :cooldown
+            # A Source-only cooldown must not give registered addresses a different first
+            # response from an unknown address. Preserve the generic dummy continuation without
+            # sending to, or changing, the Source Contact.
+            admitted_auth_ceremony_session.issue_email_otp!(contact: nil, destination: normalized_address)
+            SignAppInEmailAuthenticationState.store_dummy!(session, normalized_address)
+            :ok
           ensure
             ensure_min_elapsed(started, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
@@ -480,6 +501,10 @@ module Auth
                 pt: retrieve_pt,
               )
             end
+
+            # The pass-code form is an Inertia `fetch`; a followed 3xx would reach the OIDC result
+            # handoff as a cors/empty request, which accepts browser navigations only.
+            convert_redirect_to_inertia_location!
           end
 
           def render_successful_email_login_json(result)

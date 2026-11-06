@@ -1,0 +1,60 @@
+# frozen_string_literal: true
+
+class ClientVisaSensitiveAdmission < OpBaseAppRecord
+  PUBLIC_REF_PATTERN = /\A[A-Za-z0-9_-]{21}\z/.freeze
+  DIGEST_PATTERN = /\A[0-9a-f]{64}\z/.freeze
+  STATUSES = %w(issued browser_confirmed source_committed refused cancelled).freeze
+
+  def self.connection_owner = OpBaseAppRecord
+
+  belongs_to :oidc_authorization_transaction, class_name: "ClientOidcAuthorizationTransaction"
+  belongs_to :step_up_ceremony_transaction, class_name: "ClientStepUpCeremonyTransaction"
+  belongs_to :auth_admission_binding, class_name: "ClientAuthAdmissionBinding"
+
+  validates :public_ref, :realm, :client_id, :actor_subject, :grant_sid, :rp_session_ref,
+            :browser_binding_digest, :purpose, :provider, :event_jti, :event_auth_time,
+            :event_acr, :event_amr, :status, :expires_at, :rp_session_expires_at, presence: true
+  validates :public_ref, format: { with: PUBLIC_REF_PATTERN }, uniqueness: true
+  validates :public_ref, length: { maximum: 21 }
+  validates :realm, inclusion: { in: ["app"] }
+  validates :realm, length: { maximum: 3 }
+  validates :client_id, inclusion: { in: ["base-app-ww"] }
+  validates :client_id, length: { maximum: 64 }
+  validates :actor_subject, length: { maximum: 255 }
+  validates :grant_sid, :rp_session_ref, length: { maximum: 64 }
+  validates :purpose, length: { maximum: 32 }
+  validates :provider, length: { maximum: 16 }
+  validates :browser_binding_digest, format: { with: DIGEST_PATTERN }
+  validates :browser_binding_digest, length: { maximum: 64 }
+  validates :event_jti, length: { maximum: 255 }
+  validates :status, length: { maximum: 24 }
+  validates :event_auth_time, numericality: { only_integer: true, greater_than: 0 }
+  validates :event_acr, length: { minimum: 1, maximum: 64 }
+  validates :status, inclusion: { in: STATUSES }
+  validates :purpose, inclusion: { in: ["passkey_registration"] }
+  validates :provider, inclusion: { in: ["none"] }
+  validate :event_amr_contains_methods
+  validate :expiry_follows_creation
+  validate :expiry_does_not_outlive_rp_session
+
+  private
+
+  def event_amr_contains_methods
+    return if event_amr.is_a?(Array) && event_amr.any? &&
+      event_amr.all? { |method| method.is_a?(String) && method.present? }
+
+    errors.add(:event_amr, :invalid)
+  end
+
+  def expiry_follows_creation
+    return if expires_at && created_at && expires_at > created_at
+
+    errors.add(:expires_at, :invalid)
+  end
+
+  def expiry_does_not_outlive_rp_session
+    return if expires_at && rp_session_expires_at && expires_at <= rp_session_expires_at
+
+    errors.add(:expires_at, :invalid)
+  end
+end

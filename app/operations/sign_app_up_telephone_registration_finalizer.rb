@@ -41,29 +41,22 @@ class SignAppUpTelephoneRegistrationFinalizer
   end
 
   def call
-    user = nil
+    user = Client.find(@flow.principal_id)
+    unless valid_attribution?(user)
+      raise ArgumentError, "APP Telephone signup actor attribution mismatch"
+    end
 
-    OpBaseAppRecord.connected_to(role: :writing) do
-      @flow.with_cycle_lock do
-        @flow.reload
-        Client.connection_class_for_self.connected_to(role: :writing) do
-          ClientTelephone.transaction do
-            user = Client.lock.find(@flow.principal_id)
-            raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless user.active?
+    AppSignUpRegistrationCommitter.call!(flow: @flow, client: user, method: "telephone") do
+      telephone = ClientTelephone.lock.find(@telephone.id)
+      raise ArgumentError, "telephone sign-up owner mismatch" unless telephone.user_id == user.id
 
-            telephone = ClientTelephone.lock.find(@telephone.id)
-            raise ArgumentError, "telephone sign-up owner mismatch" unless telephone.user_id == user.id
+      passkey = user.client_passkeys.active.lock.first
+      unless passkey&.accessible?(ClientPasskey.database_now)
+        raise PasskeyMissingError, "telephone sign-up requires an active passkey"
+      end
 
-            passkey = user.client_passkeys.active.lock.first
-            unless passkey&.accessible?(ClientPasskey.database_now)
-              raise PasskeyMissingError, "telephone sign-up requires an active passkey"
-            end
-
-            ceremony_for(user, telephone).with_lock do
-              finalize_source(user, telephone)
-            end
-          end
-        end
+      ceremony_for(user, telephone).with_lock do
+        finalize_source(user, telephone)
       end
     end
 
@@ -87,10 +80,6 @@ class SignAppUpTelephoneRegistrationFinalizer
   end
 
   def finalize_source(user, telephone)
-    unless valid_attribution?(user)
-      raise ArgumentError, "APP Telephone signup actor attribution mismatch"
-    end
-
     retained = telephone.binding_effective?
     telephone.finalize_sign_up_binding!(flow: @flow, transaction: @transaction, session_nonce: @session_nonce)
     user.finalize_telephone_sign_up!(telephone: telephone, flow: @flow)

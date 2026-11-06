@@ -206,7 +206,7 @@ group :development, :test do
   gem "erb_lint", require: false
   # Type for ruby.
   gem "sorbet"
-  # herb 
+  # herb
   gem "herb"
 end
 

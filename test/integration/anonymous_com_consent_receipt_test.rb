@@ -102,7 +102,7 @@ class AnonymousComConsentReceiptTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     failure = ->(*) { raise ActiveRecord::ConnectionNotEstablished, "receipt unavailable" }
-    ComPreferenceConsentReceipt.stub(:exists?, failure) do
+    ComPreferenceConsentReceipt.stub(:find_by, failure) do
       get base_com_api_v0_preferences_cookie_path, headers: { "Accept" => "application/json" }
     end
 

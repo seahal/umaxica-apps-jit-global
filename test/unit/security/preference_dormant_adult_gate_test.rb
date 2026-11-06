@@ -8,6 +8,7 @@ class PreferenceDormantAdultGateTest < ActiveSupport::TestCase
 
   test "the adult content gate is absent from every preference registry" do
     assert_not_includes PreferenceClassRegistry::CHILD_RECORD_TYPES, :adult_content_gate
+    assert_not_includes ActorPreferenceExplicitDisplay::ALLOWED_FIELDS, "adult_content_gate"
 
     %w(App Com Org Client Operator).each do |prefix|
       assert_raises(KeyError) { PreferenceClassRegistry.option_class(prefix, :adult_content_gate) }

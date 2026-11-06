@@ -346,7 +346,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     assert_predicate session.fetch("oidc_pending_flows"), :present?
   end
 
-  test "an RP-authenticated browser receives a plain refusal instead of a new RP flow" do
+  test "an RP-authenticated browser is refused both the Sign page and a new RP flow" do
     host = RP_ROUTES.first.fetch(:host).call
     host!(host)
     client = clients(:one)
@@ -392,6 +392,14 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       client_id: oidc_client.client_id,
     )
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
+
+    get "/sign", params: { ri: "jp" }, headers: host_headers(host)
+
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_equal "text/plain", response.media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
 
     post "/sign", params: { target_link_uri: "/" }, headers: host_headers(host)
 

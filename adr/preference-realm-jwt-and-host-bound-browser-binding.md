@@ -5,17 +5,24 @@
 Accepted on 2026-10-31 by the owner. This decision supersedes
 [`preference-browser-transport-family-capability.md`](preference-browser-transport-family-capability.md)
 for Preference credential scope and lifecycle. Its family-and-surface capability and endpoint
-ownership decisions remain useful where they do not conflict with this ADR.
-The Preference credential scope clauses in
-[`cookie-domain-scope-by-surface.md`](cookie-domain-scope-by-surface.md) are also superseded.
+ownership decisions remain useful where they do not conflict with this ADR. The Preference
+credential scope clauses in [`cookie-domain-scope-by-surface.md`](cookie-domain-scope-by-surface.md)
+are also superseded.
 
 ## Decision
 
 Each preference realm issues one signed Preference JWT on the `umaxica.<realm>` cookie domain and
-two readable display cookies (`language` and `__Secure-experience`) from the same database
-snapshot. Only that realm's Base and Visa surfaces hold the signing key and write Preference state.
-Other hosts verify with the configured realm public key and never write, create a row, or issue or
-delete the shared cookies.
+two readable display cookies (`language` and `__Secure-experience`) from the same database snapshot.
+Only that realm's Base and Visa surfaces hold the signing key and write Preference state. Other
+hosts verify with the configured realm public key and never write, create a row, or issue or delete
+the shared cookies.
+
+The realm JWT uses ES384 with JOSE header `typ=JWT` and exactly seven claims: `iss`, `sub`, `aud`,
+`iat`, `exp`, `jti`, and `preferences`. `sub` is the anonymous Preference row's public identifier;
+`aud` is exactly `app`, `com`, or `org` for the corresponding realm. Each realm has an independent
+keyring (`preference_app`, `preference_com`, or `preference_org`). The token lifetime is 400 days
+from the successful database write. The former RFC 9068 Preference shape and generic
+`PREFERENCE_JWT_*` issuer/key namespace have no compatibility reader.
 
 Cookie consent and Web Push are gated by the Base host-only `__Host-preference_binding` cookie. Its
 digest is stored with the anonymous row. A valid JWT without a matching active row and binding

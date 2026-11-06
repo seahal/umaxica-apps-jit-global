@@ -3,6 +3,17 @@
 require "test_helper"
 
 class BaseZenithIdentityResolverTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
+  setup do
+    [ClientStatus, ClientMfaStatus, ClientVisibility,
+     OperatorStatus, OperatorMfaStatus, OperatorVisibility,].each(&:ensure_defaults!)
+    ClientSecurityMode.find_or_create_by!(id: ClientSecurityMode::NORMAL)
+    ClientSecurityMode.find_or_create_by!(id: ClientSecurityMode::ADVANCED)
+    OperatorSecurityMode.find_or_create_by!(id: OperatorSecurityMode::NORMAL)
+    OperatorSecurityMode.find_or_create_by!(id: OperatorSecurityMode::ADVANCED)
+  end
+
   test "Base APP resolves the canonical Client from the verified base-cell identity" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     state = authenticated_state(surface: :app, actor:)

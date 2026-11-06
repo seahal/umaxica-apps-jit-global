@@ -75,6 +75,17 @@ class PreferenceScreenLocalizationTest < ActionDispatch::IntegrationTest
                             "#{label.inspect} is a humanized key fragment, not a translation"
       end
     end
+
+    test "base_#{name} theme choices list system, light, then dark" do
+      option_class = "#{name.capitalize}PreferenceThemeOption".constantize
+      get_preference_screen(surface, "theme", region: "jp", locale: "ja")
+
+      assert_response :success
+      assert_equal(
+        [option_class::SYSTEM, option_class::LIGHT, option_class::DARK],
+        inertia_props.dig("form", "choices").pluck("value"),
+      )
+    end
   end
 
   private

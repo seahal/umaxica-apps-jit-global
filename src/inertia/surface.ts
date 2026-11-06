@@ -1,6 +1,7 @@
-import { createInertiaApp, type ResolvedComponent } from "@inertiajs/react";
+import { createInertiaApp, router, type ResolvedComponent } from "@inertiajs/react";
 
 import SurfaceLayout from "@/layouts/SurfaceLayout";
+import { handleStepUpChallenge } from "@/lib/step_up_challenge";
 import { applyTheme, readThemeCookie, watchThemeCookie } from "@/lib/theme";
 
 // Shared pieces for the per-FQDN Inertia entrypoints.
@@ -179,6 +180,17 @@ export function bootSurfaceInertiaApp(
   surface: string,
 ): Promise<unknown> {
   keepDocumentThemeInStep();
+
+  if (surface === "base/app" || surface === "base/org") {
+    router.on("httpException", (event) => {
+      if (handleStepUpChallenge(event.detail.response)) {
+        event.preventDefault();
+        return false;
+      }
+
+      return true;
+    });
+  }
 
   const nonce = cspNonce();
 

@@ -11,8 +11,12 @@ require "test_helper"
 class SurfaceSeamDefaultsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "the preference verification key is resolved for the active key id" do
-    assert_equal PreferenceJwtConfiguration.public_key_for(PreferenceJwtConfiguration.active_kid),
-                 PreferenceJwtConfiguration.public_key
+  test "each preference verification key is resolved from its realm issuer" do
+    %w(preference_app preference_com preference_org).each do |issuer_id|
+      issuer = JitSecurityJwtRegistry.issuer(issuer_id)
+      key = PreferenceJwtConfiguration.public_key_for(issuer.current_kid, issuer_id: issuer_id)
+
+      assert_equal issuer.public_key_for(issuer.current_kid), key
+    end
   end
 end

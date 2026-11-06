@@ -4,21 +4,18 @@
 module AvatarOwnershipTransfers
   class AcceptOperation < Operation
     def initialize(actor:, surface:, subject_public_id:, transfer_public_id:, step_up_token: nil,
-                   step_up_requirement: nil)
+                   step_up_evidence: nil)
       super()
       @actor = actor
       @surface = surface.to_s
       @subject_public_id = subject_public_id.to_s
       @transfer_public_id = transfer_public_id.to_s
       @step_up_token = step_up_token
-      @step_up_requirement = step_up_requirement
+      @step_up_evidence = step_up_evidence
     end
 
     def call
-      validate_step_up_context!(
-        actor: actor, surface: surface, scope: "avatar_transfer_accept",
-        token: step_up_token, requirement: step_up_requirement,
-      )
+      validate_step_up_context!(actor: actor, token: step_up_token, evidence: step_up_evidence)
       reject_legacy_transfer_after_cutover!
       observed_transfer = find_transfer!(transfer_public_id)
       unless observed_transfer.to_owner_surface == surface
@@ -53,7 +50,7 @@ module AvatarOwnershipTransfers
           end
 
           accept_transfer!(avatar, transfer, accepted_at)
-          consume_step_up!(step_up_token, step_up_requirement)
+          verify_step_up!(actor:, token: step_up_token, evidence: step_up_evidence)
           result = transfer
         end
       end
@@ -64,7 +61,7 @@ module AvatarOwnershipTransfers
 
     private
 
-    attr_reader :actor, :surface, :subject_public_id, :transfer_public_id, :step_up_token, :step_up_requirement
+    attr_reader :actor, :surface, :subject_public_id, :transfer_public_id, :step_up_token, :step_up_evidence
 
     def accept_transfer!(avatar, transfer, accepted_at)
       assert_transfer_owners!(avatar, transfer)

@@ -4,6 +4,8 @@
 require "test_helper"
 
 class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   setup do
     @source_actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
@@ -20,7 +22,57 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "request creates one pending five-day transfer without changing ownership" do
-    transfer = request_transfer
+    step_up_now = OpBaseAppRecord.database_now
+    step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch,
+      user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr,
+      amr: ["passkey"],
+      auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: step_up_client.client_id,
+      aud: [step_up_client.aud],
+      jti: step_up_grant.oidc_jti,
+    )
+    transfer =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @source_actor,
+            surface: "app",
+            subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            step_up_token: step_up_token,
+            step_up_evidence: step_up_evidence,
+          )
+        end
+      end
 
     assert_equal "pending", transfer.state
     assert_equal transfer.requested_at.to_i + 5.days.to_i, transfer.expires_at.to_i
@@ -33,6 +85,32 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
   test "registry request reserves a concrete operation and replays by idempotency key" do
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39"
+    step_up_now = OpBaseAppRecord.database_now
+    step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch,
+      user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch, client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
+    )
     attributes = {
       actor: @source_actor,
       surface: "app",
@@ -41,11 +119,23 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       target_surface: "org",
       target_collective_public_id: @target.collective.public_id,
       idempotency_key: key,
-      request_fingerprint: registry_request_fingerprint,
+      request_fingerprint: Digest::SHA256.hexdigest(
+        ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+         @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+      ),
+      step_up_token: step_up_token,
+      step_up_evidence: step_up_evidence,
     }
 
-    first = AvatarOwnershipTransfers::RegistryRequestOperation.call(**attributes)
-    second = AvatarOwnershipTransfers::RegistryRequestOperation.call(**attributes)
+    first, second =
+      OpBaseAppRecord.connected_to(role: :writing) do
+      ClientToken.transaction do
+        [
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(**attributes),
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(**attributes),
+        ]
+      end
+    end
 
     assert_equal first.id, second.id
     assert_equal "pending", first.state
@@ -60,53 +150,191 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "registry idempotency key is bound to the authenticated initiator" do
-    reservation = registry_request
+    step_up_now = OpBaseAppRecord.database_now
+    step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch, client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
     other_actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
     )
+    other_step_up_now = OpBaseAppRecord.database_now
+    other_step_up_token = ClientToken.create!(
+      authentication_epoch: other_actor.authentication_epoch, user: other_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: other_step_up_now + 1.hour,
+    )
+    other_step_up_token.update!(
+      root_login_established_at: other_step_up_now, established_authentication_method: "passkey",
+    )
+    other_step_up_token.rotate_refresh_token!(now: other_step_up_now)
+    other_step_up_token.device_session_record!
+    other_step_up_auth_time = other_step_up_now.to_i - 1
+    other_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: other_step_up_token.authentication_epoch, client_token: other_step_up_token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(other_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: other_step_up_now + 1.hour,
+    )
+    other_step_up_grant.issue_refresh_token!(now: other_step_up_now)
+    other_step_up_evidence = StepUpEvidenceValue.new(
+      acr: other_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: other_step_up_auth_time,
+      sid: other_step_up_grant.public_id,
+      sub: OidcSubject.for(other_actor, resource_type: "client"), client_id: step_up_client.client_id,
+      aud: [step_up_client.aud], jti: other_step_up_grant.oidc_jti,
+    )
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::RegistryRequestOperation.call(
-        actor: other_actor,
-        surface: "app",
-        subject_public_id: @source.account.public_id,
-        avatar_public_id: @avatar.public_id,
-        target_surface: "org",
-        target_collective_public_id: @target.collective.public_id,
-        idempotency_key: reservation.idempotency_key,
-        request_fingerprint: registry_request_fingerprint,
-      )
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: other_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: reservation.idempotency_key,
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: other_step_up_token, step_up_evidence: other_step_up_evidence,
+          )
+        end
+      end
     end
   end
 
   test "registry request rejects a caller supplied fingerprint that is not derived from the request" do
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a46"
+    step_up_now = OpBaseAppRecord.database_now
+    step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch, client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
+    )
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::RegistryRequestOperation.call(
-        actor: @source_actor,
-        surface: "app",
-        subject_public_id: @source.account.public_id,
-        avatar_public_id: @avatar.public_id,
-        target_surface: "org",
-        target_collective_public_id: @target.collective.public_id,
-        idempotency_key: key,
-        request_fingerprint: Digest::SHA256.hexdigest("attacker-controlled-input"),
-      )
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id, idempotency_key: key,
+            request_fingerprint: Digest::SHA256.hexdigest("attacker-controlled-input"),
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
     end
 
     assert_not AvatarTransferReservation.exists?(idempotency_key: key)
   end
 
   test "source owner cancels a pending registry reservation without changing ownership" do
-    reservation = registry_request
-
-    cancelled = AvatarOwnershipTransfers::RegistryCancelOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      reservation_public_id: reservation.public_id,
+    step_up_now = OpBaseAppRecord.database_now
+    step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
     )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch, client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
+
+    cancelled =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryCancelOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            reservation_public_id: reservation.public_id,
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
 
     assert_equal "cancelled", cancelled.state
     assert_predicate cancelled.completed_at, :present?
@@ -114,25 +342,106 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal @source.collective.public_id, @avatar.current_ownership_period.owner_collective_public_id
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::RegistryCancelOperation.call(
-        actor: @source_actor,
-        surface: "app",
-        subject_public_id: @source.account.public_id,
-        reservation_public_id: reservation.public_id,
-      )
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryCancelOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            reservation_public_id: reservation.public_id,
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
     end
   end
 
   test "target owner accepts a registry reservation and advances the concrete ownership generation" do
-    reservation = registry_request
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
     source_period = @avatar.enterprise_ownership_periods.current.first
 
-    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: reservation.public_id,
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
     )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    accepted =
+      OpBaseOrgRecord.connected_to(role: :writing) do
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+            actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
+            reservation_public_id: reservation.public_id,
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+          )
+        end
+      end
 
     assert_equal "accepted", accepted.state
     assert_predicate accepted.completed_at, :present?
@@ -164,22 +473,85 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_actor)
     avatar = source.avatar
 
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: source_actor.authentication_epoch, user: source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
     AvatarRecord.transaction(joinable: false) do
-      reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-        actor: source_actor,
-        surface: "app",
-        subject_public_id: source.account.public_id,
-        avatar_public_id: avatar.public_id,
-        target_surface: "org",
-        target_collective_public_id: @target.collective.public_id,
-        idempotency_key: SecureRandom.uuid,
-        request_fingerprint: registry_request_fingerprint(
-          actor: source_actor,
-          subject_public_id: source.account.public_id,
-          avatar_public_id: avatar.public_id,
-          target_collective_public_id: @target.collective.public_id,
-        ),
-      )
+      reservation =
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: source_actor,
+            surface: "app",
+            subject_public_id: source.account.public_id,
+            avatar_public_id: avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: SecureRandom.uuid,
+            request_fingerprint: registry_request_fingerprint(
+              actor: source_actor,
+              subject_public_id: source.account.public_id,
+              avatar_public_id: avatar.public_id,
+              target_collective_public_id: @target.collective.public_id,
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
       legacy_period_count = avatar.avatar_ownership_periods.count
 
       AvatarOwnershipCutover.create!(
@@ -220,12 +592,16 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
         state: "active",
       )
 
-      accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-        actor: @target_actor,
-        surface: "org",
-        subject_public_id: @target.account.public_id,
-        reservation_public_id: reservation.public_id,
-      )
+      accepted =
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            reservation_public_id: reservation.public_id,
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+          )
+        end
 
       assert_equal "accepted", accepted.state
       assert_equal legacy_period_count, AvatarOwnershipPeriod.where(avatar_id: avatar.id).count
@@ -240,16 +616,107 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "a completed registry request replays its recorded result for the same request" do
-    reservation = registry_request
-
-    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: reservation.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
     )
 
-    replay = registry_request
+    OperatorToken.transaction do
+      AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+        actor: @target_actor,
+        surface: "org",
+        subject_public_id: @target.account.public_id,
+        reservation_public_id: reservation.public_id,
+        step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+      )
+    end
+
+    replay =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
 
     assert_equal reservation.id, replay.id
     assert_equal "accepted", replay.state
@@ -257,23 +724,104 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "registry accept replay returns the recorded result without changing history" do
-    reservation = registry_request
-
-    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: reservation.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    accepted =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          reservation_public_id: reservation.public_id,
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
     legacy_period_count = @avatar.avatar_ownership_periods.count
     bureau_period_count = @avatar.bureau_ownership_periods.count
 
-    replayed = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: reservation.public_id,
-    )
+    replayed =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          reservation_public_id: reservation.public_id,
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
 
     assert_equal accepted.id, replayed.id
     assert_equal "accepted", replayed.state
@@ -291,14 +839,90 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     target_group = group_for(@target, surface: "org")
     stale_membership = membership_for(source_group)
     matching_membership = membership_for(target_group)
-    reservation = registry_request
-
-    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: reservation.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    OperatorToken.transaction do
+      AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+        actor: @target_actor,
+        surface: "org",
+        subject_public_id: @target.account.public_id,
+        reservation_public_id: reservation.public_id,
+        step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+      )
+    end
 
     assert_equal "removed", stale_membership.reload.state
     assert_predicate stale_membership.removed_at, :present?
@@ -320,27 +944,94 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_predicate result, :success?, result.errors.inspect
     avatar = result.avatar
 
-    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      avatar_public_id: avatar.public_id,
-      target_surface: "app",
-      target_collective_public_id: @source.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a40",
-      request_fingerprint: registry_request_fingerprint(
-        actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
-        avatar_public_id: avatar.public_id, target_surface: "app",
-        target_collective_public_id: @source.collective.public_id,
-      ),
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
     )
 
-    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      reservation_public_id: reservation.public_id,
-    )
+    reservation =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RegistryRequestOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          avatar_public_id: avatar.public_id,
+          target_surface: "app",
+          target_collective_public_id: @source.collective.public_id,
+          idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a40",
+          request_fingerprint: registry_request_fingerprint(
+            actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
+            avatar_public_id: avatar.public_id, target_surface: "app",
+            target_collective_public_id: @source.collective.public_id,
+          ),
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
+
+    accepted =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+          actor: @source_actor,
+          surface: "app",
+          subject_public_id: @source.account.public_id,
+          reservation_public_id: reservation.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
 
     assert_equal "accepted", accepted.state
     assert_equal "app", avatar.reload.current_ownership_period.owner_surface
@@ -355,27 +1046,93 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       visibility_id: ClientVisibility::USER,
     )
     target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: target_actor)
-    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      avatar_public_id: @avatar.public_id,
-      target_surface: "app",
-      target_collective_public_id: target.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a43",
-      request_fingerprint: registry_request_fingerprint(
-        actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
-        avatar_public_id: @avatar.public_id, target_surface: "app",
-        target_collective_public_id: target.collective.public_id,
-      ),
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    extra_step_up_now = OpBaseAppRecord.database_now
+    extra_step_up_token = ClientToken.create!(
+      authentication_epoch: target_actor.authentication_epoch, user: target_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: extra_step_up_now + 1.hour,
+    )
+    extra_step_up_token.update!(
+      root_login_established_at: extra_step_up_now, established_authentication_method: "passkey",
+    )
+    extra_step_up_token.rotate_refresh_token!(now: extra_step_up_now)
+    extra_step_up_token.device_session_record!
+    extra_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    extra_step_up_auth_time = extra_step_up_now.to_i - 1
+    extra_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: extra_step_up_token.authentication_epoch, client_token: extra_step_up_token,
+      oidc_client_id: extra_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(extra_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: extra_step_up_now + 1.hour,
+    )
+    extra_step_up_grant.issue_refresh_token!(now: extra_step_up_now)
+    extra_step_up_evidence = StepUpEvidenceValue.new(
+      acr: extra_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: extra_step_up_auth_time,
+      sid: extra_step_up_grant.public_id,
+      sub: OidcSubject.for(target_actor, resource_type: "client"),
+      client_id: extra_step_up_client.client_id, aud: [extra_step_up_client.aud],
+      jti: extra_step_up_grant.oidc_jti,
+    )
+    reservation =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RegistryRequestOperation.call(
+          actor: @source_actor,
+          surface: "app",
+          subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id,
+          target_surface: "app",
+          target_collective_public_id: target.collective.public_id,
+          idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a43",
+          request_fingerprint: registry_request_fingerprint(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "app",
+            target_collective_public_id: target.collective.public_id,
+          ),
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
 
-    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: target_actor,
-      surface: "app",
-      subject_public_id: target.account.public_id,
-      reservation_public_id: reservation.public_id,
-    )
+    accepted =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+          actor: target_actor,
+          surface: "app",
+          subject_public_id: target.account.public_id,
+          reservation_public_id: reservation.public_id,
+          step_up_token: extra_step_up_token, step_up_evidence: extra_step_up_evidence,
+        )
+      end
 
     assert_equal "accepted", accepted.state
     assert_equal "app", @avatar.reload.current_ownership_period.owner_surface
@@ -401,38 +1158,124 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       capability: "avatar.view",
     )
 
-    to_bureau = registry_request
-    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: to_bureau.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
     )
 
-    back_to_enterprise = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      avatar_public_id: @avatar.public_id,
-      target_surface: "app",
-      target_collective_public_id: @source.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a45",
-      request_fingerprint: registry_request_fingerprint(
+    to_bureau =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          ClientToken.transaction do
+            AvatarOwnershipTransfers::RegistryRequestOperation.call(
+              actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+              avatar_public_id: @avatar.public_id, target_surface: "org",
+              target_collective_public_id: @target.collective.public_id,
+              idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+              request_fingerprint: Digest::SHA256.hexdigest(
+                ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+                 @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+              ),
+              step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+            )
+          end
+        end
+      end
+    OperatorToken.transaction do
+      AvatarOwnershipTransfers::RegistryAcceptOperation.call(
         actor: @target_actor,
         surface: "org",
         subject_public_id: @target.account.public_id,
-        avatar_public_id: @avatar.public_id,
-        target_surface: "app",
-        target_collective_public_id: @source.collective.public_id,
-      ),
-    )
+        reservation_public_id: to_bureau.public_id,
+        step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+      )
+    end
 
-    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      reservation_public_id: back_to_enterprise.public_id,
-    )
+    back_to_enterprise =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RegistryRequestOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          avatar_public_id: @avatar.public_id,
+          target_surface: "app",
+          target_collective_public_id: @source.collective.public_id,
+          idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a45",
+          request_fingerprint: registry_request_fingerprint(
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            avatar_public_id: @avatar.public_id,
+            target_surface: "app",
+            target_collective_public_id: @source.collective.public_id,
+          ),
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
+
+    ClientToken.transaction do
+      AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+        actor: @source_actor,
+        surface: "app",
+        subject_public_id: @source.account.public_id,
+        reservation_public_id: back_to_enterprise.public_id,
+        step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+      )
+    end
 
     current_period = @avatar.reload.enterprise_ownership_periods.current.first
 
@@ -488,27 +1331,95 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
     avatar = result.avatar
 
-    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      avatar_public_id: avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: target.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a44",
-      request_fingerprint: registry_request_fingerprint(
-        actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
-        avatar_public_id: avatar.public_id, target_surface: "org",
-        target_collective_public_id: target.collective.public_id,
-      ),
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
     )
 
-    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: target_actor,
-      surface: "org",
-      subject_public_id: target.account.public_id,
-      reservation_public_id: reservation.public_id,
+    extra_step_up_now = OpBaseOrgRecord.database_now
+    extra_step_up_token = OperatorToken.create!(
+      authentication_epoch: target_actor.authentication_epoch, staff: target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: extra_step_up_now + 1.hour,
     )
+    extra_step_up_token.update!(
+      root_login_established_at: extra_step_up_now, established_authentication_method: "passkey",
+    )
+    extra_step_up_token.rotate_refresh_token!(now: extra_step_up_now)
+    extra_step_up_token.device_session_record!
+    extra_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    extra_step_up_auth_time = extra_step_up_now.to_i - 1
+    extra_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: extra_step_up_token.authentication_epoch, operator_token: extra_step_up_token,
+      oidc_client_id: extra_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(extra_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: extra_step_up_now + 1.hour,
+    )
+    extra_step_up_grant.issue_refresh_token!(now: extra_step_up_now)
+    extra_step_up_evidence = StepUpEvidenceValue.new(
+      acr: extra_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: extra_step_up_auth_time,
+      sid: extra_step_up_grant.public_id,
+      sub: OidcSubject.for(target_actor, resource_type: "operator"),
+      client_id: extra_step_up_client.client_id, aud: [extra_step_up_client.aud],
+      jti: extra_step_up_grant.oidc_jti,
+    )
+
+    reservation =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RegistryRequestOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          avatar_public_id: avatar.public_id,
+          target_surface: "org",
+          target_collective_public_id: target.collective.public_id,
+          idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a44",
+          request_fingerprint: registry_request_fingerprint(
+            actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
+            avatar_public_id: avatar.public_id, target_surface: "org",
+            target_collective_public_id: target.collective.public_id,
+          ),
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
+
+    accepted =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+          actor: target_actor,
+          surface: "org",
+          subject_public_id: target.account.public_id,
+          reservation_public_id: reservation.public_id,
+          step_up_token: extra_step_up_token, step_up_evidence: extra_step_up_evidence,
+        )
+      end
 
     assert_equal "accepted", accepted.state
     assert_equal "org", avatar.reload.current_ownership_period.owner_surface
@@ -518,17 +1429,94 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "registry accept rejects a non-advancing transfer instant without changing history" do
-    reservation = registry_request
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
     source_period = @avatar.enterprise_ownership_periods.current.first
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
       Avatar.stub(:database_now, source_period.valid_from) do
-        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-          actor: @target_actor,
-          surface: "org",
-          subject_public_id: @target.account.public_id,
-          reservation_public_id: reservation.public_id,
-        )
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            reservation_public_id: reservation.public_id,
+          )
+        end
       end
     end
 
@@ -538,19 +1526,96 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "registry accept rejects an instant that does not advance either ownership history" do
-    reservation = registry_request
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
     source_period = @avatar.enterprise_ownership_periods.current.first
     legacy_period = @avatar.current_ownership_period
     legacy_period.update!(valid_from: source_period.valid_from + 1.second)
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
       Avatar.stub(:database_now, legacy_period.valid_from) do
-        AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-          actor: @target_actor,
-          surface: "org",
-          subject_public_id: @target.account.public_id,
-          reservation_public_id: reservation.public_id,
-        )
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            reservation_public_id: reservation.public_id,
+          )
+        end
       end
     end
 
@@ -571,14 +1636,85 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     )
     target_token = operator_token_for(@target_actor)
     BaseSelectorAuthority.prepare(surface: :org, principal: @target_actor, session: target_token)
-    transfer = request_transfer
-
-    accepted = AvatarOwnershipTransfers::AcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      transfer_public_id: transfer.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    transfer =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id, target_surface: "org",
+          target_collective_public_id: @target.collective.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
+
+    accepted =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::AcceptOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          transfer_public_id: transfer.public_id,
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
 
     assert_equal "accepted", accepted.state
     assert_equal "org", @avatar.reload.current_ownership_period.owner_surface
@@ -617,12 +1753,15 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal @avatar.public_id, target_token.reload.selected_avatar_public_id
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::AcceptOperation.call(
-        actor: @target_actor,
-        surface: "org",
-        subject_public_id: @target.account.public_id,
-        transfer_public_id: transfer.public_id,
-      )
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::AcceptOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          transfer_public_id: transfer.public_id,
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
     end
   end
 
@@ -650,21 +1789,88 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
     assert_equal @target.collective.public_id,
                  avatar.reload.bureau_ownership_periods.current.first.bureau_public_id
-    transfer = AvatarOwnershipTransfers::RequestOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      avatar_public_id: avatar.public_id,
-      target_surface: "app",
-      target_collective_public_id: @source.collective.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
     )
 
-    accepted = AvatarOwnershipTransfers::AcceptOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      transfer_public_id: transfer.public_id,
-    )
+    transfer =
+      OperatorToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @target_actor,
+          surface: "org",
+          subject_public_id: @target.account.public_id,
+          avatar_public_id: avatar.public_id,
+          target_surface: "app",
+          target_collective_public_id: @source.collective.public_id,
+          step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+        )
+      end
+
+    accepted =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::AcceptOperation.call(
+          actor: @source_actor,
+          surface: "app",
+          subject_public_id: @source.account.public_id,
+          transfer_public_id: transfer.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
 
     assert_equal "accepted", accepted.state
     assert_equal "app", avatar.reload.current_ownership_period.owner_surface
@@ -683,46 +1889,156 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "request rejects same owner, unsupported surface, and a member without permission" do
+    step_up_now = OpBaseAppRecord.database_now
+    step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch, client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
+    )
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::RequestOperation.call(
-        actor: @source_actor,
-        surface: "app",
-        subject_public_id: @source.account.public_id,
-        avatar_public_id: @avatar.public_id,
-        target_surface: "app",
-        target_collective_public_id: @source.collective.public_id,
-      )
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "app",
+            target_collective_public_id: @source.collective.public_id,
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
     end
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::RequestOperation.call(
-        actor: @source_actor,
-        surface: "app",
-        subject_public_id: @source.account.public_id,
-        avatar_public_id: @avatar.public_id,
-        target_surface: "com",
-        target_collective_public_id: @source.collective.public_id,
-      )
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "com",
+            target_collective_public_id: @source.collective.public_id,
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
     end
 
     membership = @source.account.persona_memberships.find_by!(enterprise: @source.collective)
     membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
 
-    assert_raises(AvatarOwnershipTransfers::Unauthorized) { request_transfer }
+    assert_raises(AvatarOwnershipTransfers::Unauthorized) do
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            step_up_token: step_up_token, step_up_evidence: step_up_evidence,
+          )
+        end
+      end
+    end
     assert_equal 0, AvatarOwnershipTransfer.where(avatar: @avatar).count
   end
 
   test "expiry at the boundary is materialized and cannot transfer ownership" do
-    transfer = request_transfer
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    transfer =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id, target_surface: "org",
+          target_collective_public_id: @target.collective.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
 
     travel_to transfer.expires_at, with_usec: true do
       assert_raises(AvatarOwnershipTransfers::Expired) do
-        AvatarOwnershipTransfers::AcceptOperation.call(
-          actor: @target_actor,
-          surface: "org",
-          subject_public_id: @target.account.public_id,
-          transfer_public_id: transfer.public_id,
-        )
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::AcceptOperation.call(
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            transfer_public_id: transfer.public_id,
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+          )
+        end
       end
     end
 
@@ -731,14 +2047,85 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "accept immediately before expiry remains valid" do
-    transfer = request_transfer
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    transfer =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id, target_surface: "org",
+          target_collective_public_id: @target.collective.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
     travel_to(transfer.expires_at - 1.second, with_usec: true) do
-      accepted = AvatarOwnershipTransfers::AcceptOperation.call(
-        actor: @target_actor,
-        surface: "org",
-        subject_public_id: @target.account.public_id,
-        transfer_public_id: transfer.public_id,
-      )
+      accepted =
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::AcceptOperation.call(
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            transfer_public_id: transfer.public_id,
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+          )
+        end
 
       assert_equal "accepted", accepted.state
     end
@@ -746,16 +2133,86 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "accept immediately after expiry records expired state and denies ownership change" do
-    transfer = request_transfer
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    transfer =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id, target_surface: "org",
+          target_collective_public_id: @target.collective.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
 
     travel_to(transfer.expires_at + 1.second, with_usec: true) do
       assert_raises(AvatarOwnershipTransfers::Expired) do
-        AvatarOwnershipTransfers::AcceptOperation.call(
-          actor: @target_actor,
-          surface: "org",
-          subject_public_id: @target.account.public_id,
-          transfer_public_id: transfer.public_id,
-        )
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::AcceptOperation.call(
+            actor: @target_actor,
+            surface: "org",
+            subject_public_id: @target.account.public_id,
+            transfer_public_id: transfer.public_id,
+            step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+          )
+        end
       end
     end
     assert_equal "expired", transfer.reload.state
@@ -763,24 +2220,68 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "source owner can cancel but cannot replay a terminal transfer" do
-    transfer = request_transfer
-
-    cancelled = AvatarOwnershipTransfers::CancelOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      transfer_public_id: transfer.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    transfer =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id, target_surface: "org",
+          target_collective_public_id: @target.collective.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
+
+    cancelled =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::CancelOperation.call(
+          actor: @source_actor,
+          surface: "app",
+          subject_public_id: @source.account.public_id,
+          transfer_public_id: transfer.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
 
     assert_equal "cancelled", cancelled.state
     assert_equal "app", @avatar.reload.current_ownership_period.owner_surface
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
-      AvatarOwnershipTransfers::CancelOperation.call(
-        actor: @source_actor,
-        surface: "app",
-        subject_public_id: @source.account.public_id,
-        transfer_public_id: transfer.public_id,
-      )
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::CancelOperation.call(
+          actor: @source_actor,
+          surface: "app",
+          subject_public_id: @source.account.public_id,
+          transfer_public_id: transfer.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
     end
   end
 
@@ -789,14 +2290,84 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     target_group = group_for(@target, surface: "org")
     stale_membership = membership_for(source_group)
     matching_membership = membership_for(target_group)
-    transfer = request_transfer
-
-    AvatarOwnershipTransfers::AcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      transfer_public_id: transfer.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    transfer =
+      ClientToken.transaction do
+        AvatarOwnershipTransfers::RequestOperation.call(
+          actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+          avatar_public_id: @avatar.public_id, target_surface: "org",
+          target_collective_public_id: @target.collective.public_id,
+          step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+        )
+      end
+
+    OperatorToken.transaction do
+      AvatarOwnershipTransfers::AcceptOperation.call(
+        actor: @target_actor,
+        surface: "org",
+        subject_public_id: @target.account.public_id,
+        transfer_public_id: transfer.public_id,
+        step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+      )
+    end
 
     assert_equal "removed", stale_membership.reload.state
     assert_predicate stale_membership.removed_at, :present?
@@ -811,14 +2382,90 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     membership_for(target_group)
     source_account = [source_group.account_surface, source_group.account_public_id]
     target_account = [target_group.account_surface, target_group.account_public_id]
-    reservation = registry_request
-
-    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-      actor: @target_actor,
-      surface: "org",
-      subject_public_id: @target.account.public_id,
-      reservation_public_id: reservation.public_id,
+    source_step_up_now = OpBaseAppRecord.database_now
+    source_step_up_token = ClientToken.create!(
+      authentication_epoch: @source_actor.authentication_epoch, user: @source_actor,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_step_up_now + 1.hour,
     )
+    source_step_up_token.update!(
+      root_login_established_at: source_step_up_now, established_authentication_method: "passkey",
+    )
+    source_step_up_token.rotate_refresh_token!(now: source_step_up_now)
+    source_step_up_token.device_session_record!
+    source_step_up_client = OidcClientRegistry.find!("base-app-ww")
+    source_step_up_auth_time = source_step_up_now.to_i - 1
+    source_step_up_grant = OpAppGrant.create!(
+      authentication_epoch: source_step_up_token.authentication_epoch, client_token: source_step_up_token,
+      oidc_client_id: source_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(source_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_step_up_now + 1.hour,
+    )
+    source_step_up_grant.issue_refresh_token!(now: source_step_up_now)
+    source_step_up_evidence = StepUpEvidenceValue.new(
+      acr: source_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: source_step_up_auth_time,
+      sid: source_step_up_grant.public_id,
+      sub: OidcSubject.for(@source_actor, resource_type: "client"),
+      client_id: source_step_up_client.client_id, aud: [source_step_up_client.aud],
+      jti: source_step_up_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar.public_id, target_surface: "org",
+            target_collective_public_id: @target.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
+            request_fingerprint: Digest::SHA256.hexdigest(
+              ["avatar_transfer", "app", @source_actor.public_id, @source.account.public_id,
+               @avatar.public_id, "org", @target.collective.public_id,].join("\0"),
+            ),
+            step_up_token: source_step_up_token, step_up_evidence: source_step_up_evidence,
+          )
+        end
+      end
+    target_step_up_now = OpBaseOrgRecord.database_now
+    target_step_up_token = OperatorToken.create!(
+      authentication_epoch: @target_actor.authentication_epoch, staff: @target_actor,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_token.update!(
+      root_login_established_at: target_step_up_now, established_authentication_method: "passkey",
+    )
+    target_step_up_token.rotate_refresh_token!(now: target_step_up_now)
+    target_step_up_token.device_session_record!
+    target_step_up_client = OidcClientRegistry.find!("base-org-ww")
+    target_step_up_auth_time = target_step_up_now.to_i - 1
+    target_step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: target_step_up_token.authentication_epoch, operator_token: target_step_up_token,
+      oidc_client_id: target_step_up_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(target_step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: target_step_up_now + 1.hour,
+    )
+    target_step_up_grant.issue_refresh_token!(now: target_step_up_now)
+    target_step_up_evidence = StepUpEvidenceValue.new(
+      acr: target_step_up_grant.oidc_acr, amr: ["passkey"], auth_time: target_step_up_auth_time,
+      sid: target_step_up_grant.public_id,
+      sub: OidcSubject.for(@target_actor, resource_type: "operator"),
+      client_id: target_step_up_client.client_id, aud: [target_step_up_client.aud],
+      jti: target_step_up_grant.oidc_jti,
+    )
+
+    OperatorToken.transaction do
+      AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+        actor: @target_actor,
+        surface: "org",
+        subject_public_id: @target.account.public_id,
+        reservation_public_id: reservation.public_id,
+        step_up_token: target_step_up_token, step_up_evidence: target_step_up_evidence,
+      )
+    end
 
     assert_equal source_account, [source_group.reload.account_surface, source_group.account_public_id]
     assert_equal target_account, [target_group.reload.account_surface, target_group.account_public_id]
@@ -828,30 +2475,6 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   private
-
-  def request_transfer
-    AvatarOwnershipTransfers::RequestOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      avatar_public_id: @avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: @target.collective.public_id,
-    )
-  end
-
-  def registry_request
-    AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: @source_actor,
-      surface: "app",
-      subject_public_id: @source.account.public_id,
-      avatar_public_id: @avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: @target.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
-      request_fingerprint: registry_request_fingerprint,
-    )
-  end
 
   def registry_request_fingerprint(actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
                                    avatar_public_id: @avatar.public_id, target_surface: "org",

@@ -29,33 +29,6 @@ class SecurityJwtRfc9068AccessTokenProfileTest < ActiveSupport::TestCase
     assert_equal "sid", payload["sid"]
   end
 
-  test "preference access token header and required claims follow the RFC 9068 profile" do
-    public_id = "pref-public-id"
-    token = PreferenceToken.encode(
-      { "lx" => "ja" },
-      host: "app.localhost",
-      preference_type: "AppPreference",
-      public_id: public_id,
-      jti: "pref-jti",
-    )
-    payload, header = JWT.decode(token, nil, false)
-
-    assert_equal "at+jwt", header["typ"]
-    assert_equal "ES384", header["alg"]
-    assert_predicate header["kid"], :present?
-    %w(iss exp aud sub client_id iat jti).each do |claim|
-      assert payload.key?(claim), "missing #{claim}"
-    end
-    assert_equal public_id, payload["sub"]
-    assert_equal PreferenceJwtConfiguration.client_id, payload["client_id"]
-    assert_equal PreferenceJwtConfiguration.issuer, payload["iss"]
-    assert_equal "preference", payload["scope"]
-    assert_equal({ "lx" => "ja" }, payload["preferences"])
-    assert_nil payload["typ"]
-    assert_nil payload["act"]
-    assert_nil payload["scp"]
-  end
-
   test "auth access verification rejects wrong JOSE typ, missing typ, and none alg" do
     token = AuthenticationToken.encode(
       clients(:one), host: "example.com", session_public_id: "sid", resource_type: "client",
@@ -115,19 +88,6 @@ class SecurityJwtRfc9068AccessTokenProfileTest < ActiveSupport::TestCase
       end
 
     assert_match(/non-production identifiers: app\.localhost/, error.message)
-  end
-
-  test "production preference audience configuration rejects localhost" do
-    error =
-      assert_raises(ArgumentError) do
-        Rails.stub(:env, ActiveSupport::StringInquirer.new("production")) do
-          PreferenceJwtConfiguration.stub(:audiences_from_boot_config, %w(www.umaxica.app localhost)) do
-            PreferenceJwtConfiguration.audiences
-          end
-        end
-      end
-
-    assert_match(/non-production identifiers: localhost/, error.message)
   end
 
   private

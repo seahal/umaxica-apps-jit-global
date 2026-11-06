@@ -60,7 +60,22 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -69,6 +84,7 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -129,7 +145,22 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -138,6 +169,7 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -199,7 +231,22 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -208,6 +255,7 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -266,7 +314,22 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -275,6 +338,7 @@ class Base::Org::OrganizationsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -504,7 +568,6 @@ class Base::Org::OrganizationsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -527,24 +590,6 @@ class Base::Org::OrganizationsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

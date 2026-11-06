@@ -59,8 +59,13 @@ class CredentialSecurityTransition
     tokens = token_relation.to_a
 
     if revoke_step_up
+      committed_step_up_roots = step_up_commit_root_ids(tokens)
       tokens.each do |token|
-        revoked_step_up += revoke_step_up_for(token)
+        revoked_step_up += revoke_step_up_for(
+          token,
+          committed_step_up_roots:,
+          session_revoked: revoke_session?(token),
+        )
       end
     end
 
@@ -110,7 +115,7 @@ class CredentialSecurityTransition
 
   def expire_oidc_authentication!(authorization_model, ceremony_model)
     authorization_model.where(actor_ref: actor.public_id, base_finalized_at: nil)
-      .where.not(status: OidcAuthorizationTransactionable::STATUS_CONSUMED).lock.find_each do |transaction|
+      .where.not(status_id: OidcAuthorizationTransactionable::STATUS_CONSUMED).lock.find_each do |transaction|
         now = authorization_model.database_now
         attributes = {
           expires_at: [transaction.expires_at, now].min,
@@ -127,7 +132,7 @@ class CredentialSecurityTransition
             end
         end
         ceremony_model.where(authorization_transaction_ref: transaction.transaction_id).lock.find_each do |ceremony|
-          ceremony.revoke!(now: ceremony_model.database_now) unless ceremony.terminal?
+          ceremony.revoke! unless ceremony.terminal?
         end
       end
   end
@@ -168,10 +173,23 @@ class CredentialSecurityTransition
     left.class == right.class && left.id == right.id
   end
 
-  def revoke_step_up_for(token)
-    had_freshness = token.respond_to?(:last_step_up_at) && token.last_step_up_at.present?
+  def revoke_step_up_for(token, committed_step_up_roots:, session_revoked:)
+    had_freshness = %w(passkey totp email_otp).include?(token.last_step_up_method) ||
+      (session_revoked && committed_step_up_roots.key?(token.id))
     IdentityStepUpCeremonyFreshnessRevoker.call!(token)
     had_freshness ? 1 : 0
+  end
+
+  def step_up_commit_root_ids(tokens)
+    return {} if tokens.empty?
+
+    commit_class =
+      case actor
+      when Client then ClientStepUpCommit
+      when Operator then OperatorStepUpCommit
+      else raise ArgumentError, "unsupported credential transition actor"
+      end
+    commit_class.where(root_token_id: tokens.map(&:id)).distinct.pluck(:root_token_id).index_with(true)
   end
 
   def record_audit!(revoked_sessions:, revoked_step_up:)

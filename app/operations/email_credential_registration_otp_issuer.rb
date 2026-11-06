@@ -10,34 +10,45 @@ class EmailCredentialRegistrationOtpIssuer
         raise ArgumentError, "ORG Email registration does not accept bootstrap permission"
       end
 
-      actor.class.connection_class_for_self.connected_to(role: :writing) do
-        actor.with_lock do
-          transaction_model.connection_owner.connected_to(role: :writing) do
-            device_session = token.device_session_record!
-            device_session.with_lock do
-              token.with_lock do
-                email.with_lock do
-                  if bootstrap_transaction
-                    EmailCredentialRegistrationBootstrapGuard.call(
-                      actor: actor, token: token, bootstrap_transaction: bootstrap_transaction,
-                      browser_nonce: browser_nonce,
-                    ) do
-                      issue_locked(
-                        actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction,
-                        device_session:,
-                      )
-                    end || result(:unavailable)
-                  else
-                    issue_locked(
-                      actor, token, email, transaction_model, pending_status, browser_nonce,
-                      device_session:,
-                    )
+      issue =
+        lambda do |registered_destination|
+          next result(:registered_destination) if registered_destination
+
+          actor.class.connection_class_for_self.connected_to(role: :writing) do
+            actor.with_lock do
+              transaction_model.connection_owner.connected_to(role: :writing) do
+                device_session = token.device_session_record!
+                device_session.with_lock do
+                  token.with_lock do
+                    email.with_lock do
+                      if bootstrap_transaction
+                        EmailCredentialRegistrationBootstrapGuard.call(
+                          actor: actor, token: token, bootstrap_transaction: bootstrap_transaction,
+                          browser_nonce: browser_nonce,
+                        ) do
+                          issue_locked(
+                            actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction,
+                            device_session:,
+                          )
+                        end || result(:unavailable)
+                      else
+                        issue_locked(
+                          actor, token, email, transaction_model, pending_status, browser_nonce,
+                          device_session:,
+                        )
+                      end
+                    end
                   end
                 end
               end
             end
           end
         end
+
+      if actor.is_a?(Client)
+        AppRegisteredContactDestinationGuard.with_lock(contact: email, owner: actor, &issue)
+      else
+        issue.call(false)
       end
     end
 

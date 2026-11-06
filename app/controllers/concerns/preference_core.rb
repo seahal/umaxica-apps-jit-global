@@ -38,7 +38,6 @@ module PreferenceCore
     with_preference_connection(:reading) do
       @preference_language = load_or_refresh_preference_child_for_edit("Language")
     end
-
   end
 
   def set_language_preferences_update
@@ -60,7 +59,7 @@ module PreferenceCore
 
     return if @preference_language.option_id.blank?
 
-    language = option_id_to_language(@preference_language.option_id, preference_prefix)
+    option_id_to_language(@preference_language.option_id, preference_prefix)
   end
 
   def set_timezone_preferences_edit
@@ -143,8 +142,7 @@ module PreferenceCore
 
     return if @preference_theme.option_id.blank?
 
-    theme = option_id_to_theme(@preference_theme.option_id, preference_prefix)
-    short_code = theme_short_code(theme)
+    theme_short_code(option_id_to_theme(@preference_theme.option_id, preference_prefix))
   end
 
   def set_selectable_preference_edit(type)
@@ -200,48 +198,31 @@ module PreferenceCore
   end
 
   def set_cookie_preferences_edit
-    with_preference_connection(:reading) do
-      @preference_cookie = load_or_refresh_preference_child_for_edit(
-        "Cookie",
-        targetable: false, performant: false, functional: false, consented: false,
-      )
-    end
+    @preference_cookie_screen_state = cookie_consent_state
   end
 
   def set_cookie_preferences_update
-    if anonymous_app_org_preference?
-      values = preference_cookie_params.to_h.with_indifferent_access.slice(
-        :consented, :functional, :performant, :targetable,
-      )
-      unless values.keys.map(&:to_sym).sort == PreferenceWriteBoundary::COOKIE_CONSENT_FIELDS.sort
-        raise PreferenceOperationError
-      end
+    raise PreferenceBase::ResolutionError, "unsupported Preference consent model" unless
+      anonymous_app_org_preference?
 
-      submitted = values.transform_values do |value|
+    values = preference_cookie_params.to_h.with_indifferent_access.slice(
+      :consented, :functional, :performant, :targetable,
+    )
+    submitted_fields = values.keys.map(&:to_sym)
+    submitted_fields.sort!
+    unless submitted_fields == PreferenceWriteBoundary::COOKIE_CONSENT_FIELDS.sort
+      raise PreferenceOperationError
+    end
+
+    submitted =
+      values.transform_values do |value|
         parsed = normalize_preference_boolean(value)
         raise PreferenceOperationError if parsed.nil?
 
         parsed
       end
-      write_preference!(operation: :save, actor: preference_write_actor, submitted:)
-      @preference_cookie = PreferenceClassRegistry.cookie_class(preference_prefix).new(submitted)
-      return
-    end
-
-    with_preference_connection(:writing) do
-      @preference_cookie = load_or_refresh_preference_child(
-        "Cookie",
-        targetable: false, performant: false, functional: false, consented: false,
-      )
-
-      update_params = build_cookie_update_params(@preference_cookie, preference_cookie_params)
-
-      update_preference_cookie_dual_write!(
-        @preference_cookie,
-        update_params,
-        audit_event: "UPDATE_PREFERENCE_COOKIE",
-      )
-    end
+    write_preference!(operation: :save, actor: preference_write_actor, submitted:)
+    @preference_cookie_screen_state = submitted
   end
 
   private
@@ -261,13 +242,14 @@ module PreferenceCore
     raise PreferenceOperationError if option_id.blank?
 
     option_class = PreferenceClassRegistry.option_class(preference_prefix, :region)
-    option = option_class.find_by!(id: option_id)
+    option = option_class.find(option_id)
     raise PreferenceOperationError if option.name.blank?
 
     write_preference!(operation: :save, actor: preference_write_actor, submitted: { region: option.name.downcase })
-    assign_anonymous_realm_preference_child(
-      :region, PreferenceClassRegistry.record_class(preference_prefix, :region).find_by!(preference_id: @preferences.id),
+    region_record = PreferenceClassRegistry.record_class(preference_prefix, :region).find_by!(
+      preference_id: @preferences.id,
     )
+    assign_anonymous_realm_preference_child(:region, region_record)
     assign_anonymous_realm_preference_child(
       :language,
       PreferenceClassRegistry.record_class(preference_prefix, :language).find_by!(preference_id: @preferences.id),
@@ -294,8 +276,15 @@ module PreferenceCore
     raise PreferenceOperationError if option_id.blank?
 
     option_class = PreferenceClassRegistry.option_class(preference_prefix, type)
-    option = option_class.find_by!(id: option_id)
-    value = type == :theme ? option_id_to_theme(option.id, preference_prefix) : option.name
+    option = option_class.find(option_id)
+    value =
+      case type
+      when :theme then option_id_to_theme(option.id, preference_prefix)
+      when :language, :timezone, :region, :currency, :date_format, :time_format, :motion, :density, :page_size
+        option.name
+      else
+        raise ArgumentError, "unsupported Preference option type: #{type.inspect}"
+      end
     raise PreferenceOperationError if value.blank?
 
     write_preference!(operation: :save, actor: preference_write_actor, submitted: { type => value })
@@ -391,54 +380,31 @@ module PreferenceCore
     raise PreferenceOperationError
   end
 
-  def update_preference_cookie_dual_write!(cookie, attributes, audit_event:)
-    raise PreferenceOperationError if cookie.blank? || attributes.blank?
-    raise PreferenceBase::ResolutionError, "com consent writes require their write boundary" if
-      cookie.is_a?(ComPreferenceCookie)
-    raise PreferenceBase::ResolutionError, "unsupported Preference model" unless
-      %w(AppPreference OrgPreference).include?(preference_class.name)
-
-    values = attributes.to_h.with_indifferent_access.slice(*PreferenceWriteBoundary::COOKIE_CONSENT_FIELDS)
-    raise PreferenceOperationError unless values.keys.map(&:to_sym).sort ==
-      PreferenceWriteBoundary::COOKIE_CONSENT_FIELDS.sort
-
-    submitted = values.transform_values do |value|
-      parsed = normalize_preference_boolean(value)
-      raise PreferenceOperationError if parsed.nil?
-
-      parsed
-    end
-    write_preference!(operation: :save, actor: preference_write_actor, submitted:)
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "preference.write.cookie_error", error_class: e.class.name,
-                                         message: e.message,
-      ),
-    )
-    record_preference_write_error("preference.write.cookie_error", e, target: :cookie)
-    raise PreferenceOperationError
-  end
-
   def render_preference_update_response
     render json: { preference: preference_response_payload }, status: :ok
   end
 
   def preference_response_payload
-    snapshot = resolved_preference_snapshot(@preferences)
-    cookie = resolved_preference_cookie(@preferences)
+    raise PreferenceBase::ResolutionError, "unsupported Preference response model" unless
+      anonymous_preference_claim_shape?(@preferences)
+
+    snapshot = build_preferences_payload(@preferences)
+    prefix = preference_prefix(@preferences)
+    region_record = PreferenceClassRegistry.record_class(prefix, :region).find_by(preference_id: @preferences.id)
+    region = region_record && option_id_to_region(region_record.option_id, prefix)
+    cookie = cookie_consent_state(fail_on_read_error: true)
 
     {
-      lx: snapshot[:language] || Actor::Preference::DEFAULTS[:language],
-      ct: snapshot[:theme] || Actor::Preference::DEFAULTS[:theme],
-      ri: snapshot[:region] || Actor::Preference::DEFAULTS[:region],
-      tz: snapshot[:timezone] || Actor::Preference::DEFAULTS[:timezone],
-      cu: snapshot[:currency] || "jpy",
-      df: snapshot[:date_format] || "iso",
-      tf: snapshot[:time_format] || "24",
-      mo: snapshot[:motion] || "standard",
-      dn: snapshot[:density] || "standard",
-      ps: snapshot[:page_size] || "infinity",
+      lx: snapshot.fetch("language"),
+      ct: theme_short_code(snapshot.fetch("theme")),
+      ri: region || Actor::Preference::DEFAULTS[:region],
+      tz: snapshot.fetch("timezone"),
+      cu: snapshot.fetch("currency"),
+      df: snapshot.fetch("date_format"),
+      tf: snapshot.fetch("time_format"),
+      mo: snapshot.fetch("motion"),
+      dn: snapshot.fetch("density"),
+      ps: snapshot.fetch("page_size"),
       consented: cookie[:consented],
       functional: cookie[:functional],
       performant: cookie[:performant],
@@ -448,27 +414,10 @@ module PreferenceCore
 
   def preference_cookie_params
     return params.fetch(:preference_cookie, {}).permit(
-      :functional, :performant, :targetable, :consented, :consented_at,
+      :functional, :performant, :targetable, :consented,
     ) if params[:preference_cookie]
 
-    params.permit(:functional, :performant, :targetable, :consented, :consented_at)
-  end
-
-  def build_cookie_update_params(cookie, params)
-    # Ensure nested params are a Hash with indifferent access for reliable key access.
-    # Note: Rails 8 `expect` returns an ActionController::Parameters object,
-    # which we want to convert to Hash with indifferent access after ensuring it's permitted.
-    p_hash = params.to_h.with_indifferent_access
-    return p_hash unless p_hash.has_key?(:consented)
-
-    consent_value = ActiveModel::Type::Boolean.new.cast(p_hash[:consented])
-
-    if consent_value && !cookie.consented?
-      p_hash[:consented_at] = Time.current
-    elsif !consent_value && cookie.consented?
-      p_hash[:consented_at] = nil
-    end
-    p_hash
+    params.permit(:functional, :performant, :targetable, :consented)
   end
 
   def preference_language_params
@@ -688,5 +637,4 @@ module PreferenceCore
     label = "#{label} (#{value.to_s.upcase})" if type.to_sym == :currency
     label
   end
-
 end

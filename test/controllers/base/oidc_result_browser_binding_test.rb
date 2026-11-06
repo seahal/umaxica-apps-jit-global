@@ -131,6 +131,9 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
 
       owner.get("/oidc/result", params: submission, headers: navigation)
 
+      assert_equal 200, owner.response.status
+      complete_visa_authorization_continuation!(owner, visa_host:, navigation:)
+
       assert_equal 303, owner.response.status
       assert_predicate parent.reload.base_finalized_at, :present?
       assert_equal tokens_before + 1, token_model.where(owner_key => actor.id).count
@@ -201,6 +204,9 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
       }, headers: navigation,
     )
 
+    assert_equal 200, response.status
+    complete_visa_authorization_continuation!(self, visa_host: host, navigation:)
+
     assert_equal 303, response.status
     orphan_root = ClientToken.find_by!(public_id: first_parent.reload.browser_session_ref)
 
@@ -234,7 +240,7 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
     assert_equal 303, response.status
     second_parent = ClientOidcAuthorizationTransaction.find_by!(state: second_parameters.fetch(:state))
 
-    assert_equal "pending", second_parent.status
+    assert_equal "pending", second_parent.status_name
     second_binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: second_parent.id)
     second_ceremony, second_sid = ClientAuthCeremonySession.issue!
     second_binding.attach_auth_session!(auth_session: second_ceremony, confirmation_ref: SecureRandom.uuid)
@@ -256,6 +262,9 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
           result_ref: second_result.reference, transaction_ref: second_parent.transaction_id, ri: "jp",
         }, headers: navigation,
       )
+
+      assert_equal 200, response.status
+      complete_visa_authorization_continuation!(self, visa_host: host, navigation:)
     end
 
     assert_equal 303, response.status
@@ -375,11 +384,31 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
       }, headers: navigation,
     )
 
+    assert_equal 200, response.status
+    complete_visa_authorization_continuation!(self, visa_host: host, navigation:)
+
     assert_equal 303, response.status
     assert_predicate second_parent.reload.base_finalized_at, :present?
     assert_equal token_count + 1, ClientToken.where(user_id: actor.id).count
     assert_nil first_parent.reload.base_finalized_at
   ensure
     previous_availability.nil? ? nil : (previous_availability ? Flipper.enable(feature) : Flipper.disable(feature))
+  end
+
+  private
+
+  def complete_visa_authorization_continuation!(browser, visa_host:, navigation:)
+    form = browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+    assert form, "Visa result must render its signed POST continuation"
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    browser.post(
+      form["action"], params: fields, headers: navigation.merge(
+        "Origin" => OidcIssuer.absolute_url(visa_host),
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "same-origin",
+      ),
+    )
   end
 end

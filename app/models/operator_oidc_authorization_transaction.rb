@@ -31,7 +31,7 @@
 #  scope                      :string           not null
 #  session_ref                :string
 #  state                      :string           not null
-#  status                     :string           not null
+#  status_id                  :bigint           not null
 #  surface                    :string           not null
 #  created_at                 :datetime         not null
 #  updated_at                 :datetime         not null
@@ -50,4 +50,8 @@ class OperatorOidcAuthorizationTransaction < OpBaseOrgRecord
   validates :cancellation_handoff_digest, :result_digest, length: { maximum: 64 }
 
   oidc_authorization_surface "org"
+
+  belongs_to :status,
+             class_name: "OperatorOidcAuthorizationTransactionStatus",
+             inverse_of: :operator_oidc_authorization_transactions
 end

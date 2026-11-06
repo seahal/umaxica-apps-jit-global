@@ -67,9 +67,10 @@ module Auth
                 submit_label: page_t("#{scope}.submit"),
               },
               back_link: {
-                label: t("sign.app.authentication.new.back"),
+                label: t("actions.back"),
                 href: auth_app_sign_in_path(pt: pt, ri: ri, **binding),
               },
+              cancel: auth_parent_cancellation_form,
             }
           end
 

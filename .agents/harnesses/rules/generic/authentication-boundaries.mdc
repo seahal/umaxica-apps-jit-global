@@ -13,12 +13,13 @@ description: Preserve Rails forgery protection, browser-bound ceremony admission
 - A browser-bound admission may add a nonce or digest as defense in depth, but it never replaces
   Rails CSRF, Origin and Fetch Metadata checks. The nonce is server-issued, bound to the initiating
   browser and operation, single-use, and refused when stale, cross-browser, mismatched or replayed.
-- GET and HEAD do not create reservations, candidates, proofs, grants or ceremony state. The only
-  exception is the Sign-in path continuation GETs under the six conditions of
+- GET and HEAD do not create reservations, candidates, proofs, grants or ceremony state. Explicitly
+  state-consuming Sign-in path continuations follow the six conditions of
   `adr/sign-in-path-continuation-protocol.md`: Fetch Metadata navigation/document, host-only
   browser binding before touching the one-time record, atomic CAS/row-lock consumption, the
   same-browser issuance-plus-10-second repeat rule, `no-store`/`no-referrer`, and a clean final URL.
-  HEAD is always refused there.
+  Visa APP/ORG result, cancellation, switch and silent-SSO GETs are read-only displays; the existing
+  same-origin authorization POST is their commit boundary. HEAD is refused for continuation GETs.
 
 ## Auth and step-up ownership
 

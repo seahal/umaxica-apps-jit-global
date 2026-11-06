@@ -1,22 +1,22 @@
 # Logout suite withdrawn from the 2026-10 authentication cycle
 
 Status: Returned to the cycle 2026-10-26; definition `ten.md`; implemented by SO-1 … SO-4.
-Acceptance and deployment conditions remain subject to the SO-5 evidence below.
+Acceptance and deployment conditions remain subject to the SO-5 evidence below. `.com`
+authentication was retired afterwards; COM references were removed from this entry.
 
 Units: `two.md` WU-14 (RP-Initiated Logout), WU-15 (Back-Channel Logout), WU-16 (one OP
 authority-stop primitive), WU-22 (sign-out records SO-1 … SO-7), WU-44 (root issuance re-check,
-epoch, credential-change serialization). Gates: `three.md` G-16, G-19, G-20, A14-*, A15-*, A16-*,
-A22-*, A44-*.
+epoch, credential-change serialization). Gates: `three.md` G-16, G-19, G-20, A14-_, A15-_, A16-_,
+A22-_, A44-*.
 
 ## What the cycle set out to do
 
-- One durable, browser-independent OP authority-stop record per stop, written by a single
-  primitive (`OpAuthorityStopCommitter`), with an explicit cause (`browser_logout`,
-  `rp_initiated_logout`, `token_revocation`, `refresh_reuse`, `revoke_others`, `credential_change`,
-  `identity_stop`, `administrative`, `risk`) and scope (`root`, `grant`, `all_roots_of_principal`)
-  (D-27/BX-1, D-119, D-123, D-172, D-173, D-179 (3)).
-- RP-Initiated Logout as specified by OpenID Connect; the RP no longer writes OP logout rows
-  (D-33).
+- One durable, browser-independent OP authority-stop record per stop, written by a single primitive
+  (`OpAuthorityStopCommitter`), with an explicit cause (`browser_logout`, `rp_initiated_logout`,
+  `token_revocation`, `refresh_reuse`, `revoke_others`, `credential_change`, `identity_stop`,
+  `administrative`, `risk`) and scope (`root`, `grant`, `all_roots_of_principal`) (D-27/BX-1, D-119,
+  D-123, D-172, D-173, D-179 (3)).
+- RP-Initiated Logout as specified by OpenID Connect; the RP no longer writes OP logout rows (D-33).
 - Every participating RP notified through a durable Back-Channel Logout outbox delivered by Solid
   Queue (D-26, D-29, D-31, D-117, D-118, D-121).
 - Sign-out records with NOT NULL principal and cause, `ON DELETE RESTRICT` token references and a
@@ -29,7 +29,7 @@ A22-*, A44-*.
 ## What exists in the worktree today (uncommitted on top of `bde2346c1`)
 
 - `OpAuthorityStopCommitter` and the authority-stop tables, per realm
-  (`db/op_base_{app,com,org}_migrate/20261025120000` … `20261025120301`).
+  (`db/op_base_{app,org}_migrate/20261025120000` … `20261025120301`).
 - Legacy tables dropped by irreversible migrations: `*_logout_flows` (`20261025120100`) and
   `*_sign_out_flows` (`20261025120400`); refresh delivery receipts removed (`20261025100100`).
 - BCL sender, outbox and receiver; registered-RP logout matrix and Edit RP return tests pass
@@ -42,20 +42,21 @@ A22-*, A44-*.
 
 1. **Dead legacy path still live.** `AcmeLogoutTransaction` is no longer created anywhere
    (`AcmeLogoutTransactionCoordinator.persist_transaction!` has no caller), yet the Auth sign-out
-   controllers on APP/COM/ORG and `SignOutCancellation` still look it up and advance it
-   (`app/controllers/auth/*/sign/outs_controller.rb`, `app/controllers/concerns/sign_out_cancellation.rb`).
-   D-33 says the RP no longer writes it. Model, table and readers remain.
-2. **The definitions describe the pre-change design.** `two.md` R3/V9 assume a Visa
-   `LogoutReceipt` and `/sign/bye`; the stop primitive (D-172, D-173) and the record removal
-   (D-179) changed the shape afterwards. `three.md` A22-1 tests the removed sign-out-flow models.
-   G-16 requires a read-only `GET /sign/out/completion`; Base still routes a completion while Auth
-   tests assert the Auth completion route is retired. `two.md` is layered ("Part 6 wins over
-   earlier sections"), so the current contract is not readable in one place.
-3. **Decisions not carried into code.** COM and ORG Secret removal does not go through
+   controllers on APP/ORG and `SignOutCancellation` still look it up and advance it
+   (`app/controllers/auth/*/sign/outs_controller.rb`,
+   `app/controllers/concerns/sign_out_cancellation.rb`). D-33 says the RP no longer writes it.
+   Model, table and readers remain.
+2. **The definitions describe the pre-change design.** `two.md` R3/V9 assume a Visa `LogoutReceipt`
+   and `/sign/bye`; the stop primitive (D-172, D-173) and the record removal (D-179) changed the
+   shape afterwards. `three.md` A22-1 tests the removed sign-out-flow models. G-16 requires a
+   read-only `GET /sign/out/completion`; Base still routes a completion while Auth tests assert the
+   Auth completion route is retired. `two.md` is layered ("Part 6 wins over earlier sections"), so
+   the current contract is not readable in one place.
+3. **Decisions not carried into code.** ORG Secret removal does not go through
    `CredentialSecurityTransition`, so the D-167 `credential_change` stop may not happen there.
 4. **Design checked after the fact.** The D-173 cause mapping did not check the allowed scopes per
-   cause; the defect surfaced as test errors and was fixed by D-179 (3). Deleted tests were mapped to
-   replacement coverage only afterwards.
+   cause; the defect surfaced as test errors and was fixed by D-179 (3). Deleted tests were mapped
+   to replacement coverage only afterwards.
 5. **Acceptance not run.** A14-1 … A14-7 and A44-1 … A44-10 are "Not run" in `three.md`; A15-7 is
    unverified; A16-5 was blocked by a stale test database (since reset, not re-run); A22-4 and G-16
    are unverified. The concurrency cases (logout vs refresh, logout vs rotation,
@@ -63,28 +64,28 @@ A22-*, A44-*.
 
 ## Database consistency findings held by the freeze
 
-The 2026-10-26 development scan reports 39 cycle findings on the new authority-stop and logout-hint
-tables. No model or schema change was made because the logout suite remains withdrawn. These rows
-need an owner decision alongside the design disagreements above:
+The 2026-10-26 development scan reported 39 cycle findings (13 per realm) on the new authority-stop
+and logout-hint tables; the 13 COM findings lapsed with the COM tables, leaving 26. No model or
+schema change was made because the logout suite remains withdrawn. These rows need an owner decision
+alongside the design disagreements above:
 
-| Realm | Unique indexes without matching validators | Missing dependent-delete policy | Length finding | Redundant index |
-| ----- | ------------------------------------------- | ------------------------------ | ------------- | --------------- |
+| Realm | Unique indexes without matching validators                                                                                                                                                                                                  | Missing dependent-delete policy                             | Length finding                                  | Redundant index                                                        |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
 | APP   | AuthorityStop `public_id`, `(realm, idempotency_digest)`; RootTarget `(stop_id, root_id)`; GrantTarget `(stop_id, grant_id)`; EpochCutoff `stop_id`; Participant `(stop_id, grant_id)`; BrowserLogout `stop_id`; GrantLogoutHint `grant_id` | RootTarget `root`; GrantTarget `grant`; Participant `grant` | AuthorityStop `realm` has `varchar(3)` capacity | Participant `stop_id` index is covered by unique `(stop_id, grant_id)` |
-| COM   | Same eight index shapes as APP | Same three associations as APP | Same | Same |
-| ORG   | Same eight index shapes as APP | Same three associations as APP | Same | Same |
+| ORG   | Same eight index shapes as APP                                                                                                                                                                                                              | Same three associations as APP                              | Same                                            | Same                                                                   |
 
 The scan proposes model validations for the unique and length findings, but adding them changes the
 failure path before the database constraint runs. The dependent-delete findings do not authorize a
 cascade or retention change. The three single-column participant indexes are physically redundant
 with the composite indexes; a reversible schema migration still needs explicit shape approval. Keep
-all 39 findings visible until those decisions are made. The complete 690-row classification and
-checker output are recorded in
+all 26 remaining findings visible until those decisions are made. The complete 690-row
+classification and checker output are recorded in
 `evidence/2026-10-26-database-consistency-cycle-findings-X7P4.md`.
 
 ## What to do next (proposed order)
 
-1. Inventory the current implementation: every logout entry point, record, notification and
-   cleanup step, per surface and host (Base RP, Auth, Visa OP, Jump), as one diagram. Read-only.
+1. Inventory the current implementation: every logout entry point, record, notification and cleanup
+   step, per surface and host (Base RP, Auth, Visa OP, Jump), as one diagram. Read-only.
 2. Diff that inventory against `one.md`, `two.md`, `three.md`, the ADRs
    (`adr/first-party-sign-out-op-commit-and-backchannel-logout-for-separated-rp-stores.md`,
    `adr/visa-op-host.md`) and `docs/mermaid/`. List every disagreement.
@@ -99,22 +100,21 @@ checker output are recorded in
   it is still for.
 - Where sign-out completion lives (Base, Auth, Visa) and whether `GET /sign/out/completion` stays.
 - Whether the Visa `LogoutReceipt` / `/sign/bye` design of `two.md` R3/V9 is still the target.
-- Whether COM/ORG Secret removal is a `credential_change` stop (D-167), as APP credential removals
-  are.
-- Whether WU-44 (Root issuance vs concurrent stop) stays coupled to the logout suite or is
-  scheduled as its own unit.
+- Whether ORG Secret removal is a `credential_change` stop (D-167), as APP credential removals are.
+- Whether WU-44 (Root issuance vs concurrent stop) stays coupled to the logout suite or is scheduled
+  as its own unit.
 - Whether the irreversible table drops (`*_logout_flows`, `*_sign_out_flows`) ship with the frozen
   code or wait for the redesign.
 
 ## Deployment
 
 SO-1 removed the dead `AcmeLogoutTransaction` readers. The named irreversible drops were approved
-for this undeployed application and applied in development and test; deployment recovery and row-count
-requirements remain owner decisions. The remaining acceptance and full-suite conditions are not yet
-established by this entry.
+for this undeployed application and applied in development and test; deployment recovery and
+row-count requirements remain owner decisions. The remaining acceptance and full-suite conditions
+are not yet established by this entry.
 
-Do not deploy the current worktree's logout changes as-is. Before any deployment that includes
-them, at least:
+Do not deploy the current worktree's logout changes as-is. Before any deployment that includes them,
+at least:
 
 - the full suite has no failure in logout, BCL or authority-stop tests;
 - G-16 and G-20 are verified against the current design;

@@ -34,6 +34,8 @@ module SignUpSocialPendingClientSupport
   # F3: under the Flow lock, consume the Candidate once, then write the External Identity and the
   # registered status in one principal transaction.
   def finalize_social_sign_up_identity!(actor)
+    return if @sign_up_ticket.registration_completion
+
     candidate = social_signup_candidate!
     consumed = IdentitySocialCeremonyCandidateStore.consume!(social_signup_evidence.fetch("candidate_ref"))
     raise IdentitySocialCeremonyContract::Error, "candidate changed" unless consumed.digest == candidate.digest
@@ -45,7 +47,7 @@ module SignUpSocialPendingClientSupport
           user: actor,
           principal: callback_result.principal,
           credential_candidate: callback_result.credential_candidate,
-          ceremony_started_at: @sign_up_ticket.issued_at,
+          ceremony_started_at: @sign_up_ticket.issued_at, flow: @sign_up_ticket,
         ).fetch(:identity)
       end
     @sign_up_ticket.update!(pending_contact_id: identity.id)

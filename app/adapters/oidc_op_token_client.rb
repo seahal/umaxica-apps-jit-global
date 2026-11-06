@@ -35,9 +35,9 @@ class OidcOpTokenClient
     public
 
     def authorization_code(client_id:, token_url:, code:, redirect_uri:, code_verifier:, require_https: true,
-                           deadline: nil)
+                           deadline: nil, step_up_expectation: nil)
       new(client_id:, token_url:, require_https:, deadline:, request_budget: INITIAL_REQUEST_BUDGET).call(
-        grant_type: "authorization_code", code:, redirect_uri:, code_verifier:,
+        grant_type: "authorization_code", code:, redirect_uri:, code_verifier:, step_up_expectation:,
       )
     end
 
@@ -61,7 +61,10 @@ class OidcOpTokenClient
     return result(:indeterminate, error: "timeout") if monotonic_now >= deadline
 
     # The assertion audience is this exact token endpoint, so it cannot be replayed elsewhere.
-    assertion = OidcClientAssertionJwt.issue(client_id: client_id, token_url: token_url)
+    assertion_arguments = { client_id: client_id, token_url: token_url }
+    step_up_expectation = grant_params.delete(:step_up_expectation)
+    assertion_arguments[:step_up_expectation] = step_up_expectation unless step_up_expectation.nil?
+    assertion = OidcClientAssertionJwt.issue(**assertion_arguments)
     return result(:invalid_remote, error: "client_assertion_unavailable") if assertion.blank?
 
     uri = URI.parse(token_url)

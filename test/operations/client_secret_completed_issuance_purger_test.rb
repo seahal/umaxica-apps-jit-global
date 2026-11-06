@@ -280,80 +280,6 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     )
   end
 
-  test "confirmed allocation collection follows real revocation and durable credential purge audit" do
-    config_keys = %w(
-      APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
-    )
-    original_config = ENV.to_h.slice(*config_keys)
-    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
-    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
-    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
-    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-    actor.client_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Time.current,
-    )
-    ClientEmail.create!(
-      user: actor, address: "purger-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: ClientEmail.database_now,
-    )
-    token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-    )
-    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
-    issuance = ClientSecretManualReservationIssuer.call!(
-      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 2.seconds,
-    )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
-    raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
-    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
-    credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
-    token.reload.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up-for-revocation", last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: credential.public_id,
-    )
-    ClientSecretRevocationCommitter.call!(
-      actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
-    )
-    ChronicleRetentionPolicy.find_by(code: "security") ||
-      ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
-    ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
-
-    assert_equal :purged, ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "credential")
-    token.revoke!
-    deadline = [issuance.reload.expires_at, token.reload.discard_at].max + 1.second
-    Timeout.timeout(4) { sleep 0.01 while Client.database_now < deadline }
-
-    assert_equal :undelivered, ClientSecretIssuancePurger.call_confirmed!(
-      issuance: issuance, executor_job_id: "before-purge-audit", retention_after: 1.second,
-    )
-    assert ClientSecretIssuance.exists?(issuance.id)
-    ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
-
-    ClientSecretLifecycleJob.perform_now(batch_size: 500)
-
-    assert_not ClientSecretIssuance.exists?(issuance.id)
-    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
-    event = ClientSecretAuditOutbox.find_by!(
-      operation_ref: issuance.origin_operation_id, event_name: "secret.issuance_purged",
-    )
-
-    assert_equal 1, event.item_count
-    assert_nil event.delivered_at
-    assert ClientToken.exists?(token.id)
-  ensure
-    config_keys.each { |key| ENV[key] = original_config[key] }
-  end
-
   test "confirmed allocation remains while its confirmed credential still exists" do
     issuance = client_secret_issuances(:one)
 
@@ -537,5 +463,134 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     assert_equal :purged, ClientSecretIssuancePurger.call_omitted!(
       issuance: ClientSecretIssuance.find(issuance.id), executor_job_id: "retry", retention_after: 1.second,
     )
+  end
+end
+
+class ClientSecretConfirmedIssuancePurgeCommitTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+  self.use_transactional_tests = false
+
+  test "confirmed allocation collection follows real revocation and durable credential purge audit" do
+    config_keys = %w(
+      APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
+    )
+    original_config = ENV.to_h.slice(*config_keys)
+    actor = nil
+    retention_policy_id = nil
+    retention_policy_created = false
+
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
+    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Time.current,
+    )
+    ClientEmail.create!(
+      user: actor, address: "purger-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: ClientEmail.database_now,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 2.seconds,
+      step_up_evidence: evidence,
+    )
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
+    raw = ClientSecretPresentationIssuer.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    ).first
+    ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
+    credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
+    ClientSecretRevocationCommitter.call!(
+      actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
+      step_up_evidence: evidence,
+    )
+    retention_policy = ChronicleRetentionPolicy.find_by(code: "security")
+    unless retention_policy
+      retention_policy = ChronicleRetentionPolicy.create!(
+        code: "security", name: "Security", duration_days: 365, permanent: false,
+      )
+      retention_policy_created = true
+    end
+    retention_policy_id = retention_policy.id
+    ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
+
+    assert_equal :purged, ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "credential")
+    token.revoke!
+    deadline = [issuance.reload.expires_at, token.reload.discard_at].max + 1.second
+    Timeout.timeout(4) { sleep 0.01 while Client.database_now < deadline }
+
+    assert_equal :undelivered, ClientSecretIssuancePurger.call_confirmed!(
+      issuance: issuance, executor_job_id: "before-purge-audit", retention_after: 1.second,
+    )
+    assert ClientSecretIssuance.exists?(issuance.id)
+    ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
+
+    ClientSecretLifecycleJob.perform_now(batch_size: 500)
+
+    assert_not ClientSecretIssuance.exists?(issuance.id)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
+    event = ClientSecretAuditOutbox.find_by!(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.issuance_purged",
+    )
+
+    assert_equal 1, event.item_count
+    assert_nil event.delivered_at
+    assert ClientToken.exists?(token.id)
+  ensure
+    config_keys.each { |key| ENV[key] = original_config[key] }
+    if actor
+      event_ids = ClientSecretAuditOutbox.where(client_ref: actor.public_id).pluck(:event_id)
+      ClientSecretCredential.where(client_id: actor.id).delete_all
+      ClientSecretIssuance.where(client_id: actor.id).delete_all
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).delete_all
+      ChronicleRecord.connected_to(role: :writing) do
+        chronicle_ids = Chronicle.where(event_uuid: event_ids).pluck(:id)
+        ChronicleVisibility.where(chronicle_id: chronicle_ids).delete_all
+        ChronicleOutboxEntry.where(event_uuid: event_ids).delete_all
+        Chronicle.where(id: chronicle_ids).delete_all
+        if retention_policy_created && !Chronicle.exists?(chronicle_retention_policy_id: retention_policy_id)
+          ChronicleRetentionPolicy.where(id: retention_policy_id).delete_all
+        end
+      end
+      token_ids = ClientToken.where(user_id: actor.id).pluck(:id)
+      grant_ids = OpAppGrant.where(client_token_id: token_ids).pluck(:id)
+      ClientStepUpCommit.where(root_token_id: token_ids).or(ClientStepUpCommit.where(grant_id: grant_ids)).delete_all
+      OpAppGrantLogoutHint.where(grant_id: grant_ids).delete_all
+      OpAppGrant.where(id: grant_ids).delete_all
+      session_ids = ClientDeviceSession.where(user_id: actor.id).pluck(:id)
+      ClientDeviceSession.where(id: session_ids).update_all(current_refresh_token_id: nil)
+      ClientToken.where(id: token_ids).destroy_all
+      ClientDeviceSession.where(id: session_ids).destroy_all
+      # Test-created identity is not an eligible account-purge subject; remove only this actor's rows.
+      ClientEmail.where(user_id: actor.id).delete_all
+      ClientPasskey.where(user_id: actor.id).delete_all
+      Client.where(id: actor.id).delete_all
+    end
   end
 end

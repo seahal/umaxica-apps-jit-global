@@ -5,10 +5,25 @@ require "test_helper"
 # D-135 / D-176: a new sign-up whose contact is still held by an unfinished registration is refused
 # with a copy that says nothing about registration state, and nothing is created.
 class SignUpContactHoldRefusalTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+  include SignInFlowCleanup
+  include SignUpJourneyCleanup
+
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
   setup do
+    sign_up_journey_watermarks!
+    @previous_challenge = [TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response]
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     https!
+  end
+
+  teardown do
+    delete_sign_up_journey_rows!
+    clear_enqueued_jobs
+    TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response = @previous_challenge
   end
 
   test "APP email sign-up is refused while an unfinished registration holds the address" do

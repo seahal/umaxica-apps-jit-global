@@ -28,7 +28,10 @@ require "test_helper"
 class AppPreferenceLanguageTest < ActiveSupport::TestCase
   setup do
     AppPreferenceStatus.ensure_defaults!
-    @preference = AppPreference.create!(status_id: AppPreferenceStatus::ACTIVE)
+    @preference = AppPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current, last_issued_expires_at: 400.days.from_now,
+      status_id: AppPreferenceStatus::ACTIVE,
+    )
   end
 
   test "belongs to preference" do

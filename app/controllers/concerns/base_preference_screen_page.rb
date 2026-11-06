@@ -140,11 +140,21 @@ module BasePreferenceScreenPage
   # Option IDs and names are fixed by each option model. Building unsaved rows from that catalog
   # keeps a first-time GET read-only; explicit preference writes persist the referenced rows before
   # they can be selected. Timezones sort by standard UTC offset so DST does not reshuffle the list.
+  # Themes list the default (system) first, then light and dark, matching the footer control and
+  # common OS settings; the fixed option IDs stay unchanged.
+  THEME_DISPLAY_ORDER = %w(system light dark).freeze
+
   def preference_ordered_options(option_class, option_type)
     rows = option_class.const_get(:DEFAULTS, false).map { |id| option_class.new(id: id) }
-    return rows unless option_type == :timezone
-
-    rows.sort_by { |option| TimezoneIdentifier.utc_offset_sort_key(option.name) }
+    case option_type
+    when :timezone
+      rows.sort_by { |option| TimezoneIdentifier.utc_offset_sort_key(option.name) }
+    when :theme
+      rows.select { |option| THEME_DISPLAY_ORDER.include?(option.name) }
+        .sort_by { |option| THEME_DISPLAY_ORDER.index(option.name) }
+    else
+      rows
+    end
   end
 
   def preference_option_key(option_type, name)
@@ -227,7 +237,7 @@ module BasePreferenceScreenPage
   end
 
   def preference_cookie_screen_state
-    readable_cookie_state(@preference_cookie)
+    @preference_cookie_screen_state || cookie_consent_state
   end
 
   # --- customizations (reset) --------------------------------------------------------------------

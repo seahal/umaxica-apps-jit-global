@@ -3,7 +3,8 @@
 **Status:** Accepted (2026-10-15). Recorded from the WU-2 design dialogue. Not implemented; the
 current code still uses `mfa_level_id` and the `NOTHING/WEAK/MEDIUM/FULL` reference values.
 
-> **Partial supersession (2026-10-15):** `adr/authentication-security-cycle-consolidation-2026-10-15.md` supersedes A4 and E1 (the
+> **Partial supersession (2026-10-15):**
+> `adr/authentication-security-cycle-consolidation-2026-10-15.md` supersedes A4 and E1 (the
 > `ADVANCED` minimum is two active passkeys, not one), E2 (two to one is refused), the clause of C3
 > that Emergency never satisfies Persona/RP authorization, F1–F5 and G2 (returned to Pending), and
 > resolves Open decision 2. Those sections are kept below as history and are not current.
@@ -12,6 +13,14 @@ current code still uses `mfa_level_id` and the `NOTHING/WEAK/MEDIUM/FULL` refere
 > passkeys and nothing else counts. Value mapping for the migration: APP/COM every existing value
 > becomes `NORMAL=3`; every ORG Operator becomes `ADVANCED=7`. The ORG one-passkey restriction and
 > zero-passkey refusal are defined by the consolidation ADR §2.6.
+
+> **Amendment (2026-11-03, owner):** D3 and the "one-time consumption of the used step-up evidence"
+> clause of E4 are replaced for ordinary step-up by the reusable, RP-session-scoped evidence
+> recorded in `adr/authentication-security-cycle-consolidation-2026-10-15.md` (amendment of the same
+> date). D2 remains as the upper bound; ordinary step-up uses 300 seconds. The stated rationale
+> "one-time, operation-bound evidence removes the reuse the old scope window allowed" no longer
+> applies to ordinary step-up; the owner accepted reuse within a 300 second window bound to one RP
+> session in exchange for not repeating the ceremony per operation.
 
 ## Context
 
@@ -25,10 +34,10 @@ Security Mode that drives those rules.
 
 ### A. Naming and values
 
-- **A1.** `mfa_level_id` is renamed to `security_mode_id`. The reference models and associations
-  are renamed with it.
-- **A2.** The current modes are `NORMAL = 3` and `ADVANCED = 7`. The names `MEDIUM`, `WEAK`,
-  `FULL` and `STRICT` are retired.
+- **A1.** `mfa_level_id` is renamed to `security_mode_id`. The reference models and associations are
+  renamed with it.
+- **A2.** The current modes are `NORMAL = 3` and `ADVANCED = 7`. The names `MEDIUM`, `WEAK`, `FULL`
+  and `STRICT` are retired.
 - **A3.** `NOTHING = 0` is not a valid authentication mode.
 - **A4.** The current valid mode IDs are `NORMAL=3` and `ADVANCED=7`; unknown and reserved IDs are
   invalid. `ADVANCED=7` requires two active distinct passkeys for the general holding minimum, with
@@ -49,25 +58,25 @@ Security Mode that drives those rules.
   passkey confirmation in `ADVANCED`.
 - **C2.** ORG ordinary sign-in remains Entra ID followed by passkey.
 - **C3.** ORG Emergency is a restricted authentication context, not ordinary access. It is distinct
-  from ordinary sessions and recovery sessions, and it never satisfies ordinary step-up or Persona/RP
-  authorization.
+  from ordinary sessions and recovery sessions, and it never satisfies ordinary step-up or
+  Persona/RP authorization.
 
 ### D. Step-up
 
 - **D1.** Method sets:
 
-  | mode       | APP                          | COM                   | ORG          |
-  | ---------- | ---------------------------- | --------------------- | ------------ |
-  | `NORMAL`   | Email OTP / Passkey / TOTP   | Email OTP / Passkey   | not used     |
-  | `ADVANCED` | Passkey                      | Passkey               | Passkey      |
+  | mode       | APP                        | COM                 | ORG      |
+  | ---------- | -------------------------- | ------------------- | -------- |
+  | `NORMAL`   | Email OTP / Passkey / TOTP | Email OTP / Passkey | not used |
+  | `ADVANCED` | Passkey                    | Passkey             | Passkey  |
 
 - **D2.** Maximum step-up validity is 15 minutes in `NORMAL` and 5 minutes in `ADVANCED`.
 - **D3.** Step-up evidence is bound to the operation, the target, the actor and the session, and is
   consumed once. The previous scope-level reuse within 15 minutes is replaced.
 
-**Implementation status (2026-10-26):** Current consumers enforce one-time, operation-scope,
-actor and session binding. Per-record target binding through `resource_ref` is deferred; existing
-settings requirements use `nil`. Operations that write target state and Step-Up evidence to separate
+**Implementation status (2026-10-26):** Current consumers enforce one-time, operation-scope, actor
+and session binding. Per-record target binding through `resource_ref` is deferred; existing settings
+requirements use `nil`. Operations that write target state and Step-Up evidence to separate
 databases cannot guarantee atomic commit across both stores. The consumer audit and affected
 boundaries are recorded in `evidence/2026-10-26-wu30-step-up-consumption-M3A7.md`.
 

@@ -2,9 +2,19 @@
 
 ## Status
 
-Accepted on 2026-10-31 by the owner. This decision replaces
+Accepted on 2026-10-31 by the owner; superseded for the Experience redesign on 2026-11-04 by
+`five.md` C3-C4. This decision replaces
 [`preference-relogin-reconciliation-record-recency.md`](preference-relogin-reconciliation-record-recency.md)
-and applies to WU-7's COM implementation and WU-9's APP/ORG implementation.
+and applied to WU-7's COM implementation and WU-9's APP/ORG implementation.
+
+## Amendment 2026-11-04: Experience redesign
+
+The owner decided to remove sign-in and authenticated-save copying between Browser Experience and
+Account Experience. Sign-in and sign-out derive a Display Snapshot from the applicable current
+source; they do not persist one Experience into the other. A User write changes Account Experience
+only, and a Guest write changes Browser Experience only. The old field-by-field reflection and
+consent/Web Push copy rules below are historical and do not govern the redesign. This decision is
+recorded in `five.md` C3-C4; implementation remains pending its unresolved C5 contracts.
 
 ## Decision
 

@@ -7,8 +7,101 @@ require "test_helper"
 class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
+  self.fixture_table_names = []
+  self.use_transactional_tests = false
+
+  setup do
+    @created_client_ids = []
+  end
+
+  teardown do
+    client_ids = Array(@created_client_ids)
+    client_refs = Client.where(id: client_ids).pluck(:public_id)
+    identities = ClientIdentity.where(source_record_id: client_ids)
+    identity_ids = identities.pluck(:id)
+    persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+    enterprise_ids = EnterpriseOwnership.where(client_id: client_ids).pluck(:enterprise_id)
+    enterprise_public_ids = Enterprise.where(id: enterprise_ids).pluck(:public_id)
+    unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+
+    AvatarRecord.connected_to(role: :writing) do
+      connection = AvatarRecord.lease_connection
+      begin
+        connection.execute("SET session_replication_role = replica")
+        avatar_ids = AvatarPersonaBinding.where(persona_id: persona_ids).pluck(:avatar_id)
+        avatar_ids.concat(
+          AvatarEnterpriseOwnershipPeriod.where(enterprise_public_id: enterprise_public_ids).pluck(:avatar_id),
+        )
+        avatar_ids.uniq!
+        AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+        ownership_periods = AvatarEnterpriseOwnershipPeriod.where(avatar_id: avatar_ids)
+        AvatarEnterprisePersonaGrant.where(
+          avatar_enterprise_ownership_period_id: ownership_periods.select(:id),
+        ).delete_all
+        AvatarEnterpriseOwnershipPeriod.where(avatar_id: avatar_ids).delete_all
+        AvatarOwnershipPeriod.where(avatar_id: avatar_ids).delete_all
+        AvatarMoniker.where(avatar_id: avatar_ids).delete_all
+        handle_ids = Avatar.where(id: avatar_ids).pluck(:active_handle_id)
+        Avatar.where(id: avatar_ids).delete_all
+        Handle.where(id: handle_ids).delete_all
+      ensure
+        connection.execute("SET session_replication_role = origin")
+      end
+    end
+
+    tokens = ClientToken.where(user_id: client_ids).select(:id)
+    parents = ClientStepUpCeremonyTransaction.where(actor_ref: client_refs)
+    ClientContactAuditOutbox.where(owner_ref: client_refs).delete_all
+    ClientEmailCeremonyTransaction.where(actor_ref: client_refs).delete_all
+    ClientAuthAdmissionBinding.where(base_token_id: tokens).or(
+      ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parents.select(:id)),
+    ).delete_all
+    ClientStepUpSession.where(user_token_id: tokens).delete_all
+    ClientAuthCeremonySession.where(
+      step_up_ceremony_transaction_ref: parents.select(:transaction_id),
+    ).delete_all
+    parents.delete_all
+    OpAppGrant.where(client_token_id: tokens).delete_all
+    ClientEmail.where(user_id: client_ids).delete_all
+    ClientPreference.where(client_id: client_ids).destroy_all
+    PersonaMembership.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseUnitClosure.where(ancestor_id: unit_ids).or(
+      EnterpriseUnitClosure.where(descendant_id: unit_ids),
+    ).delete_all
+    EnterpriseUnit.where(id: unit_ids).delete_all
+    EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+    Enterprise.where(id: enterprise_ids).delete_all
+    EnterpriseOwnershipTransferRequest.where(source_client_id: client_ids).or(
+      EnterpriseOwnershipTransferRequest.where(destination_client_id: client_ids),
+    ).delete_all
+    ClientPersonaOwnershipTransferRequest.where(source_client_id: client_ids).or(
+      ClientPersonaOwnershipTransferRequest.where(destination_client_id: client_ids),
+    ).delete_all
+    ClientPersonaAdministrationGrant.where(client_id: client_ids).delete_all
+    ClientPersonaDelegationGrant.where(client_id: client_ids).delete_all
+    ClientPersonaUsageGrant.where(client_id: client_ids).delete_all
+    ClientPersonaViewGrant.where(client_id: client_ids).delete_all
+    ClientPersonaOwnership.where(client_id: client_ids).delete_all
+    ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+    PersonaAssignment.where(client_identity_id: identity_ids).delete_all
+    ClientPersona.where(id: persona_ids).delete_all
+    ClientDeviceSession.where(user_id: client_ids).update_all(current_refresh_token_id: nil)
+    ClientToken.where(user_id: client_ids).delete_all
+    ClientDeviceSession.where(user_id: client_ids).delete_all
+    ClientAuthorityLock.where(client_id: client_ids).delete_all
+    ClientChronicle.where(subject_type: "Client", subject_id: client_ids.map(&:to_s)).delete_all
+    ClientAccount.where(user_id: client_ids).delete_all
+    ClientIdentity.where(id: identity_ids).delete_all
+    Client.where(id: client_ids).delete_all
+  end
+
   %i(contact_receipt bootstrap_receipt).each do |boundary|
-    test "app email bootstrap recovers #{boundary} through identical HTTP without granting freshness" do
+    test "app email bootstrap retries #{boundary} Ticket failure without granting freshness" do
       protection = ActionController::Base.allow_forgery_protection
       previous_turnstile = [TurnstileVerifierStub.enabled, TurnstileVerifierStub.response]
       previous_challenge = [TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response]
@@ -29,6 +122,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
         status_id: ClientStatus::ACTIVE,
       )
+      @created_client_ids << actor.id
       token = token_model.create!(
         :authentication_epoch => 0,
         owner_key => actor.id, :root_login_established_at => token_model.database_now,
@@ -169,13 +263,12 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         end
 
       ActiveSupport::Notifications.subscribed(failure, "sql.active_record") do
-        assert_raises(ActiveRecord::StatementInvalid) do
-          browser.patch("/identity/emails/registration", params: submission, headers: confirmation_headers)
-        end
+        browser.patch("/identity/emails/registration", params: submission, headers: confirmation_headers)
       end
 
       assert_equal 1, failures
-      assert_predicate contact.reload, :binding_effective?
+      assert_equal 503, browser.response.status
+      assert_not_predicate contact.reload, :binding_effective?
       assert_nil transaction.reload.otp_verifier
       proof = transaction.attributes.slice(
         "otp_consumed_at", "otp_receipt_verifier", "otp_result_expires_at",
@@ -193,7 +286,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         otp_consumed_at otp_receipt_verifier otp_verifier otp_result_expires_at updated_at lock_version
       )
 
-      assert_withheld("Failed lifecycle receipt must retain every Ticket fact except committed OTP verification") {
+      assert_withheld("Failed Ticket commit must retain every Ticket fact except verified OTP proof") {
         original_ticket.except(*verification_changes) ==
           transaction.reload.attributes.except(*verification_changes)
       }
@@ -201,15 +294,15 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
                    "Committed OTP verification must advance the Ticket optimistic lock exactly once"
       verified_ticket = transaction.attributes
 
-      assert_withheld("Failed receipt must retain the original Bootstrap parent") {
+      assert_withheld("Failed Ticket commit must retain the original Bootstrap parent") {
         original_parent == parent.reload.attributes
       }
       assert_equal "pending", transaction.status
       assert_equal "pending", parent.status
-      assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
-      audit_facts = audits.first.attributes
+      assert_equal 0, audits.count
 
-      assert_includes StepUpConfiguredMethodsQuery.call(actor), :email_otp
+      assert_not_includes StepUpConfiguredMethodsQuery.call(actor), :email_otp,
+                          "An uncommitted registration candidate cannot become a configured factor"
       assert_nil token.reload.last_step_up_at
       pending_marker = BaseStepUpMarkerAdapter.new.read(
         locator:, transaction_ref: parent.transaction_id,
@@ -243,10 +336,9 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
 
       assert_equal 302, browser.response.status
       assert_equal "/identity/emails", URI.parse(browser.response.location).path,
-                   "Receipt recovery must return to the original target, not ordinary verification"
-      assert_withheld("Receipt-only retry must not rewrite committed Source facts") {
-        source_facts == contact.reload.attributes
-      }
+                   "Retry must return to the original target, not ordinary verification"
+      assert_predicate contact.reload, :binding_effective?
+      assert_equal ClientEmailStatus::VERIFIED, contact.user_email_status_id
       assert_predicate transaction.reload, :consumed?
       assert_withheld("Retry must retain the exact bounded Email proof") {
         proof == transaction.attributes.slice(*proof.keys)
@@ -256,7 +348,6 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         parent.verified_credential_ref == contact.public_id
       }
       assert_equal 1, audits.count
-      assert_withheld("Retry must not rewrite the original Source audit") { audit_facts == audits.first.attributes }
       assert_withheld("Retry must retain original nonce") {
         nonce == browser.request.session.fetch("auth_admission_browser_nonce")
       }

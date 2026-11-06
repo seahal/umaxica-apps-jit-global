@@ -30,7 +30,11 @@ module OidcAuthAdmissionTestHelper
       base_host:, visa_host:, auth_host:, browser: @base_browser,
     )
 
-    raise RuntimeError, "Auth admission did not reach the Auth browser" unless current_browser.equal?(self)
+    unless current_browser.equal?(self)
+      failure_host = current_browser.host
+      failure_status = current_browser.response.status
+      raise RuntimeError, "Auth admission stopped on #{failure_host} (HTTP #{failure_status})"
+    end
     raise RuntimeError, "Auth admission did not render the Auth entry" unless response.successful?
 
     host!(auth_host)
@@ -64,13 +68,30 @@ module OidcAuthAdmissionTestHelper
     jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
     12.times do
-      break unless current_browser.response.redirect?
+      if current_browser.response.redirect?
+        target = URI.parse(current_browser.response.location.to_s)
+        target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+        target = URI.parse(jump_rt_url_from_location_for_test(target.to_s)) if target.host == jump_host
+        current_browser, current_host = navigate_admission_target(
+          target:, base_host:, visa_host:, auth_host:,
+        )
+        next
+      end
 
-      target = URI.parse(current_browser.response.location.to_s)
-      target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
-      target = URI.parse(jump_rt_url_from_location_for_test(target.to_s)) if target.host == jump_host
-      current_browser, current_host = navigate_admission_target(
-        target:, base_host:, visa_host:, auth_host:,
+      form = Nokogiri::HTML(current_browser.response.body).at_css("form#base-ceremony-binding-confirmation-form")
+      break unless form
+
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      current_browser.post(
+        form["action"],
+        params: fields,
+        headers: {
+          "Host" => current_host,
+          "Origin" => "https://#{current_host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+        },
       )
     end
 
@@ -95,7 +116,7 @@ module OidcAuthAdmissionTestHelper
   end
 
   def response_form(browser)
-    form = browser.response.parsed_body.at_css("form")
+    form = Nokogiri::HTML(browser.response.body).at_css("form")
     return form if form
 
     raise RuntimeError, "browser admission form is missing (HTTP #{browser.response.status})"

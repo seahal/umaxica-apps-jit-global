@@ -58,5 +58,5 @@ review.
 
 - Keep the deleted redirector/jump-link models deleted. Do not reintroduce `RedirectorRecord`,
   `AppJumpLink`, `ComJumpLink`, `OrgJumpLink`, or `JumpLinkable` while addressing this plan.
-- Align updates with `docs/operations/jwt-key-rotation.md` and
-  `docs/operations/jump-rt-key-rotation.md` once implementation behavior is final.
+- Align updates with `docs/runbooks/jwt-key-rotation.md` and `docs/runbooks/jump-rt-key-rotation.md`
+  once implementation behavior is final.

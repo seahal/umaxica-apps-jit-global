@@ -76,11 +76,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
   # This list is compared by equality, not inclusion, so a NEW skip fails the test and so does a
   # skip that silently disappears. Adding an entry is a deliberate, reviewable act.
   RI_SKIP_ALLOWLIST = %w(
-    app/controllers/auth/app/edge/v0/token/checks_controller.rb
-    app/controllers/auth/app/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/app/omniauth/omniauth_callbacks_controller.rb
-    app/controllers/auth/org/edge/v0/token/checks_controller.rb
-    app/controllers/auth/org/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
     app/controllers/base/app/oidc/callbacks_controller.rb
     app/controllers/base/app/sign/interruptions_controller.rb

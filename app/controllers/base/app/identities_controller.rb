@@ -62,8 +62,10 @@ module Base
 
       def identity_external_services_section
         {
-          heading: t("sign.app.settings.show.external_services"),
+          heading: t("base.shared.identity.sections.external_services"),
           items: [
+            { label: t("base_social_identities.title"),
+              href: base_app_identity_social_identities_path(ri: params[:ri]), },
             identity_auth_link(:google, :auth_app_settings_google_url),
             identity_auth_link(:apple, :auth_app_settings_apple_url),
           ],

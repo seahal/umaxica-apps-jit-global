@@ -6,7 +6,11 @@
 // the Turnstile widget writes the token into the hidden field the form submits.
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 import { csrfToken } from "./csrf";
@@ -38,6 +42,8 @@ export type ContactSignUpFormProps = {
   turnstile: TurnstileWidgetProps;
   submit_label: string;
   links: { key: string; label: string; href: string }[];
+  /** Ends the parent sign-in request; null when this ceremony has no parent that can be cancelled. */
+  cancel: CeremonyCancellationProps | null;
 };
 
 export default function ContactSignUpForm({
@@ -51,11 +57,14 @@ export default function ContactSignUpForm({
   turnstile,
   submit_label: submitLabel,
   links,
+  cancel,
 }: ContactSignUpFormProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <h2 className="text-xl font-semibold text-fg">{title}</h2>
-
+    <Page
+      title={title}
+      up={links.find((link) => link.key === "back") ?? null}
+      width="narrow"
+    >
       <form
         action={action}
         method="post"
@@ -126,19 +135,23 @@ export default function ContactSignUpForm({
         <Button type="submit">{submitLabel}</Button>
       </form>
 
-      {links.map((link) => (
-        <p
-          key={link.key}
-          className="text-base"
-        >
-          <a
-            href={link.href}
-            className="ui-text-link text-fg underline underline-offset-4 hover:underline"
+      {links
+        .filter((link) => link.key !== "back")
+        .map((link) => (
+          <p
+            key={link.key}
+            className="text-base"
           >
-            {link.label}
-          </a>
-        </p>
-      ))}
-    </section>
+            <a
+              href={link.href}
+              className="ui-text-link text-fg underline underline-offset-4 hover:underline"
+            >
+              {link.label}
+            </a>
+          </p>
+        ))}
+
+      {cancel ? <CeremonyCancellation {...cancel} /> : null}
+    </Page>
   );
 }

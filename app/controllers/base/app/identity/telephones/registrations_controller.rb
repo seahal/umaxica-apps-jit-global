@@ -11,6 +11,7 @@ module Base
           include CommonRedirect
           include EnforcementIdentifierGate
           include VerificationClient
+          include EmailOtpResponseTiming
 
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
@@ -19,6 +20,7 @@ module Base
           TELEPHONE_VERIFICATION_RATE_WINDOW = 60
 
           before_action :authorize_telephone_registration!, only: %i(new create edit update)
+          around_action :with_otp_issue_response_timing, only: :create
 
           def new
             @user_telephone = ClientTelephone.new
@@ -93,10 +95,14 @@ module Base
           def handle_registration_update_status(status, code)
             case status
             when :success
-              finish_telephone_ceremony!(
-                surface: "app", actor: current_client, session_ref: current_session_public_id,
-                candidate: @user_telephone, code: code,
-              )
+              begin
+                finish_telephone_ceremony!(
+                  surface: "app", actor: current_client, session_ref: current_session_public_id,
+                  candidate: @user_telephone, code: code,
+                )
+              rescue TelephoneCredentialRegistrationOtpFinalizer::DependencyFailure
+                return head :service_unavailable
+              end
               reset_registration_session!
               redirect_to(
                 base_app_identity_telephones_url(
@@ -188,6 +194,10 @@ module Base
               actor: user, token: current_session_token, telephone: @user_telephone,
               browser_nonce: ensure_base_admission_browser_nonce!,
             )
+            if issued.status == :registered_destination
+              session.delete(registration_transaction_session_key)
+              return true
+            end
             return false unless issued.success?
 
             session[registration_transaction_session_key] = issued.transaction.transaction_id
@@ -201,7 +211,7 @@ module Base
           end
 
           def complete_telephone_verification(id, submitted_code)
-            return :session_expired unless @user_telephone && @user_telephone.id == id && registration_otp_transaction
+            return :session_expired unless @user_telephone && @user_telephone.id == id
 
             result = TelephoneCredentialRegistrationOtpVerificationCommitter.call(
               actor: current_client, token: current_session_token, telephone: @user_telephone,
@@ -226,6 +236,7 @@ module Base
               transaction: registration_otp_transaction,
               browser_nonce: base_admission_browser_nonce,
               requirement: step_up_requirement(scope: verification_scope),
+              step_up_evidence: current_step_up_evidence,
             )
             return candidate if status == :finalized
 

@@ -4,6 +4,8 @@
 require "test_helper"
 
 class AuthCeremonySessionTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   CASES = [
     ClientAuthCeremonySession,
     OperatorAuthCeremonySession,
@@ -16,6 +18,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       assert_predicate record, :persisted?
       assert_equal 64, record.sid_digest.length
       assert_not_equal raw_sid, record.sid_digest
+      assert_equal AuthCeremonySession::STATUS_ISSUED, record.status_id
       assert_predicate record, :active?
       assert record.asserts_no_authority_api!
 
@@ -25,12 +28,14 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
       rotated = record.rotate!
 
+      assert_equal AuthCeremonySession::STATUS_ISSUED, record.reload.status_id
       assert_nil model.find_active_by_raw_sid(raw_sid)
       assert_equal record.id, model.find_active_by_raw_sid(rotated).id
 
       record.revoke!
 
       assert_not record.reload.active?
+      assert_equal AuthCeremonySession::STATUS_REVOKED, record.status_id
       assert_nil model.find_active_by_raw_sid(rotated)
     end
 
@@ -46,6 +51,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
       record.reload
 
+      assert_equal AuthCeremonySession::STATUS_COMPLETED, record.status_id
       assert_equal database_now, record.created_at
       assert_equal database_now + model::DEFAULT_TTL, record.expires_at
       assert_equal database_now, record.admitted_at
@@ -68,6 +74,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       record.complete!
 
       assert_predicate record.reload, :completed?
+      assert_equal AuthCeremonySession::STATUS_COMPLETED, record.status_id
       assert_predicate record, :terminal?
       assert_not_predicate record, :active?
       assert_raises(AuthCeremonySession::InvalidTransition) { record.complete! }
@@ -91,25 +98,26 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
     test "#{model.name} records one-time authentication evidence without granting authority" do
       database_now = Time.utc(2026, 9, 21, 13, 14, 15)
-      record, = model.issue!(now: database_now)
-      record.admit!(
-        admission_purpose: "authentication_handoff",
-        authorization_transaction_ref: "evidence-#{model.name}", now: database_now,
-      )
-
-      record.class.stub(:database_now, database_now) do
+      record = nil
+      model.stub(:database_now, database_now) do
+        record, = model.issue!
+        record.admit!(
+          admission_purpose: "authentication_handoff",
+          authorization_transaction_ref: "evidence-#{model.name}",
+        )
         record.record_authentication_evidence!(method: "secret")
       end
 
       record.reload
 
+      assert_equal AuthCeremonySession::STATUS_EVIDENCE_RECORDED, record.status_id
       assert_equal "secret", record.authentication_method
       assert_equal database_now, record.authentication_event_at
       assert_predicate record, :authentication_evidence_recorded?
       assert record.asserts_no_authority_api!
 
       assert_raises(AuthCeremonySession::InvalidTransition) do
-        record.record_authentication_evidence!(method: "passkey", now: database_now)
+        record.record_authentication_evidence!(method: "passkey")
       end
       assert_equal "secret", record.reload.authentication_method
     end
@@ -132,6 +140,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
         admission_purpose: "authentication_handoff",
         authorization_transaction_ref: "previous-#{model.name}",
       )
+      admitted_at = previous.admitted_at
 
       replacement, replacement_sid = model.rotate_and_admit!(
         admission_purpose: "authentication_handoff",
@@ -140,7 +149,11 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       )
 
       assert_predicate previous.reload, :terminal?
+      assert_equal AuthCeremonySession::STATUS_REPLACED, previous.status_id
+      assert_not_predicate previous, :admitted?
+      assert_equal admitted_at, previous.admitted_at
       assert_not_predicate previous, :active?
+      assert_equal AuthCeremonySession::STATUS_ADMITTED, replacement.status_id
       assert_predicate replacement, :admitted?
       assert_predicate replacement, :active?
       assert_equal previous.sid_digest, replacement.previous_sid_digest
@@ -171,9 +184,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       assert_equal 1, model.where(previous_sid_digest: previous.sid_digest).count
       assert_equal 1, model.where(
         previous_sid_digest: previous.sid_digest,
-        revoked_at: nil,
-        completed_at: nil,
-        cancelled_at: nil,
+        status_id: AuthCeremonySession::ACTIVE_STATUS_IDS,
       ).count
     end
 
@@ -210,6 +221,12 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
           record.update_columns(authorization_transaction_ref: "unadmitted-#{model.name}")
         end
       end
+
+      assert_raises(ActiveRecord::StatementInvalid) do
+        model.transaction(requires_new: true) do
+          record.update_columns(status_id: AuthCeremonySession::STATUS_EVIDENCE_RECORDED)
+        end
+      end
     end
 
     test "#{model.name} cancellation is terminal and cannot be followed by completion" do
@@ -219,8 +236,28 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       record.cancel!
 
       assert_predicate record.reload, :cancelled?
+      assert_equal AuthCeremonySession::STATUS_CANCELLED_BEFORE_PROGRESS, record.status_id
+      assert_predicate record, :cancelled_before_authentication_progress?
       assert_raises(AuthCeremonySession::InvalidTransition) { record.complete! }
       assert_raises(AuthCeremonySession::InvalidTransition) { record.revoke! }
+    end
+
+    test "#{model.name} records cancellation on each side of authentication evidence" do
+      before_progress, = model.issue!
+      before_progress.admit!(admission_purpose: "authentication_handoff")
+      before_progress.cancel!
+
+      assert_equal AuthCeremonySession::STATUS_CANCELLED_BEFORE_PROGRESS, before_progress.reload.status_id
+      assert_predicate before_progress, :cancelled_before_authentication_progress?
+
+      after_progress, = model.issue!
+      after_progress.admit!(admission_purpose: "authentication_handoff")
+      after_progress.record_authentication_evidence!(method: "secret")
+      after_progress.cancel!
+
+      assert_equal AuthCeremonySession::STATUS_CANCELLED_AFTER_PROGRESS, after_progress.reload.status_id
+      assert_not_predicate after_progress, :cancelled_before_authentication_progress?
+      assert_predicate after_progress, :authentication_evidence_recorded?
     end
   end
 

@@ -16,6 +16,28 @@ authorization, token, or freshness decision.
 
 ## Responsibilities
 
+For an APP login, the provider-start request records the admitted Auth ceremony row ID only as a
+callback-attempt correlation value in the Rails session. Before the callback consumes OAuth state,
+it resolves the current host-only `auth_sid` and requires the same active ceremony row. A mismatch
+returns the shared 409 refusal without consuming state or writing authentication evidence; the
+correlation value does not grant admission or select an actor.
+
+For APP sign-up, the Google/Apple registration POST stores callback state, provider and the Apple
+nonce when applicable, but creates no `ClientSignUpFlow` and records no Auth evidence. The user can
+return to the initial sign-up page and choose another method. A later provider POST consumes the
+previous callback state present in its current server-side session before issuing its replacement.
+After that consume commits, the old callback state is refused. Concurrent provider starts made from
+stale signed-cookie sessions are not yet associated with one persisted Admission generation; their
+ordering is unverified. Only a verified successful callback locks the Admission Binding and then the
+Auth Ceremony, rechecks the active sign-up admission, absence of cancellation, prior Flow and
+evidence, and creates/advances the Flow with callback evidence. A callback refuses when Email,
+Telephone or another social Flow already belongs to the admission.
+
+A refusal for a known superseded or already-consumed callback state does not clear or commit the
+session. This prevents an in-flight callback carrying an older signed-cookie snapshot from
+overwriting the newer session cookie after a restart. This does not serialize concurrent provider
+starts from stale snapshots.
+
 `sign/id` may:
 
 - validate OAuth/OIDC provider callback state and nonce;

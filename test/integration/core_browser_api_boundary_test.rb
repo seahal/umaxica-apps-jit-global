@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/rp_cell_session_helper"
 # require "helpers/global_test_support"
 
 class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
+  include RpCellSessionHelper
+
   HOST = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
 
   setup do
@@ -51,7 +54,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "a csrf failure answers with the csrf-verification-failed problem type" do
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = "opaque-refresh-token"
 
     post "/api/v0/token/refresh", headers: json_headers
 
@@ -119,39 +122,18 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   test "an authenticated actor is identified by public id, never by the database key" do
     client = clients(:one)
     root_token = client_tokens(:one)
-    rp_session = OpAppGrant.create!(
-      authentication_epoch: 0,
-      client_token: root_token, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current, refresh_token_expires_at: 1.hour.from_now,
-    )
-    oidc_client = OidcClientRegistry.find!("core-app-jp")
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      client,
-      host: OidcIssuer.host_for_resource_type("client"),
-      resource_type: "client",
-      session_public_id: root_token.public_id,
-      base_session_public_id: root_token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_resource_type("client"),
-      audiences: [oidc_client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
-      subject: OidcSubject.for(client, resource_type: "client"),
-      client_id: oidc_client.client_id,
-      authentication_context: root_token.strict_authentication_context_value.to_s,
-    )
+    authenticate_core_app_cell!(actor: client, root_token:)
 
     get("/api/v0/session", headers: json_headers)
 
     assert_response :success
 
     actor = response.parsed_body.fetch("actor")
+    local_principal = core_app_local_principal
 
-    assert_equal client.public_id, actor.fetch("id")
-    assert_not_equal client.id.to_s, actor.fetch("id")
-    assert_not_includes response.body, %("#{client.id}")
+    assert_equal local_principal.public_id, actor.fetch("id")
+    assert_not_equal local_principal.id.to_s, actor.fetch("id")
+    assert_not_includes response.body, %("#{local_principal.id}")
   end
 
   # adr/identifier-contract.md fixes public_id at exactly 21 characters, so a principal can no
@@ -165,41 +147,11 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal 21, client.reload.public_id.length
   end
 
-  test "a context claim that disagrees with the current Base root is rejected from the cookie boundary" do
-    client = clients(:one)
-    root_token = client_tokens(:one)
-    rp_session = OpAppGrant.create!(
-      authentication_epoch: 0,
-      client_token: root_token, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current, refresh_token_expires_at: 1.hour.from_now,
-    )
-    oidc_client = OidcClientRegistry.find!("core-app-jp")
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      client,
-      host: OidcIssuer.host_for_resource_type("client"),
-      resource_type: "client",
-      session_public_id: root_token.public_id,
-      base_session_public_id: root_token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_resource_type("client"),
-      audiences: [oidc_client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
-      subject: OidcSubject.for(client, resource_type: "client"),
-      client_id: oidc_client.client_id,
-      authentication_context: AuthenticationContextValue::STANDBY_KEY,
-    )
+  test "a valid Access JWT without its local session is rejected from the cookie boundary" do
+    authenticate_core_app_cell!
+    cookies.delete(OidcRpBrowserCredentialContract::SESSION_COOKIE)
 
-    get "/api/v0/session",
-        headers: {
-          "Accept" => "application/json",
-          "Content-Type" => "application/json",
-          "Client-Agent" =>
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        }
+    get "/api/v0/session", headers: json_headers
 
     assert_response :unauthorized
     assert_match(
@@ -207,6 +159,27 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
       Array(response.headers["Set-Cookie"]).join("\n"),
     )
     assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
+  end
+
+  test "a local cell storage failure answers unavailable without clearing browser credentials" do
+    authenticate_core_app_cell!
+    access_cookie = cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
+    session_cookie = cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE]
+
+    RpCoreAppRecord.stub(
+      :connected_to, ->(*, **) { raise ActiveRecord::ConnectionNotEstablished },
+    ) do
+      get "/api/v0/session", headers: json_headers
+    end
+
+    assert_response :service_unavailable
+    assert_equal "urn:umaxica:problem:service-unavailable", response.parsed_body.fetch("type")
+    assert_equal access_cookie, cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
+    assert_equal session_cookie, cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE]
+    set_cookie_headers = Array(response.headers["Set-Cookie"]).join("\n")
+
+    assert_no_match(/#{Regexp.escape(OidcRpBrowserCredentialContract::ACCESS_COOKIE)}=/, set_cookie_headers)
+    assert_no_match(/#{Regexp.escape(OidcRpBrowserCredentialContract::SESSION_COOKIE)}=/, set_cookie_headers)
   end
 
   # A routing miss never reaches a controller, so only the exceptions app can answer it. The test
@@ -347,30 +320,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
 
   test "authenticated session response is minimal and excludes raw credentials" do
     client = clients(:one)
-    root_token = client_tokens(:one)
-    rp_session = OpAppGrant.create!(
-      authentication_epoch: 0,
-      client_token: root_token, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current, refresh_token_expires_at: 1.hour.from_now,
-    )
-    oidc_client = OidcClientRegistry.find!("core-app-jp")
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      client,
-      host: OidcIssuer.host_for_resource_type("client"),
-      resource_type: "client",
-      session_public_id: root_token.public_id,
-      base_session_public_id: root_token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_resource_type("client"),
-      audiences: [oidc_client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
-      subject: OidcSubject.for(client, resource_type: "client"),
-      client_id: oidc_client.client_id,
-      authentication_context: root_token.strict_authentication_context_value.to_s,
-    )
+    authenticate_core_app_cell!(actor: client, root_token: client_tokens(:one))
 
     get "/api/v0/session", headers: json_headers
 
@@ -379,14 +329,17 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
 
     assert body.fetch("authenticated")
     assert_predicate body.fetch("csrf_token"), :present?
-    assert_equal clients(:one).public_id, body.dig("actor", "id")
+    local_principal = core_app_local_principal
+
+    assert_equal local_principal.public_id, body.dig("actor", "id")
+    assert_not_equal local_principal.id.to_s, body.dig("actor", "id")
     assert_not body.key?("access_token")
     assert_not body.key?("refresh_token")
     assert_not_includes response.body, cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s
   end
 
   test "unsafe refresh without csrf returns json csrf error contract" do
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = "opaque-refresh-token"
 
     post "/api/v0/token/refresh", headers: json_headers
 
@@ -401,8 +354,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   test "refresh rejects authorization header transport even when refresh cookie is present" do
     get "/api/v0/session", headers: json_headers
     csrf_token = response.parsed_body.fetch("csrf_token")
-    refresh = oidc_refresh_token_for_client
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = "opaque-refresh-token"
 
     post "/api/v0/token/refresh",
          headers: json_headers.merge(
@@ -418,23 +370,14 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "refresh rotates opaque cookie and never returns credentials in body" do
+    actor = clients(:one)
+    root_token = client_tokens(:one)
+    absolute_expiry = 2.minutes.from_now.change(usec: 0)
+    root_token.update!(discard_at: absolute_expiry)
+    sign_in_rp_cell("core-app-jp", actor:, root_token:)
+
     get "/api/v0/session", headers: json_headers
     csrf_token = response.parsed_body.fetch("csrf_token")
-    absolute_expiry = 2.minutes.from_now.change(usec: 0)
-    token = client_tokens(:one)
-    token.update!(discard_at: absolute_expiry)
-    rp_session = OpAppGrant.create!(
-      authentication_epoch: 0,
-      client_token: token,
-      oidc_client_id: "core-app-jp",
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: absolute_expiry,
-    )
-    refresh = rp_session.issue_refresh_token!(expires_at: absolute_expiry)
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh
 
     post "/api/v0/token/refresh", headers: json_headers.merge(
       "X-CSRF-Token" => csrf_token,
@@ -511,17 +454,15 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def oidc_refresh_token_for_client
-    session = OpAppGrant.create!(
-      authentication_epoch: 0,
-      client_token: client_tokens(:one),
-      oidc_client_id: "core-app-jp",
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: 10.minutes.from_now,
+  def authenticate_core_app_cell!(actor: clients(:one), root_token: client_tokens(:one))
+    @rp_cell_token_response, @rp_cell_payload, @rp_cell_session = sign_in_rp_cell(
+      "core-app-jp", actor:, root_token:,
     )
-    session.issue_refresh_token!
+  end
+
+  def core_app_local_principal
+    RpCoreAppSession.includes(op_session_binding: { identity_binding: :principal })
+      .find_by!(public_id: @rp_cell_session.public_id).op_session_binding.identity_binding.principal
   end
 
   def set_cookie_for(name)
@@ -757,7 +698,6 @@ class CoreBrowserApiBoundaryTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -780,24 +720,6 @@ class CoreBrowserApiBoundaryTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

@@ -5,10 +5,33 @@ require "test_helper"
 
 # adr/operator-capability-authorization.md, IAM. Every test states the grants it relies on.
 class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    @granter = operators(:one)
-    @grantee = operators(:two)
+    @granter = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    @grantee = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    [@granter, @grantee].each do |operator|
+      2.times do |index|
+        OperatorPasskey.create!(
+          staff_id: operator.id,
+          webauthn_id: SecureRandom.urlsafe_base64(32),
+          external_id: index.zero? ? "test-step-up-credential" : SecureRandom.uuid,
+          public_key: "iam-grant-test-public-key",
+          sign_count: 0,
+          description: "IAM grant test Passkey #{index + 1}",
+          status_id: OperatorPasskeyStatus::ACTIVE,
+        )
+      end
+    end
     @granter_token = OperatorToken.create!(
       authentication_epoch: 0,
       staff: @granter,

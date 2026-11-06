@@ -9,6 +9,8 @@ stateDiagram-v2
     Acknowledged --> Acknowledged: Duplicate scan does not deliver again
     note right of Pending
         App Zenith owns the remaining Contact source intents.
+        App Email preference changes use the preferences_changed event,
+        committed with the preference row and opaque references only.
         A failed event stays pending; later pages are still attempted.
         The job reports the failure after the bounded scan.
         Undelivered events are retained; no purge owner is introduced.

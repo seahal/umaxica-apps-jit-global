@@ -115,11 +115,12 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       assert_equal before_count + 1, preference_class.count
       token = browser.cookies[PreferenceCookieName.anonymous_jwt]
       hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-      host = realm == "app" ? hosts.visa_service.host : hosts.visa_staff.host
+      host = (realm == "app") ? hosts.visa_service.host : hosts.visa_staff.host
       claims = PreferenceToken.decode(token, host:, jwt_issuer_id: "preference_#{realm}")
       preference = preference_class.find_by!(public_id: claims.fetch("sub"))
 
-      active_status_id = realm == "app" ? AppPreference::ACTIVE_STATUS_ID : OrgPreference::ACTIVE_STATUS_ID
+      active_status_id = (realm == "app") ? AppPreference::ACTIVE_STATUS_ID : OrgPreference::ACTIVE_STATUS_ID
+
       assert_equal active_status_id, preference.status_id
       [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
        PreferenceCookieName.anonymous_experience,].each do |name|
@@ -167,7 +168,7 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       status_class.ensure_defaults!
       decision_time = preference_class.database_now
       expires_at = Time.at(
-        decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL.to_i,
+        decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL.to_i,
       ).utc
       source = preference_class.create!(
         status_id: active_status_id,
@@ -187,7 +188,7 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
           when :region then region_option_id
           else PreferenceClassRegistry.default_option_id(prefix, type)
           end
-        option = option_class.find_by!(id: option_id)
+        option = option_class.find(option_id)
         PreferenceClassRegistry.record_class(prefix, type).create!(preference_id: source.id, option_id: option.id)
         snapshot[type.to_s] = option.name unless type == :region
       end
@@ -234,14 +235,16 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       )
       target = config.fetch(:preference).find_by!(public_id: claims.fetch("sub"))
 
-      retired_status_id = realm == "app" ? AppPreference::RETIRED_STATUS_ID : OrgPreference::RETIRED_STATUS_ID
-      active_status_id = realm == "app" ? AppPreference::ACTIVE_STATUS_ID : OrgPreference::ACTIVE_STATUS_ID
+      retired_status_id = (realm == "app") ? AppPreference::RETIRED_STATUS_ID : OrgPreference::RETIRED_STATUS_ID
+      active_status_id = (realm == "app") ? AppPreference::ACTIVE_STATUS_ID : OrgPreference::ACTIVE_STATUS_ID
+
       assert_equal retired_status_id, source.reload.status_id
       assert_equal active_status_id, target.status_id
       assert_equal "dark", claims.fetch("preferences").fetch("theme")
       assert_equal "en", claims.fetch("preferences").fetch("language")
       PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
         record_class = PreferenceClassRegistry.record_class(realm.capitalize, type)
+
         assert_equal record_class.find_by!(preference_id: source.id).option_id,
                      record_class.find_by!(preference_id: target.id).option_id, type.to_s
       end
@@ -253,17 +256,23 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       target_consent = [
         target_cookie.consented, target_cookie.functional, target_cookie.performant, target_cookie.targetable,
       ]
+
       assert_equal source_consent, target_consent
-      target_receipt = (realm == "app" ? AppPreferenceConsentReceipt : OrgPreferenceConsentReceipt)
+      target_receipt = ((realm == "app") ? AppPreferenceConsentReceipt : OrgPreferenceConsentReceipt)
         .find_by!(preference_id: target.id)
-      assert_equal [source_receipt.version, source_receipt.recorded_at], [target_receipt.version, target_receipt.recorded_at]
-      target_push = (realm == "app" ? AppPreferenceWebPush : OrgPreferenceWebPush).find_by!(preference_id: target.id)
+
+      assert_equal [source_receipt.version, source_receipt.recorded_at],
+                   [target_receipt.version, target_receipt.recorded_at]
+      target_push = ((realm == "app") ? AppPreferenceWebPush : OrgPreferenceWebPush).find_by!(preference_id: target.id)
+
       assert_equal source_push.option_id, target_push.option_id
-      target_binding = (realm == "app" ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding)
+      target_binding = ((realm == "app") ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding)
         .find_by!(preference_id: target.id)
+
       assert_equal source_binding.digest, target_binding.digest
       assert_not_includes browser.response.headers["Set-Cookie"].to_s, "#{PreferenceBrowserBinding::COOKIE_NAME}="
       browser.host!(base_host)
+
       assert_equal binding_value, browser.cookies[PreferenceBrowserBinding::COOKIE_NAME]
     end
 
@@ -296,7 +305,7 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       end
       decision_time = preference_class.database_now
       expires_at = Time.at(
-        decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL.to_i,
+        decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL.to_i,
       ).utc
       source = preference_class.create!(
         status_id: active_status_id,
@@ -316,12 +325,13 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       source_receipt = receipt_class.create!(
         preference_id: source.id, version: SecureRandom.uuid, recorded_at: decision_time,
       )
-      snapshot = PreferenceWriteBoundary::ANONYMOUS_DISPLAY_TYPES.each_with_object({}) do |type, values|
-        record_class = PreferenceClassRegistry.record_class(prefix, type)
-        record = record_class.find_by!(preference_id: source.id)
-        option = PreferenceClassRegistry.option_class(prefix, type).find(record.option_id)
-        values[type.to_s] = option.name
-      end
+      snapshot =
+        PreferenceWriteBoundary::ANONYMOUS_DISPLAY_TYPES.each_with_object({}) do |type, values|
+          record_class = PreferenceClassRegistry.record_class(prefix, type)
+          record = record_class.find_by!(preference_id: source.id)
+          option = PreferenceClassRegistry.option_class(prefix, type).find(record.option_id)
+          values[type.to_s] = option.name
+        end
       token = PreferenceToken.encode(
         snapshot,
         host: visa_host,
@@ -394,6 +404,20 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
             scope: "openid",
             state: "state",
             nonce: "nonce",
+          },
+        )
+
+        assert_equal 200, browser.response.status
+        form = Nokogiri::HTML(browser.response.body).at_css("form#visa-authorization-continuation-form")
+
+        assert form, "silent authorization GET must render its POST continuation"
+        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        browser.post(
+          form["action"], params: fields, headers: {
+            "Origin" => "https://#{browser.host}",
+            "Sec-Fetch-Site" => "same-origin",
+            "Sec-Fetch-Mode" => "navigate",
+            "Sec-Fetch-Dest" => "document",
           },
         )
       end

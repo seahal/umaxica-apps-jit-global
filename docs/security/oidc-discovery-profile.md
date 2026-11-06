@@ -20,11 +20,12 @@ Source of truth: `app/values/oidc_discovery_document.rb`, `app/values/oidc_issue
 both `["ES384"]`. The OpenID Connect Core conformance profiles expect `RS256` support; Visa
 **intentionally does not** offer `RS256`.
 
-First-party JWT access tokens (`auth_access` and preference access) follow RFC 9068 in token
-structure, claims, semantics, and validation requirements. ES384 is the sole supported signing
-algorithm. UMAXICA intentionally does not implement the RFC 9068 §2.1 requirement that conforming
-authorization servers and resource servers include RS256 among their supported signature algorithms.
-ES384 itself is permitted by RFC 9068; the deviation is the absence of RS256 support. See
+Auth access JWTs follow RFC 9068 in token structure, claims, semantics, and validation requirements.
+ES384 is the sole supported signing algorithm. UMAXICA intentionally does not implement the RFC 9068
+§2.1 requirement that conforming authorization servers and resource servers include RS256 among
+their supported signature algorithms. ES384 itself is permitted by RFC 9068; the deviation is the
+absence of RS256 support. Preference JWTs use a separate realm shape and keyring; see
+`adr/preference-realm-jwt-and-host-bound-browser-binding.md` and
 `adr/rfc9068-access-token-profile.md`.
 
 This is a deliberate private profile:
@@ -75,7 +76,7 @@ URLs, key selection) does not depend on it and must never be broken by it.
 `JitSecurityJwtRegistry` refuses to publish dev/test/fixture-marked `kid`s outside local Rails
 environments (`enforce_public_key_hygiene?`). Development and test may mint local keys; production,
 staging, review, and other non-local environments must provide deployable key identifiers. See
-`docs/operations/jwt-key-rotation.md` for rotation guidance.
+`docs/runbooks/jwt-key-rotation.md` for rotation guidance.
 
 ## Delivered reconciliation (2026-10-24)
 

@@ -30,8 +30,10 @@ audience-bound, purpose-bound, one-shot, expiring, and transaction/session-bound
 The current Visa/Auth browser OIDC handoff follows the same rule. Auth does not put the result in a
 redirect query or fragment. After the user action, Auth redirects to a Design D GET continuation;
 that navigation issues the opaque one-shot result and redirects to Visa with a non-secret result
-reference. Visa's matching GET continuation validates the browser binding and consumes the result
-atomically. The result itself is never a bearer value in the URL.
+reference. Visa's matching GET continuation validates the browser binding and transaction, then
+renders a same-origin POST continuation without consuming the result. The POST revalidates the
+signed continuation and consumes/finalizes the result atomically. The result itself is never a
+bearer value in the URL.
 
 The Visa-to-Auth admission follows the same transport boundary. Visa may carry only a non-secret,
 short-lived transaction or local-entry reference in the initial Auth GET. The admission code itself
@@ -42,10 +44,12 @@ pointer to the digest-keyed admission record and never the raw code.
 
 Visa accepts the result only from the exact configured Auth origin (including the existing
 same-site/null-origin proxy case), checks the surface-bound result at atomic consumption, and then
-resumes the pending Visa transaction. The authorization endpoint itself never consumes a result; the
-dedicated GET continuation owns that operation. Rails forgery protection is not disabled for user
-actions, and Auth ceremony continuity is stored in the surface-specific database ceremony session
-rather than a Rails-session pre-authentication map.
+resumes the pending Visa transaction. The ordinary authorization-start GET does not consume a
+result; the same-origin, Rails-CSRF-protected authorization POST owns result consumption and
+finalization after the dedicated display GET. Cancellation, switch, and silent-SSO continuations use
+that POST boundary as well. Rails forgery protection is not disabled for user actions, and Auth
+ceremony continuity is stored in the surface-specific database ceremony session rather than a
+Rails-session pre-authentication map.
 
 ## Related
 

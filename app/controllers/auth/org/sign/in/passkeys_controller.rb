@@ -79,6 +79,7 @@ module Auth
                 label: t("sign.org.authentication.new.back"),
                 href: auth_org_sign_in_path(pt: pt, ri: region),
               },
+              parent_cancel: auth_parent_cancellation_form,
             }
           end
 

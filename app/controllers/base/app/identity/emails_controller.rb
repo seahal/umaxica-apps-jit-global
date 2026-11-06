@@ -41,12 +41,14 @@ module Base
           IdentityEmailPreferenceCommitter.call!(
             actor: current_client, token: current_session_token, email: @user_email,
             preferences: email_preference_params.to_h,
+            step_up_evidence: current_step_up_evidence,
           )
           redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
+        rescue IdentityEmailPreferenceCommitter::TransactionConflict,
+               IdentityEmailPreferenceCommitter::DependencyFailure
+          head :service_unavailable
         rescue IdentityEmailPreferenceCommitter::Denied
           render plain: STEP_UP_REQUIRED_MESSAGE, status: :unauthorized
-        rescue IdentityEmailPreferenceCommitter::DependencyFailure
-          head :service_unavailable
         rescue ActiveRecord::RecordInvalid
           render(
             inertia: "base/app/identity/emails/edit",
@@ -66,11 +68,14 @@ module Base
 
           removed = IdentityCredentialRemovalCommitter.call!(
             actor: current_client, credential: @user_email, current_session: current_session, request: request,
-            actor_context: current_actor,
+            step_up_evidence: current_step_up_evidence, actor_context: current_actor,
           )
           return render plain: t("errors.messages.invalid_request"), status: :unprocessable_content unless removed
 
           redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
+        rescue IdentityCredentialRemovalCommitter::TransactionConflict,
+               IdentityCredentialRemovalCommitter::DependencyFailure
+          head :service_unavailable
         end
 
         private

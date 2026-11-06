@@ -16,6 +16,11 @@ Only an authenticated, unexpired transaction may be consumed. Consumption is ser
 transaction row lock and cannot restore or replace a terminal state. Expired transactions cannot be
 authenticated or consumed.
 
+State writers and durable result/grant writers read the owning transaction database clock after
+locking the parent row. The authentication event timestamp remains event evidence from the completed
+ceremony; it does not select the parent transaction's decision time. Cross-database callers do not
+pass their clock into these writers.
+
 The three concrete transaction models remain surface-local (`ClientOidcAuthorizationTransaction`,
 `VisitorOidcAuthorizationTransaction`, and `OperatorOidcAuthorizationTransaction`). The model state
 machine is independent of Auth-local ceremony continuity. Auth receives and returns only purpose-

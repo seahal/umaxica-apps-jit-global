@@ -22,8 +22,8 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
 
     owner_body = nil
     OidcClientRegistry.stub(
-      :authenticate_assertion,
-      ->(cid, assertion, token_url:) { cid == "core-app-jp" && assertion.present? && token_url.present? },
+      :verify_client_assertion,
+      ->(cid, assertion, token_url:) { verified_assertion_for(cid:, assertion:, token_url:, expected: "core-app-jp") },
     ) do
       post visa_app_oauth_token_url(host: @host),
            params: {
@@ -59,8 +59,8 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     warp_client = OidcClientRegistry.find("warp-app-jp")
 
     OidcClientRegistry.stub(
-      :authenticate_assertion,
-      ->(cid, assertion, token_url:) { cid == "warp-app-jp" && assertion.present? && token_url.present? },
+      :verify_client_assertion,
+      ->(cid, assertion, token_url:) { verified_assertion_for(cid:, assertion:, token_url:, expected: "warp-app-jp") },
     ) do
       post visa_app_oauth_token_url(host: @host),
            params: {
@@ -90,8 +90,8 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     code_record = issue_code!
 
     OidcClientRegistry.stub(
-      :authenticate_assertion,
-      ->(cid, assertion, token_url:) { cid == "core-app-jp" && assertion.present? && token_url.present? },
+      :verify_client_assertion,
+      ->(cid, assertion, token_url:) { verified_assertion_for(cid:, assertion:, token_url:, expected: "core-app-jp") },
     ) do
       post visa_app_oauth_token_url(host: @host),
            params: {
@@ -235,6 +235,14 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def verified_assertion_for(cid:, assertion:, token_url:, expected:)
+    authenticated = cid == expected && assertion.present? && token_url.present?
+    OidcClientRegistry::AssertionAuthenticationResult.new(
+      authenticated:, client: authenticated ? OidcClientRegistry.find(cid) : nil,
+      step_up_claims_state: :none, step_up_expectation: nil,
+    )
+  end
 
   def issue_code!
     OidcAuthorizationCodeIssuer.call(

@@ -232,8 +232,6 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     assert_match "pass_code_form", unknown_session.response.body
   end
 
-
-
   private
 
   def browser_headers

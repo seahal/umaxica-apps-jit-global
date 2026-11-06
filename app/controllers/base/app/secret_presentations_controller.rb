@@ -16,10 +16,13 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
     return if performed?
 
     context = ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :base)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: current_session_token, issuance: @issuance)
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: current_session_token, issuance: @issuance,
+      step_up_evidence: current_step_up_evidence,
+    )
     @values = ClientSecretPresentationIssuer.call!(
       actor_context: context,
-      token: current_session_token, issuance: @issuance,
+      token: current_session_token, issuance: @issuance, step_up_evidence: current_step_up_evidence,
     )
     response.headers["Referrer-Policy"] = "strict-origin"
     render "base/app/secret_presentations/create", layout: false, locals: {
@@ -34,6 +37,7 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
       actor_context: context,
       token: current_session_token, issuance: @issuance, purge_after: ClientSecretLifetimesValue.purge_delay,
+      step_up_evidence: current_step_up_evidence,
     )
     render plain: t("base.app.secrets.payload_unavailable"), status: :gone
   rescue ClientSecretPresentationIssuer::Denied

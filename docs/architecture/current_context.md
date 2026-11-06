@@ -114,26 +114,36 @@ Preference is exposed as an immutable value object through `Actor.preferences`.
 Request code should not read preference state from controller instance variables, raw JWT claims, or
 legacy current-context APIs when `Actor.preferences` is available.
 
-`Actor::Preference` contains the resolved runtime preference used by the app/org/com preference
-flows. In normal authenticated requests it is initialized from the Preference JWT payload, then
-valid request-local `lx`, `ct`, and `tz` values are overlaid when explicitly present. That overlay
-affects only the current request and must not be copied back to the database or JWT.
+`Actor::Preference` contains the resolved display preference used by app/org/com flows. In normal
+authenticated requests it is initialized from the verified realm Preference JWT, then supported
+request-local context values such as `ri`, `lx`, `ct`, and `tz` are overlaid when explicitly
+present. That overlay affects only the current request and must not be copied back to the database
+or JWT.
 
-Logged-in HTML preference edit screens may first refresh the current surface preference token from
-the actor-local preference DB so another browser's preference change is visible before the edit
-screen renders. This refresh is a bounded preference-screen entry flow and must run before
-`Actor.preferences` is initialized.
+Base preference edit screens read account-local values from the actor's Preference records. They do
+not refresh a shared Preference JWT from account storage. On Base app/org GET or HEAD, if the JWT is
+valid but its language or experience display cookie is missing or does not match, Base may rebuild
+those two display cookies from the verified snapshot, active anonymous row and explicit actor
+values. This read does not update or reissue the JWT, change row lifecycle, or extend expiry.
+Invalid or missing JWTs are not repaired from the Preference database. Other read-only hosts render
+from the verified JWT without reading the Preference database or issuing or deleting Preference
+cookies.
 
 - localization: `language`, `region`, `timezone`
 - presentation: `theme`, `motion`, `density`, `items_per_page`
 - format defaults: `currency`, `date_format`, `time_format`
-- consent cookie state through `Actor.preferences.cookie`
+- consent receipts, browser binding and Web Push state are separate Base-owned records; they are not
+  hydrated from the Preference JWT into `Actor.preferences` and are not authorized by display
+  cookies
 
-Authenticated request setup must not repair a missing or malformed preference access-token by
-reading the preference database. Treat that as a token failure and route it through the normal
-failure path. A request that has not loaded a Preference JWT uses the default preference values
-(theme `sy`) rather than `Actor::Preference::NULL`. `Actor::Preference::NULL` is reserved for an
-unbound context (jobs, mailers, tests, and the empty snapshot before a request installs state).
+Supported request-local context overlays change only the current request's `Actor.preferences`. They
+must not write the database, reissue JWTs, or update the persistent Preference snapshot.
+
+Authenticated request setup must not repair a missing or malformed Preference JWT by reading the
+Preference database. Treat that as a token failure and route it through the normal failure path. A
+request that has not loaded a Preference JWT uses the default preference values (theme `sy`) rather
+than `Actor::Preference::NULL`. `Actor::Preference::NULL` is reserved for an unbound context (jobs,
+mailers, tests, and the empty snapshot before a request installs state).
 
 ## Authentication
 

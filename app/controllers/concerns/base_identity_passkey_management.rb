@@ -1,12 +1,9 @@
 # frozen_string_literal: true
 
-# Base-owned inventory and lifecycle entry for passkeys. Registration leaves Base through the
-# purpose-scoped credential-registration admission; Auth only verifies the attestation and Base
-# finalization remains the credential writer.
+# Base-owned inventory and lifecycle entry for passkeys. Visa creates the O-9 admission; Auth owns
+# attestation verification and the source credential write.
 module BaseIdentityPasskeyManagement
   extend ActiveSupport::Concern
-
-  include ::BaseStepUpTransactionMarker
 
   public
 
@@ -35,43 +32,59 @@ module BaseIdentityPasskeyManagement
     authorize!(passkey_class, to: :new?)
     apply_base_browser_continuation_headers!
     response.headers["Referrer-Policy"] = "strict-origin"
-    restart_binding = base_registration_restart_binding!(scope: "settings_passkey", method: :passkey)
     render "base/shared/credential_registration", layout: false,
-                                                  locals: { action_url: passkeys_path, restart_binding: }
-  rescue BaseAuthAdmissionCoordinator::Denied, ArgumentError, ActiveRecord::RecordNotFound
-    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+                                                  locals: { action_url: passkeys_path, restart_binding: nil }
   end
 
   def create
     authorize!(passkey_class, to: :create?)
     apply_base_browser_continuation_headers!
-    nonce = base_admission_browser_nonce_for_request!
-    token = current_session_token
+    browser_nonce = ensure_base_admission_browser_nonce!
     actor = identity_actor
-    requirement = StepUpRequirement.new(
-      scope: "settings_passkey", purpose: "credential_registration", step_up_required: false,
-      allowed_methods: [:passkey], phishing_resistant_required: false,
-      user_verification_required: false, full_reauthentication_required: false,
-      audience: "step_up:#{registration_surface}", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true, ttl: VerificationBase::STEP_UP_TTL,
-      actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-    )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: actor, token: token, requirement: requirement, return_to: passkeys_path,
-      base_browser_nonce: nonce, base_token: token, restart_of: params[:restart_of],
-    )
-    if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
-      return redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
+    rp_session = browser_rp_access_state.rp_session
+    unless rp_session.is_a?(rp_session_class) && rp_session.active? &&
+        rp_session.absolute_expires_at > rp_record_class.database_now && actor.login_allowed?
+      return render plain: I18n.t("errors.messages.invalid_request"), status: :unauthorized
     end
 
-    remember_base_step_up_transaction!(transaction: issuance.transaction, actor:, token:)
-    redirect_to(
-      registration_auth_url(entry_ref: issuance.reference), status: :see_other, allow_other_host: true,
+    verifier = SecureRandom.urlsafe_base64(48)
+    challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false)
+    nonce = SecureRandom.urlsafe_base64(32)
+    state, jti = OidcStateJwt.issue(
+      client_id: oidc_client_id, target_link_uri: RpTargetLinkUri.normalize(passkeys_path),
     )
-  rescue BaseAuthAdmissionCoordinator::Denied, ArgumentError, ActiveRecord::RecordNotFound
+    remember_oidc_pending_flow!(jti:, verifier:, nonce:)
+    browser_digest = AuthAdmissionBinding.browser_digest(
+      surface: registration_surface, entry_ref: rp_session.public_id, nonce: browser_nonce,
+    )
+    attributes = {
+      response_type: "code",
+      client_id: oidc_client_id,
+      redirect_uri: oidc_callback_url,
+      scope: "openid profile",
+      state: state,
+      nonce: nonce,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+      ri: RequestContextContract.normalize_region(params[:ri]),
+      rp_session_ref: rp_session.public_id,
+      rp_session_expires_at: rp_session.absolute_expires_at.iso8601(6),
+      browser_binding_digest: browser_digest,
+      purpose: "passkey_registration",
+      provider: "none",
+    }
+    access_token = BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+    result = VisaSensitiveAdmissionClient.new(
+      surface: registration_surface, access_token:,
+    ).issue_admission!(attributes:)
+    return head :service_unavailable if result.status == :dependency
+    return head :unauthorized if result.status == :unauthorized
+    return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request unless result.ok?
+
+    redirect_to(result.authorization_url, status: :see_other, allow_other_host: true)
+  rescue ArgumentError, OidcAuthorizeRequestResolver::RequestError
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
-  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
-    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
   private
@@ -162,19 +175,18 @@ module BaseIdentityPasskeyManagement
     end
   end
 
-  def registration_auth_url(entry_ref:)
-    query = { entry_ref: entry_ref, ri: params[:ri], host: registration_auth_host, protocol: "https" }
+  def rp_session_class
     case registration_surface
-    when "app" then new_auth_app_verification_registration_passkey_url(**query)
-    when "org" then new_auth_org_verification_registration_passkey_url(**query)
+    when "app" then RpBaseAppSession
+    when "org" then RpBaseOrgSession
     else raise ArgumentError, "unsupported passkey surface"
     end
   end
 
-  def registration_auth_host
+  def rp_record_class
     case registration_surface
-    when "app" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    when "app" then RpBaseAppRecord
+    when "org" then RpBaseOrgRecord
     else raise ArgumentError, "unsupported passkey surface"
     end
   end

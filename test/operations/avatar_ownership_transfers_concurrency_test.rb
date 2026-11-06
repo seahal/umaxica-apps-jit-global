@@ -86,6 +86,16 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   end
 
   teardown do
+    if @step_up_token
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(id: @step_up_grant.id).delete_all if @step_up_grant
+        ClientDeviceSession.where(
+          id: @step_up_token.device_session_id, current_refresh_token_id: @step_up_token.id,
+        ).update_all(current_refresh_token_id: nil)
+        ClientToken.where(id: @step_up_token.id).delete_all
+        ClientDeviceSession.where(id: @step_up_token.device_session_id, user_id: @client.id).delete_all
+      end
+    end
     cleanup_committed_transfer_rows!
     # Mutable cross-DB membership/unit rows must not outlive fixture-rebuilt principal IDs.
     PersonaMembership.where(id: @membership.id).delete_all if @membership
@@ -103,6 +113,12 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     ClientIdentity.where(id: @client_identity.id).delete_all if @client_identity
     ClientAuthorityLock.where(client_id: @client.id).delete_all if @client
     Client.where(id: @client.id).delete_all if @client
+    # The collective rows are the same class of residue as the membership above: a bare
+    # Bureau/Enterprise with no fixture file of its own, recorded only by public id from the
+    # avatar history in another database. Leaving them grows the enterprise/bureau tables on
+    # every run; the fixture reload would delete them anyway, just later and less predictably.
+    Enterprise.where(id: @enterprise.id).delete_all if @enterprise
+    Bureau.where(id: @bureau.id).delete_all if @bureau
   end
 
   # Avatar, organization identities and committed histories use the test database lifecycle.
@@ -113,6 +129,43 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     client_id = @client.id
     persona_public_id = @persona.public_id
     target_public_id = @bureau.public_id
+    step_up_now = OpBaseAppRecord.database_now
+    @step_up_token = step_up_token = ClientToken.create!(
+      authentication_epoch: @client.authentication_epoch,
+      user: @client,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    @step_up_grant = step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_token_id = step_up_token.id
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr,
+      amr: ["passkey"],
+      auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id,
+      sub: OidcSubject.for(@client, resource_type: "client"),
+      client_id: step_up_client.client_id,
+      aud: [step_up_client.aud],
+      jti: step_up_grant.oidc_jti,
+    )
     ready = Queue.new
     start = Queue.new
 
@@ -124,14 +177,20 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
             backend_pid = connection.select_value("SELECT pg_backend_pid()")
             ready << backend_pid
             start.pop
-            AvatarOwnershipTransfers::RequestOperation.call(
-              actor: Client.find(client_id),
-              surface: "app",
-              subject_public_id: persona_public_id,
-              avatar_public_id: avatar_public_id,
-              target_surface: "org",
-              target_collective_public_id: target_public_id,
-            )
+            OpBaseAppRecord.connected_to(role: :writing) do
+              ClientToken.transaction do
+                AvatarOwnershipTransfers::RequestOperation.call(
+                  actor: Client.find(client_id),
+                  surface: "app",
+                  subject_public_id: persona_public_id,
+                  avatar_public_id: avatar_public_id,
+                  target_surface: "org",
+                  target_collective_public_id: target_public_id,
+                  step_up_token: ClientToken.find(step_up_token_id),
+                  step_up_evidence: step_up_evidence,
+                )
+              end
+            end
             [backend_pid, :created]
           rescue AvatarOwnershipTransfers::InvalidTransfer
             [backend_pid, :rejected]
@@ -167,6 +226,43 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     target_public_id = @bureau.public_id
     idempotency_key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a45"
     @committed_registry_idempotency_key = idempotency_key
+    step_up_now = OpBaseAppRecord.database_now
+    @step_up_token = step_up_token = ClientToken.create!(
+      authentication_epoch: @client.authentication_epoch,
+      user: @client,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: step_up_now + 1.hour,
+    )
+    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.device_session_record!
+    step_up_client = OidcClientRegistry.find!("base-app-ww")
+    step_up_auth_time = step_up_now.to_i - 1
+    @step_up_grant = step_up_grant = OpAppGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      client_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 1.hour,
+    )
+    step_up_grant.issue_refresh_token!(now: step_up_now)
+    step_up_token_id = step_up_token.id
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr,
+      amr: ["passkey"],
+      auth_time: step_up_auth_time,
+      sid: step_up_grant.public_id,
+      sub: OidcSubject.for(@client, resource_type: "client"),
+      client_id: step_up_client.client_id,
+      aud: [step_up_client.aud],
+      jti: step_up_grant.oidc_jti,
+    )
     request_fingerprint = Digest::SHA256.hexdigest(
       [
         "avatar_transfer", "app", @client.public_id, subject_public_id,
@@ -184,16 +280,23 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
             backend_pid = connection.select_value("SELECT pg_backend_pid()")
             ready << backend_pid
             start.pop
-            reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-              actor: Client.find(actor_id),
-              surface: "app",
-              subject_public_id: subject_public_id,
-              avatar_public_id: avatar_public_id,
-              target_surface: "org",
-              target_collective_public_id: target_public_id,
-              idempotency_key: idempotency_key,
-              request_fingerprint: request_fingerprint,
-            )
+            reservation =
+              OpBaseAppRecord.connected_to(role: :writing) do
+                ClientToken.transaction do
+                  AvatarOwnershipTransfers::RegistryRequestOperation.call(
+                    actor: Client.find(actor_id),
+                    surface: "app",
+                    subject_public_id: subject_public_id,
+                    avatar_public_id: avatar_public_id,
+                    target_surface: "org",
+                    target_collective_public_id: target_public_id,
+                    idempotency_key: idempotency_key,
+                    request_fingerprint: request_fingerprint,
+                    step_up_token: ClientToken.find(step_up_token_id),
+                    step_up_evidence: step_up_evidence,
+                  )
+                end
+              end
             [backend_pid, reservation.id]
           rescue AvatarOwnershipTransfers::InvalidTransfer, ActiveRecord::RecordNotUnique => e
             [backend_pid, e.class]

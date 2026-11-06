@@ -67,7 +67,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
       assert_raises(ArgumentError) { transaction.issue_email_otp!(purpose: "recovery") }
     end
   end
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction, OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} accepts a random code exactly once and rejects malformed input" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",

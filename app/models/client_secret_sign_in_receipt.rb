@@ -47,7 +47,7 @@ class ClientSecretSignInReceipt < OpBaseAppRecord
   def matching_ceremony?(ceremony, flow)
     now = ClientSignInFlow.database_now
     return false unless ceremony.admission_purpose == "authentication_handoff" && ceremony.completed? &&
-      ceremony.admitted? && ceremony.revoked_at.nil? && ceremony.cancelled_at.nil? && ceremony.expires_at > now
+      ceremony.admitted? && ceremony.expires_at > now
 
     transaction = ClientOidcAuthorizationTransaction.find_by(
       transaction_id: ceremony.authorization_transaction_ref, secret_sign_in_flow_id: flow.id,

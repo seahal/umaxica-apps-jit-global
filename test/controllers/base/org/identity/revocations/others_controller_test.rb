@@ -8,6 +8,8 @@ require "test_helper"
 # through the authenticated staff request so the HTTP action itself is
 # exercised, including the destroy alias.
 class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     @host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
     host! @host

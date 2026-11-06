@@ -300,8 +300,7 @@ module PreferenceGlobal
 
   def set_locale
     locale = normalized_locale(requested_context[:lx])
-    locale ||= normalized_locale(cookie_context[:lx]) if anonymous_preference_payload?(@preference_payload)
-    locale ||= Actor.preferences.locale if defined?(Actor)
+    locale ||= normalized_locale(Actor.preferences.locale) if defined?(Actor)
     I18n.locale = locale if locale.present?
   end
 

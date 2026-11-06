@@ -71,7 +71,7 @@ module Base
             def revocation_screen
               account = find_account!
               authorize!(account, to: :revoke_sessions?, with: policy)
-              with_owner_step_up(STEP_UP_SCOPE) do
+              with_owner_step_up_read(STEP_UP_SCOPE, surface: AVATAR_SURFACE) do
                 count = AuthenticationSessionRevoker.tokens_for(account).not_revoked.count
                 render json: { account: account_json(account).merge(active_sessions: count) }
               end

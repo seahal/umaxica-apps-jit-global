@@ -40,10 +40,8 @@ module Security
       PUBLIC_WITHDRAWAL
       PUBLIC_IDENTITY_RECOVERY
       PUBLIC_SOCIAL
-      PUBLIC_AUTH_APP_REDIRECTS
       PUBLIC_AUTH_APP_SETTINGS_COMPAT
       PUBLIC_CORE_API
-      PUBLIC_AUTH_ORG_REDIRECTS
       PUBLIC_WARP_SETTINGS
       PUBLIC_APPLE_NOTIFICATIONS
       PUBLIC_MCP
@@ -124,8 +122,8 @@ module Security
           [route.verb, route.path.spec.to_s.sub(/\(\.:format\)\z/, ""), route.defaults[:action].to_s]
         end
 
-      # The corporate Auth surface is retired, so nine hosts publish the two Rails PWA endpoints.
-      assert_equal 18, entries.size, "expected two PWA endpoints on each of the nine base/auth/warp/palm hosts"
+      # Auth retired its Worker, so seven Base, Warp and Palm hosts publish the two Rails PWA endpoints.
+      assert_equal 14, entries.size, "expected two PWA endpoints on each of the seven base/warp/palm hosts"
       assert_equal ["GET"], entries.map(&:first).uniq
       assert_equal(
         [["/offline", "offline"], ["/service-worker", "service_worker"]],
@@ -192,6 +190,7 @@ module Security
 
     def documented_public_content?(entry)
       public_root?(entry) ||
+        public_service_worker_retirement?(entry) ||
         public_legacy_dashboard?(entry) ||
         public_local_auth_admission?(entry) ||
         public_lobby?(entry) ||
@@ -213,13 +212,11 @@ module Security
         public_withdrawal?(entry) ||
         public_identity_recovery?(entry) ||
         public_social?(entry) ||
-        public_auth_app_redirect?(entry) ||
         public_auth_app_settings_compat?(entry)
     end
 
     def documented_public_api?(entry)
       public_core_api?(entry) ||
-        public_auth_org_redirect?(entry) ||
         public_warp_settings?(entry) ||
         public_apple_notification?(entry) ||
         public_mcp?(entry) ||
@@ -247,6 +244,11 @@ module Security
     end
 
     def public_root?(entry) = get?(entry) && entry.path == "/"
+
+    def public_service_worker_retirement?(entry)
+      get?(entry) && entry.path == "/service-worker" &&
+        entry.controller_path.match?(%r{\Aauth/(app|org)/service_worker_retirements\z})
+    end
 
     def public_legacy_dashboard?(entry)
       get?(entry) && entry.path == "/dashboard" &&
@@ -364,10 +366,6 @@ module Security
       entry.path.start_with?("/social") || entry.controller_path.match?(%r{\A(auth|base)/app/social/})
     end
 
-    def public_auth_app_redirect?(entry)
-      get?(entry) && entry.controller_path == "auth/app/billings" && entry.path == "/billings"
-    end
-
     def public_auth_app_settings_compat?(entry)
       entry.controller_path.start_with?("auth/app/settings/") && entry.path.start_with?("/settings/")
     end
@@ -376,13 +374,6 @@ module Security
       entry.controller_path.start_with?("core/") &&
         ((get?(entry) && entry.path == "/api/v0/session") ||
           (post?(entry) && entry.path == "/api/v0/token/refresh"))
-    end
-
-    def public_auth_org_redirect?(entry)
-      return false unless get?(entry)
-
-      entry.controller_path.start_with?("auth/org/") &&
-        %w(/accounts /audit /billing /iam /support /system).include?(entry.path)
     end
 
     def public_warp_settings?(entry)

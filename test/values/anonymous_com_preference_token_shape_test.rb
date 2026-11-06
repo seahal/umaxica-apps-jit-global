@@ -36,7 +36,7 @@ class AnonymousComPreferenceTokenShapeTest < ActiveSupport::TestCase
   end
 
   test "oversized and non-string input is rejected" do
-    limit = SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+    limit = SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
 
     assert_nil SecurityJwtPreferenceTokenCodec.decode("x" * (limit + 1), host: "www.umaxica.com")
     assert_nil SecurityJwtPreferenceTokenCodec.decode(123, host: "www.umaxica.com")
@@ -106,25 +106,28 @@ class AnonymousComPreferenceTokenShapeTest < ActiveSupport::TestCase
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     now = Time.current.to_i
     claims = {
-      "iss" => PreferenceJwtConfiguration.issuer,
-      "aud" => PreferenceJwtConfiguration.audience_for(host),
+      "iss" => PreferenceJwtConfiguration.issuer_for("preference_com"),
+      "aud" => "com",
       "exp" => now + 60,
       "iat" => now,
       "nbf" => now,
       "sub" => "legacy-com-row",
-      "client_id" => PreferenceJwtConfiguration.client_id,
+      "client_id" => "retired-preference-client",
       "jti" => SecureRandom.uuid,
-      "scope" => SecurityJwtPreferenceTokenCodec::PREFERENCE_SCOPE,
+      "scope" => "preference",
       "preferences" => { "lx" => "ja" },
-      "host" => PreferenceJwtConfiguration.host_scope_for(host),
+      "host" => host,
       "preference_type" => "ComPreference",
       "public_id" => "legacy-com-row",
     }
     legacy_com = JWT.encode(
       claims,
-      PreferenceJwtConfiguration.private_key_for_active,
+      PreferenceJwtConfiguration.private_key_for_active("preference_com"),
       SecurityJwtPreferenceTokenCodec::JWT_ALGORITHM,
-      { kid: PreferenceJwtConfiguration.active_kid, typ: SecurityJwtPreferenceTokenCodec::TOKEN_TYPE },
+      {
+        kid: PreferenceJwtConfiguration.active_kid("preference_com"),
+        typ: SecurityJwtPreferenceTokenCodec::TOKEN_TYPE,
+      },
     )
 
     assert_nil SecurityJwtPreferenceTokenCodec.decode(legacy_com, host: host)
@@ -238,7 +241,7 @@ class AnonymousComPreferenceTokenShapeTest < ActiveSupport::TestCase
         encoded = Base64.urlsafe_encode64(claims.merge("sub" => "x" * length).to_json, padding: false)
         [header_length + encoded.bytesize + signature_length + 2, length]
       end
-    limit = SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+    limit = SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
     # Base64url cannot represent every adjacent length; use the nearest reachable size on each side.
     sizes = [candidates.keys.select { |size| size < limit }.max,
              candidates.keys.select { |size| size <= limit }.max,
@@ -342,7 +345,7 @@ class AnonymousComPreferenceTokenShapeTest < ActiveSupport::TestCase
     )
     com_claims, com_header = JWT.decode(com_token, nil, false)
     forged_com = JWT.encode(
-      com_claims, PreferenceJwtConfiguration.private_key_for_active,
+      com_claims, PreferenceJwtConfiguration.private_key_for_active("preference_app"),
       com_header.fetch("alg"), com_header.except("alg"),
     )
 
@@ -373,7 +376,7 @@ class AnonymousComPreferenceTokenShapeTest < ActiveSupport::TestCase
   test "registry rejects reuse of another issuer's key under a com kid" do
     records = JitSecurityJwtRegistry.issuers.dup
     com = records.fetch("preference_com")
-    other = records.fetch("preference").current_key
+    other = records.fetch("preference_app").current_key
     com_key = com.current_key.with(
       private_key: other.private_key,
       public_key: other.public_key,

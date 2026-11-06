@@ -23,6 +23,7 @@ describe("Base step-up admission", () => {
               action: "/verification?ri=jp",
               scope: "settings_birthdate",
               pt: "signed-return-path",
+              return_target: "/settings/birthdate",
               submit_label: "Continue",
             }}
             cancel={{ href: "/identity?ri=jp", label: "Cancel" }}
@@ -42,6 +43,7 @@ describe("Base step-up admission", () => {
         authenticity_token: "current-token",
         scope: "settings_birthdate",
         pt: "signed-return-path",
+        return_target: "/settings/birthdate",
       });
     } finally {
       act(() => root.unmount());

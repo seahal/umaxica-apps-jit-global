@@ -33,9 +33,18 @@ class Warp::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal I18n.t("base.com.roots.message"), inertia_props.fetch("description")
     assert_nil inertia_props["sign_up"]
     assert_equal(
-      [["Settings", warp_com_settings_path(ri: "jp")]],
+      [[I18n.t("ui_presentation.navigation.preferences"),
+        base_com_preference_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "http"),]],
       inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
     )
+  end
+
+  test "the retired com settings page is not routed" do
+    host! @host
+
+    get "/settings", params: { ri: "jp" }
+
+    assert_response :not_found
   end
 
   test "a signed com preference renders on warp without accessing the setting database" do
@@ -69,9 +78,9 @@ class Warp::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_select "html[lang=en][data-theme=dark]"
+    assert_select "html[lang=ja][data-theme=dark]"
     assert rendered_preferences.any? { |preference|
-      preference.language == "en" && preference.theme == "dr" && preference.currency == "usd" &&
+      preference.language == "ja" && preference.theme == "dr" && preference.currency == "usd" &&
         preference.web_push == "disabled" && !preference.cookie.consented? && !preference.cookie.functional? &&
         !preference.cookie.performant? && !preference.cookie.targetable?
     }
@@ -100,11 +109,11 @@ class Warp::Com::RootsControllerTest < ActionDispatch::IntegrationTest
       end
 
     ActiveSupport::Notifications.subscribed(listener, "sql.active_record") do
-      get warp_com_settings_path(ri: "jp")
+      get warp_com_root_path(ri: "jp")
     end
 
     assert_response :success
-    assert_select "html[lang=en][data-theme=dark]"
+    assert_select "html[lang=ja][data-theme=dark]"
     assert_empty queries
     assert_not_includes databases, "com_setting"
     assert_not_includes databases, "com_setting_replica"

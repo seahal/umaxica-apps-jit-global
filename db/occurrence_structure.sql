@@ -3404,7 +3404,7 @@ ALTER TABLE ONLY public.jwt_occurrences
 --
 
 ALTER TABLE ONLY public.ip_visitor_occurrences
-    ADD CONSTRAINT fk_rails_008a174aa0 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id);
+    ADD CONSTRAINT fk_rails_008a174aa0 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id) NOT VALID;
 
 
 --
@@ -3412,7 +3412,7 @@ ALTER TABLE ONLY public.ip_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.ip_telephone_occurrences
-    ADD CONSTRAINT fk_rails_0091298830 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_0091298830 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3420,7 +3420,7 @@ ALTER TABLE ONLY public.ip_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_client_occurrences
-    ADD CONSTRAINT fk_rails_00e504b9ab FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_00e504b9ab FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3428,7 +3428,7 @@ ALTER TABLE ONLY public.ip_client_occurrences
 --
 
 ALTER TABLE ONLY public.area_ip_occurrences
-    ADD CONSTRAINT fk_rails_02206200a2 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_02206200a2 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3436,7 +3436,7 @@ ALTER TABLE ONLY public.area_ip_occurrences
 --
 
 ALTER TABLE ONLY public.operator_client_occurrences
-    ADD CONSTRAINT fk_rails_13800338d1 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_13800338d1 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3444,7 +3444,7 @@ ALTER TABLE ONLY public.operator_client_occurrences
 --
 
 ALTER TABLE ONLY public.area_zip_occurrences
-    ADD CONSTRAINT fk_rails_18554dc64e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_18554dc64e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3452,7 +3452,7 @@ ALTER TABLE ONLY public.area_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_email_occurrences
-    ADD CONSTRAINT fk_rails_190d1d7227 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_190d1d7227 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3460,7 +3460,7 @@ ALTER TABLE ONLY public.domain_email_occurrences
 --
 
 ALTER TABLE ONLY public.email_operator_occurrences
-    ADD CONSTRAINT fk_rails_1b3f55514c FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_1b3f55514c FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3468,7 +3468,7 @@ ALTER TABLE ONLY public.email_operator_occurrences
 --
 
 ALTER TABLE ONLY public.operator_client_occurrences
-    ADD CONSTRAINT fk_rails_1e7954599d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_1e7954599d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3476,7 +3476,7 @@ ALTER TABLE ONLY public.operator_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_telephone_occurrences
-    ADD CONSTRAINT fk_rails_209d51cbd3 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_209d51cbd3 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --
@@ -3484,7 +3484,7 @@ ALTER TABLE ONLY public.email_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.domain_zip_occurrences
-    ADD CONSTRAINT fk_rails_20ab26995d FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_20ab26995d FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3492,7 +3492,7 @@ ALTER TABLE ONLY public.domain_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_ip_occurrences
-    ADD CONSTRAINT fk_rails_22b982fb0e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_22b982fb0e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3500,7 +3500,7 @@ ALTER TABLE ONLY public.area_ip_occurrences
 --
 
 ALTER TABLE ONLY public.area_visitor_occurrences
-    ADD CONSTRAINT fk_rails_22c72f835b FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_22c72f835b FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3508,7 +3508,7 @@ ALTER TABLE ONLY public.area_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.area_zip_occurrences
-    ADD CONSTRAINT fk_rails_2f56574cee FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_2f56574cee FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3516,7 +3516,7 @@ ALTER TABLE ONLY public.area_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_ip_occurrences
-    ADD CONSTRAINT fk_rails_30c617346d FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_30c617346d FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3524,7 +3524,7 @@ ALTER TABLE ONLY public.domain_ip_occurrences
 --
 
 ALTER TABLE ONLY public.email_telephone_occurrences
-    ADD CONSTRAINT fk_rails_34a4ac5d57 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_34a4ac5d57 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3532,7 +3532,7 @@ ALTER TABLE ONLY public.email_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.email_visitor_occurrences
-    ADD CONSTRAINT fk_rails_363c71b53f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_363c71b53f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3540,7 +3540,7 @@ ALTER TABLE ONLY public.email_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.email_zip_occurrences
-    ADD CONSTRAINT fk_rails_381f0f5f60 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_381f0f5f60 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3548,7 +3548,7 @@ ALTER TABLE ONLY public.email_zip_occurrences
 --
 
 ALTER TABLE ONLY public.client_zip_occurrences
-    ADD CONSTRAINT fk_rails_3e61e47523 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_3e61e47523 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3556,7 +3556,7 @@ ALTER TABLE ONLY public.client_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_telephone_occurrences
-    ADD CONSTRAINT fk_rails_42743b1b5d FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_42743b1b5d FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --
@@ -3564,7 +3564,7 @@ ALTER TABLE ONLY public.area_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_zip_occurrences
-    ADD CONSTRAINT fk_rails_43681b033b FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_43681b033b FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3572,7 +3572,7 @@ ALTER TABLE ONLY public.ip_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_telephone_occurrences
-    ADD CONSTRAINT fk_rails_43b450d653 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_43b450d653 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3580,7 +3580,7 @@ ALTER TABLE ONLY public.domain_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_visitor_occurrences
-    ADD CONSTRAINT fk_rails_4bd9e2f547 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_4bd9e2f547 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3588,7 +3588,7 @@ ALTER TABLE ONLY public.ip_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.operator_telephone_occurrences
-    ADD CONSTRAINT fk_rails_4fe85fb8ea FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_4fe85fb8ea FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3596,7 +3596,7 @@ ALTER TABLE ONLY public.operator_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.area_operator_occurrences
-    ADD CONSTRAINT fk_rails_51d4f8ec16 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_51d4f8ec16 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3604,7 +3604,7 @@ ALTER TABLE ONLY public.area_operator_occurrences
 --
 
 ALTER TABLE ONLY public.area_email_occurrences
-    ADD CONSTRAINT fk_rails_587a294924 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_587a294924 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3612,7 +3612,7 @@ ALTER TABLE ONLY public.area_email_occurrences
 --
 
 ALTER TABLE ONLY public.area_telephone_occurrences
-    ADD CONSTRAINT fk_rails_58c6f190f9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_58c6f190f9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3620,7 +3620,7 @@ ALTER TABLE ONLY public.area_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.email_operator_occurrences
-    ADD CONSTRAINT fk_rails_59212c3511 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_59212c3511 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3628,7 +3628,7 @@ ALTER TABLE ONLY public.email_operator_occurrences
 --
 
 ALTER TABLE ONLY public.area_domain_occurrences
-    ADD CONSTRAINT fk_rails_5bec914d67 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_5bec914d67 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3636,7 +3636,7 @@ ALTER TABLE ONLY public.area_domain_occurrences
 --
 
 ALTER TABLE ONLY public.domain_client_occurrences
-    ADD CONSTRAINT fk_rails_5fc25fbd6a FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_5fc25fbd6a FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3644,7 +3644,7 @@ ALTER TABLE ONLY public.domain_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_client_occurrences
-    ADD CONSTRAINT fk_rails_64273fb6e5 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_64273fb6e5 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3652,7 +3652,7 @@ ALTER TABLE ONLY public.email_client_occurrences
 --
 
 ALTER TABLE ONLY public.operator_zip_occurrences
-    ADD CONSTRAINT fk_rails_69f99bbeaf FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_69f99bbeaf FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3660,7 +3660,7 @@ ALTER TABLE ONLY public.operator_zip_occurrences
 --
 
 ALTER TABLE ONLY public.ip_telephone_occurrences
-    ADD CONSTRAINT fk_rails_6a0a2e9960 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_6a0a2e9960 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --
@@ -3668,7 +3668,7 @@ ALTER TABLE ONLY public.ip_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_operator_occurrences
-    ADD CONSTRAINT fk_rails_6d03a3d401 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_6d03a3d401 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3676,7 +3676,7 @@ ALTER TABLE ONLY public.ip_operator_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_client_occurrences
-    ADD CONSTRAINT fk_rails_6f536d5ebf FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_6f536d5ebf FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3684,7 +3684,7 @@ ALTER TABLE ONLY public.telephone_client_occurrences
 --
 
 ALTER TABLE ONLY public.ip_client_occurrences
-    ADD CONSTRAINT fk_rails_72d1905cdd FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_72d1905cdd FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3692,7 +3692,7 @@ ALTER TABLE ONLY public.ip_client_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_zip_occurrences
-    ADD CONSTRAINT fk_rails_762eceb883 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_762eceb883 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3700,7 +3700,7 @@ ALTER TABLE ONLY public.telephone_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_ip_occurrences
-    ADD CONSTRAINT fk_rails_77c6097609 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_77c6097609 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3708,7 +3708,7 @@ ALTER TABLE ONLY public.domain_ip_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_zip_occurrences
-    ADD CONSTRAINT fk_rails_79d04c2147 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_79d04c2147 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --
@@ -3716,7 +3716,7 @@ ALTER TABLE ONLY public.telephone_zip_occurrences
 --
 
 ALTER TABLE ONLY public.email_client_occurrences
-    ADD CONSTRAINT fk_rails_7a5ab1e241 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_7a5ab1e241 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3724,7 +3724,7 @@ ALTER TABLE ONLY public.email_client_occurrences
 --
 
 ALTER TABLE ONLY public.area_domain_occurrences
-    ADD CONSTRAINT fk_rails_8684e941ea FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_8684e941ea FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3732,7 +3732,7 @@ ALTER TABLE ONLY public.area_domain_occurrences
 --
 
 ALTER TABLE ONLY public.operator_telephone_occurrences
-    ADD CONSTRAINT fk_rails_8b1f6ba670 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_8b1f6ba670 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --
@@ -3740,7 +3740,7 @@ ALTER TABLE ONLY public.operator_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_zip_occurrences
-    ADD CONSTRAINT fk_rails_9136c2236a FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_9136c2236a FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3748,7 +3748,7 @@ ALTER TABLE ONLY public.ip_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_operator_occurrences
-    ADD CONSTRAINT fk_rails_93a08a87ce FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_93a08a87ce FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3756,7 +3756,7 @@ ALTER TABLE ONLY public.domain_operator_occurrences
 --
 
 ALTER TABLE ONLY public.area_email_occurrences
-    ADD CONSTRAINT fk_rails_a358e72324 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_a358e72324 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3764,7 +3764,7 @@ ALTER TABLE ONLY public.area_email_occurrences
 --
 
 ALTER TABLE ONLY public.domain_operator_occurrences
-    ADD CONSTRAINT fk_rails_a39158f9e1 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_a39158f9e1 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3772,7 +3772,7 @@ ALTER TABLE ONLY public.domain_operator_occurrences
 --
 
 ALTER TABLE ONLY public.operator_zip_occurrences
-    ADD CONSTRAINT fk_rails_b2a9b8a8b3 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_b2a9b8a8b3 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3780,7 +3780,7 @@ ALTER TABLE ONLY public.operator_zip_occurrences
 --
 
 ALTER TABLE ONLY public.email_ip_occurrences
-    ADD CONSTRAINT fk_rails_b2fd16e596 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_b2fd16e596 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3788,7 +3788,7 @@ ALTER TABLE ONLY public.email_ip_occurrences
 --
 
 ALTER TABLE ONLY public.area_client_occurrences
-    ADD CONSTRAINT fk_rails_bc8f2fb1d9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
+    ADD CONSTRAINT fk_rails_bc8f2fb1d9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
 
 
 --
@@ -3796,7 +3796,7 @@ ALTER TABLE ONLY public.area_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_zip_occurrences
-    ADD CONSTRAINT fk_rails_c31148b25f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
+    ADD CONSTRAINT fk_rails_c31148b25f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
 
 
 --
@@ -3804,7 +3804,7 @@ ALTER TABLE ONLY public.email_zip_occurrences
 --
 
 ALTER TABLE ONLY public.email_visitor_occurrences
-    ADD CONSTRAINT fk_rails_c912bd4a94 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id);
+    ADD CONSTRAINT fk_rails_c912bd4a94 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id) NOT VALID;
 
 
 --
@@ -3812,7 +3812,7 @@ ALTER TABLE ONLY public.email_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.client_zip_occurrences
-    ADD CONSTRAINT fk_rails_c91ad2be3e FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
+    ADD CONSTRAINT fk_rails_c91ad2be3e FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
 
 
 --
@@ -3820,7 +3820,7 @@ ALTER TABLE ONLY public.client_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_visitor_occurrences
-    ADD CONSTRAINT fk_rails_cb6a0677f8 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id);
+    ADD CONSTRAINT fk_rails_cb6a0677f8 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id) NOT VALID;
 
 
 --
@@ -3828,7 +3828,7 @@ ALTER TABLE ONLY public.area_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.domain_client_occurrences
-    ADD CONSTRAINT fk_rails_cc055fd395 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_cc055fd395 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3836,7 +3836,7 @@ ALTER TABLE ONLY public.domain_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_ip_occurrences
-    ADD CONSTRAINT fk_rails_cc0f42ece0 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_cc0f42ece0 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3844,7 +3844,7 @@ ALTER TABLE ONLY public.email_ip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_email_occurrences
-    ADD CONSTRAINT fk_rails_dfecbcc166 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_dfecbcc166 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3852,7 +3852,7 @@ ALTER TABLE ONLY public.domain_email_occurrences
 --
 
 ALTER TABLE ONLY public.area_operator_occurrences
-    ADD CONSTRAINT fk_rails_e851adb93d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
+    ADD CONSTRAINT fk_rails_e851adb93d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
 
 
 --
@@ -3860,7 +3860,7 @@ ALTER TABLE ONLY public.area_operator_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_client_occurrences
-    ADD CONSTRAINT fk_rails_e92d26d9f1 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_e92d26d9f1 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --
@@ -3868,7 +3868,7 @@ ALTER TABLE ONLY public.telephone_client_occurrences
 --
 
 ALTER TABLE ONLY public.visitor_occurrences
-    ADD CONSTRAINT fk_rails_f0316e1852 FOREIGN KEY (status_id) REFERENCES public.visitor_occurrence_statuses(id);
+    ADD CONSTRAINT fk_rails_f0316e1852 FOREIGN KEY (status_id) REFERENCES public.visitor_occurrence_statuses(id) NOT VALID;
 
 
 --
@@ -3876,7 +3876,7 @@ ALTER TABLE ONLY public.visitor_occurrences
 --
 
 ALTER TABLE ONLY public.ip_operator_occurrences
-    ADD CONSTRAINT fk_rails_f098ca3601 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
+    ADD CONSTRAINT fk_rails_f098ca3601 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
 
 
 --
@@ -3884,7 +3884,7 @@ ALTER TABLE ONLY public.ip_operator_occurrences
 --
 
 ALTER TABLE ONLY public.domain_zip_occurrences
-    ADD CONSTRAINT fk_rails_f15deee84c FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
+    ADD CONSTRAINT fk_rails_f15deee84c FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
 
 
 --
@@ -3892,7 +3892,7 @@ ALTER TABLE ONLY public.domain_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_client_occurrences
-    ADD CONSTRAINT fk_rails_f171bdb1c9 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
+    ADD CONSTRAINT fk_rails_f171bdb1c9 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
 
 
 --
@@ -3900,7 +3900,7 @@ ALTER TABLE ONLY public.area_client_occurrences
 --
 
 ALTER TABLE ONLY public.domain_telephone_occurrences
-    ADD CONSTRAINT fk_rails_fc2f6167c7 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
+    ADD CONSTRAINT fk_rails_fc2f6167c7 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
 
 
 --

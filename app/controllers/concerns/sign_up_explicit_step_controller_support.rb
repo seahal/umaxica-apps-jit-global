@@ -4,6 +4,8 @@
 module SignUpExplicitStepControllerSupport
   extend ActiveSupport::Concern
 
+  include SignEntryExit
+
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include SignUpSequenceControllerSupport
@@ -93,6 +95,9 @@ module SignUpExplicitStepControllerSupport
   def cancel_from_explicit_step
     return unless load_gate_context!(gate_for_destroy)
 
+    ceremony, transaction = sign_entry_parent_cancellation
+    return refuse_sign_entry_exit!("cancellation_unavailable") unless ceremony && transaction
+
     result =
       if @sign_up_ticket.social_entry_method?
         SignAppUpSocialCancellation.call(cycle: @sign_up_ticket)
@@ -102,9 +107,11 @@ module SignUpExplicitStepControllerSupport
     return render_sign_up_result(result) unless result.success?
 
     sign_up_session_state.clear_all!
-    return head :no_content if request.format.json?
-
-    redirect_to(sign_up_restart_path, status: :see_other)
+    redirect_to_sign_entry_parent_cancellation!(ceremony:, transaction:)
+  rescue BaseAuthAdmissionCoordinator::Denied, AuthCeremonySession::InvalidTransition, ArgumentError
+    refuse_sign_entry_exit!("cancellation_unavailable")
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
   def clear_current_requirement!

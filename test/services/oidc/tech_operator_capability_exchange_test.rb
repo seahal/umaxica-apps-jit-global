@@ -33,8 +33,10 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     )
     result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "tech-org-ww" && assertion.present? && token_url.present? },
+        :verify_client_assertion,
+        ->(client_id, assertion, token_url:) {
+          verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id: "tech-org-ww")
+        },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
@@ -121,8 +123,10 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     )
     exchange_result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "tech-org-ww" && assertion.present? && token_url.present? },
+        :verify_client_assertion,
+        ->(client_id, assertion, token_url:) {
+          verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id: "tech-org-ww")
+        },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
@@ -142,8 +146,10 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     grant.update!(revoked_at: Time.current, revoked_by_operator: operators(:two), revoke_reason_code: "duty_ended")
     refresh_result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "tech-org-ww" && assertion.present? && token_url.present? },
+        :verify_client_assertion,
+        ->(client_id, assertion, token_url:) {
+          verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id: "tech-org-ww")
+        },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
@@ -162,5 +168,15 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     verifier = OperatorToken.parse_refresh_token(refresh_token).last
 
     assert rp_session.refresh_token_digest_matches?(verifier)
+  end
+
+  private
+
+  def verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id:)
+    authenticated = client_id == expected_client_id && assertion.present? && token_url.present?
+    OidcClientRegistry::AssertionAuthenticationResult.new(
+      authenticated:, client: authenticated ? OidcClientRegistry.find(client_id) : nil,
+      step_up_claims_state: :none, step_up_expectation: nil,
+    )
   end
 end

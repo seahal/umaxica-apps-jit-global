@@ -3,6 +3,8 @@
 require "test_helper"
 
 class OidcAuthorizationCancelStateTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   test "A13-5: cancellation returns opaque state bytes and only the protocol fields" do
     %w(client operator).each do |resource_type|
       realm = { "client" => "app", "operator" => "org" }.fetch(resource_type)

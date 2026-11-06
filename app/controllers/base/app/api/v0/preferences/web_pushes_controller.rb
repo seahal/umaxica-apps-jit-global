@@ -15,7 +15,7 @@ module Base
 
             preference_browser_api!
             prepend_before_action :apply_default_no_store
-            skip_before_action :set_preferences_cookie, raise: false
+            skip_before_action :set_preferences_cookie, unless: -> { request.get? || request.head? }, raise: false
             skip_before_action :set_current_actor, raise: false
 
             rescue_from PreferenceBase::ResolutionError, with: :render_preference_dependency_failure

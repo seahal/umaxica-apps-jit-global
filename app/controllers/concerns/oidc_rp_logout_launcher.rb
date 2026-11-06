@@ -17,51 +17,50 @@ module OidcRpLogoutLauncher
   def authenticate_oidc_rp_session!
     resolved = resolve_oidc_rp_logout_credentials
     unless resolved
-      render plain: "Authentication required", status: :unauthorized
+      render plain: t("errors.messages.login_required"), status: :unauthorized
       return
     end
 
     @oidc_rp_logout_session, @oidc_rp_logout_resource, @oidc_rp_logout_access_payload = resolved
     @current_resource = @oidc_rp_logout_resource
     @current_session_public_id = @oidc_rp_logout_session.public_id
+  rescue ActiveRecord::ActiveRecordError, PG::Error, OidcOpJwksClient::FetchError => e
+    Rails.logger.error(
+      "auth.sign_out.rp_local_authentication_failed error_class=#{e.class.name} result=unavailable",
+    )
+    render_oidc_rp_logout_unavailable(status: :service_unavailable)
   end
 
   private
 
-  def launch_oidc_rp_logout!(client_id:, issuer_resource_type: nil, token_issuer: nil, session_authority: :rp_session)
-    _ = [issuer_resource_type, token_issuer, session_authority]
+  def launch_oidc_rp_logout!(client_id:)
     completion_region = rp_logout_region
     session_record = oidc_rp_logout_session
     resource_type = oidc_rp_logout_resource_type
-    # WU-14: a grant whose callback stored no verified ID Token has no hint and cannot start logout.
-    hint = session_record&.association(:logout_hint)&.scope&.take
-    return render_oidc_rp_logout_unavailable unless hint
-
-    id_token = hint.id_token
+    # The verified local binding identifies the only Refresh Token the RP may revoke. Visa's
+    # independent OP-wide confirmation is always a no-hint browser step.
+    refresh_token = current_oidc_rp_refresh_token(session_record)
 
     post_logout_redirect_uri = registered_rp_logout_redirect_uri(
       client_id:, resource_type:, region: completion_region,
     )
     state = SecureRandom.urlsafe_base64(32)
     prepare_oidc_rp_sign_out_notice!(state:, session_record:)
-    revoke_oidc_rp_session_before_redirect!(session_record)
-    clear_oidc_rp_logout_cookies!
-    reset_session_and_clear_inertia_history!
-    issue_sign_out_notice!
-    Actor.clear
-    @current_resource = nil
-    @oidc_rp_logout_session = nil
-    @oidc_rp_logout_access_payload = nil
-    redirect_to(
-      oidc_rp_end_session_url(
-        resource_type:,
-        id_token:,
-        client_id:,
-        post_logout_redirect_uri:,
-        state:,
-      ),
-      allow_other_host: true,
-      status: :see_other,
+    unless cancel_visa_o9_admissions_before_rp_revoke!(session_record)
+      return render_oidc_rp_logout_unavailable(status: :service_unavailable)
+    end
+
+    begin
+      revoke_oidc_rp_session_before_redirect!(session_record)
+    rescue ActiveRecord::ActiveRecordError, PG::Error => e
+      Rails.logger.error(
+        "auth.sign_out.rp_local_revoke_failed error_class=#{e.class.name} result=unavailable",
+      )
+      return render_oidc_rp_logout_unavailable(status: :service_unavailable)
+    end
+
+    handoff_oidc_rp_logout_to_op!(
+      client_id:, resource_type:, refresh_token:, post_logout_redirect_uri:, state:,
     )
   rescue OidcClientRegistry::ClientNotFound, OidcRpLogoutError, URI::InvalidURIError,
          RpSession::IssuanceRejected, ActiveRecord::ActiveRecordError => e
@@ -101,47 +100,30 @@ module OidcRpLogoutLauncher
     render_oidc_rp_logout_completion
   end
 
+  def handoff_oidc_rp_logout_to_op!(client_id:, resource_type:, refresh_token:,
+                                    post_logout_redirect_uri:, state:)
+    clear_oidc_rp_logout_cookies!
+    reset_session_and_clear_inertia_history!
+    Actor.clear
+    @current_resource = nil
+    @oidc_rp_logout_session = nil
+    @oidc_rp_logout_access_payload = nil
+    revoke_oidc_rp_refresh_token(client_id:, resource_type:, token: refresh_token) if refresh_token
+    issue_sign_out_notice!
+    redirect_to(
+      oidc_rp_end_session_url(
+        resource_type:, client_id:, post_logout_redirect_uri:, state:,
+      ),
+      allow_other_host: true,
+      status: :see_other,
+    )
+  end
+
   class OidcRpLogoutError < StandardError; end
 
   private
 
   def resolve_oidc_rp_logout_credentials
-    return resolve_rp_cell_logout_credentials if rp_cell_process?
-
-    resource_type = oidc_rp_logout_resource_type
-    access_plain, refresh_plain = oidc_rp_logout_cookie_values
-    return if access_plain.blank? && refresh_plain.blank?
-
-    access_payload = decode_oidc_rp_logout_access(access_plain, resource_type)
-    access_session = find_oidc_rp_logout_access_session(access_payload, resource_type)
-    refresh_session = find_oidc_rp_logout_session_from_refresh(
-      refresh_plain,
-      client_id: oidc_client_id,
-      resource_type: resource_type,
-    ) if refresh_plain.present?
-    return unless valid_oidc_rp_logout_credential_set?(
-      access_plain,
-      access_payload,
-      access_session,
-      refresh_session,
-      resource_type,
-      refresh_present: refresh_plain.present?,
-    )
-
-    session_record = access_session || refresh_session
-    return unless oidc_rp_logout_session_current?(session_record)
-
-    resource = oidc_rp_logout_resource_for(session_record)
-    return unless resource&.active?
-    return if access_payload && OidcSubject.for(resource, resource_type: resource_type) !=
-      AuthorizationTokenClaims.subject(access_payload).to_s
-
-    [session_record, resource, access_payload]
-  rescue ArgumentError, ActiveRecord::RecordNotFound, URI::InvalidURIError
-    nil
-  end
-
-  def resolve_rp_cell_logout_credentials
     access_plain = cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.presence
     return if access_plain.blank?
 
@@ -150,138 +132,45 @@ module OidcRpLogoutLauncher
     return unless access_state.rp_session&.active?
 
     [access_state.rp_session, access_state.resource, access_state.payload]
-  rescue ActiveRecord::ActiveRecordError, ArgumentError
+  rescue ArgumentError
     nil
-  end
-
-  def oidc_rp_logout_cookie_values
-    [
-      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.presence,
-      cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.presence,
-    ]
-  end
-
-  def decode_oidc_rp_logout_access(access_plain, resource_type)
-    return if access_plain.blank?
-
-    OidcRpBrowserCredentialContract.decode_access_token(
-      token: access_plain,
-      host: request.host,
-      resource_type: resource_type,
-      client_id: oidc_client_id,
-      allow_expired: true,
-    )
-  end
-
-  def find_oidc_rp_logout_access_session(access_payload, resource_type)
-    return if access_payload.blank?
-
-    find_oidc_rp_logout_session(
-      public_id: AuthorizationTokenClaims.session_id(access_payload),
-      client_id: oidc_client_id,
-      resource_type: resource_type,
-    )
-  end
-
-  def valid_oidc_rp_logout_credential_set?(
-    access_plain,
-    access_payload,
-    access_session,
-    refresh_session,
-    resource_type,
-    refresh_present:
-  )
-    return false if access_plain.present? && access_payload.blank?
-    return false if access_payload && !valid_oidc_rp_logout_access?(access_payload, access_session, resource_type)
-    return false if refresh_session.blank? && access_session.blank? && refresh_present
-    return false if access_session && refresh_session && access_session.public_id != refresh_session.public_id
-
-    true
   end
 
   def oidc_rp_logout_resource_type
     OidcIssuer.resource_type_for_client(OidcClientRegistry.find!(oidc_client_id))
   end
 
-  def oidc_rp_logout_session_class_for(resource_type)
-    case resource_type.to_s
-    when "operator" then OpOrgGrant
-    when "client" then OpAppGrant
-    else raise ArgumentError, "unsupported RP Session resource type"
-    end
+  def current_oidc_rp_refresh_token(session_record)
+    raw_token = cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.presence
+    return unless raw_token
+
+    token_parts = raw_token.split(RefreshTokenShared::REFRESH_TOKEN_SEPARATOR, 2)
+    return unless token_parts.length == 2 && token_parts.all?(&:present?)
+
+    public_id = token_parts.first
+    binding_sid = session_record.op_session_binding&.sid
+    access_sid = AuthorizationTokenClaims.session_id(@oidc_rp_logout_access_payload)
+    return unless secure_public_id_match?(binding_sid, access_sid)
+    return unless secure_public_id_match?(binding_sid, public_id)
+
+    raw_token
   end
 
-  def oidc_rp_logout_session_relation_for(resource_type)
-    case resource_type.to_s
-    when "operator" then OpOrgGrant.includes(operator_device_session: :staff)
-    when "client" then OpAppGrant.includes(client_device_session: :user)
-    else raise ArgumentError, "unsupported RP Session resource type"
-    end
+  def secure_public_id_match?(expected, actual)
+    expected_value = expected.to_s
+    actual_value = actual.to_s
+    expected_value.present? && actual_value.present? && expected_value.bytesize == actual_value.bytesize &&
+      ActiveSupport::SecurityUtils.secure_compare(expected_value, actual_value)
   end
 
-  def oidc_rp_logout_connection_for(resource_type)
-    case resource_type.to_s
-    when "operator" then OpBaseOrgRecord
-    else OpBaseAppRecord
-    end
-  end
+  def revoke_oidc_rp_refresh_token(client_id:, resource_type:, token:)
+    result = OidcOpRevocationClient.revoke(client_id:, resource_type:, token:)
+    return if result.success?
 
-  def find_oidc_rp_logout_session(public_id:, client_id:, resource_type:)
-    return if public_id.blank?
-
-    oidc_rp_logout_connection_for(resource_type).connected_to(role: :writing) do
-      oidc_rp_logout_session_relation_for(resource_type).find_by(
-        public_id: public_id,
-        oidc_client_id: client_id,
-      )
-    end
-  end
-
-  def find_oidc_rp_logout_session_from_refresh(refresh_plain, client_id:, resource_type:)
-    parsed = oidc_rp_logout_session_class_for(resource_type).parse_refresh_token(refresh_plain)
-    return if parsed.blank?
-
-    public_id, verifier = parsed
-    session_record = find_oidc_rp_logout_session(
-      public_id: public_id,
-      client_id: client_id,
-      resource_type: resource_type,
+    Rails.logger.warn(
+      "auth.sign_out.rp_refresh_revocation_unavailable " \
+      "client_id=#{client_id} outcome=#{result.outcome}",
     )
-    return unless session_record&.authenticate_refresh_token(verifier)
-
-    session_record
-  end
-
-  def valid_oidc_rp_logout_access?(payload, session_record, resource_type)
-    return false unless session_record
-    return false if session_record.oidc_jti.blank?
-
-    expected_jti = session_record.oidc_jti.to_s
-    actual_jti = AuthorizationTokenClaims.jti(payload).to_s
-    return false unless expected_jti.bytesize == actual_jti.bytesize
-    return false unless ActiveSupport::SecurityUtils.secure_compare(expected_jti, actual_jti)
-
-    OidcSubject.for(oidc_rp_logout_resource_for(session_record), resource_type: resource_type).to_s ==
-      AuthorizationTokenClaims.subject(payload).to_s
-  rescue ArgumentError
-    false
-  end
-
-  def oidc_rp_logout_session_current?(session_record)
-    return false unless session_record
-    return session_record.active? if rp_cell_process?
-    return false if session_record.revoked?
-
-    session_record.parent_token_active?
-  end
-
-  def oidc_rp_logout_resource_for(session_record)
-    return @oidc_rp_logout_resource if rp_cell_process?
-
-    case session_record
-    when OpOrgGrant then session_record.staff
-    else session_record.user
-    end
   end
 
   def oidc_rp_logout_session
@@ -301,7 +190,7 @@ module OidcRpLogoutLauncher
       OidcRpBrowserCredentialContract::REFRESH_COOKIE,
       OidcRpBrowserCredentialContract.refresh_cookie_deletion_options,
     )
-    clear_rp_cell_session_cookie! if rp_cell_process?
+    clear_rp_cell_session_cookie!
     @current_access_token_payload = nil
   end
 
@@ -312,15 +201,31 @@ module OidcRpLogoutLauncher
   end
 
   def revoke_oidc_rp_session_before_redirect!(session_record)
-    return unless rp_cell_process?
-
-    session_record.class.connection_class.connected_to(role: :writing) do
+    session_record.class.connection_class_for_self.connected_to(role: :writing) do
       session_record.with_lock do
         if session_record.revoked_at.blank?
           session_record.update!(revoked_at: session_record.class.database_now)
         end
       end
     end
+  end
+
+  def cancel_visa_o9_admissions_before_rp_revoke!(session_record)
+    surface =
+      case session_record
+      when RpBaseAppSession then "app"
+      when RpBaseOrgSession then "org"
+      else return true
+      end
+    access_token = BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+    result = VisaSensitiveAdmissionClient.new(surface:, access_token:)
+      .revoke_rp_session(rp_session_ref: session_record.public_id)
+    return true if result.ok?
+
+    Rails.logger.error(
+      "auth.sign_out.o9_session_cancellation_failed surface=#{surface} result=#{result.status}",
+    )
+    false
   end
 
   def registered_rp_logout_redirect_uri(client_id:, resource_type:, region:)
@@ -341,11 +246,10 @@ module OidcRpLogoutLauncher
     candidate
   end
 
-  def oidc_rp_end_session_url(resource_type:, id_token:, client_id:, post_logout_redirect_uri:, state:)
+  def oidc_rp_end_session_url(resource_type:, client_id:, post_logout_redirect_uri:, state:)
     uri = URI.parse(OidcIssuer.end_session_endpoint(resource_type))
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
     query.merge!(
-      "id_token_hint" => id_token,
       "client_id" => client_id,
       "post_logout_redirect_uri" => post_logout_redirect_uri,
       "state" => state,
@@ -354,10 +258,10 @@ module OidcRpLogoutLauncher
     uri.to_s
   end
 
-  def render_oidc_rp_logout_unavailable
+  def render_oidc_rp_logout_unavailable(status: :unprocessable_content)
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Referrer-Policy"] = "strict-origin"
-    render "auth/shared/sign_outs/unavailable", status: :unprocessable_content
+    render "auth/shared/sign_outs/unavailable", status: status
   end
 
   def render_oidc_rp_logout_completion

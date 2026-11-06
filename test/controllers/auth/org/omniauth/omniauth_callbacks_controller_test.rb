@@ -77,6 +77,7 @@ class Auth::Org::Omniauth::OmniauthCallbacksControllerTest < ActionDispatch::Int
 
     assert_equal ExternalAuthenticationEntraRedirectUri.call, query.fetch("redirect_uri")
     callback = URI.parse(query.fetch("redirect_uri"))
+
     assert_equal ENV.fetch("PUBLIC_AUTH_STAFF_URL"), callback.host
     assert_equal "/social/entra/callback", callback.path
     assert_equal "https", callback.scheme

@@ -144,7 +144,6 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     assert_predicate other_session.reload, :revoked?
   end
 
-
   test "browser_session scope revokes an operator session's RP Sessions and the operator token" do
     operator_root = OperatorToken.create!(
       authentication_epoch: 0,

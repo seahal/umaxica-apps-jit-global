@@ -6,6 +6,7 @@ require "test_helper"
 require "base64"
 
 class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = %w(clients client_secret_credentials)
   fixtures :clients, :client_secret_credentials
 
   setup do
@@ -22,6 +23,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
+    @token.rotate_refresh_token!(now: ClientToken.database_now)
     @token.update!(created_at: 1.hour.ago)
 
     # Base authenticates only the Browser RP access cookie and follows its sid to the RP Session
@@ -29,23 +31,34 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     @headers = begin
       fv5010 = @token
       fv5008 = OidcClientRegistry.find!("base-app-ww")
-      fv5009 = OpAppGrant.create!(
+      @grant = OpAppGrant.create!(
         authentication_epoch: 0,
         client_token: fv5010,
         oidc_client_id: fv5008.client_id,
         oidc_scope: "openid profile",
         oidc_jti: SecureRandom.uuid,
         oidc_auth_time: 1.minute.ago,
+        oidc_acr: nil,
+        oidc_amr: JSON.generate([]),
         refresh_token_expires_at: 10.minutes.from_now,
       )
+      @grant.issue_refresh_token!(now: OpBaseAppRecord.database_now)
+      enrollment = RpCallbackCommitter.call(
+        cell: RpCellBinding.for_client("base-app-ww"), issuer: OidcIssuer.for_client(fv5008),
+        subject: OidcSubject.for(@user, resource_type: "client"), sid: @grant.public_id,
+        absolute_expires_at: 1.hour.from_now,
+      )
+      raise ArgumentError, "RP enrollment failed" unless enrollment.success?
+
+      @rp_session_cookie = "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{enrollment.session.public_id}"
       fv5007 = AuthenticationTokenService.encode(
         @user,
         host: OidcIssuer.host_for_resource_type("client"),
         resource_type: "client",
         session_public_id: fv5010.public_id,
         base_session_public_id: fv5010.public_id,
-        oidc_sid: fv5009.public_id,
-        oidc_jti: fv5009.oidc_jti,
+        oidc_sid: @grant.public_id,
+        oidc_jti: @grant.oidc_jti,
         expires_at: 10.minutes.from_now,
         scopes: %w(openid profile),
         issuer: OidcIssuer.for_client(fv5008),
@@ -54,322 +67,139 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
         subject: OidcSubject.for(@user, resource_type: "client"),
         client_id: fv5008.client_id,
       )
-      fv5006 = "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{fv5007}"
+      fv5006 = "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{fv5007}; #{@rp_session_cookie}"
       host_headers(@base_host).merge(
         "Cookie" => fv5006,
         "HTTP_COOKIE" => fv5006,
       )
     end.freeze
 
-    ClientEmail.create!(
+    @setup_email = ClientEmail.create!(
       user: @user,
       address: "stepup-auth-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
   end
 
-  test "Secret rename verification binds the owned Secret from its signed return path" do
+  test "RP Secret routes refuse with a localized message without changing credentials" do
     credential = client_secret_credentials(:one)
-    ClientTotpCredential.create_for_user!(
-      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-    )
+    before = credential.attributes
+
     get edit_base_app_secret_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
 
-    assert_response :redirect
-    verification = URI.parse(response.location)
-    query = Rack::Utils.parse_query(verification.query)
-
-    assert_equal "/verification", verification.path
-    assert_equal "settings_secret_credential", query.fetch("scope")
-    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
-    post base_app_verification_url(ri: "jp", host: @base_host),
-         params: { scope: "settings_secret_credential", pt: query.fetch("pt") }, headers: @headers
-
-    assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
-
-    assert_equal credential.public_id, transaction.resource_ref
-  end
-
-  test "a signed verification return path cannot bind another actor's Secret" do
-    credential = client_secret_credentials(:two)
-    path = edit_base_app_secret_path(credential.public_id, ri: "jp")
-    target = ActiveSupport::MessageVerifier.new(
-      Rails.application.key_generator.generate_key("path_target_token", 32),
-      digest: "SHA256", serializer: JSON, url_safe: true,
-    ).generate(
-      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
-      purpose: :path_target, expires_in: 15.minutes,
-    )
-
-    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
-      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_secret_credential", pt: target),
-          headers: @headers
-    end
-
-    assert_response :bad_request
-    assert_nil @token.reload.last_step_up_at
-  end
-
-  test "an issuance-bound verification permits Secret presentation and confirmation once" do
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-    )
-    context = ActorValuesContext.empty.with(subject: @user, actor_type: :client, tld: :app, surface: :base)
-    issuance = ClientSecretManualReservationIssuer.call!(
-      actor_context: context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
-    )
-    @token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
-
-    assert_response :success
-    post base_app_secret_issuance_presentation_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
-
-    assert_response :success
-    assert_equal "strict-origin", response.headers["Referrer-Policy"]
-    assert_equal "strict-origin", response.parsed_body.at_css('meta[name="referrer"]')["content"]
-    assert_predicate issuance.reload.presented_at, :present?
-    assert_nil issuance.confirmed_at
-    patch base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host),
-          params: { stored: "1" }, headers: @headers
-
-    assert_response :see_other
-    assert_predicate issuance.reload.confirmed_at, :present?
-    assert_nil @token.reload.last_step_up_at
-    assert_equal 1, ClientSecretCredential.where(issuance_id: issuance.id, client_id: @user.id).count
-  end
-
-  test "a Secret issuance cannot request a Step-Up scope for another origin" do
-    issuance = ClientSecretIssuance.create!(
-      client: @user, origin_operation_id: SecureRandom.uuid, origin: "passkey_registration", attempt_number: 1,
-      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
-    )
-    path = base_app_secret_issuance_path(issuance.public_id, ri: "jp")
-    target = ActiveSupport::MessageVerifier.new(
-      Rails.application.key_generator.generate_key("path_target_token", 32),
-      digest: "SHA256", serializer: JSON, url_safe: true,
-    ).generate(
-      { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
-      purpose: :path_target, expires_in: 15.minutes,
-    )
-
-    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
-      get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_secret_credential", pt: target),
-          headers: @headers
-    end
-    assert_response :bad_request
-    assert_nil @token.reload.last_step_up_at
-  end
-
-  test "a signed Secret issuance target cannot cross an owner or browser session" do
-    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-    other_token = ClientToken.create!(authentication_epoch: 0, user: @user)
-    [
-      { client: other, browser_session_ref: @token.public_id },
-      { client: @user, browser_session_ref: other_token.public_id },
-    ].each do |binding|
-      issuance = ClientSecretIssuance.create!(
-        **binding, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
-                   planned_count: 1, expires_at: Client.database_now + 1.minute,
-      )
-      path = base_app_secret_issuance_path(issuance.public_id, ri: "jp")
-      target = ActiveSupport::MessageVerifier.new(
-        Rails.application.key_generator.generate_key("path_target_token", 32),
-        digest: "SHA256", serializer: JSON, url_safe: true,
-      ).generate(
-        { "flow" => "step_up.bootstrap", "surface" => "app", "session_nonce" => @token.public_id, "pt" => path },
-        purpose: :path_target, expires_in: 15.minutes,
-      )
-
-      assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
-        get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_secret_credential", pt: target),
-            headers: @headers
-      end
-      assert_response :bad_request
-    end
-    assert_nil @token.reload.last_step_up_at
-  end
-
-  test "Passkey-origin Secret issuance verification binds its own target" do
-    issuance = ClientSecretIssuance.create!(
-      client: @user, origin_operation_id: SecureRandom.uuid, origin: "passkey_registration", attempt_number: 1,
-      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
-    )
-    ClientTotpCredential.create_for_user!(
-      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-    )
-    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
-
-    assert_response :redirect
-    verification = URI.parse(response.location)
-    query = Rack::Utils.parse_query(verification.query)
-
-    assert_equal "/verification", verification.path
-    assert_equal "settings_passkey", query.fetch("scope")
-    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
-    post base_app_verification_url(ri: "jp", host: @base_host),
-         params: { scope: "settings_passkey", pt: query.fetch("pt") }, headers: @headers
-
-    assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
-
-    assert_equal issuance.public_id, transaction.resource_ref
-  end
-
-  test "Secret issuance verification binds its owned issuance and session" do
-    issuance = ClientSecretIssuance.create!(
-      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
-      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
-    )
-    ClientTotpCredential.create_for_user!(
-      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-    )
-    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
-
-    assert_response :redirect
-    verification = URI.parse(response.location)
-    query = Rack::Utils.parse_query(verification.query)
-
-    assert_equal "/verification", verification.path
-    assert_equal "settings_secret_credential", query.fetch("scope")
-    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
-    post base_app_verification_url(ri: "jp", host: @base_host),
-         params: { scope: "settings_secret_credential", pt: query.fetch("pt") }, headers: @headers
-
-    assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
-
-    assert_equal issuance.public_id, transaction.resource_ref
-  end
-
-  test "Secret storage confirmation reports dependency failures as unavailable" do
-    issuance = ClientSecretIssuance.create!(
-      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
-      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
-    )
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: issuance.public_id,
-    )
-    failure = ->(**) { raise ClientSecretStorageConfirmationCommitter::DependencyFailure, "injected storage failure" }
-    ClientSecretStorageConfirmationCommitter.stub(:call!, failure) do
-      patch base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host),
-            params: { stored: "1" }, headers: @headers
-
-      assert_response :service_unavailable
-      assert_nil issuance.reload.confirmed_at
-      assert_predicate @token.reload.last_step_up_at, :present?
-    end
-  end
-
-  test "Secret revocation reports storage dependency failures as unavailable" do
-    credential = client_secret_credentials(:one)
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: credential.public_id,
-    )
-    failure = ->(**) { raise ClientSecretRevocationCommitter::DependencyFailure, "injected storage failure" }
-    ClientSecretRevocationCommitter.stub(:call!, failure) do
-      delete base_app_secret_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
-
-      assert_response :service_unavailable
-      assert_nil credential.reload.revoked_at
-      assert_predicate @token.reload.last_step_up_at, :present?
-    end
-
-    @user.client_passkeys.create!(
-      webauthn_id: "secret-revocation-step-up-test", public_key: "synthetic-public-key",
-      status_id: ClientPasskeyStatus::ACTIVE,
-    )
-    delete base_app_secret_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
-
-    assert_response :see_other
-    assert_predicate credential.reload.revoked_at, :present?
-    assert_nil @token.reload.last_step_up_at
-  end
-
-  test "Secret rename reports storage dependency failures as unavailable" do
-    credential = client_secret_credentials(:one)
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: credential.public_id,
-    )
-    failure = ->(**) { raise ClientSecretNameCommitter::DependencyFailure, "injected storage failure" }
-    ClientSecretNameCommitter.stub(:call!, failure) do
-      patch base_app_secret_url(credential.public_id, ri: "jp", host: @base_host),
-            params: { name: "Renamed" }, headers: @headers
-
-      assert_response :service_unavailable
-      assert_equal "Fixture Secret 1", credential.reload.name
-      assert_predicate @token.reload.last_step_up_at, :present?
-    end
+    assert_response :service_unavailable
+    assert_equal I18n.t("auth.rp_feature_unavailable"), response.body
 
     patch base_app_secret_url(credential.public_id, ri: "jp", host: @base_host),
-          params: { name: "Renamed" }, headers: @headers
+          params: { client_secret_credential: { name: "changed" } }, headers: @headers
 
-    assert_response :see_other
-    assert_equal "Renamed", credential.reload.name
-    assert_nil @token.reload.last_step_up_at
+    assert_response :service_unavailable
+    assert_equal I18n.t("auth.rp_feature_unavailable"), response.body
+    assert_equal before, credential.reload.attributes
+
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      planned_count: 1, browser_session_ref: @token.public_id, expires_at: Client.database_now + 1.minute,
+    )
+    issuance_before = issuance.attributes
+    get base_app_secret_issuance_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :service_unavailable
+    assert_equal I18n.t("auth.rp_feature_unavailable"), response.body
+
+    post base_app_secret_issuance_presentation_url(issuance.public_id, ri: "jp", host: @base_host), headers: @headers
+
+    assert_response :service_unavailable
+    assert_equal I18n.t("auth.rp_feature_unavailable"), response.body
+    assert_equal issuance_before, issuance.reload.attributes
   end
 
-  test "TOTP name verification binds the owned credential from its signed return path" do
+  test "a TOTP page challenges before accepting an event" do
     credential = ClientTotpCredential.create_for_user!(
       user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     get base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
 
-    assert_response :redirect
-    verification = URI.parse(response.location)
-    query = Rack::Utils.parse_query(verification.query)
+    assert_response :unauthorized
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
+    get base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: proof_headers
 
-    assert_equal "/verification", verification.path
-    assert_equal "settings_totp", query.fetch("scope")
-    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
-    post base_app_verification_url(ri: "jp", host: @base_host),
-         params: { scope: "settings_totp", pt: query.fetch("pt") }, headers: @headers
-
-    assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
-
-    assert_equal credential.public_id, transaction.resource_ref
+    assert_response :success
+    assert_includes response.body, credential.public_id
   end
 
   test "a refused TOTP removal is not reported as successful" do
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
     credential = ClientTotpCredential.create_for_user!(
       user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "totp",
-      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: false,
-      last_step_up_user_verified: false, last_step_up_credential_ref: credential.public_id,
-      last_step_up_full_reauthentication: false, last_step_up_resource_ref: credential.public_id,
-    )
     IdentityCredentialRemovalCommitter.stub(:call!, false) do
-      delete base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
+      delete base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: proof_headers
 
       assert_response :unprocessable_content
       assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
     end
   end
 
-  test "TOTP-specific Step-Up cannot open another owned TOTP credential" do
+  test "a Step-Up event can open another owned TOTP credential" do
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
     first = @user.client_totp_credentials.find_by(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
     first ||= ClientTotpCredential.create_for_user!(
       user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
@@ -377,19 +207,14 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     second = ClientTotpCredential.create_for_user!(
       user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "totp",
-      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: false,
-      last_step_up_user_verified: false, last_step_up_credential_ref: first.public_id,
-      last_step_up_full_reauthentication: false, last_step_up_resource_ref: first.public_id,
-    )
 
-    get base_app_identity_totp_url(second.public_id, ri: "jp", host: @base_host), headers: @headers
+    get base_app_identity_totp_url(first.public_id, ri: "jp", host: @base_host), headers: proof_headers
 
-    assert_response :redirect
-    assert_equal "/verification", URI.parse(response.location).path
-    assert_equal first.public_id, @token.reload.last_step_up_resource_ref
+    assert_response :success
+    get base_app_identity_totp_url(second.public_id, ri: "jp", host: @base_host), headers: proof_headers
+
+    assert_response :success
+    assert_equal proof_time.to_i, @grant.reload.oidc_auth_time.to_i
   end
 
   test "another actor's TOTP credential cannot start a verification" do
@@ -402,11 +227,12 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       get base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
     end
 
-    assert_response :not_found
+    # The existing Step-Up callback runs before the owner-scoped record lookup.
+    assert_response :unauthorized
     assert_nil @token.reload.last_step_up_at
   end
 
-  test "a signed verification return path cannot bind another actor's TOTP" do
+  test "a signed return path cannot bypass ownership at another actor's TOTP" do
     other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     credential = ClientTotpCredential.create_for_user!(
       user: other, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
@@ -424,11 +250,34 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_totp", pt: target), headers: @headers
     end
 
-    assert_response :bad_request
-    assert_nil @token.reload.last_step_up_at
+    assert_response :success
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
+    get "https://#{@base_host}#{path}", headers: proof_headers
+
+    assert_response :not_found
+    assert_equal proof_time.to_i, @grant.reload.oidc_auth_time.to_i
   end
 
-  test "a signed verification return path cannot bind another actor's Telephone" do
+  test "a signed return path cannot bypass ownership at another actor's Telephone" do
     other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     telephone = ClientTelephone.create!(user: other, number: "+819012345686", confirm_policy: "1")
     path = edit_base_app_identity_telephone_path(telephone.public_id, ri: "jp")
@@ -445,11 +294,34 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
           headers: @headers
     end
 
-    assert_response :bad_request
-    assert_nil @token.reload.last_step_up_at
+    assert_response :success
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
+    get "https://#{@base_host}#{path}", headers: proof_headers
+
+    assert_response :not_found
+    assert_equal proof_time.to_i, @grant.reload.oidc_auth_time.to_i
   end
 
-  test "Telephone removal verification binds the owned target from its signed return path" do
+  test "a Telephone page challenges before accepting an event" do
     telephone = ClientTelephone.create!(
       user: @user, number: "+819012345685", confirm_policy: "1",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
@@ -461,64 +333,100 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     get edit_base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host), headers: @headers
 
     assert_response :redirect
-    verification = URI.parse(response.location)
-    query = Rack::Utils.parse_query(verification.query)
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
+    get edit_base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host), headers: proof_headers
 
-    assert_equal "/verification", verification.path
-    assert_equal "settings_telephone", query.fetch("scope")
-    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
-    post base_app_verification_url(ri: "jp", host: @base_host),
-         params: { scope: "settings_telephone", pt: query.fetch("pt") }, headers: @headers
-
-    assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
-
-    assert_equal telephone.public_id, transaction.resource_ref
+    assert_response :success
+    assert_includes response.body, telephone.public_id
   end
 
-  test "email preference verification binds the owned Email target from its signed return path" do
+  test "an Email preference challenges before accepting an event" do
     email = ClientEmail.find_by!(user_id: @user.id, user_email_status_id: ClientEmailStatus::VERIFIED)
     ClientTotpCredential.create_for_user!(
       user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     get edit_base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host), headers: @headers
 
-    assert_response :redirect
-    verification = URI.parse(response.location)
-    query = Rack::Utils.parse_query(verification.query)
+    assert_response :unauthorized
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
+    get edit_base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host), headers: proof_headers
 
-    assert_equal "/verification", verification.path
-    assert_equal "settings_email", query.fetch("scope")
-    assert_predicate query.fetch("pt"), :present?
-    before = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).pluck(:id)
-    post base_app_verification_url(ri: "jp", host: @base_host),
-         params: { scope: "settings_email", pt: query.fetch("pt") }, headers: @headers
-
-    assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.where(actor_ref: @user.public_id).where.not(id: before).sole
-
-    assert_equal email.public_id, transaction.resource_ref
+    assert_response :success
+    assert_includes response.body, email.public_id
   end
 
-  test "Email-specific Step-Up cannot open another owned Email preference" do
+  test "a Step-Up event can open another owned Email credential" do
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
     first = ClientEmail.find_by!(user_id: @user.id, user_email_status_id: ClientEmailStatus::VERIFIED)
     second = ClientEmail.create!(
       user: @user, address: "stepup-other-#{SecureRandom.hex(6)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
-      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: false,
-      last_step_up_user_verified: false, last_step_up_credential_ref: "test-step-up",
-      last_step_up_full_reauthentication: false, last_step_up_resource_ref: first.public_id,
-    )
 
-    get edit_base_app_identity_email_url(second.public_id, ri: "jp", host: @base_host), headers: @headers
+    get edit_base_app_identity_email_url(first.public_id, ri: "jp", host: @base_host), headers: proof_headers
 
-    assert_response :redirect
-    assert_equal "/verification", URI.parse(response.location).path
-    assert_equal first.public_id, @token.reload.last_step_up_resource_ref
+    assert_response :success
+    get edit_base_app_identity_email_url(second.public_id, ri: "jp", host: @base_host), headers: proof_headers
+
+    assert_response :success
+    assert_equal proof_time.to_i, @grant.reload.oidc_auth_time.to_i
   end
 
   test "another actor's Email cannot start a preference verification" do
@@ -532,11 +440,12 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       get edit_base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host), headers: @headers
     end
 
-    assert_response :not_found
+    # The existing Step-Up callback runs before the owner-scoped record lookup.
+    assert_response :unauthorized
     assert_nil @token.reload.last_step_up_at
   end
 
-  test "a signed verification return path cannot bind another actor's Email" do
+  test "a signed return path cannot bypass ownership at another actor's Email" do
     other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     email = ClientEmail.create!(
       user: other, address: "stepup-foreign-target-#{SecureRandom.hex(6)}@example.com",
@@ -555,21 +464,42 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       get base_app_verification_url(ri: "jp", host: @base_host, scope: "settings_email", pt: target), headers: @headers
     end
 
-    assert_response :bad_request
-    assert_nil @token.reload.last_step_up_at
+    assert_response :success
+    proof_client = OidcClientRegistry.find!("base-app-ww")
+    proof_now = OpBaseAppRecord.database_now
+    proof_time = Time.at(proof_now.to_i).utc
+    @grant.update!(
+      oidc_auth_time: proof_time, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    proof_access = AuthenticationTokenService.encode(
+      @user, host: @base_host, resource_type: "client", session_public_id: @token.public_id,
+             base_session_public_id: @token.public_id, oidc_sid: @grant.public_id, oidc_jti: @grant.oidc_jti,
+             expires_at: proof_now + 10.minutes, scopes: %w(openid profile), acr: @grant.oidc_acr,
+             amr: ["passkey"], auth_time: proof_time, issuer: OidcIssuer.for_client(proof_client),
+             audiences: [proof_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(proof_client),
+             subject: OidcSubject.for(@user, resource_type: "client"), client_id: proof_client.client_id,
+             authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    proof_cookie = [
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(proof_access)}", @rp_session_cookie,
+    ].join("; ")
+    proof_headers = { "Host" => @base_host, "Cookie" => proof_cookie, "HTTP_COOKIE" => proof_cookie }
+    get "https://#{@base_host}#{path}", headers: proof_headers
+
+    assert_response :not_found
+    assert_equal proof_time.to_i, @grant.reload.oidc_auth_time.to_i
   end
 
-  test "GET sensitive page redirects to verification when step-up is not satisfied" do
-    get new_base_app_identity_emails_registration_url(ri: "jp", host: @base_host), headers: @headers
+  test "GET sensitive TOTP page returns a Step-Up challenge" do
+    credential = ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    get base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
 
-    assert_response :redirect
-    uri = URI.parse(response.location)
-    query = Rack::Utils.parse_query(uri.query)
-
-    assert_equal "/verification", uri.path
-    assert_equal "settings_email", query["scope"]
-    assert_equal "jp", query["ri"]
-    assert_predicate query["pt"], :present?
+    assert_response :unauthorized
+    assert_includes response.headers.fetch("WWW-Authenticate"), "insufficient_user_authentication"
+    assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
   end
 
   test "fresh sign-in token does not satisfy step-up without recorded step-up" do
@@ -580,12 +510,18 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "POST sensitive action returns 401 when step-up is not satisfied" do
-    post base_app_identity_emails_registration_url(ri: "jp", host: @base_host),
-         params: { user_email: { address: "new@example.com" } },
-         headers: @headers
+  test "RP email registration refuses before writing while its Base writer is out of scope" do
+    email_count = @user.client_emails.count
 
-    assert_response :unauthorized
+    assert_no_enqueued_jobs(only: OtpNotifierEmailDeliveryJob) do
+      post base_app_identity_emails_registration_url(ri: "jp", host: @base_host),
+           params: { user_email: { address: "new@example.com" } },
+           headers: @headers
+    end
+
+    assert_response :service_unavailable
+    assert_equal I18n.t("auth.rp_feature_unavailable"), response.body
+    assert_equal email_count, @user.client_emails.count
   end
 
   # The bearer header only skips the browser-request check; no Browser RP credential is presented.
@@ -637,6 +573,22 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     )
     other_token.update!(created_at: 1.hour.ago)
     other_headers = other_session_headers(other_token)
+    other_grant = OpAppGrant.find_by!(client_token: other_token, oidc_client_id: "base-app-ww")
+    other_enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client("base-app-ww"), issuer: OidcIssuer.for_resource_type("client"),
+      subject: OidcSubject.for(@user, resource_type: "client"), sid: other_grant.public_id,
+      absolute_expires_at: 1.hour.from_now,
+    )
+
+    assert_predicate other_enrollment, :success?
+    other_cookie = [
+      other_headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{other_enrollment.session.public_id}",
+    ].join("; ")
+    other_headers = other_headers.merge("Cookie" => other_cookie, "HTTP_COOKIE" => other_cookie)
+
+    assert_not_equal @rp_session_cookie,
+                     "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{other_enrollment.session.public_id}"
 
     get base_app_identity_emails_url(ri: "jp", host: @base_host), headers: other_headers
 
@@ -654,21 +606,21 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
   end
 
   test "revoked session is bounced out before any step-up gate" do
-    # A discarded session is excluded by ClientToken.currently_usable_at, so it
-    # can no longer authenticate at all. The stale step-up freshness is therefore
-    # irrelevant: authentication (authenticate_client!) fails and the actor is
-    # bounced out before any step-up gate runs -- a strictly stronger guarantee
-    # than redirecting to the verification path.
-    #
-    # The unauthenticated bounce tries to jump the actor to sign-in (OIDC SSO on
-    # a cross-site host). For an Auth:: settings controller that jump RT cannot be
-    # issued (JumpRtSurface.namespace_for_controller only recognises the
-    # Sign::/Acme::/Core::/Base:: engines, not Auth::), so the bounce surfaces as a
-    # 422 rejection rather than a 3xx. Either way the revoked session is denied
-    # and never reaches /identity/emails while retaining step-up freshness.
+    # OP root revocation reaches the RP asynchronously; assert refusal after the local logout commit.
     satisfy_user_verification(@token)
     mark_step_up_satisfied!(@token, at: 10.minutes.ago, scope: "settings_email")
     @token.update!(discard_at: 1.second.ago)
+    result = RpCellSessionRevoker.call(
+      cell: RpCellBinding.for_client("base-app-ww"),
+      payload: {
+        "iss" => OidcIssuer.for_resource_type("client"),
+        "sid" => @grant.public_id,
+        "jti" => SecureRandom.uuid,
+        "exp" => 10.minutes.from_now.to_i,
+      },
+    )
+
+    assert_equal :revoked, result
 
     get base_app_identity_emails_url(ri: "jp", host: @base_host), headers: @headers
 
@@ -693,23 +645,56 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "HEAD sensitive page redirects to verification when step-up is not satisfied" do
-    head new_base_app_identity_emails_registration_url(ri: "jp", host: @base_host), headers: @headers
+  test "HEAD sensitive TOTP page returns a Step-Up challenge" do
+    credential = ClientTotpCredential.create_for_user!(
+      user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    head base_app_identity_totp_url(credential.public_id, ri: "jp", host: @base_host), headers: @headers
 
-    assert_response :redirect
-    uri = URI.parse(response.location)
-    query = Rack::Utils.parse_query(uri.query)
-
-    assert_equal "/verification", uri.path
-    assert_equal "settings_email", query["scope"]
-    assert_equal "jp", query["ri"]
-    assert_predicate query["pt"], :present?
+    assert_response :unauthorized
+    assert_includes response.headers.fetch("WWW-Authenticate"), "insufficient_user_authentication"
+    assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
   end
 
   test "a Security Mode downgrade through the controller revokes every session including the current one" do
     @user.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-    satisfy_user_verification(@token, scope: "settings_mfa")
-    mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_mfa")
+    now = OpBaseAppRecord.database_now
+    auth_time = now.to_i - 1
+    @grant.update!(
+      oidc_auth_time: Time.at(auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
+    )
+    ClientStepUpCommit.create!(
+      grant: @grant,
+      root_token: @token,
+      context_ref: PublicId.generate,
+      verified_method: "passkey",
+      committed_at: Time.at(auth_time).utc,
+    )
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    access_token = AuthenticationTokenService.encode(
+      @user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: @token.public_id,
+      base_session_public_id: @token.public_id,
+      oidc_sid: @grant.public_id,
+      oidc_jti: @grant.oidc_jti,
+      expires_at: now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      amr: ["passkey"],
+      auth_time: auth_time,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(@user, resource_type: "client"),
+      client_id: oidc_client.client_id,
+    )
+    access_cookie = "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{access_token}; #{@rp_session_cookie}"
+    @headers = @headers.merge("Cookie" => access_cookie, "HTTP_COOKIE" => access_cookie)
     other_token = ClientToken.create!(
       authentication_epoch: 0,
       user: @user,
@@ -717,7 +702,6 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       discard_at: 1.day.from_now,
     )
-    mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_email")
     ClientStepUpSession.create!(
       user_token: other_token,
       scope: "settings_email",
@@ -729,9 +713,25 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     )
 
     before_audit_count = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
-    patch base_app_identity_mfa_challenge_url(ri: "jp", host: @base_host),
-          params: { user: { security_mode_id: SecurityModeConfigurable::NORMAL } },
-          headers: @headers
+    selection_client = Object.new
+    selection_client.define_singleton_method(:get) do |path|
+      raise ArgumentError, "unexpected selection endpoint" unless path == "/identity/selection"
+
+      OrgAdminAuthorityClient::Result.new(status: :ok, data: {}, errors: {}, http_status: 200)
+    end
+    expected_access_token = access_token
+    selection_boundary =
+      lambda do |surface:, **arguments|
+        raise ArgumentError, "selection actor mismatch" unless
+          arguments.fetch(:access_token) == expected_access_token && surface == "app"
+
+        selection_client
+      end
+    OrgAdminAuthorityClient.stub(:new, selection_boundary) do
+      patch base_app_identity_mfa_challenge_url(ri: "jp", host: @base_host),
+            params: { user: { security_mode_id: SecurityModeConfigurable::NORMAL } },
+            headers: @headers
+    end
 
     assert_response :redirect
     assert_equal before_audit_count + 1,
@@ -750,154 +750,156 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_includes [302, 303, 401, 403, 422], response.status
   end
 
-  test "email verification completion retains current session and revokes other sessions and step-up grants" do
-    satisfy_user_verification(@token, scope: "settings_email")
-    # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
-    passkey = @user.client_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
+  test "ADVANCED to NORMAL refuses a five-minute-expired OP step-up event" do
+    @user.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    now = OpBaseAppRecord.database_now
+    auth_time = now.to_i - StepUpEvidenceValue::MAX_AGE_SECONDS - 1
+    @grant.update!(
+      oidc_auth_time: Time.at(auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
     )
-    requirement = StepUpRequirement.new(
-      scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
-      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @user.public_id,
-      resource_ref: nil, tenant_ref: nil,
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+    ClientStepUpCommit.create!(
+      grant: @grant,
+      root_token: @token,
+      context_ref: PublicId.generate,
+      verified_method: "passkey",
+      committed_at: Time.at(auth_time).utc,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: @user,
-      token: @token,
-      requirement: requirement,
-      return_to: "/identity/emails/registration/new",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-      base_token: @token,
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    access_token = AuthenticationTokenService.encode(
+      @user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: @token.public_id,
+      base_session_public_id: @token.public_id,
+      oidc_sid: @grant.public_id,
+      oidc_jti: @grant.oidc_jti,
+      expires_at: now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      amr: ["passkey"],
+      auth_time: auth_time,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(@user, resource_type: "client"),
+      client_id: oidc_client.client_id,
     )
-    transaction = issuance.transaction
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    attached, raw_sid = ClientAuthCeremonySession.issue!
-    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
-    binding.confirm_base!(base_token: @token, browser_digest: binding.base_browser_digest)
-    BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
-      raw_auth_sid: raw_sid,
+    cookie = "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{access_token}; #{@rp_session_cookie}"
+    headers = @headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+
+    selection_client = Object.new
+    selection_client.define_singleton_method(:get) do |path|
+      raise ArgumentError, "unexpected selection endpoint" unless path == "/identity/selection"
+
+      OrgAdminAuthorityClient::Result.new(status: :ok, data: {}, errors: {}, http_status: 200)
+    end
+    expected_access_token = access_token
+    selection_boundary =
+      lambda do |surface:, **arguments|
+        raise ArgumentError, "selection actor mismatch" unless
+          arguments.fetch(:access_token) == expected_access_token && surface == "app"
+
+        selection_client
+      end
+    OrgAdminAuthorityClient.stub(:new, selection_boundary) do
+      patch base_app_identity_mfa_challenge_url(ri: "jp", host: @base_host),
+            params: { user: { security_mode_id: SecurityModeConfigurable::NORMAL } }, headers: headers
+    end
+
+    assert_response :see_other
+    verification_uri = URI.parse(response.location)
+
+    assert_equal "/verification", verification_uri.path
+    assert_equal "settings_mfa", Rack::Utils.parse_query(verification_uri.query).fetch("scope")
+    assert_equal SecurityModeConfigurable::ADVANCED, @user.reload.security_mode_id
+    assert_predicate @token.reload, :currently_usable?
+  end
+
+  test "ADVANCED to NORMAL refuses an OP event after its root session is revoked" do
+    @user.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    now = OpBaseAppRecord.database_now
+    auth_time = now.to_i - 1
+    @grant.update!(
+      oidc_auth_time: Time.at(auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
     )
-    transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
-      user_verified: true,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
+    ClientStepUpCommit.create!(
+      grant: @grant,
+      root_token: @token,
+      context_ref: PublicId.generate,
+      verified_method: "passkey",
+      committed_at: Time.at(auth_time).utc,
     )
-    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-      previous_raw_sid: raw_sid,
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    access_token = AuthenticationTokenService.encode(
+      @user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: @token.public_id,
+      base_session_public_id: @token.public_id,
+      oidc_sid: @grant.public_id,
+      oidc_jti: @grant.oidc_jti,
+      expires_at: now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      amr: ["passkey"],
+      auth_time: auth_time,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(@user, resource_type: "client"),
+      client_id: oidc_client.client_id,
     )
-    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
-    result = BaseAuthAdmissionCoordinator.issue_result!(
-      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-    )
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: @user, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
-    )
-    other_token = ClientToken.create!(
-      authentication_epoch: 0,
-      user: @user,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: PublicId.generate,
-      discard_at: 1.day.from_now,
-    )
-    # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
-    passkey = @user.client_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
-    )
-    requirement = StepUpRequirement.new(
-      scope: "settings_secret_credential", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
-      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @user.public_id,
-      resource_ref: nil, tenant_ref: nil,
-      session_binding: other_token.public_id, token_binding: other_token.public_id, require_session_binding: true,
-    )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: @user,
-      token: other_token,
-      requirement: requirement,
-      return_to: "/secrets",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-      base_token: other_token,
-    )
-    transaction = issuance.transaction
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    attached, raw_sid = ClientAuthCeremonySession.issue!
-    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
-    binding.confirm_base!(base_token: other_token, browser_digest: binding.base_browser_digest)
-    BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
-      raw_auth_sid: raw_sid,
-    )
-    transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
-      user_verified: true,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
-    )
-    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-      previous_raw_sid: raw_sid,
-    )
-    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
-    result = BaseAuthAdmissionCoordinator.issue_result!(
-      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-    )
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: @user, token: other_token, transaction: transaction, requirement: requirement, raw_result: result.code,
-    )
-    TurnstileVerifierStub.challenge_enabled = true
-    TurnstileVerifierStub.challenge_response = { "success" => true }
-    address = "verified-transition-#{SecureRandom.hex(4)}@example.com"
-    host! @base_host
-    https!
-    perform_enqueued_jobs do
+    cookie = "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{access_token}; #{@rp_session_cookie}"
+    headers = @headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+    @token.revoke!
+
+    selection_client = Object.new
+    selection_client.define_singleton_method(:get) do |path|
+      raise ArgumentError, "unexpected selection endpoint" unless path == "/identity/selection"
+
+      OrgAdminAuthorityClient::Result.new(status: :ok, data: {}, errors: {}, http_status: 200)
+    end
+    expected_access_token = access_token
+    selection_boundary =
+      lambda do |surface:, **arguments|
+        raise ArgumentError, "selection actor mismatch" unless
+          arguments.fetch(:access_token) == expected_access_token && surface == "app"
+
+        selection_client
+      end
+    OrgAdminAuthorityClient.stub(:new, selection_boundary) do
+      patch base_app_identity_mfa_challenge_url(ri: "jp", host: @base_host),
+            params: { user: { security_mode_id: SecurityModeConfigurable::NORMAL } }, headers: headers
+    end
+
+    assert_response :unprocessable_content
+    assert_equal SecurityModeConfigurable::ADVANCED, @user.reload.security_mode_id
+    assert_predicate @token.reload, :revoked?
+  end
+
+  test "RP email verification refuses before writing while its Base writer is out of scope" do
+    emails_before = @user.client_emails.pluck(:id, :address, :user_email_status_id)
+    session_ids_before = @user.client_tokens.order(:id).pluck(:id)
+    audit_count_before = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
+
+    assert_no_enqueued_jobs(only: OtpNotifierEmailDeliveryJob) do
       post base_app_identity_emails_registration_url(ri: "jp", host: @base_host),
-           params: { user_email: { address: address }, "cf-turnstile-response": "test" },
+           params: { user_email: { address: "out-of-scope-#{SecureRandom.hex(4)}@example.com" } },
            headers: @headers
     end
 
-    assert_response :redirect
-    pending_email = @user.client_emails.find { |email| email.address == address }
-
-    assert_not_nil pending_email
-    mail = ActionMailer::Base.deliveries.last
-    pass_code = (mail.text_part || mail).body.decoded.match(/Pass Code:\s*([0-9]{6})/).captures.fetch(0)
-    cookie = [cookies.to_hash.map { |name, value| "#{name}=#{Rack::Utils.escape(value)}" }.join("; "),
-              @headers.fetch("Cookie"),].join("; ")
-    submission_headers = @headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
-    before_audit_count = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
-
-    TurnstileVerifierStub.challenge_enabled = true
-    begin
-      patch(
-        base_app_identity_emails_registration_url(ri: "jp", host: @base_host),
-        params: {
-          user_email: { pass_code: pass_code },
-          "cf-turnstile-response": "test",
-        },
-        headers: submission_headers,
-      )
-    ensure
-      TurnstileVerifierStub.challenge_enabled = false
-    end
-
-    assert_response :redirect
-    assert_equal ClientEmailStatus::VERIFIED, pending_email.reload.user_email_status_id
-    assert_equal before_audit_count + 1,
+    assert_response :service_unavailable
+    assert_equal I18n.t("auth.rp_feature_unavailable"), response.body
+    assert_equal emails_before, @user.client_emails.pluck(:id, :address, :user_email_status_id)
+    assert_equal session_ids_before, @user.client_tokens.order(:id).pluck(:id)
+    assert_equal audit_count_before,
                  ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
-    assert_predicate @token.reload, :currently_usable?
-    assert_predicate other_token.reload, :revoked?
-    assert_nil @token.last_step_up_at
-    assert_nil other_token.last_step_up_at
-    assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
-
-    get base_app_identity_url(ri: "jp", host: @base_host), headers: other_session_headers(other_token)
-
-    assert_includes [302, 303, 401, 403, 422], response.status
-    assert_not_equal :success, response.status
   end
 
   private
@@ -1193,7 +1195,6 @@ class StepUpAuthenticationTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1216,24 +1217,6 @@ class StepUpAuthenticationTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

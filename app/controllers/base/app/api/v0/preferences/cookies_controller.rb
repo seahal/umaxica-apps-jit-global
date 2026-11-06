@@ -21,7 +21,7 @@ module Base
 
             declare_authentication_mode! :open
 
-            skip_before_action :set_preferences_cookie, raise: false
+            skip_before_action :set_preferences_cookie, unless: -> { request.get? || request.head? }, raise: false
             skip_before_action :set_current_actor, raise: false
 
             rescue_from PreferenceBase::ResolutionError, with: :render_preference_dependency_failure

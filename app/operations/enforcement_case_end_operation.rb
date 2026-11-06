@@ -14,6 +14,8 @@ class EnforcementCaseEndOperation
 
   class PrincipalAlreadyReleased < StandardError; end
 
+  class NestedStepUpTransactionError < StandardError; end
+
   public
 
   def self.call(...)
@@ -21,13 +23,16 @@ class EnforcementCaseEndOperation
   end
 
   def initialize(enforcement_case:, reason:, ended_by_operator_public_id: nil,
-                 step_up_token: nil, step_up_requirement: nil, recovery_ceremony: nil)
+                 step_up_token: nil, step_up_actor: nil, step_up_evidence: nil, recovery_ceremony: nil,
+                 authorization_rule: nil)
     @enforcement_case = enforcement_case
     @reason = reason
     @ended_by_operator_public_id = ended_by_operator_public_id
     @step_up_token = step_up_token
-    @step_up_requirement = step_up_requirement
+    @step_up_actor = step_up_actor
+    @step_up_evidence = step_up_evidence
     @recovery_ceremony = recovery_ceremony
+    @authorization_rule = authorization_rule
     validate_step_up_pair!
   end
 
@@ -38,22 +43,12 @@ class EnforcementCaseEndOperation
 
     validate_recovery_pair!
 
-    committed_end_reason = nil
-    enforcement_case.class.transaction do
-      enforcement_case.with_lock do
-        if recovery_ceremony
-          recovery_ceremony.with_lock do
-            validate_locked_recovery!
-            commit_end!
-            recovery_ceremony.consume!
-          end
-        else
-          commit_end!
-        end
-
-        committed_end_reason = enforcement_case.end_reason
+    committed_end_reason =
+      if step_up_token
+        commit_end_with_step_up_authority!
+      else
+        commit_end_transaction!
       end
-    end
 
     release_principal_access_effect!
     enforcement_case.write_audit_event_once!(audit_event_type(committed_end_reason), **audit_actor)
@@ -74,8 +69,8 @@ class EnforcementCaseEndOperation
 
   private
 
-  attr_reader :enforcement_case, :reason, :ended_by_operator_public_id, :step_up_token, :step_up_requirement,
-              :recovery_ceremony
+  attr_reader :enforcement_case, :reason, :ended_by_operator_public_id, :step_up_token, :step_up_actor,
+              :step_up_evidence, :recovery_ceremony, :authorization_rule
 
   def commit_end!
     return if enforcement_case.ended_at.present?
@@ -90,7 +85,59 @@ class EnforcementCaseEndOperation
     enforcement_case.authentication_method_effects.where(ended_at: nil).update_all(ended_at: now)
     enforcement_case.identifier_effects.where(ended_at: nil).update_all(ended_at: now)
     # rubocop:enable Rails/SkipsModelValidations
-    step_up_token&.consume_step_up_evidence!(requirement: step_up_requirement, now:)
+    authorize_step_up!(step_up_actor) if step_up_token
+    verify_step_up!
+  end
+
+  def commit_end_transaction!
+    committed_end_reason = nil
+    enforcement_case.class.transaction do
+      enforcement_case.with_lock do
+        if recovery_ceremony
+          recovery_ceremony.with_lock do
+            validate_locked_recovery!
+            commit_end!
+            recovery_ceremony.consume!
+          end
+        else
+          commit_end!
+        end
+
+        committed_end_reason = enforcement_case.end_reason
+      end
+    end
+    committed_end_reason
+  end
+
+  def commit_end_with_step_up_authority!
+    unless step_up_actor.class.lease_connection.open_transactions.zero? &&
+        step_up_token.class.lease_connection.open_transactions.zero? &&
+        enforcement_case.class.lease_connection.open_transactions.zero?
+      raise NestedStepUpTransactionError,
+            "Step-Up Case end must own the actor, OP and Case transactions"
+    end
+
+    # Hold the actor first and retain OP evidence locks through the Case commit. Principal access
+    # release and audit convergence happen after both transaction boundaries close.
+    step_up_actor.with_lock do
+      step_up_token.class.transaction { commit_end_transaction! }
+    end
+  end
+
+  def authorize_step_up!(locked_actor)
+    policy = EnforcementCasePolicy.new(enforcement_case, user: locked_actor)
+    authorized =
+      case authorization_rule
+      when :release
+        policy.apply(:release?)
+      when :review_appeal
+        policy.apply(:review_appeal?)
+      else
+        raise ArgumentError, "Step-Up Case end requires an explicit authorization rule"
+      end
+    return if authorized
+
+    raise EnforcementCaseAuthorizationRejected, "operator is no longer authorized to end this Case"
   end
 
   def validate_recovery_pair!
@@ -111,15 +158,28 @@ class EnforcementCaseEndOperation
   end
 
   def validate_step_up_pair!
-    return if step_up_token.nil? && step_up_requirement.nil?
-    return if step_up_token.is_a?(OperatorToken) && step_up_requirement.is_a?(StepUpRequirement) &&
-      step_up_requirement.scope == "enforcement_case_release" &&
-      step_up_requirement.actor_ref == ended_by_operator_public_id &&
-      Operator.exists?(id: step_up_token.staff_id, public_id: ended_by_operator_public_id) &&
-      step_up_requirement.token_binding == step_up_token.public_id &&
-      step_up_requirement.audience == "step_up:org"
+    return if step_up_token.nil? && step_up_actor.nil? && step_up_evidence.nil? && ended_by_operator_public_id.nil?
 
-    raise ArgumentError, "enforcement end Step-Up token and requirement must be supplied together"
+    valid_actor_and_token = step_up_token.is_a?(OperatorToken) && step_up_actor.is_a?(Operator) &&
+      step_up_actor.persisted? && step_up_actor.public_id == ended_by_operator_public_id &&
+      step_up_token.staff_id == step_up_actor.id
+    raise ArgumentError, "operator enforcement end Step-Up actor and token must be supplied together" unless
+      valid_actor_and_token
+    unless %i(release review_appeal).include?(authorization_rule)
+      raise ArgumentError, "operator enforcement end requires an explicit authorization rule"
+    end
+    return if step_up_evidence.is_a?(StepUpEvidenceValue)
+    raise TokenStatusManagement::StepUpEvidenceUnavailable, "Enforcement end requires current Step-Up" if
+      step_up_evidence.nil?
+
+    raise ArgumentError, "operator enforcement end requires its bound Step-Up actor, token and evidence"
+  end
+
+  def verify_step_up!
+    return if step_up_token.nil?
+    return if StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: step_up_actor, token: step_up_token)
+
+    raise TokenStatusManagement::StepUpEvidenceUnavailable, "Enforcement end requires current Step-Up"
   end
 
   # The operator who ended the Case; nil when no operator did (expiry, principal verification).

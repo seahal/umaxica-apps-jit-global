@@ -3,7 +3,7 @@
 require "test_helper"
 
 class CeremonyOtpDestinationBindingTest < ActiveSupport::TestCase
-  [ClientEmailCeremonyTransaction,    OperatorEmailCeremonyTransaction,].each do |model|
+  [ClientEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} email proof cannot authenticate a replaced destination digest" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "sign_up",
@@ -26,7 +26,7 @@ class CeremonyOtpDestinationBindingTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction, OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} telephone proof cannot authenticate a replaced destination digest" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "sign_up",

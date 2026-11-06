@@ -17,29 +17,50 @@ class EmailCredentialRegistrationOtpResendIssuer
       case [actor, token, email, transaction]
       in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction]
         ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
+      in [Client, ClientToken, ClientEmail, nil]
+        ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
       else raise ArgumentError, "unsupported Email registration resend realm"
       end
   end
 
   def call
+    if transaction.nil?
+      return result(:unavailable) unless actor.is_a?(Client) && email.user_id == actor.id
+
+      return AppRegisteredContactDestinationGuard.with_lock(contact: email, owner: actor) do |registered|
+        result(registered ? :registered_destination : :unavailable)
+      end
+    end
+
     expected = CredentialRegistrationOtpSessionValue.for(
       surface: surface, channel: :email, transaction_ref: transaction.transaction_id,
       root_ref: token.public_id, browser_nonce: browser_nonce,
     ).dump
     return result(:unavailable) unless transaction.session_ref == expected
 
-    actor.class.connection_class_for_self.connected_to(role: :writing) do
-      actor.with_lock do
-        transaction.class.connection_owner.connected_to(role: :writing) do
-          token_device_session.with_lock do
-            token.with_lock do
-              email.with_lock do
-                resend_under_original_parent(expected)
+    resend =
+      lambda do |registered_destination|
+        next result(:registered_destination) if registered_destination
+
+        actor.class.connection_class_for_self.connected_to(role: :writing) do
+          actor.with_lock do
+            transaction.class.connection_owner.connected_to(role: :writing) do
+              token_device_session.with_lock do
+                token.with_lock do
+                  email.with_lock do
+                    resend_under_original_parent(expected)
+                  end
+                end
               end
             end
           end
         end
       end
+
+    if actor.is_a?(Client)
+      AppRegisteredContactDestinationGuard.with_lock(contact: email, owner: actor, &resend)
+    else
+      resend.call(false)
     end
   end
 

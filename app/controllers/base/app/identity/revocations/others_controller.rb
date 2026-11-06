@@ -18,7 +18,7 @@ module Base
               sessions: current_client.client_tokens.session_inventory,
               current_token: current_session,
               current_session_public_id: current_session_public_id,
-              step_up_requirement: step_up_requirement(scope: "session_revoke_all"),
+              step_up_evidence: current_step_up_evidence,
             )
             redirect_to(base_app_sessions_path(ri: params[:ri]), status: :see_other)
           rescue AuthenticationOtherSessionsRevoker::StepUpUnavailable

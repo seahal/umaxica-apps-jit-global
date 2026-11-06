@@ -42,7 +42,7 @@ class AcceptanceWu13AuthorizeUnrelatedParamsTest < ActionDispatch::IntegrationTe
           surface, unrelated_parameter, response.status,
           transaction_class.count - transactions_before,
           binding_class.count - bindings_before,
-          transaction && [transaction.status, transaction.intent,
+          transaction && [transaction.status_name, transaction.intent,
                           transaction.cancellation_handoff_ref, transaction.cancellation_handoff_ciphertext,],
         ]
       end

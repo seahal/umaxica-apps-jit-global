@@ -1,5 +1,11 @@
 ---
 ja:
+  base_social_identities:
+    title: 連携済みアカウント
+    description: あなたの identity に連携されたアカウントを確認します。
+    org_description: 組織へのサインイン用に設定されたアカウントを確認します。
+    linked: 連携済み
+    unlinked: 未連携
   acme:
     app:
       preference:
@@ -85,10 +91,10 @@ ja:
             heading: 1ページあたりの表示件数
             option_label: 表示件数
           options:
-            '10': 10件
-            '100': 100件
-            '20': 20件
-            '50': 50件
+            "10": 10件
+            "100": 100件
+            "20": 20件
+            "50": 50件
             infinity: 無制限
         region:
           edit:
@@ -124,8 +130,8 @@ ja:
             system: システム設定
         time_format:
           options:
-            '12': 12時間表記
-            '24': 24時間表記
+            "12": 12時間表記
+            "24": 24時間表記
             hour_12: 12時間表記
             hour_24: 24時間表記
         timezone:
@@ -216,7 +222,7 @@ ja:
         in:
           limitations:
             capacity_still_full: セッション容量がまだいっぱいです。続行するには別のセッションを無効にしてください。
-            invalid_or_expired: このサインイン制限リンクは無効または期限切れです。
+            invalid_or_expired: このログイン制限リンクは無効または期限切れです。
             revoke_failed: 選択されたセッションを無効にできませんでした。
     com:
       preference:
@@ -291,10 +297,10 @@ ja:
             standard: 標準モーション
         page_size:
           options:
-            '10': 10件
-            '100': 100件
-            '20': 20件
-            '50': 50件
+            "10": 10件
+            "100": 100件
+            "20": 20件
+            "50": 50件
             infinity: 無制限
         region:
           edit:
@@ -334,8 +340,8 @@ ja:
             heading: 時刻形式
             option_label: 時刻形式
           options:
-            '12': 12時間表記
-            '24': 24時間表記
+            "12": 12時間表記
+            "24": 24時間表記
             hour_12: 12時間表記
             hour_24: 24時間表記
         timezone:
@@ -486,10 +492,10 @@ ja:
             standard: 標準モーション
         page_size:
           options:
-            '10': 10件
-            '100': 100件
-            '20': 20件
-            '50': 50件
+            "10": 10件
+            "100": 100件
+            "20": 20件
+            "50": 50件
             infinity: 無制限
         region:
           edit:
@@ -529,8 +535,8 @@ ja:
             heading: 時刻形式
             option_label: 時刻形式
           options:
-            '12': 12時間表記
-            '24': 24時間表記
+            "12": 12時間表記
+            "24": 24時間表記
             hour_12: 12時間表記
             hour_24: 24時間表記
         timezone:
@@ -805,7 +811,7 @@ ja:
         exceeds_e164_length: はE.164形式の最大桁数（%{max}桁）を超えています
         identity_audit_event_format_invalid: は大文字とアンダースコアのみで構成される必要があります
         invalid_e164_format: はE.164形式（例：+819012345678）である必要があります
-        record_invalid: 'バリデーションに失敗しました: %{errors}'
+        record_invalid: "バリデーションに失敗しました: %{errors}"
         restrict_dependent_destroy:
           has_many: "%{record}が存在しているので削除できません"
           has_one: "%{record}が存在しているので削除できません"
@@ -814,7 +820,8 @@ ja:
         operator:
           attributes:
             public_id:
-              invalid_format: 英大文字と数字のうち SecureRandom::BASE32_ALPHABET の文字のみで16文字にしてください
+              invalid_format:
+                英大文字と数字のうち SecureRandom::BASE32_ALPHABET の文字のみで16文字にしてください
         org_document_tagger:
           attributes:
             org_document_tag_id:
@@ -822,7 +829,8 @@ ja:
         staff:
           attributes:
             public_id:
-              invalid_format: 英大文字と数字のうち SecureRandom::BASE32_ALPHABET の文字のみで16文字にしてください
+              invalid_format:
+                英大文字と数字のうち SecureRandom::BASE32_ALPHABET の文字のみで16文字にしてください
   app_document_categories:
     "%{id}": app_document_category_%{id}
     announcement: お知らせ
@@ -899,7 +907,16 @@ ja:
     client_emails: メールアドレス
     client_id: クライアントID
     client_persona_id: ペルソナID
+    client_preference_adult_content_gates: 成人向けコンテンツ設定
+    client_preference_currencies: 通貨設定
+    client_preference_date_formats: 日付形式設定
+    client_preference_densities: 表示密度設定
+    client_preference_languages: 言語設定
+    client_preference_motions: 動きの設定
+    client_preference_page_sizes: 1ページあたりの表示件数設定
+    client_preference_regions: 地域設定
     client_preference_themes: テーマ設定
+    client_preference_time_formats: 時刻形式設定
     client_preference_timezones: タイムゾーン設定
     client_telephones: 電話番号
     client_tokens: トークン
@@ -974,10 +991,21 @@ ja:
     org_preference_regions: 地域設定
     org_preference_themes: テーマ設定
     org_preference_timezones: タイムゾーン設定
+    operator_preference_adult_content_gates: 成人向けコンテンツ設定
+    operator_preference_currencies: 通貨設定
+    operator_preference_date_formats: 日付形式設定
+    operator_preference_densities: 表示密度設定
+    operator_preference_languages: 言語設定
+    operator_preference_motions: 動きの設定
+    operator_preference_page_sizes: 1ページあたりの表示件数設定
+    operator_preference_regions: 地域設定
+    operator_preference_themes: テーマ設定
+    operator_preference_time_formats: 時刻形式設定
+    operator_preference_timezones: タイムゾーン設定
     org_preferences: 組織設定
     organization: 組織
     organization_id: 組織ID
-    pass_code: 認証コード
+    pass_code: 確認コード
     password_digest: パスワードダイジェスト
     performant: パフォーマンスCookie
     persona_id: ペルソナID
@@ -1003,7 +1031,7 @@ ja:
     sequence: 連番
     sid: セッション参照
     sign_count: 署名回数
-    sign_in_flow_id: サインインフロー
+    sign_in_flow_id: ログインフロー
     social_provider: ソーシャルプロバイダー
     source_record_id: ソースレコードID
     staff: スタッフ
@@ -1045,10 +1073,11 @@ ja:
     vocabulary_public_id_snapshot: 語彙公開IDのスナップショット
     webauthn_id: WebAuthn ID
   auth:
+    rp_feature_unavailable: "この機能は現在ご利用いただけません。時間をおいてもう一度お試しください。"
     app:
       dashboards:
         show:
-          description: Sign App のサインイン後のランディングです。
+          description: Sign App のログイン後のランディングです。
       settings:
         activity:
           events:
@@ -1079,7 +1108,7 @@ ja:
     org:
       dashboards:
         show:
-          description: Sign Org のサインイン後のランディングです。
+          description: Sign Org のログイン後のランディングです。
       settings:
         activity:
           events:
@@ -1091,20 +1120,25 @@ ja:
         in:
           passkeys:
             create:
-              page_title: パスキーでサインイン
+              page_title: パスキーでログイン
           sessions:
             update:
-              page_title: サインイン
+              page_title: ログイン
         up:
           invitations:
             create:
               turnstile_failed: 検証に失敗しました。もう一度お試しください。
-    session_expired: セッションの有効期限が切れました。もう一度サインインしてください。
+    session_expired: セッションの有効期限が切れました。もう一度ログインしてください。
     step_up:
       canceled: 認証をキャンセル
+      challenge:
+        description: リクエストは完了していません。再試行する前に本人確認をしてください。
+        title: 本人確認
       completed: 続行
-      emergency_unavailable: このセッションは緊急アクセスで確立されたため、段階的認証を行えません。サインアウトして通常モードで サインインし直してください。
-      fresh_sign_in_required: 最初の認証方法を登録するには、いったんサインアウトしてからサインインし直してください。
+      emergency_unavailable:
+        このセッションは緊急アクセスで確立されたため、段階的認証を行えません。ログアウトして通常モードで
+        ログインし直してください。
+      fresh_sign_in_required: 最初の認証方法を登録するには、いったんログアウトしてからログインし直してください。
       invalid_request: 無効な認証リクエストです。
       method_unavailable: 選択した認証方法は利用できません。
       register_methods_required: 利用可能なステップアップ認証がありません。パスキー・メール・TOTPを登録してください。
@@ -1113,9 +1147,23 @@ ja:
       verification_required: 認証が必要です。
     unauthorized: 権限がありません
   avatar_backfill:
-    legacy_client_bindings_desc: 曖昧さのないレガシー avatars.client_id バインディングをバックフィルします。デフォルトはドライランです。変更する場合は APPLY=1 を設定してください。
+    legacy_client_bindings_desc:
+      曖昧さのないレガシー avatars.client_id
+      バインディングをバックフィルします。デフォルトはドライランです。変更する場合は APPLY=1
+      を設定してください。
   base:
     app:
+      selectors:
+        show:
+          account_label: ペルソナ
+          avatar_label: アバター
+          description: このセッションで使用するペルソナを選択してください。
+          empty_message: このアカウントで利用できるペルソナがありません。
+          invalid_selection: このペルソナは利用できなくなりました。利用可能なペルソナを選択してください。
+          organization_label: 組織
+          submit_label: 続ける
+          title: ペルソナを選択
+          unit_label: 組織ユニット
       avatars:
         already_assigned: すでにアバターをお持ちのため、新しいアバターは作成できません。
         moniker_validation:
@@ -1125,9 +1173,11 @@ ja:
           max_graphemes: 名前は最大 %{count} 文字です。
       identity:
         credential_warning:
-          body: 別のサインイン方法を追加すると、Apple サインインを利用できないときもアカウントにアクセスできます。
+          body:
+            別のログイン方法を追加すると、Apple
+            サインインを利用できないときもアカウントにアクセスできます。
           google: Google と連携する
-          heading: 別のサインイン方法を追加
+          heading: 別のログイン方法を追加
           passkey: パスキーを追加
         emails:
           registrations:
@@ -1246,10 +1296,10 @@ ja:
             heading: 1ページあたりの表示件数
             option_label: 表示件数
           options:
-            '10': 10件
-            '100': 100件
-            '20': 20件
-            '50': 50件
+            "10": 10件
+            "100": 100件
+            "20": 20件
+            "50": 50件
             infinity: 無制限
         theme:
           edit:
@@ -1267,6 +1317,15 @@ ja:
         calendar_settings: カレンダー設定
         clock_settings: 時計設定
         cookie_settings: クッキー設定
+        notification_settings: 通知設定
+        notification:
+          title: 通知
+          description: 通知の受け取り方を選びます。
+          placeholder: この画面はモックです。通知の設定はまだ利用できません。
+          web_push:
+            label: Web Push 通知
+            enabled: 有効
+            disabled: 無効
         currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
@@ -1290,21 +1349,28 @@ ja:
         add: Secretを1個追加
         capacity_conflict: Secretの上限に達しているか、別の発行操作が進行中です。
         confirm: 提示されたSecretを保存しました
-        distribution_omitted: 有効な Secret が上限の20個あるため、今回は新しい Secret を配布していません。保存済みの Secret は引き続き使用できます。
-        distribution_one_confirmed: Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布しました。
-        distribution_one_present: Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布します。
+        distribution_omitted:
+          有効な Secret が上限の20個あるため、今回は新しい Secret を配布していません。保存済みの
+          Secret は引き続き使用できます。
+        distribution_one_confirmed:
+          Secret
+          は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布しました。
+        distribution_one_present:
+          Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布します。
         payload_unavailable: 提示値を取得できません。新しい発行を明示的に開始してください。
         present: Secretを一度だけ表示
         reattempt: もう一度発行する
         rename: 名前を変更
         revoke: 失効
-        single_delivery: この値を保存してください。再表示はできません。保存確認を完了するまでSign inには使えません。
+        single_delivery:
+          この値を保存してください。再表示はできません。保存確認を完了するまでSign
+          inには使えません。
         title: Secret
       sign:
         in:
           limitations:
             capacity_still_full: セッション容量がまだいっぱいです。続行するには別のセッションを無効にしてください。
-            invalid_or_expired: このサインイン制限リンクは無効または期限切れです。
+            invalid_or_expired: このログイン制限リンクは無効または期限切れです。
             revoke_failed: セッションを無効化できませんでした。
     com:
       identity:
@@ -1396,10 +1462,10 @@ ja:
             heading: 1ページあたりの表示件数
             option_label: 表示件数
           options:
-            '10': 10件
-            '100': 100件
-            '20': 20件
-            '50': 50件
+            "10": 10件
+            "100": 100件
+            "20": 20件
+            "50": 50件
             infinity: 無制限
         resets:
           back: 設定一覧に戻る
@@ -1424,6 +1490,15 @@ ja:
         calendar_settings: カレンダー設定
         clock_settings: 時計設定
         cookie_settings: クッキー設定
+        notification_settings: 通知設定
+        notification:
+          title: 通知
+          description: 通知の受け取り方を選びます。
+          placeholder: この画面はモックです。通知の設定はまだ利用できません。
+          web_push:
+            label: Web Push 通知
+            enabled: 有効
+            disabled: 無効
         currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
@@ -1484,7 +1559,9 @@ ja:
           title: 措置ケース
         errors:
           audit_unavailable: 監査記録を書き込めなかったため、操作を開始していません。
-          break_glass_required: このケースの解除には第二承認者を伴う break-glass が必要ですが、コンソールでは提供していません。
+          break_glass_required:
+            このケースの解除には第二承認者を伴う break-glass
+            が必要ですが、コンソールでは提供していません。
           capability: 権限を一覧から選んでください。
           conflict: 記録済みの操作または対象の現在の状態と競合しています。再読み込みして対象を確認してください。
           duration: 有効期間を一覧から選んでください。
@@ -1571,7 +1648,7 @@ ja:
         revocations:
           acknowledgement: 対象アカウントと理由を確認しました。
           action: 全セッションを失効
-          effect: このアカウントの現在のセッションをすべて終了します。アカウントは停止されず、再度サインインできます。
+          effect: このアカウントの現在のセッションをすべて終了します。アカウントは停止されず、再度ログインできます。
           new_title: 全セッションを失効
           show_title: セッション失効の結果
           submit: セッションを失効
@@ -1704,10 +1781,10 @@ ja:
             heading: 1ページあたりの表示件数
             option_label: 表示件数
           options:
-            '10': 10件
-            '100': 100件
-            '20': 20件
-            '50': 50件
+            "10": 10件
+            "100": 100件
+            "20": 20件
+            "50": 50件
             infinity: 無制限
         resets:
           back: 設定一覧に戻る
@@ -1745,6 +1822,15 @@ ja:
         calendar_settings: カレンダー設定
         clock_settings: 時計設定
         cookie_settings: クッキー設定
+        notification_settings: 通知設定
+        notification:
+          title: 通知
+          description: 通知の受け取り方を選びます。
+          placeholder: この画面はモックです。通知の設定はまだ利用できません。
+          web_push:
+            label: Web Push 通知
+            enabled: 有効
+            disabled: 無効
         currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
@@ -1766,11 +1852,11 @@ ja:
         message: 組織用アカウントと各種設定へ進みます。
     shared:
       dashboard:
-        description: サインイン済み
+        description: ログイン済み
         links:
           account: アカウント
-          authorize_sign_in: 認可（サインイン）
-          authorize_sign_up: 認可（サインアップ）
+          authorize_sign_in: 認可（ログイン）
+          authorize_sign_up: 認可（新規登録）
           avatar: アバター
           billings: 請求
           dashboard: ダッシュボード
@@ -1807,16 +1893,16 @@ ja:
             apple_sign_in: Appleでサインイン
             email_account_created: メールアドレスでアカウントを作成
             google_account_created: Googleでアカウントを作成
-            google_sign_in: Googleでサインイン
+            google_sign_in: Googleでログイン
             passkey_description_changed: パスキーの名前を変更
             passkey_registered: パスキーを登録
             passkey_removed: パスキーを削除
             security_change: セキュリティ設定を変更
             session_revoked: セッションを終了
             session_security_alert: セキュリティ上の理由でセッションを終了
-            sign_in: サインイン
-            sign_in_failed: サインインに失敗
-            sign_out: サインアウト
+            sign_in: ログイン
+            sign_in_failed: ログインに失敗
+            sign_out: ログアウト
             step_up_completed: 追加認証を完了
             step_up_failed: 追加認証に失敗
             telephone_account_created: 電話番号でアカウントを作成
@@ -1846,6 +1932,7 @@ ja:
           title: パスキー
         sections:
           account: アカウント
+          external_services: 外部サービス
           profile: プロフィール
           security: セキュリティ
         sessions:
@@ -1882,12 +1969,12 @@ ja:
           title: 認証アプリ
         up_link: もどる
       lobby:
-        description: 続けるにはサインインしてください。
+        description: 続けるにはログインしてください。
         heading: ロビー
-        sign_in: サインイン
+        sign_in: ログイン
         title: ロビー
   billings:
-    signed_in_required: サインインが必要です。
+    signed_in_required: ログインが必要です。
   com_document_categories:
     "%{id}": com_document_category_%{id}
     announcement: お知らせ
@@ -2117,57 +2204,57 @@ ja:
       key: カスタムエラー
   date:
     abbr_day_names:
-    - 日
-    - 月
-    - 火
-    - 水
-    - 木
-    - 金
-    - 土
+      - 日
+      - 月
+      - 火
+      - 水
+      - 木
+      - 金
+      - 土
     abbr_month_names:
-    -
-    - 1月
-    - 2月
-    - 3月
-    - 4月
-    - 5月
-    - 6月
-    - 7月
-    - 8月
-    - 9月
-    - 10月
-    - 11月
-    - 12月
+      -
+      - 1月
+      - 2月
+      - 3月
+      - 4月
+      - 5月
+      - 6月
+      - 7月
+      - 8月
+      - 9月
+      - 10月
+      - 11月
+      - 12月
     day_names:
-    - 日曜日
-    - 月曜日
-    - 火曜日
-    - 水曜日
-    - 木曜日
-    - 金曜日
-    - 土曜日
+      - 日曜日
+      - 月曜日
+      - 火曜日
+      - 水曜日
+      - 木曜日
+      - 金曜日
+      - 土曜日
     formats:
       default: "%Y/%m/%d"
       long: "%Y年%m月%d日(%a)"
       short: "%m/%d"
     month_names:
-    -
-    - 1月
-    - 2月
-    - 3月
-    - 4月
-    - 5月
-    - 6月
-    - 7月
-    - 8月
-    - 9月
-    - 10月
-    - 11月
-    - 12月
+      -
+      - 1月
+      - 2月
+      - 3月
+      - 4月
+      - 5月
+      - 6月
+      - 7月
+      - 8月
+      - 9月
+      - 10月
+      - 11月
+      - 12月
     order:
-    - :year
-    - :month
-    - :day
+      - :year
+      - :month
+      - :day
   datetime:
     distance_in_words:
       about_x_hours:
@@ -2301,12 +2388,14 @@ ja:
       in: は%{count}の範囲に含めてください
       inclusion: は一覧にありません
       invalid: は不正な値です
+      invalid_browser_request: ブラウザからのリクエストが無効です。
       invalid_request: 無効なリクエストです。
       less_than: は%{count}より小さい値にしてください
       less_than_or_equal_to: は%{count}以下の値にしてください
-      login_cooldown_retry: 現在サインインできません。しばらく待ってから %{restart_url} でもう一度お試しください
+      login_cooldown_retry:
+        現在ログインできません。しばらく待ってから %{restart_url} でもう一度お試しください
       login_required: ログインが必要です
-      model_invalid: 'バリデーションに失敗しました: %{errors}'
+      model_invalid: "バリデーションに失敗しました: %{errors}"
       not_a_number: は数値で入力してください
       not_an_integer: は整数で入力してください
       not_authorized: この操作を行う権限がありません。
@@ -2321,9 +2410,11 @@ ja:
       required: を入力してください
       session_limit_exceeded: セッション数の上限に達しました
       sign_count_mismatch: パスキーのセキュリティ検証に失敗しました
-      sign_in_unavailable: 現在サインインをご利用いただけません。しばらくしてからお試しください。
+      sign_in_unavailable: 現在ログインをご利用いただけません。しばらくしてからお試しください。
       sign_up_unavailable: 現在新規登録をご利用いただけません。しばらくしてからお試しください。
+      stale_checkpoint: この画面は古くなっています。再読み込みしてから、もう一度お試しください。
       taken: はすでに存在します
+      temporarily_unavailable: 一時的に利用できません。しばらくしてからもう一度お試しください。
       too_long:
         one: "は%{count}文字以内で入力してください"
         other: "は%{count}文字以内で入力してください"
@@ -2341,7 +2432,8 @@ ja:
         no_passkeys_available: 利用可能なパスキーがありません
         options_failed: 認証オプションの取得に失敗しました
         origin_invalid: このサイトからの認証は許可されていません
-        origin_not_trusted: オリジン '%{origin}' は信頼されていません。TRUSTED_ORIGINS 環境変数を設定してください。
+        origin_not_trusted:
+          オリジン '%{origin}' は信頼されていません。TRUSTED_ORIGINS 環境変数を設定してください。
         pii_required: メールアドレスまたは電話番号を入力してください
       wrong_length:
         one: "は%{count}文字で入力してください"
@@ -2372,8 +2464,8 @@ ja:
       missing_provider: プロバイダー情報がありません
       missing_uid: プロバイダーからユーザー識別子を受信できませんでした
       not_logged_in: 先にログインしてください
-      pending_social_signup_failed: ソーシャルサインアップの確認を完了できませんでした。最初からやり直してください。
-      pending_social_signup_invalid_state: ソーシャルサインアップの確認状態が不正です。ページを更新して最初からやり直してください。
+      pending_social_signup_failed: ソーシャル新規登録の確認を完了できませんでした。最初からやり直してください。
+      pending_social_signup_invalid_state: ソーシャル新規登録の確認状態が不正です。ページを更新して最初からやり直してください。
       provider_error: プロバイダーとの通信中にエラーが発生しました
       state_expired: セッションの有効期限が切れました。もう一度お試しください。
       state_mismatch: セキュリティ検証に失敗しました。もう一度お試しください。
@@ -2399,11 +2491,14 @@ ja:
       no_passkeys_available: 利用可能なパスキーがありません
       options_failed: 認証オプションの取得に失敗しました
       origin_invalid: このサイトからの認証は許可されていません
-      origin_not_trusted: オリジン '%{origin}' は信頼されていません。TRUSTED_ORIGINS 環境変数を設定してください。
+      origin_not_trusted:
+        オリジン '%{origin}' は信頼されていません。TRUSTED_ORIGINS 環境変数を設定してください。
       passkey_limit_reached: 登録できるパスキーの上限に達しています。追加するには既存のパスキーを削除してください。
       pii_required: メールアドレスまたは電話番号を入力してください
       sign_count_mismatch: パスキーのセキュリティカウンターに問題があります。
-      sign_in_transaction_required: サインインの手続きが期限切れであるか、Microsoft サインインから開始されていません。最初からやり直してください。
+      sign_in_transaction_required:
+        ログインの手続きが期限切れであるか、Microsoft
+        サインインから開始されていません。最初からやり直してください。
       verification_failed: パスキーの検証に失敗しました。
       verification_required: パスキーの登録は WebAuthn 認証で完了する必要があります。
   hello: やぁ、せかい
@@ -2535,7 +2630,8 @@ ja:
     contact:
       errors:
         id_required: お問い合わせIDは必須です
-        invalid_status: '無効なお問い合わせステータス: SET_UPが予想されていますが、%{current_status}です'
+        invalid_status:
+          "無効なお問い合わせステータス: SET_UPが予想されていますが、%{current_status}です"
         not_found: お問い合わせが見つかりません
     org:
       contacts:
@@ -2601,7 +2697,7 @@ ja:
     redirector:
       unavailable: このジャンプリンクは利用できません。
   landing:
-    sign_in: サインイン
+    sign_in: ログイン
     thin_endpoint: 下の操作を選んで、次の手順へ進みます。
   languages:
     english: English
@@ -2626,7 +2722,7 @@ ja:
       restricted_mode:
         description: 段階的認証とそれを必要とする操作は利用できません。
         label: 制限モード — Emergency Access
-        sign_out: サインアウトして通常モードでサインインし直す
+        sign_out: ログアウトして通常モードでログインし直す
   mail:
     common:
       cta: 詳細を見る
@@ -2641,7 +2737,7 @@ ja:
             instruction: 以下の確認コードを使用して、登録を完了してください：
             subject: 確認コードのお知らせ
             subjects:
-              sign_in: UMAXICA - サインインを確認してください
+              sign_in: UMAXICA - ログインを確認してください
               sign_up: UMAXICA - メールアドレスを確認してください
             title: メールアドレスの確認
             verify_link: メールアドレスを確認する
@@ -2655,7 +2751,7 @@ ja:
             title: スタッフ用メールアドレスの確認
             verify_link: メールアドレスを確認する
   messages:
-    access_blocked_auth_error: 'アクセスをブロック: 認証エラーです'
+    access_blocked_auth_error: "アクセスをブロック: 認証エラーです"
     cannot_delete_last_passkey: 最後のパスキーは削除できません。少なくとも1つのパスキーが必要です。
     confirm_destroy: 本当に削除しますか？
     email_successfully_created: メールアドレスの確認コードを送信しました。
@@ -2737,9 +2833,9 @@ ja:
           quadrillion: 千兆
           thousand: 千
           trillion: 兆
-          unit: ''
+          unit: ""
       format:
-        delimiter: ''
+        delimiter: ""
         precision: 3
         significant: true
         strip_insignificant_zeros: true
@@ -2757,14 +2853,17 @@ ja:
           tb: TB
     percentage:
       format:
-        delimiter: ''
+        delimiter: ""
         format: "%n%"
     precision:
       format:
-        delimiter: ''
+        delimiter: ""
   oidc:
     rp_logout:
-      local_only: このドメインからログアウトしました。sign にはまだログイン中です。すべてのサービスからログアウトする場合は、sign のセッション管理で実行してください。%{idp_sessions_url}
+      local_only:
+        このドメインからログアウトしました。sign
+        にはまだログイン中です。すべてのサービスからログアウトする場合は、sign
+        のセッション管理で実行してください。%{idp_sessions_url}
   oidc_rp:
     interruption:
       body: ログインできませんでした。再度ログインしてください。
@@ -2819,19 +2918,19 @@ ja:
     resend:
       button: コードを再送する
       failed: 再送に失敗しました。時間を置いて再度お試しください。
-      sent: 認証コードを再送しました。
+      sent: 確認コードを再送しました。
       too_soon: しばらく待ってから再送してください。
   palm:
     app:
       dashboard:
         description: Palm の保護されたブラウザページです。
-        sign_out: サインアウト
+        sign_out: ログアウト
         status: ブラウザセッションは有効です。
         status_heading: セッション
         title: Palm App
       roots:
-        message: Palm アカウントにサインインして保護されたアプリを開いてください。
-        sign_in: サインイン
+        message: Palm アカウントにログインして保護されたアプリを開いてください。
+        sign_in: ログイン
       sign_out:
         completed: Your Palm session was revoked and the browser logout flow completed.
         heading: Signed out
@@ -2862,10 +2961,10 @@ ja:
     duplicate_position: |2-
 
       重複したpositionでAppPreferenceStatusを作成しようとしています...
-    expected_db_error: '想定されるDBエラー: %{message}'
-    expected_error: '想定されるエラー: %{message}'
+    expected_db_error: "想定されるDBエラー: %{message}"
+    expected_error: "想定されるエラー: %{message}"
     missing_position: AppPreferenceStatusをpositionなしで作成しようとしています...
-    success_created: '作成に成功しました。ID: %{id}、position: %{position}'
+    success_created: "作成に成功しました。ID: %{id}、position: %{position}"
   root:
     app:
       com:
@@ -3160,36 +3259,36 @@ ja:
             verification_code_sent: 確認コードをメールアドレスに送信しました。
             you_have_already_logged_in: あなたはログインしています
           edit:
-            code_label: 認証コード
+            code_label: 確認コード
             code_placeholder: 6桁の数字を入力
             delivery_unavailable: "コードの送信を確認できませんでした。再送するか、戻ってコードの確認を中止できます。"
             delivery_help: "※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。"
-            description: 完了まであと少しです。メールに送信された6桁の認証コードを入力してください。
-            page_title: 認証コードの入力
+            description: 完了まであと少しです。メールに送信された6桁の確認コードを入力してください。
+            page_title: 確認コードの入力
             return_page: 戻る
             submit: 送信する
-          locked: このメールアドレスでのサインインはロックされています。
+          locked: このメールアドレスでのログインはロックされています。
           new:
             page_title: メールでログイン
             registration: 登録しますか？
             you_have_already_logged_in: あなたはログインしています
           update:
-            invalid_code: パスコードが正しくありません
+            invalid_code: 確認コードが正しくありません
         new:
           back: 他の方法を選びますか？
           back_link: もどる
-          description: 今回のサインインで利用する認証方法を選択してください。
+          description: 今回のログインで利用する認証方法を選択してください。
           links:
             apple: Appleで続行
             email: メールアドレス
             google: Googleで続行
             passkey: パスキー
             recovery: リカバリーコード
-            registration: アカウント登録はこちら
+            registration: 新規登録はこちら
             secret: Secret
             secret_credential: シークレット
             telephone: 電話番号
-          page_title: サインイン方法を選ぶ
+          page_title: ログイン方法を選ぶ
         passkey:
           new:
             description: パスキーを使って安全にログインします。
@@ -3213,14 +3312,14 @@ ja:
             success: ログインしました。
           new:
             hints: 利用可能なシークレット
-            page_title: シークレットでサインイン
+            page_title: シークレットでログイン
             pii_label: メールアドレスまたは電話番号
             pii_placeholder: user@example.com または +81 90 1234 5678
             secret_credential_label: シークレット
         telephone:
           new:
             description: このきのうはまだじっそうされていません
-            page_title: 電話番号でサインイン
+            page_title: 電話番号でログイン
             you_have_already_logged_in: あなたはログインしています
       common:
         cancel: キャンセル
@@ -3239,7 +3338,7 @@ ja:
             title: ようこそ
         checkpoints:
           show:
-            title: サインインの確認
+            title: ログインの確認
         mfa:
           description: 認証方法を選択してください。
           methods:
@@ -3293,13 +3392,14 @@ ja:
               create_identity: 新しいUmaxica Identityを作成します。
               no_merge: 既存アカウントとは後から統合できません。
               unregistered: この%{provider}アカウントは未登録です。
+        confirmation_required: 新しいUmaxica Identityを作成することを確認してください。
         email:
           create:
             contact_held: このメールアドレスでは、いま登録を始められません。しばらくしてからもう一度お試しください。
             address_required: メールアドレスを入力してください。
             otp_resend_too_soon: しばらく時間をおいてから再度お試しください。
             turnstile_validation_failed: セキュリティ検証に失敗しました。もう一度お試しください。
-            verification_code_sent: 入力いただいたメールアドレスに、認証コードという6桁の数字が届きますので、入力してボタンを押してください。
+            verification_code_sent: 入力いただいたメールアドレスに、確認コードという6桁の数字が届きますので、入力してボタンを押してください。
           edit:
             return_page: 戻る
             session_expired: セッションの有効期限が切れました。最初からやり直してください。
@@ -3307,13 +3407,12 @@ ja:
             invalid: セッションの有効期限が切れました。
           new:
             error_summary: 入力内容を確認してください。
-            link_to_sign_in: ログインしますか？
             page_title: メールアドレスで登録
           update:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
             failed: 登録処理に失敗しました。もう一度やり直してください。
-            invalid_code: パスコードが正しくありません
+            invalid_code: 確認コードが正しくありません
             sign_in_required: 登録を続行できませんでした。ログインをお試しください。
             success: 登録が完了しました。
         new:
@@ -3330,7 +3429,7 @@ ja:
               title: 携帯電話番号
             title: 登録方法を選ぶ
           page_description: "%{product} の利用をはじめるための登録方法を選択してください。"
-          page_title: アカウント登録
+          page_title: 新規登録
           social:
             buttons:
               apple: Appleで続行
@@ -3348,26 +3447,24 @@ ja:
           create:
             contact_held: この電話番号では、いま登録を始められません。しばらくしてからもう一度お試しください。
             turnstile_validation_failed: セキュリティ検証に失敗しました。もう一度お試しください。
-            verification_code_sent: 入力いただいた電話番号に、認証コードという6桁の数字がSMSで届きますので、入力してボタンを押してください。
+            verification_code_sent: 入力いただいた電話番号に、確認コードという6桁の数字がSMSで届きますので、入力してボタンを押してください。
           edit:
-            code_label: 認証コード
+            code_label: 確認コード
             code_placeholder: 6桁の数字を入力
             delivery_help: "※1分以上待っても届かない場合は、入力内容やSMSの受信設定をご確認の上、再度お試しください。"
-            page_title: 認証コード入力
+            page_title: 確認コード入力
             session_expired: セッションの有効期限が切れました。最初からやり直してください。
             submit: 送信する
           new:
-            link_to_other_methods: 他の方法で登録しますか？
-            link_to_sign_in: ログインしますか？
             page_title: 電話番号で登録
           resend:
             rate_limited: しばらく待ってから再送してください。
-            sent: 認証コードをSMSで再送しました。
+            sent: 確認コードをSMSで再送しました。
           update:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
             failed: 登録処理に失敗しました。もう一度やり直してください。
-            invalid_code: パスコードが正しくありません。
+            invalid_code: 確認コードが正しくありません。
             passkey_required: 電話番号が確認されました。パスキーを登録してください。
             sign_in_required: 登録を続行できませんでした。ログインをお試しください。
             success: 電話番号の確認が完了しました。
@@ -3473,7 +3570,7 @@ ja:
           new:
             description: 新しいパスキーを登録して、パスワードなしでログインできるようになります
             description_label: パスキーの名前
-            description_placeholder: '例: MacBook Pro'
+            description_placeholder: "例: MacBook Pro"
             page_title: パスキーを登録
             submit: パスキーを登録
           show:
@@ -3570,11 +3667,11 @@ ja:
           new:
             description: 認証アプリ（Google Authenticator等）を設定します。
             page_title: TOTPの作成
-            title_hint: '例: 会社のスマホ'
+            title_hint: "例: 会社のスマホ"
         totps:
           destroy:
             last_method: この認証アプリは削除できません。
-          invalid_code: 認証コードが正しくありません。
+          invalid_code: 確認コードが正しくありません。
           limit_reached: 2件以上は登録できないです
         withdrawal:
           deactivate:
@@ -3589,7 +3686,7 @@ ja:
           recovery:
             available: アカウントはまだ復旧できます。
             confirm: このアカウントを復旧しますか？
-            deadline: '復旧期限: %{date}'
+            deadline: "復旧期限: %{date}"
             link: アカウントを復旧する
             page_title: 退会の復旧
             submit: アカウントを復旧する
@@ -3617,6 +3714,14 @@ ja:
             invalid_request: Appleへのリクエストが無効です。もう一度お試しください。
             timeout: リクエストがタイムアウトしました
             unknown_error: 不明なエラーが発生しました
+        verified_subject_guidance:
+          registered:
+            body: このソーシャルアカウントは登録済みです。新しい手続きを開始し、ログインを選択してください。
+            title: このソーシャルアカウントは登録済みです
+          start: 新しい手続きを開始
+          unregistered:
+            body: このソーシャルアカウントはまだ登録されていません。新しい手続きを開始し、新規登録を選択してください。
+            title: このソーシャルアカウントはまだ登録されていません
       step_up:
         edit:
           authenticate_with_passkey: パスキーで認証
@@ -3668,7 +3773,7 @@ ja:
           email_description: 本人確認のため、コードの入力を行ってください。
           submit: 確認
           title: 検証
-          totp_help: "※認証コードは一定時間ごとに更新されます。うまく送信できない場合は、認証アプリに表示されている最新のコードを入力してください。"
+          totp_help: "※確認コードは一定時間ごとに更新されます。うまく送信できない場合は、認証アプリに表示されている最新のコードを入力してください。"
         errors:
           incorrect_code: 確認コードが正しくありません
           no_passkey: パスキーが登録されていません。
@@ -3698,6 +3803,8 @@ ja:
             passkey: パスキーを登録
             totp: 認証アプリ（TOTP）を登録
           title: 認証方法の登録
+        step_up_refused: 追加認証を完了できませんでした。認証を求めたページに戻り、もう一度開始してください。
+        step_up_unavailable: 追加認証を現在利用できません。時間をおいてから、もう一度お試しください。
         success:
           complete: 検証が完了しました
     common:
@@ -3717,11 +3824,11 @@ ja:
             verification_code_sent: 確認コードをメールアドレスに送信しました。
             you_have_already_logged_in: あなたはログインしています
           edit:
-            code_label: 認証コード
+            code_label: 確認コード
             code_placeholder: 6桁の数字を入力
             delivery_help: "※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。"
-            description: 完了まであと少しです。メールに送信された6桁の認証コードを入力してください。
-            page_title: 認証コードの入力
+            description: 完了まであと少しです。メールに送信された6桁の確認コードを入力してください。
+            page_title: 確認コードの入力
             submit: 送信する
           new:
             registration: 登録しますか？
@@ -3729,16 +3836,22 @@ ja:
         emergency:
           passkey:
             new:
-              description: スタッフIDと登録済みのパスキーでサインインします。Microsoft サインインは使用しません。
+              description:
+                スタッフIDと登録済みのパスキーでログインします。Microsoft サインインは使用しません。
               identifier_label: ID
               identifier_placeholder: スタッフIDを入力してください
               page_title: 緊急アクセス
-              restricted_mode_notice: このサインインでは制限モードのセッションになります。サインアウトして通常モードでサインインし直すまで、 段階的認証とそれを必要とする操作は利用できません。
-              submit: パスキーでサインイン
+              restricted_mode_notice:
+                このログインでは制限モードのセッションになります。ログアウトして通常モードでログインし直すまで、
+                段階的認証とそれを必要とする操作は利用できません。
+              submit: パスキーでログイン
         entra:
           errors:
-            authentication_method_locked: このアカウントの Microsoft サインインはロックされています。管理者にお問い合わせください。
-            client_assertion_unavailable: Microsoft サインインの設定が正しくありません。管理者にお問い合わせください。
+            authentication_method_locked:
+              このアカウントの Microsoft
+              サインインはロックされています。管理者にお問い合わせください。
+            client_assertion_unavailable:
+              Microsoft サインインの設定が正しくありません。管理者にお問い合わせください。
             connection_not_found: 指定された Microsoft 連携が見つかりません。
             entra_error: Microsoft 認証でエラーが発生しました。もう一度お試しください。
             generic: エラーが発生しました。もう一度お試しください。
@@ -3746,25 +3859,28 @@ ja:
             internal_error: 内部エラーが発生しました。もう一度お試しください。
             invalid_callback: 認証応答が不正でした。最初からやり直してください。
             missing_id_token: 認証応答が不完全でした。最初からやり直してください。
-            operator_not_found: このアカウントでのサインインは許可されていません。
-            pkce_verifier_missing: サインインセッションの有効期限が切れました。最初からやり直してください。
-            provider_unavailable: 現在 Microsoft サインインはご利用いただけません。時間をおいてお試しください。
-            sign_in_failed: サインインに失敗しました。もう一度お試しください。
+            operator_not_found: このアカウントでのログインは許可されていません。
+            pkce_verifier_missing: ログインセッションの有効期限が切れました。最初からやり直してください。
+            provider_unavailable:
+              現在 Microsoft サインインはご利用いただけません。時間をおいてお試しください。
+            sign_in_failed: ログインに失敗しました。もう一度お試しください。
             state_mismatch: セキュリティ検証に失敗しました。最初からやり直してください。
             tenant_mismatch: このアカウントは別の組織に属しています。
-            tenant_not_allowed: この種類のアカウントではサインインできません。組織のアカウントをご利用ください。
+            tenant_not_allowed: この種類のアカウントではログインできません。組織のアカウントをご利用ください。
             token_exchange_failed: 認証トークンの取得に失敗しました。もう一度お試しください。
             token_verification_failed: 認証トークンの検証に失敗しました。もう一度お試しください。
           new:
             connection_label: 連携 ID
-            connection_not_found: 連携 ID を確認できませんでした。入力内容をご確認のうえ、管理者にお問い合わせください。
+            connection_not_found:
+              連携 ID を確認できませんでした。入力内容をご確認のうえ、管理者にお問い合わせください。
             connection_prompt: 管理者から案内された組織の連携 ID を入力してください。
             connection_submit: つづける
-            connection_unavailable: この組織の Microsoft 連携が設定されていません。管理者にお問い合わせください。
+            connection_unavailable:
+              この組織の Microsoft 連携が設定されていません。管理者にお問い合わせください。
             page_title: Microsoft アカウントでサインイン
             submit: Microsoft でサインイン
         mode_switch:
-          sign_out_required: すでにサインインしています。モードを変更するには、いったんサインアウトしてください（%{sign_out_url}）。
+          sign_out_required: すでにログインしています。モードを変更するには、いったんログアウトしてください（%{sign_out_url}）。
         new:
           back: 他の方法を選びますか？
           back_link: もどる
@@ -3777,10 +3893,10 @@ ja:
             google: Google
             passkey: パスキー
             recovery: リカバリーコード
-            registration: アカウント登録はこちら
+            registration: 新規登録はこちら
             secret_credential: シークレット
             telephone: 電話番号
-          page_title: サインイン方法を選択
+          page_title: ログイン方法を選択
         passkey:
           new:
             description: staff の ID を使ってパスキーでログインします。
@@ -3796,17 +3912,17 @@ ja:
         secret_credential:
           create:
             invalid: 認証に失敗しました。入力内容をご確認ください。
-            success: サインインしました。
+            success: ログインしました。
           new:
             confirm_label: シークレットを保存しました
-            page_title: シークレットでサインイン
+            page_title: シークレットでログイン
             pii_label: ID
             pii_placeholder: staff の ID を入力
             secret_credential_label: シークレット
         telephone:
           new:
             description: このきのうはまだじっそうされていません
-            page_title: 電話番号でサインイン
+            page_title: 電話番号でログイン
             you_have_already_logged_in: あなたはログインしています
       exits:
         destroy:
@@ -3828,7 +3944,7 @@ ja:
             title: ようこそ
         checkpoints:
           show:
-            title: サインインの確認
+            title: ログインの確認
         session:
           cancelled: セッションをキャンセルしました。もう一度ログインしてください。
           cannot_revoke_current: 現在のセッションは無効化できません。
@@ -3860,7 +3976,7 @@ ja:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
             failed: 登録処理に失敗しました。もう一度やり直してください。
-            invalid_code: パスコードが正しくありません
+            invalid_code: 確認コードが正しくありません
             success: 登録が完了しました。
         new:
           links:
@@ -3889,16 +4005,16 @@ ja:
           create:
             verification_code_sent: 確認コードをSMSで送信しました。
           edit:
-            code_label: 認証コード
+            code_label: 確認コード
             code_placeholder: 6桁の数字を入力
             delivery_help: "※1分以上待っても届かない場合は、入力内容やSMSの受信設定をご確認の上、再度お試しください。"
-            page_title: 認証コード入力
+            page_title: 確認コード入力
             session_expired: セッションの有効期限が切れました。最初からやり直してください。
             submit: 送信する
           update:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
-            invalid_code: パスコードが正しくありません。
+            invalid_code: 確認コードが正しくありません。
             passkey_required: 電話番号が確認されました。パスキーを登録してください。
             success: 電話番号の確認が完了しました。
       root:
@@ -3930,7 +4046,7 @@ ja:
             unknown: 不明なイベント (%{event_id})
             user_secret_credential_created: シークレット作成
           index:
-            description: 最近のサインイン履歴を確認できます。
+            description: 最近のログイン履歴を確認できます。
             empty: アクティビティはありません。
             page_title: アクティビティ
             table:
@@ -3942,7 +4058,7 @@ ja:
           show:
             birthdate_label: 生年月日
             change_unavailable: この値の変更が必要な場合はオペレーターに連絡してください。
-            description: サインイン中のオペレーターアカウントに記録されている生年月日です。
+            description: ログイン中のオペレーターアカウントに記録されている生年月日です。
             not_set: 未設定
             page_title: 生年月日
         email:
@@ -3972,14 +4088,14 @@ ja:
             success: メール設定を更新しました。
         google:
           destroy:
-            via_email: Google サインインの設定はメールアドレス設定から変更してください。
+            via_email: Google ログインの設定はメールアドレス設定から変更してください。
           show:
-            delete_confirm: Google サインインの利用方法を確認しますか？
-            description: Google サインインは、確認済みのメールアドレスと紐づいて利用できます。
+            delete_confirm: Google ログインの利用方法を確認しますか？
+            description: Google ログインは、確認済みのメールアドレスと紐づいて利用できます。
             disable: 無効にする
-            disabled: 確認済みメールアドレスがないため、Google サインインは利用できません。
+            disabled: 確認済みメールアドレスがないため、Google ログインは利用できません。
             email_hint: 無効化したい場合は、メールアドレス設定から対象メールアドレスを変更または削除してください。
-            enabled: Google サインインを利用できます。
+            enabled: Google ログインを利用できます。
         mfa:
           show:
             disabled: 無効
@@ -4036,9 +4152,9 @@ ja:
             empty: 登録済みのパスキーはありません
             title: パスキー管理
           new:
-            description: パスワードなしでサインインできるように、新しいパスキーを登録します。
+            description: パスワードなしでログインできるように、新しいパスキーを登録します。
             description_label: パスキー名
-            description_placeholder: '例: MacBook Pro'
+            description_placeholder: "例: MacBook Pro"
             page_title: パスキーを登録
             submit: パスキーを登録
           show:
@@ -4096,15 +4212,20 @@ ja:
             new_link: TOTP を新規作成
         withdrawal:
           show:
-            description: org の退会は self-service では実行できません。別の operator による確認と実行が必要です。
-            direct_message_unavailable: direct message 機能はまだ実装されていないため、現時点では入退会申請として記録します。
+            description:
+              org の退会は self-service では実行できません。別の operator
+              による確認と実行が必要です。
+            direct_message_unavailable:
+              direct message 機能はまだ実装されていないため、現時点では入退会申請として記録します。
             request_link: 退会申請を作成する
             title: 退会
       sign:
         up:
           invitations:
             create:
-              success: 招待を受諾しました。operator ID は %{public_id} です。招待メールアドレスの Google ログインを使うか、別の operator にログイン方法の設定を依頼してください。
+              success:
+                招待を受諾しました。operator ID は %{public_id} です。招待メールアドレスの Google
+                ログインを使うか、別の operator にログイン方法の設定を依頼してください。
               turnstile_failed: 検証に失敗しました。もう一度お試しください。
       social:
         sessions:
@@ -4151,7 +4272,9 @@ ja:
       up:
         invitations:
           create:
-            success: 招待を受諾しました。operator ID は %{public_id} です。招待メールアドレスの Google ログインを使うか、別の operator にログイン方法の設定を依頼してください。
+            success:
+              招待を受諾しました。operator ID は %{public_id} です。招待メールアドレスの Google
+              ログインを使うか、別の operator にログイン方法の設定を依頼してください。
             turnstile_failed: 検証に失敗しました。もう一度お試しください。
           form:
             invitation_code: 招待コード
@@ -4165,7 +4288,7 @@ ja:
           description: お客様専用の管理操作をはじめるにはアカウントを作成してください。
           heading: アカウントを作成
           links:
-            sign_in: すでにアカウントをお持ちですか？サインイン
+            sign_in: すでにアカウントをお持ちですか？ログイン
           recruit_link_text: 採用に関するお問い合わせ
           recruit_prompt: 採用情報
           recruit_prompt_html: 採用を希望しますか？ %{link}
@@ -4202,6 +4325,8 @@ ja:
           methods:
             passkey: パスキーを登録
           title: 認証方法の登録
+        step_up_refused: 追加認証を完了できませんでした。認証を求めたページに戻り、もう一度開始してください。
+        step_up_unavailable: 追加認証を現在利用できません。時間をおいてから、もう一度お試しください。
         success:
           complete: 検証が完了しました
     recovery_passcodes:
@@ -4222,28 +4347,29 @@ ja:
           format: 生年月日はYYYY-MM-DD形式で入力してください。
           not_before_today: 生年月日は本日より前の日付を入力してください。
       sign_out:
-        already_signed_out: すでにサインアウトしています。
+        already_signed_out: すでにログアウトしています。
         button: ログアウトします
-        cleanup_incomplete_description: サインアウトしました。このサービスのサインイン情報の削除を完了できませんでしたが、次に利用したときに削除されます。
-        completed_description: サインアウトしました。ほかのサービスのセッションは無効になっています。開いたままの画面は、次に通信したときにサインインを求めます。
-        completed_title: サインアウトしました
+        cleanup_incomplete_description: ログアウトしました。このサービスのログイン情報の削除を完了できませんでしたが、次に利用したときに削除されます。
+        completed_description: ログアウトしました。ほかのサービスのセッションは無効になっています。開いたままの画面は、次に通信したときにログインを求めます。
+        completed_title: ログアウトしました
         confirm_description: 一度ログアウトすると、再度ログインが必要になります。
         forbidden_description: 禁止された振る舞いです
         home_link: ホームへ戻る
-        idp_session_error: IdP セッションを確認できませんでした。セッションはサインアウトされていません。
-        invalid_request: このサインアウトのリクエストは無効です。
-        indeterminate_description: サインアウトが完了したかを確認できませんでした。このサービスを開き直して、現在の状態を確認してください。
-        indeterminate_title: サインアウトの結果を確認できません
-        retry_button: もう一度サインアウトする
-        stale_description: このサインアウトのリクエストは期限切れです。サインアウトする場合は、もう一度やり直してください。
+        idp_session_error:
+          IdP セッションを確認できませんでした。セッションはログアウトされていません。
+        invalid_request: このログアウトのリクエストは無効です。
+        indeterminate_description: ログアウトが完了したかを確認できませんでした。このサービスを開き直して、現在の状態を確認してください。
+        indeterminate_title: ログアウトの結果を確認できません
+        retry_button: もう一度ログアウトする
+        stale_description: このログアウトのリクエストは期限切れです。ログアウトする場合は、もう一度やり直してください。
         title: ログアウトしますか？
-        unavailable_description: 現在のセッションがまだ有効な可能性があります。もう一度サインアウトしてください。
-        unavailable_title: サインアウトは完了していません
+        unavailable_description: 現在のセッションがまだ有効な可能性があります。もう一度ログアウトしてください。
+        unavailable_title: ログアウトは完了していません
       verification:
         cancelled_title: 認証をキャンセル
         completed_title: 認証が完了しました
     telephone_verification:
-      sms_message: '確認コード: %{code}'
+      sms_message: "確認コード: %{code}"
     token_refresh:
       errors:
         invalid_refresh_token: 無効または期限切れのリフレッシュトークンです
@@ -4271,22 +4397,23 @@ ja:
       access_denial:
         description: Tech ワークスペースを利用する権限がありません。
         heading: アクセスできません
-        return_to_sign_in: サインインに戻る
-        sign_out: サインアウト
+        return_to_sign_in: ログインに戻る
+        sign_out: ログアウト
         title: Tech にアクセスできません
       dashboard:
         description: Tech の保護されたオペレーターワークスペースです。
         empty_state: 利用できるツールはまだありません。
         heading: Tech
-        sign_out: サインアウト
+        sign_out: ログアウト
         title: Tech Org
         tools_heading: ツール
       navigation:
         label: Tech のナビゲーション
       roots:
-        description: Tech ワークスペースを開くには、許可されたオペレーターアカウントでサインインしてください。
+        description:
+          Tech ワークスペースを開くには、許可されたオペレーターアカウントでログインしてください。
         heading: Tech
-        sign_in: サインイン
+        sign_in: ログイン
         title: Tech Org
   test:
     email:
@@ -4400,9 +4527,9 @@ ja:
                 help_text: 入力された電話番号にSMS等で確認コードを送信します。
           totps:
             new:
-              first_token_delivery_help: "※認証コードは一定時間ごとに更新されます。うまく送信できない場合は、認証アプリに表示されている最新のコードを入力してください。"
+              first_token_delivery_help: "※確認コードは一定時間ごとに更新されます。うまく送信できない場合は、認証アプリに表示されている最新のコードを入力してください。"
               first_token_help: 認証アプリに表示されている6桁のコードを入力してください。
-              first_token_label: 認証コード
+              first_token_label: 確認コード
               first_token_placeholder: 6桁の数字を入力
               qr_fallback: QRコードがスキャンできない場合は、認証アプリに手動でシークレットを入力してください。
               submit: 送信する
@@ -4413,7 +4540,7 @@ ja:
           in:
             limitations:
               capacity_still_full: セッション容量がまだいっぱいです。続行するには別のセッションを無効にしてください。
-              invalid_or_expired: このサインイン制限リンクは無効または期限切れです。
+              invalid_or_expired: このログイン制限リンクは無効または期限切れです。
               revoke_failed: 選択されたセッションを無効にできませんでした。
         up:
           emails:

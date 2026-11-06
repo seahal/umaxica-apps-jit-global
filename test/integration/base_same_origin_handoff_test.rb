@@ -158,7 +158,6 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
     assert_equal "https://#{visa_host}", jump_payload_from_location(response.location).fetch("iss")
   end
 
-
   test "Visa org authorize returns a base-org-ww code to the Base callback through Jump" do
     base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     visa_host = visa_host_for_tld("org")

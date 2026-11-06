@@ -5,11 +5,14 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
   fixtures :client_statuses, :client_token_kinds, :client_token_statuses, :client_email_statuses,
            :client_telephone_statuses,
            :client_totp_credential_statuses, :client_passkey_statuses
 
   setup do
+    @created_client_ids = []
     https!
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @base_host = @host
@@ -19,12 +22,73 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   teardown do
+    client_ids = Array(@created_client_ids)
+    client_refs = Client.where(id: client_ids).pluck(:public_id)
+    # BaseSelectorBootstrapAuthority links every principal it bootstraps to a persona and to a
+    # collective through the membership graph. Those rows commit with the test, they have no
+    # fixture file, and they point at `enterprises`, whose table fixture loading empties, so the
+    # next fixture load re-enables the foreign key against an enterprise that is already gone and
+    # every later non-transactional test fails in setup. Collect the ids while the membership rows
+    # still exist, then remove the graph with the client it belongs to.
+    identity_ids = ClientIdentity.where(source_record_id: client_ids).pluck(:id)
+    persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+    enterprise_ids =
+      (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
+        EnterpriseOwnership.where(client_id: client_ids).pluck(:enterprise_id)).uniq
+    unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+    PersonaMembership.where(persona_id: persona_ids)
+      .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+    PersonaAssignment.where(persona_id: persona_ids).delete_all
+    ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+    ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+    ClientPersona.where(id: persona_ids).delete_all
+    ClientIdentity.where(id: identity_ids).delete_all
+    EnterpriseUnitClosure.where(ancestor_id: unit_ids)
+      .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
+    EnterpriseUnit.where(id: unit_ids).delete_all
+    EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+    EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+    Enterprise.where(id: enterprise_ids).delete_all
+    # The default avatar and its append-only ownership periods cannot be removed (the period
+    # history trigger rejects DELETE), but the binding row points at a persona this teardown
+    # deletes, so it must not outlive it.
+    AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+    ClientContactAuditOutbox.where(owner_ref: client_refs).delete_all
+    ClientPasskeyAuditOutbox.where(actor_ref: client_refs).delete_all
+    ClientSecretAuditOutbox.where(client_ref: client_refs).delete_all
+    ClientChronicle.where(subject_type: "Client", subject_id: client_ids.map(&:to_s)).delete_all
+    ClientPreference.where(client_id: client_ids).destroy_all
+    ClientSecretCredential.where(client_id: client_ids).delete_all
+    ClientSecretIssuance.where(client_id: client_ids).delete_all
+    ClientAccount.where(user_id: client_ids).delete_all
+    ClientTotpCredential.where(user_id: client_ids).delete_all
+    ClientEmail.where(user_id: client_ids).delete_all
+    ClientTelephone.where(user_id: client_ids).delete_all
+    ClientPasskey.where(user_id: client_ids).delete_all
+    tokens = ClientToken.where(user_id: client_ids).select(:id)
+    ClientStepUpSession.where(user_token_id: tokens).delete_all
+    step_up_transactions = ClientStepUpCeremonyTransaction.where(actor_ref: client_refs)
+    ClientAuthCeremonySession
+      .where(step_up_ceremony_transaction_ref: step_up_transactions.select(:transaction_id))
+      .delete_all
+    step_up_transactions.delete_all
+    OpAppGrant.where(client_token_id: tokens).delete_all
+    ClientDeviceSession.where(user_id: client_ids).update_all(current_refresh_token_id: nil)
+    ClientToken.where(user_id: client_ids).delete_all
+    ClientDeviceSession.where(user_id: client_ids).delete_all
+    ClientAuthorityLock.where(client_id: client_ids).delete_all
+    Client.where(id: client_ids).delete_all
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
 
   test "email removal may leave a usable passkey-only identity" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     email = create_verified_email(client, "app-removal-contact-email@example.com")
     create_active_passkey(client)
 
@@ -171,6 +235,28 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         end.except("Cookie", "HTTP_COOKIE")
       end
     fx0_token.reload.update!(last_step_up_resource_ref: email.public_id)
+
+    ticket_write_seen = false
+    observer =
+      lambda do |_name, _start, _finish, _id, event|
+        sql = event.fetch(:sql)
+        next unless sql.match?(/\A\s*UPDATE\s+"client_tokens".*"last_step_up_at"/im)
+
+        ticket_write_seen = true
+        raise ActiveRecord::ConnectionNotEstablished, "injected Ticket commit failure"
+      end
+    step_up_at = fx0_token.reload.last_step_up_at
+    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+      delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
+             headers: http_headers_7
+    end
+
+    assert ticket_write_seen
+    assert_response :service_unavailable
+    assert_equal ClientEmailStatus::VERIFIED, email.reload.user_email_status_id
+    assert_predicate email, :binding_effective?
+    assert_equal step_up_at, fx0_token.reload.last_step_up_at
+
     delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
            headers: http_headers_7
 
@@ -181,6 +267,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "telephone removal may leave a usable passkey-only identity" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     telephone = create_verified_telephone(client, "+819011110001")
     create_active_passkey(client)
 
@@ -337,6 +424,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "passkey removal is blocked when it would remove the last usable step-up capability" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     create_verified_telephone(client, "+819011110002")
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -503,6 +591,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "totp removal is blocked when it would remove the last usable step-up capability" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     create_verified_telephone(client, "+819011110003")
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -669,6 +758,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "totp removal is allowed when another usable step-up capability remains" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     create_verified_telephone(client, "+819011110004")
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -836,6 +926,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "email removal is allowed when sign-in, step-up and contact capabilities remain" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     email = create_verified_email(client, "app-removal-email-allowed@example.com")
     create_verified_telephone(client, "+819011110006")
     create_active_passkey(client)
@@ -999,6 +1090,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "telephone removal is allowed when another contact capability remains" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     telephone = create_verified_telephone(client, "+819011110007")
     create_verified_email(client, "app-removal-telephone-allowed@example.com")
 
@@ -1161,6 +1253,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
 
   test "passkey removal is allowed when another usable step-up capability remains" do
     client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
+    @created_client_ids << client.id
     create_verified_email(client, "app-removal-passkey-allowed@example.com")
     passkey = create_active_passkey(client)
 
@@ -1661,7 +1754,6 @@ class Auth::App::CredentialRemovalConstraintsTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1684,24 +1776,6 @@ class Auth::App::CredentialRemovalConstraintsTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

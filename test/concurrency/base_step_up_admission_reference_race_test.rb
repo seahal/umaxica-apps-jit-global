@@ -15,16 +15,23 @@ class BaseStepUpAdmissionReferenceRaceTest < ActiveSupport::TestCase
           [client, ClientToken.create!(authentication_epoch: 0, user: client), ClientStepUpCeremonyTransaction,
            ClientStepUpSession, :user_token, OpBaseAppRecord,]
         else
-          operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          operator = Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+          )
           [operator, OperatorToken.create!(authentication_epoch: 0, staff: operator), OperatorStepUpCeremonyTransaction,
            OperatorStepUpSession, :staff_token, OpBaseOrgRecord,]
         end
       device = token.device_session_record!
+      now = parent_model.database_now
+      token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now:)
       parent_args = {
         actor_ref: actor.public_id,
         session_ref: token.public_id,
         required_scope: "settings_passkey",
         required_aal: "none",
+        purpose: "bootstrap",
+        step_up_required: false,
         allowed_methods: ["passkey"],
         return_to: "/identity/passkeys",
       }
@@ -36,7 +43,7 @@ class BaseStepUpAdmissionReferenceRaceTest < ActiveSupport::TestCase
         :discard_at => first.expires_at,
       )
       requirement = StepUpRequirement.new(
-        scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
+        scope: "settings_passkey", purpose: "bootstrap", step_up_required: false, allowed_methods: [:passkey],
         phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
@@ -67,10 +74,12 @@ class BaseStepUpAdmissionReferenceRaceTest < ActiveSupport::TestCase
         Timeout.timeout(10) do
           loop do
             waiting =
-              op_record.uncached do
-                op_record.lease_connection.select_value(
-                  "SELECT cardinality(pg_blocking_pids(#{Integer(pid)})) > 0",
-                )
+              op_record.connected_to(role: :writing) do
+                op_record.uncached do
+                  op_record.lease_connection.select_value(
+                    "SELECT cardinality(pg_blocking_pids(#{Integer(pid)})) > 0",
+                  )
+                end
               end
             break if waiting
 
@@ -98,6 +107,10 @@ class BaseStepUpAdmissionReferenceRaceTest < ActiveSupport::TestCase
       device&.update!(current_refresh_token_id: nil)
       token&.delete
       device&.delete
+      if actor.is_a?(Operator)
+        OperatorAuthorityLock.where(operator_id: actor.id).delete_all
+        OperatorAccount.where(staff_id: actor.id).delete_all
+      end
       actor&.delete
     end
   end

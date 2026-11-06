@@ -5,12 +5,15 @@
 `acme/www` owns preference writes, account lifecycle, withdrawal, and dashboards.
 
 `acme/www` owns the general identity/settings shell, preference writes, account lifecycle,
-withdrawal, and session-management UI. `sign/id` owns only credential/provider ceremonies: passkeys,
-TOTP, Google, and Apple.
+withdrawal, and session-management UI. `sign/id` owns sign-in, sign-up, verification, provider
+callbacks, and credential ceremonies that still require the Auth host.
 
-Signed-in Sign `/settings` is being retired as a general settings surface. The remaining
-credential/provider ceremonies stay on Sign. General identity/settings flows now belong to Acme
-`/identity`.
+Signed-in Auth `/settings` is being retired as a general settings surface. Under accepted step-up
+contract revision 13, Base owns APP TOTP management and social-provider status/unlink, and Base ORG
+owns the read-only Entra status display. Auth ORG has no `/settings` route; Entra sign-in remains on
+Auth and remains limited to administrator-provisioned identities. The APP Auth route migration and
+Visa-mediated link admission remain incomplete; until those slices are delivered, the source still
+contains legacy APP settings routes. General identity/settings flows belong to Base `/identity`.
 
 Telephone registration, withdrawal, sessions, secrets, emails, birthdate, activities, and MFA policy
 are Acme-owned identity surfaces. Acme should read MFA inventory from a summary or domain-service

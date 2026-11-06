@@ -24,7 +24,10 @@ class AppPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "has many app_preference_timezones" do
     option = AppPreferenceTimezoneOption.create!(id: 99)
-    preference = AppPreference.create!
+    preference = AppPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     timezone = AppPreferenceTimezone.create!(preference: preference, option: option)
 
     assert_includes option.app_preference_timezones, timezone
@@ -32,7 +35,10 @@ class AppPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = AppPreferenceTimezoneOption.create!(id: 99)
-    preference = AppPreference.create!
+    preference = AppPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     AppPreferenceTimezone.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

@@ -7,7 +7,7 @@ class OperatorPreferenceTest < ActiveSupport::TestCase
   test "belongs to the owning operator and retains one child for each display field" do
     preference = operator_preferences(:one)
 
-    assert_same operators(:one), preference.operator
+    assert_equal operators(:one), preference.operator
     assert_predicate preference.operator_preference_language, :present?
     assert_predicate preference.operator_preference_timezone, :present?
     assert_predicate preference.operator_preference_region, :present?
@@ -44,14 +44,14 @@ class OperatorPreferenceTest < ActiveSupport::TestCase
     preference.operator_preference_language.update!(option_id: OperatorPreferenceLanguageOption::EN)
     preference.operator_preference_theme.update!(option_id: OperatorPreferenceThemeOption::DARK)
 
-    assert_equal({ "language" => "en", "theme" => "dark" }, preference.explicit_display_snapshot)
+    assert_equal({ "language" => "en", "theme" => "dark" }, preference.explicit_values)
     assert_equal %w(language theme region), preference.reload.explicit_fields
   end
 
   test "operator exposes its current actor preference" do
     operator = operators(:one)
 
-    assert_same operator_preferences(:one), operator.operator_preference
+    assert_equal operator_preferences(:one), operator.operator_preference
   end
 
   test "dormant adult content gate remains model-only" do
@@ -59,6 +59,6 @@ class OperatorPreferenceTest < ActiveSupport::TestCase
   end
 
   test "public_id is a fixed 21-character NanoID" do
-    assert_public_id_fixed_length(OperatorPreference)
+    assert_public_id_fixed_length(::OperatorPreference)
   end
 end

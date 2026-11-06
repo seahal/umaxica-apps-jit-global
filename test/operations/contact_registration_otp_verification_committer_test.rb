@@ -5,6 +5,66 @@ require "minitest/mock"
 
 # Boolean snapshots avoid disclosing OTP, proof and root material when an assertion fails.
 class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
+  %i(email telephone).each do |channel|
+    test "APP #{channel} registration raises before consuming proof when another Client owns the destination" do
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
+      nonce = SecureRandom.urlsafe_base64(32)
+      address = "registered-verification-#{SecureRandom.hex(8)}@example.test"
+      number = "+1202555#{SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")}"
+      contact =
+        if channel == :email
+          actor.client_emails.create!(raw_address: address, confirm_policy: true, otp_attempts_count: 2)
+        else
+          actor.client_telephones.create!(raw_number: number, confirm_policy: true, otp_attempts_count: 2)
+        end
+      token.rotate_refresh_token!
+      issuer, verifier, source =
+        if channel == :email
+          [
+            EmailCredentialRegistrationOtpIssuer, EmailCredentialRegistrationOtpVerificationCommitter,
+            { email: contact },
+          ]
+        else
+          [TelephoneCredentialRegistrationOtpIssuer, TelephoneCredentialRegistrationOtpVerificationCommitter,
+           { telephone: contact },]
+        end
+      issued = issuer.call(actor: actor, token: token, browser_nonce: nonce, **source)
+      competitor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      registered =
+        if channel == :email
+          competitor.client_emails.create!(
+            raw_address: address, confirm_policy: true, user_email_status_id: ClientEmailStatus::VERIFIED,
+          )
+        else
+          competitor.client_telephones.create!(
+            raw_number: number, confirm_policy: true, user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+          )
+        end
+      registered.finalize_binding!
+      contact_facts = contact.reload.attributes
+      ticket_facts = issued.transaction.reload.attributes
+      registered_facts = registered.reload.attributes
+      actor_facts = actor.reload.attributes
+      competitor_facts = competitor.reload.attributes
+
+      assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
+        verifier.call(
+          actor: actor, token: token, transaction: issued.transaction, browser_nonce: nonce,
+          code: issued.code, **source,
+        )
+      end
+
+      assert_equal contact_facts, contact.reload.attributes
+      assert_equal ticket_facts, issued.transaction.reload.attributes
+      assert_equal registered_facts, registered.reload.attributes
+      assert_equal actor_facts, actor.reload.attributes
+      assert_equal competitor_facts, competitor.reload.attributes
+    end
+  end
+
   %w(app).each do |surface|
     %i(email telephone).each do |channel|
       %i(success wrong_code foreign_browser foreign_owner foreign_root foreign_candidate foreign_ticket

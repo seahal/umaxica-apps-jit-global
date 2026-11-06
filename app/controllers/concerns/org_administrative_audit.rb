@@ -40,11 +40,11 @@ module OrgAdministrativeAudit
   def audited_administrative_operation(operation_id:, action:, subject:, reason_code:, metadata:, changeset:)
     raise InvalidOperationIdError unless operation_id.is_a?(String) && OPERATION_ID_FORMAT.match?(operation_id)
 
-    recorded = recorded_administrative_operation(operation_id, action:, subject:, reason_code:)
+    recorded = recorded_administrative_operation(operation_id, action:, subject:, reason_code:, metadata:)
     return recorded if recorded
 
     chronicle = write_administrative_intent!(operation_id, action:, subject:, reason_code:, metadata:, changeset:)
-    return recorded_administrative_operation(operation_id, action:, subject:, reason_code:) if chronicle.nil?
+    return recorded_administrative_operation(operation_id, action:, subject:, reason_code:, metadata:) if chronicle.nil?
 
     begin
       observed = yield
@@ -56,13 +56,15 @@ module OrgAdministrativeAudit
     finish_administrative_operation(chronicle, "succeeded", action:, subject:, changeset: observed)
   end
 
-  def recorded_administrative_operation(operation_id, action:, subject:, reason_code:)
+  def recorded_administrative_operation(operation_id, action:, subject:, reason_code:, metadata:)
     chronicle = Chronicle.find_by(event_uuid: operation_id)
     return nil if chronicle.nil?
 
+    expected_metadata = ChronicleRecordPolicy.sanitize(metadata)
     same = chronicle.action == action && chronicle.reason == reason_code &&
       chronicle.actor_type == current_operator.class.name && chronicle.actor_id == current_operator.id &&
-      chronicle.subject_type == subject.class.name && chronicle.subject_id == subject.id
+      chronicle.subject_type == subject.class.name && chronicle.subject_id == subject.id &&
+      chronicle.metadata == expected_metadata
     raise OperationConflictError unless same
 
     chronicle

@@ -182,13 +182,24 @@ class AdmissionCurfewTest < ActionDispatch::IntegrationTest
       @base_browser.https!
       @base_browser.get(target.request_uri, headers: navigation_headers(site: "cross-site"))
 
-      assert_response :see_other
+      assert_equal 200, @base_browser.response.status
+      form = @base_browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+      assert form, "Visa cancellation must render its signed POST continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      @base_browser.post(
+        form["action"], params: fields, headers: navigation_headers(site: "same-origin").merge(
+          "Origin" => OidcIssuer.absolute_url(target.host),
+        ),
+      )
+
+      assert_equal 303, @base_browser.response.status
       target = URI.parse(jump_rt_url_from_location_for_test(@base_browser.response.location))
       query = Rack::Utils.parse_query(target.query)
 
       assert_equal [303, "access_denied", @transaction.state],
                    [@base_browser.response.status, query["error"], query["state"]]
-      assert_equal "canceled", @transaction.reload.status
+      assert_equal "canceled", @transaction.reload.status_name
       assert_equal before_tokens, ClientToken.count
     end
   end
@@ -210,7 +221,7 @@ class AdmissionCurfewTest < ActionDispatch::IntegrationTest
     stranger.get("/sign/in", params: { ri: "jp" })
 
     assert_not_equal 303, stranger.response.status
-    assert_equal "pending", @transaction.reload.status
+    assert_equal "pending", @transaction.reload.status_name
   end
 
   test "the owner's browser after the curfew without its authorization transaction gets the uniform error" do

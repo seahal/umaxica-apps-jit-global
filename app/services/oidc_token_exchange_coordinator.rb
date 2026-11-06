@@ -91,6 +91,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def authenticated_client?
+    @authenticated_client = nil
+    @client_assertion_verification = nil
+
     client = OidcClientRegistry.find(client_id)
     return false unless client
 
@@ -98,7 +101,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
     case client.registered_token_endpoint_auth_method
     when "none"
-      public_client_authenticated?
+      return false unless public_client_authenticated?
+
+      @authenticated_client = client
+      true
     when "private_key_jwt"
       return false if client_secret.present?
 
@@ -106,7 +112,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
     else
       return false if client_assertion.present? || client_assertion_type.present?
 
-      OidcClientRegistry.authenticate(client_id, client_secret)
+      return false unless OidcClientRegistry.authenticate(client_id, client_secret)
+
+      @authenticated_client = client
+      true
     end
   end
 
@@ -119,11 +128,15 @@ class OidcTokenExchangeCoordinator < ApplicationService
     return false if token_endpoint_uri.blank?
     return false if client_assertion.blank?
 
-    OidcClientRegistry.authenticate_assertion(
+    @client_assertion_verification = OidcClientRegistry.verify_client_assertion(
       client_id,
       client_assertion,
       token_url: token_endpoint_uri,
     )
+    return false unless @client_assertion_verification.authenticated?
+
+    @authenticated_client = @client_assertion_verification.client
+    true
   end
 
   def exchange_authorization_code!
@@ -138,19 +151,30 @@ class OidcTokenExchangeCoordinator < ApplicationService
     precheck = prevalidate_payload(peeked)
     return precheck if precheck
 
+    dpop_jkt = validate_dpop_proof(resource_type: peeked["resource_type"])
+    return dpop_jkt if dpop_jkt.is_a?(Result)
+
+    if peeked["authorization_transaction_ref"].present?
+      return issue_tokens_for_authorization_transaction!(
+        peeked, dpop_jkt: dpop_jkt, assertion_verification: @client_assertion_verification,
+      )
+    end
+
     bound_session_failure = prevalidate_bound_session(peeked)
     return bound_session_failure if bound_session_failure
 
     capability_failure = required_operator_capability_failure_for_payload(peeked)
     return capability_failure if capability_failure
 
-    dpop_jkt = validate_dpop_proof(resource_type: peeked["resource_type"])
-    return dpop_jkt if dpop_jkt.is_a?(Result)
+    return failure("invalid_request", "step-up assertion claims require a step-up authorization code") if
+      step_up_assertion_claims_present?
 
-    if peeked["authorization_transaction_ref"].present?
-      return issue_tokens_for_authorization_transaction!(peeked, dpop_jkt: dpop_jkt)
-    end
+    consume_authorization_code!(peeked, dpop_jkt:)
+  rescue RpSessionAlreadyExists
+    failure("invalid_grant", "RP Session already exists for this Browser Session and client")
+  end
 
+  def consume_authorization_code!(peeked, dpop_jkt:)
     consume_result = code_store.consume!(
       raw_code: code,
       expected: {
@@ -179,11 +203,11 @@ class OidcTokenExchangeCoordinator < ApplicationService
     else
       failure("server_error", "authorization code consume failed")
     end
-  rescue RpSessionAlreadyExists
-    failure("invalid_grant", "RP Session already exists for this Browser Session and client")
   end
 
   def exchange_refresh_token!
+    return failure("invalid_request", "step-up assertion claims require an authorization code") if
+      step_up_assertion_claims_present?
     return failure("invalid_grant", "refresh_token is required") if refresh_token.blank?
 
     resolved = resolve_refresh_usage
@@ -196,8 +220,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     resource_type = resource_type_for_usage(usage)
     return failure("invalid_grant", "refresh token realm mismatch") unless expected_realm_matches?(resource_type)
 
-    client = OidcClientRegistry.find(client_id)
-    return failure("invalid_client", "unknown OIDC client") unless client
+    client = authenticated_client_config
     return failure("invalid_grant", "refresh token resource mismatch") unless
       OidcIssuer.resource_type_for_client(client) == resource_type
 
@@ -341,12 +364,20 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def required_operator_capability_failure_for_payload(payload)
-    client = OidcClientRegistry.find!(client_id)
+    client = authenticated_client_config
     required_operator_capability_failure(client, resolve_resource(wrap_payload(payload)))
   end
 
   def valid_refresh_scopes?(client, scopes)
     scopes.include?("openid") && (scopes - client.allowed_scopes).empty?
+  end
+
+  def authenticated_client_config
+    @authenticated_client || raise(ArgumentError, "authenticated OIDC client is unavailable")
+  end
+
+  def step_up_assertion_claims_present?
+    @client_assertion_verification&.step_up_claims_present? || false
   end
 
   def validate_refresh_dpop_proof(usage, resource_type)
@@ -433,7 +464,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def validate_authorized_scopes(payload)
-    client = OidcClientRegistry.find!(client_id)
+    client = authenticated_client_config
     requested_scopes = payload["scope"].to_s.split
     invalid_scopes = requested_scopes - client.allowed_scopes
 
@@ -490,7 +521,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     root_token = resolve_root_token(authorization_code)
     return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
 
-    client = OidcClientRegistry.find!(client_id)
+    client = authenticated_client_config
     connection_class = connection_class_for(authorization_code.resource_type)
 
     connection_class.connected_to(role: :writing) do
@@ -538,27 +569,30 @@ class OidcTokenExchangeCoordinator < ApplicationService
   # transaction use PostgreSQL as the one-time grant authority. Valkey remains
   # a short-lived transport and is consumed only after the RP Session and token
   # issuance transaction has committed.
-  def issue_tokens_for_authorization_transaction!(payload, dpop_jkt:)
+  def issue_tokens_for_authorization_transaction!(payload, dpop_jkt:, assertion_verification:)
     authorization_code = wrap_payload(payload)
     resource = resolve_resource(authorization_code)
-    return failure("invalid_grant", "resource is not active") unless resource&.active?
-
     root_token = resolve_root_token(authorization_code)
-    return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
+    if root_token.blank?
+      record_step_up_context_failure_for_code!(payload, dpop_jkt:)
+      return failure("invalid_grant", "Authorization code is unbound")
+    end
 
-    client = OidcClientRegistry.find!(client_id)
+    client = authenticated_client_config
     connection_class = connection_class_for(authorization_code.resource_type)
     transaction_class = authorization_transaction_class_for(authorization_code.resource_type)
     issuance_result, usage_for_link =
-      connection_class.connected_to(role: :writing) do
+      with_current_root_token_lock(root_token, resource) do |locked_root_token, device_session|
       connection_class.transaction do
         issue_authorization_transaction_database!(
           authorization_code: authorization_code,
           resource: resource,
           client: client,
-          root_token: root_token,
+          root_token: locked_root_token,
+          device_session: device_session,
           transaction_class: transaction_class,
           dpop_jkt: dpop_jkt,
+          assertion_verification: assertion_verification,
         )
       end
     end
@@ -568,46 +602,352 @@ class OidcTokenExchangeCoordinator < ApplicationService
     issuance_result || failure("server_error", "authorization grant exchange failed")
   rescue RpSessionAlreadyExists
     failure("invalid_grant", "RP Session already exists for this Browser Session and client")
+  rescue RpSession::IssuanceRejected
+    record_step_up_context_failure_for_code!(payload, dpop_jkt:)
+    failure("invalid_grant", "root session is not active")
   end
 
   def issue_authorization_transaction_database!(authorization_code:, resource:, client:, root_token:,
-                                                transaction_class:, dpop_jkt:)
+                                                device_session:, transaction_class:, dpop_jkt:,
+                                                assertion_verification:)
     authorization_transaction = transaction_class.lock.find_by(
       transaction_id: authorization_code.authorization_transaction_ref,
     )
     decision_time = transaction_class.database_now
+    return [failure("invalid_grant", "authorization transaction mismatch"), nil] unless authorization_transaction
+
+    if authorization_transaction.intent == "step_up"
+      return issue_step_up_authorization_transaction!(
+        authorization_code:, resource:, client:, root_token:, device_session:,
+        authorization_transaction:, dpop_jkt:, assertion_verification:, now: decision_time,
+      )
+    end
+
+    if assertion_verification&.step_up_claims_present?
+      return [failure("invalid_request", "step-up assertion claims require a step-up authorization code"), nil]
+    end
+
     unless authorization_grant_matches?(authorization_transaction, authorization_code, now: decision_time)
       return [failure("invalid_grant", "authorization transaction mismatch"), nil]
     end
-    unless authorization_transaction.claim_authorization_grant_locked!(now: decision_time)
+
+    capability_failure = required_operator_capability_failure(client, resource)
+    return [capability_failure, nil] if capability_failure
+    unless bound_session_usable_after_code_cas?(root_token, resource, device_session:)
+      return [failure("invalid_grant", "root session is not active"), nil]
+    end
+    unless authorization_transaction.claim_authorization_grant_locked!
       return [failure("invalid_grant", "authorization grant already redeemed"), nil]
     end
 
-    with_current_root_token_lock(root_token, resource) do |locked_root_token, device_session|
-      unless bound_session_usable_after_code_cas?(locked_root_token, resource, device_session: device_session)
-        return [failure("invalid_grant", "root session is not active"), nil]
-      end
+    usage = prepare_exchanged_usage(
+      authorization_code: authorization_code,
+      resource: resource,
+      client: client,
+      root_token: root_token,
+      dpop_jkt: dpop_jkt,
+      now: decision_time,
+    )
+    refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
+    result = issue_exchanged_token_result(
+      authorization_code: authorization_code,
+      resource: resource,
+      client: client,
+      root_token: root_token,
+      usage: usage,
+      refresh_plain: refresh_plain,
+      dpop_jkt: dpop_jkt,
+      now: decision_time,
+    )
+    [result, usage]
+  end
 
-      usage = prepare_exchanged_usage(
-        authorization_code: authorization_code,
-        resource: resource,
-        client: client,
-        root_token: locked_root_token,
-        dpop_jkt: dpop_jkt,
-        now: decision_time,
+  def issue_step_up_authorization_transaction!(
+    authorization_code:, resource:, client:, root_token:, device_session:, authorization_transaction:, dpop_jkt:,
+    assertion_verification:, now:
+  )
+    context_model, grant_model, state_model, realm, source_key, transition_writer =
+      step_up_models_for_resource_type(authorization_code.resource_type)
+    context = context_model.lock.find_by(oidc_authorization_transaction_id: authorization_transaction.id)
+    return [failure("invalid_grant", "step-up authorization context is unavailable"), nil] unless context
+
+    grant = grant_model.lock.find_by(id: context.grant_id)
+    if grant&.dpop_jkt.present? || dpop_jkt.present?
+      return [failure("invalid_grant", "DPoP-bound step-up grants are unsupported"), nil]
+    end
+
+    refusal = step_up_context_refusal(
+      authorization_code:, authorization_transaction:, context:, grant:, resource:, root_token:, device_session:,
+      client:, assertion_verification:, state_model:, realm:, source_key:, transition_writer:, now:,
+    )
+    return [refusal, nil] if refusal
+
+    unless authorization_transaction.claim_authorization_grant_locked!
+      return [failure("invalid_grant", "authorization grant already redeemed"), nil]
+    end
+
+    result = prepare_step_up_token_response(
+      authorization_code:, authorization_transaction:, grant:, resource:, client:, root_token:, now:,
+    )
+    commit_step_up_attribution!(
+      authorization_code:, authorization_transaction:, context:, grant:, root_token:, client:, state_model:, realm:,
+      source_key:, transition_writer:, now:,
+    )
+    [result, grant]
+  end
+
+  def step_up_context_refusal(authorization_code:, authorization_transaction:, context:, grant:, resource:, root_token:,
+                              device_session:, client:, assertion_verification:, state_model:, realm:, source_key:,
+                              transition_writer:, now:)
+    if context.state_id == state_model::PENDING && context.expires_at <= now
+      expire_step_up_context!(context:, client:, source_key:, realm:, transition_writer:, state_model:, now:)
+      return failure("invalid_grant", "step-up authorization context expired")
+    end
+    return failure("invalid_grant", "step-up authorization context is not pending") unless
+      context.state_id == state_model::PENDING
+
+    unless step_up_binding_matches?(
+      authorization_code:, authorization_transaction:, context:, grant:, resource:, root_token:, device_session:,
+      client:, now:,
+    )
+      return refuse_step_up_context!(
+        context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code: "binding_mismatch",
+        description: "step-up grant binding mismatch", now:,
       )
-      refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
-      result = issue_exchanged_token_result(
-        authorization_code: authorization_code,
-        resource: resource,
-        client: client,
-        root_token: locked_root_token,
-        usage: usage,
-        refresh_plain: refresh_plain,
-        dpop_jkt: dpop_jkt,
-        now: decision_time,
+    end
+
+    unless authorization_grant_matches?(authorization_transaction, authorization_code, now:)
+      return refuse_step_up_context!(
+        context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code: "binding_mismatch",
+        description: "step-up authorization binding mismatch", now:,
       )
-      [result, usage]
+    end
+
+    capability_failure = required_operator_capability_failure(client, resource)
+    return refuse_step_up_policy!(context:, client:, source_key:, realm:, transition_writer:, state_model:, now:) if
+      capability_failure
+
+    step_up_evidence_refusal(
+      authorization_code:, authorization_transaction:, context:, grant:, resource:, root_token:, device_session:,
+      client:, assertion_verification:, state_model:, realm:, source_key:, transition_writer:, now:,
+    )
+  end
+
+  def step_up_evidence_refusal(
+    authorization_code:, authorization_transaction:, context:, grant:, resource:, root_token:, device_session:, client:,
+    assertion_verification:, state_model:, realm:, source_key:, transition_writer:, now:
+  )
+    expectation = assertion_verification&.step_up_expectation
+    expectation_matches = assertion_verification&.step_up_claims_state == :valid &&
+      expectation&.grant == grant.public_id && expectation.subject == context.bound_subject
+    unless expectation_matches
+      return refuse_step_up_context!(
+        context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code: "expectation_mismatch",
+        description: "step-up assertion expectation mismatch", now:,
+      )
+    end
+
+    authentication_is_current = step_up_authentication_current?(
+      authorization_code:, authorization_transaction:, context:, grant:, resource:, now:,
+    )
+    unless authentication_is_current
+      return refuse_step_up_context!(
+        context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code: "policy_refused",
+        description: "step-up authentication no longer satisfies policy", now:,
+      )
+    end
+
+    unless bound_session_usable_after_code_cas?(root_token, resource, device_session:)
+      return refuse_step_up_context!(
+        context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code: "binding_mismatch",
+        description: "root session is not active", now:,
+      )
+    end
+
+    nil
+  end
+
+  def refuse_step_up_policy!(context:, client:, source_key:, realm:, transition_writer:, state_model:, now:)
+    refuse_step_up_context!(
+      context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code: "policy_refused",
+      description: "step-up authorization policy is no longer satisfied", now:,
+    )
+  end
+
+  def refuse_step_up_context!(context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code:,
+                              description:, now:)
+    fail_step_up_context!(context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code:, now:)
+    failure("invalid_grant", description)
+  end
+
+  def prepare_step_up_token_response(
+    authorization_code:, authorization_transaction:, grant:, resource:, client:, root_token:, now:
+  )
+    grant.update!(
+      oidc_auth_time: authorization_transaction.authenticated_at,
+      oidc_acr: OidcAuthorizeRequestResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate([authorization_transaction.auth_method]),
+    )
+    refresh_plain = issue_or_rotate_usage_refresh_token!(grant, now:)
+    issue_exchanged_token_result(
+      authorization_code:, resource:, client:, root_token:, usage: grant, refresh_plain:, dpop_jkt: nil, now:,
+    )
+  end
+
+  def commit_step_up_attribution!(authorization_code:, authorization_transaction:, context:, grant:, root_token:,
+                                  client:, state_model:, realm:, source_key:, transition_writer:, now:)
+    verified_method = authorization_transaction.auth_method
+    auth_time = authorization_transaction.authenticated_at
+    step_up_commit_model_for_resource_type(authorization_code.resource_type).create!(
+      grant:, root_token:, context_ref: context.public_id, verified_method:, committed_at: now,
+    )
+    transitioned = transition_writer.call!(
+      context:, to_state_id: state_model::COMMITTED, reason_code: "completed",
+    )
+    raise TokenIssuanceError, "step-up context transition failed" unless transitioned
+
+    StepUpAuditOutboxWriter.call(
+      source_key:, event_type: "step_up.committed", realm:, client_id: client.client_id,
+      subject_ref: context.bound_subject, context_ref: context.public_id, reason_code: "completed",
+      payload: {
+        op_context_ref: context.public_id,
+        grant_ref: grant.public_id,
+        verified_method: verified_method,
+        auth_time: auth_time.to_i,
+      }, occurred_at: now,
+    )
+  end
+
+  def step_up_models_for_resource_type(resource_type)
+    case resource_type.to_s
+    when "client"
+      [ClientStepUpContext, OpAppGrant, ClientStepUpContextState, "APP", "op_app",
+       ClientStepUpContextTransitionWriter,]
+    when "operator"
+      [OperatorStepUpContext, OpOrgGrant, OperatorStepUpContextState, "ORG", "op_org",
+       OperatorStepUpContextTransitionWriter,]
+    else
+      raise ArgumentError, "unsupported step-up resource type: #{resource_type.inspect}"
+    end
+  end
+
+  def step_up_commit_model_for_resource_type(resource_type)
+    case resource_type.to_s
+    when "client" then ClientStepUpCommit
+    when "operator" then OperatorStepUpCommit
+    else raise ArgumentError, "unsupported step-up resource type: #{resource_type.inspect}"
+    end
+  end
+
+  def step_up_binding_matches?(
+    authorization_code:, authorization_transaction:, context:, grant:, resource:, root_token:, device_session:, client:,
+    now:
+  )
+    return false unless resource
+    return false unless grant && grant.oidc_client_id == client.client_id && grant.active?(now)
+    return false unless grant_root_token_id(grant, root_token) == root_token.id
+    return false unless grant.device_session_id == device_session.id &&
+      root_token.device_session_id == device_session.id
+    return false unless authorization_transaction.client_id == grant.oidc_client_id
+    return false unless context.oidc_authorization_transaction_id == authorization_transaction.id
+    return false unless context.grant_id == grant.id && context.expires_at > now
+    return false unless context.bound_subject == authorization_code.subject
+    return false unless authorization_transaction.actor_ref == OidcSubject.public_id_from(
+      context.bound_subject,
+      resource_type: authorization_code.resource_type,
+    )
+    return false unless authorization_transaction.session_ref == root_token.public_id
+    return false unless authorization_transaction.surface == surface_for_resource_type(authorization_code.resource_type)
+
+    expected_subject = OidcSubject.for(resource, resource_type: authorization_code.resource_type)
+    context.bound_subject == expected_subject
+  end
+
+  def grant_root_token_id(grant, root_token)
+    case [grant, root_token]
+    in [OpAppGrant, ClientToken] then grant.client_token_id
+    in [OpOrgGrant, OperatorToken] then grant.operator_token_id
+    else nil
+    end
+  end
+
+  def step_up_authentication_current?(
+    authorization_code:, authorization_transaction:, context:, grant:, resource:, now:
+  )
+    verified_method = authorization_transaction.auth_method
+    allowed_methods = OidcStepUpAllowedMethodsResolver.call(actor: resource)
+    auth_time = authorization_code.auth_time
+    transaction_auth_time = authorization_transaction.authenticated_at
+    auth_time.present? && transaction_auth_time.present? && auth_time <= now && now < auth_time + 300.seconds &&
+      authorization_code.acr == OidcAuthorizeRequestResolver::STEP_UP_ACR &&
+      authorization_transaction.acr == OidcAuthorizeRequestResolver::STEP_UP_ACR &&
+      context.requested_acr == OidcAuthorizeRequestResolver::STEP_UP_ACR &&
+      transaction_auth_time.to_i == auth_time.to_i &&
+      StepUpAuditCodesRegistry::METHODS.include?(verified_method) &&
+      Array(authorization_code.auth_method).map(&:to_s) == [verified_method] &&
+      allowed_methods.include?(verified_method.to_sym) &&
+      grant.oidc_scope.to_s.split.sort == authorization_code.scope.to_s.split.sort
+  end
+
+  def fail_step_up_context!(context:, client:, source_key:, realm:, transition_writer:, state_model:, reason_code:,
+                            now:)
+    transitioned = transition_writer.call!(
+      context:, to_state_id: state_model::FAILED, reason_code:,
+    )
+    raise TokenIssuanceError, "step-up failure transition failed" unless transitioned
+
+    StepUpAuditOutboxWriter.call(
+      source_key:, event_type: "step_up.failed", realm:, client_id: client.client_id,
+      subject_ref: context.bound_subject, context_ref: context.public_id, reason_code:,
+      payload: { op_context_ref: context.public_id, failure_code: reason_code }, occurred_at: now,
+    )
+    true
+  end
+
+  def expire_step_up_context!(context:, client:, source_key:, realm:, transition_writer:, state_model:, now:)
+    transitioned = transition_writer.call!(
+      context:, to_state_id: state_model::EXPIRED, reason_code: "expired",
+    )
+    raise TokenIssuanceError, "step-up expiry transition failed" unless transitioned
+
+    StepUpAuditOutboxWriter.call(
+      source_key:, event_type: "step_up.expired", realm:, client_id: client.client_id,
+      subject_ref: context.bound_subject, context_ref: context.public_id, reason_code: "expired",
+      payload: { op_context_ref: context.public_id }, occurred_at: now,
+    )
+    true
+  end
+
+  def record_step_up_context_failure_for_code!(payload, dpop_jkt:)
+    authorization_code = wrap_payload(payload)
+    transaction_model = authorization_transaction_class_for(authorization_code.resource_type)
+    context_model, grant_model, state_model, realm, source_key, transition_writer =
+      step_up_models_for_resource_type(authorization_code.resource_type)
+    transaction_model.connection_owner.connected_to(role: :writing) do
+      transaction_model.transaction do
+        authorization_transaction = transaction_model.lock.find_by(
+          transaction_id: authorization_code.authorization_transaction_ref,
+        )
+        next unless authorization_transaction&.intent == "step_up"
+
+        context = context_model.lock.find_by(oidc_authorization_transaction_id: authorization_transaction.id)
+        next unless context&.state_id == state_model::PENDING
+
+        grant = grant_model.lock.find_by(id: context.grant_id)
+        next if grant&.dpop_jkt.present? || dpop_jkt.present?
+
+        now = transaction_model.database_now
+        if context.expires_at <= now
+          expire_step_up_context!(
+            context:, client: authenticated_client_config, source_key:, realm:, transition_writer:, state_model:, now:,
+          )
+        else
+          fail_step_up_context!(
+            context:, client: authenticated_client_config, source_key:, realm:, transition_writer:, state_model:,
+            reason_code: "binding_mismatch", now:,
+          )
+        end
+      end
     end
   end
 
@@ -698,7 +1038,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     return false unless transaction.nonce == authorization_code.nonce
     return false unless transaction.scope == authorization_code.scope
     return false if transaction.base_finalized_at.blank?
-    return false unless transaction.status == OidcAuthorizationTransactionable::STATUS_CONSUMED
+    return false unless transaction.consumed?
     return false unless transaction.browser_session_ref == authorization_code.base_session_ref
     return false unless transaction.actor_ref == OidcSubject.public_id_from(
       authorization_code.subject,

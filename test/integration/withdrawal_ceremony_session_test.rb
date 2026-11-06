@@ -29,7 +29,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-
   test "client recovery consumes ceremony and does not create normal auth cookie" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host! host
@@ -51,7 +50,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
-
 
   test "expired revoked and consumed ceremonies are rejected" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
@@ -111,7 +109,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_predicate ceremony.reload, :active?
   end
 
-
   test "termination clears Inertia history on the next app page" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
@@ -143,7 +140,6 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert inertia_page.fetch("clearHistory")
   end
-
 
   private
 

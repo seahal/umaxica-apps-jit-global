@@ -20,7 +20,7 @@ class PreferenceInertiaPageContractTest < ActionDispatch::IntegrationTest
   ].freeze
 
   SCREEN_KEYS = %w(
-    region timezone language motion density pagination theme cookie calendar clock currency customization
+    region timezone language motion density pagination theme cookie notification calendar clock currency customization
   ).freeze
 
   # Every screen under /preference and the component shape it renders. The four shapes are the four
@@ -38,6 +38,7 @@ class PreferenceInertiaPageContractTest < ActionDispatch::IntegrationTest
     "calendar" => "selectable",
     "clock" => "selectable",
     "customization" => "customizations",
+    "notification" => "notifications/edit",
   }.freeze
 
   setup do
@@ -211,6 +212,77 @@ class PreferenceInertiaPageContractTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert_equal 2, inertia_props.dig("form", "value")
+    end
+
+    # The scaffold accepts the round trip but intentionally stores neither notification
+    # preferences nor the display-only Web Push choice until their owners are defined.
+    test "base_#{name} notification mock update leaves preference state and credentials unchanged" do
+      prefix = name.capitalize
+      registry = PreferenceClassRegistry.fetch(prefix)
+      extra_state_models =
+        case name
+        when "app"
+          [AppPreferenceBrowserBinding, AppPreferenceConsentReceipt, AppPreferenceWebPush]
+        when "com"
+          [ComPreferenceBrowserBinding, ComPreferenceConsentReceipt, ComPreferenceWebPush]
+        when "org"
+          [OrgPreferenceBrowserBinding, OrgPreferenceConsentReceipt, OrgPreferenceWebPush]
+        end
+      state_models = [
+        registry.fetch(:preference), registry.fetch(:status), registry.fetch(:cookie),
+        registry.fetch(:audit), registry.fetch(:audit_event), registry.fetch(:audit_level),
+        *registry.fetch(:option_classes).values, *registry.fetch(:record_classes).values,
+        *extra_state_models,
+      ].uniq
+      before_state =
+        state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      host!(surface_host(surface))
+      notification_url =
+        case name
+        when "app" then base_app_preference_notification_url(host: surface_host(surface), ri: "jp")
+        when "com" then base_com_preference_notification_url(host: surface_host(surface), ri: "jp")
+        when "org" then base_org_preference_notification_url(host: surface_host(surface), ri: "jp")
+        end
+      notification_edit_path =
+        case name
+        when "app" then edit_base_app_preference_notification_path(ri: "jp")
+        when "com" then edit_base_com_preference_notification_path(ri: "jp")
+        when "org" then edit_base_org_preference_notification_path(ri: "jp")
+        end
+      patch(
+        notification_url,
+        params: { preference_notification: { email: "daily", web_push: "enabled", unknown: "ignored" } },
+        headers: inertia_headers(surface, version: ViteRuby.digest),
+      )
+
+      assert_response :see_other
+      assert_redirected_to notification_edit_path
+
+      after_state =
+        state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      assert_equal before_state, after_state, "ignored notification fields must not persist"
+
+      patch(
+        notification_url,
+        params: { preference_notification: {} },
+        headers: inertia_headers(surface, version: ViteRuby.digest),
+      )
+
+      assert_response :see_other
+      assert_redirected_to notification_edit_path
+
+      after_empty_state =
+        state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      assert_equal before_state, after_empty_state, "an empty notification payload must not persist"
     end
 
     # Inertia reads a 4xx as a transport exception, so a refused reset has to come back as a

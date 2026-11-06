@@ -35,6 +35,22 @@ module ExternalAuthenticationInfrastructureOmniauthGoogleOidcEnforcement
     {}
   end
 
+  protected
+
+  # OmniAuth OAuth2 stringifies both sides of its state comparison. A malformed or
+  # corrupted session value such as Integer(0) can therefore match a callback
+  # parameter "0" and reach the token endpoint. Provider state is opaque text;
+  # require the exact String values produced by the request phase.
+  def csrf_detected?
+    return false if options.provider_ignores_state
+
+    callback_state = request.params["state"]
+    stored_state = stored_sign_in.fetch("state", nil)
+    return true unless callback_state.is_a?(String) && stored_state.is_a?(String)
+
+    callback_state.empty? || !secure_compare(callback_state, stored_state)
+  end
+
   private
 
   def verified_id_info

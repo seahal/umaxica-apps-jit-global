@@ -4,6 +4,9 @@
 require "aws-sdk-sns"
 
 class OutboundSmsProvidersAwsSns
+  HTTP_OPEN_TIMEOUT = 5
+  HTTP_READ_TIMEOUT = 10
+
   def initialize
     @client = Aws::SNS::Client.new(client_options)
   end
@@ -30,6 +33,8 @@ class OutboundSmsProvidersAwsSns
       access_key_id: Rails.app.creds.require(:AWS_ACCESS_KEY_ID),
       secret_access_key: Rails.app.creds.require(:AWS_SECRET_ACCESS_KEY),
       region: Rails.application.config.aws_region || "ap-northeast-1",
+      http_open_timeout: HTTP_OPEN_TIMEOUT,
+      http_read_timeout: HTTP_READ_TIMEOUT,
     }
     session_token = Rails.app.creds.option(:AWS_SESSION_TOKEN)
     options[:session_token] = session_token if session_token.present?

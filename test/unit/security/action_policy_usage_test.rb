@@ -55,9 +55,6 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/auth/app/settings/googles_controller.rb#create",
     "app/controllers/auth/app/settings/googles_controller.rb#destroy",
     "app/controllers/auth/app/settings/removals_controller.rb#create",
-    "app/controllers/auth/org/settings/entras_controller.rb#create",
-    "app/controllers/auth/org/settings/entras_controller.rb#destroy",
-    "app/controllers/auth/org/settings/removals_controller.rb#create",
 
     # Sign-in verification and cancellation ceremony endpoints are guarded by active flow,
     # checkpoint, and verification state rather than standalone mutable resource records.

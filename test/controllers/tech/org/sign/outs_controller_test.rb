@@ -2,12 +2,13 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require_relative "../../../../support/oidc_rp_logout_hint_helper"
+require_relative "../../../../support/rp_cell_sign_out_helper"
 
 class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
-  include OidcRpLogoutHintHelper
+  include RpCellSessionHelper
+  include RpCellSignOutHelper
 
-  fixtures :operators, :operator_statuses
+  fixtures :operators, :operator_statuses, :operator_token_kinds
 
   setup do
     @host = ENV.fetch("PUBLIC_TECH_STAFF_URL")
@@ -29,36 +30,10 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    client = OidcClientRegistry.find!("tech-org-ww")
-    root_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator)
-    rp_session = OpOrgGrant.create!(
-      authentication_epoch: 0,
-      operator_token: root_token,
-      oidc_client_id: client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: 10.minutes.from_now,
+    root_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
-    store_oidc_rp_logout_hint!(rp_session, @operator, client)
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      @operator,
-      host: @host,
-      resource_type: "operator",
-      session_public_id: root_token.public_id,
-      base_session_public_id: root_token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_client(client),
-      audiences: [client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-      subject: OidcSubject.for(@operator, resource_type: "operator"),
-      client_id: client.client_id,
-    )
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
+    authenticate_rp_cell_for_sign_out!(client_id: "tech-org-ww", actor: @operator, root_token:)
     grant.update!(
       revoked_at: Time.current,
       revoked_by_operator: operators(:two),
@@ -71,44 +46,49 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", I18n.t("tech.org.access_denial.heading")
     assert_not_includes response.body, I18n.t("tech.org.dashboard.empty_state")
     authenticity_token = css_select('input[name="authenticity_token"]').first["value"]
-    cookies.delete(OidcRpBrowserCredentialContract::ACCESS_COOKIE)
 
     stops_before = OpOrgAuthorityStop.count
-    post(
+    post_rp_cell_sign_out(
       tech_org_sign_out_path(ri: "jp"),
-      params: { authenticity_token: authenticity_token },
-      headers: {
-        "Origin" => "https://#{@host}",
-        "Sec-Fetch-Site" => "same-origin",
-      },
+      params: { authenticity_token: },
+      headers: { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" },
     )
 
-    assert_response :see_other
     assert_equal stops_before, OpOrgAuthorityStop.count
-    authority_uri = URI.parse(response.location)
-
-    query = Rack::Utils.parse_nested_query(authority_uri.query.to_s)
-
-    assert_visa_end_session_redirect(query, authority_uri, client_id: client.client_id, region: "jp")
+    assert_rp_cell_sign_out_handoff!(client_id: "tech-org-ww", region: "jp")
     assert_predicate root_token.reload, :currently_usable?
-    assert_predicate rp_session.reload, :active?
     assert_equal "no-store", response.headers["Cache-Control"]
   ensure
     ActionController::Base.allow_forgery_protection = previous_forgery_protection
   end
 
-  test "sign-out without a valid authenticity token is refused before transaction creation" do
+  test "cross-site sign-out without a valid authenticity token is refused" do
     previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
+    OperatorCapabilityGrant.create!(
+      operator: @operator,
+      granted_by_operator: operators(:two),
+      origin: "grant",
+      capability: OperatorCapabilityGrant::TECH_ACCESS,
+      reason_code: "duty_assignment",
+      starts_at: 1.minute.ago,
+      expires_at: 1.day.from_now,
+    )
+    root_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+    )
+    authenticate_rp_cell_for_sign_out!(client_id: "tech-org-ww", actor: @operator, root_token:)
 
-    post(
+    post_rp_cell_sign_out(
       tech_org_sign_out_path(ri: "jp"), headers: {
-        "Origin" => "https://#{@host}",
-        "Sec-Fetch-Site" => "same-origin",
+        "Origin" => "https://attacker.example",
+        "Sec-Fetch-Site" => "cross-site",
       },
     )
 
     assert_response :unprocessable_content
+    assert_predicate @rp_cell_session.reload, :active?
+    assert_empty @rp_cell_revocation_calls
   ensure
     ActionController::Base.allow_forgery_protection = previous_forgery_protection
   end

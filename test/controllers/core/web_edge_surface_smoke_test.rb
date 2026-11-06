@@ -18,7 +18,7 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
     },
   ].freeze
 
-  test "core preference API endpoints are executable on every surface" do
+  test "core preference API endpoints expose reads and refuse writes on every surface" do
     SURFACES.each do |surface|
       host = surface.fetch(:host)
       host! host
@@ -28,16 +28,14 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_equal "application/json", response.media_type
 
-      # A body without a consent decision is a validation problem, not a credential failure.
       patch "https://#{host}#{surface.fetch(:cookie_path)}", params: { ri: "jp", value: "1" }, as: :json
 
-      assert_response :unprocessable_content
+      assert_response :forbidden
       assert_equal "application/problem+json", response.media_type
-      assert_equal ["/cookie/consented"], response.parsed_body.fetch("errors").pluck("pointer")
 
       patch "https://#{host}#{surface.fetch(:cookie_path)}", params: { cookie: { consented: true } }, as: :json
 
-      assert_response :no_content
+      assert_response :forbidden
 
       get "https://#{host}#{surface.fetch(:theme_path)}", params: { ri: "jp" }
 
@@ -46,15 +44,11 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
 
       patch "https://#{host}#{surface.fetch(:theme_path)}", params: { ri: "jp", value: "dark" }, as: :json
 
-      assert_response :unprocessable_content
-      assert_equal ["/theme"], response.parsed_body.fetch("errors").pluck("pointer")
+      assert_response :forbidden
 
       patch "https://#{host}#{surface.fetch(:theme_path)}", params: { theme: "dark" }, as: :json
 
-      assert_response :success
-      assert_equal "application/json", response.media_type
-      assert_equal "dr", response.parsed_body.fetch("theme")
-
+      assert_response :forbidden
     end
   end
 end

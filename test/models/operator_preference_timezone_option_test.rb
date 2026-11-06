@@ -48,6 +48,7 @@ class OperatorPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "ensure_defaults! creates missing default records" do
     Prosopite.pause do
+      OperatorPreferenceTimezone.where(option_id: OperatorPreferenceTimezoneOption::DEFAULTS).delete_all
       OperatorPreferenceTimezoneOption.where(id: OperatorPreferenceTimezoneOption::DEFAULTS).destroy_all
     end
 
@@ -68,6 +69,7 @@ class OperatorPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "ensure_defaults! uses Prosopite.pause when defined" do
     Prosopite.pause do
+      OperatorPreferenceTimezone.where(option_id: OperatorPreferenceTimezoneOption::DEFAULTS).delete_all
       OperatorPreferenceTimezoneOption.where(id: OperatorPreferenceTimezoneOption::DEFAULTS).destroy_all
     end
     pause_called = false

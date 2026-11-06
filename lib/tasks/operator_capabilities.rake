@@ -5,7 +5,7 @@
 # operator; there is no "all operators" or "first operator" form and no environment that skips it.
 #
 # The Chronicle intent is written first, and nothing is granted if it cannot be. See
-# docs/operations/operator-capability-runbook.md.
+# docs/runbooks/operator-capability.md.
 namespace :operator_capabilities do
   desc "Grant capabilities to one operator (OPERATOR= CAPABILITIES=a,b TICKET= EXPIRES_AT=iso8601 [DRY_RUN=true])"
   task bootstrap: :environment do

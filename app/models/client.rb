@@ -264,8 +264,8 @@ class Client < AppPrincipalRecord
   has_one :core_app_client_bridge,
           dependent: :destroy,
           inverse_of: :client
-  has_one :client_preference, class_name: "ClientPreference", foreign_key: :client_id, dependent: :destroy,
-                            inverse_of: :client
+  has_one :client_preference, class_name: "ClientPreference", dependent: :destroy,
+                              inverse_of: :client
   # Cross-database (avatar DB). Join rows are purged explicitly via
   # RetentionCrossDatabaseChildPurge, not by an implicit cross-DB cascade.
   has_many :avatar_assignments, foreign_key: :user_id, inverse_of: :user # rubocop:disable Rails/HasManyOrHasOneDependent
@@ -393,7 +393,7 @@ class Client < AppPrincipalRecord
     with_lock do
       unless email.is_a?(ClientEmail) && flow.is_a?(ClientSignUpFlow) &&
           email.user_id == id && flow.principal_id == id && flow.pending_contact_type == "email" &&
-          flow.pending_contact_id == email.id && flow.sign_up_checkpoint_pending? &&
+          flow.pending_contact_id == email.id && flow.status_id == ClientSignUpFlowStatus::FINALIZING &&
           flow.expires_at > flow.class.database_now && flow.requirement_cleared?(:otp) &&
           email.binding_effective? && email.user_email_status_id == ClientEmailStatus::VERIFIED_WITH_SIGN_UP &&
           active? && access_enabled? && accessible?(self.class.database_now)
@@ -414,7 +414,7 @@ class Client < AppPrincipalRecord
     with_lock do
       unless telephone.is_a?(ClientTelephone) && flow.is_a?(ClientSignUpFlow) &&
           telephone.user_id == id && flow.principal_id == id && flow.pending_contact_type == "telephone" &&
-          flow.pending_contact_id == telephone.id && flow.sign_up_checkpoint_pending? &&
+          flow.pending_contact_id == telephone.id && flow.status_id == ClientSignUpFlowStatus::FINALIZING &&
           flow.expires_at > flow.class.database_now && flow.requirement_cleared?(:otp) &&
           telephone.binding_effective? &&
           telephone.user_telephone_status_id == ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP && active? &&

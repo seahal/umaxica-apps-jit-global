@@ -4318,7 +4318,7 @@ ALTER TABLE ONLY public.avatars
 --
 
 ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details
-    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4350,7 +4350,7 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4414,7 +4414,7 @@ ALTER TABLE ONLY public.avatar_bureau_agent_grants
 --
 
 ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details
-    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4502,7 +4502,7 @@ ALTER TABLE ONLY public.avatar_lifecycle_events
 --
 
 ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details
-    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4542,7 +4542,7 @@ ALTER TABLE ONLY public.member_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4574,7 +4574,7 @@ ALTER TABLE ONLY public.client_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4622,7 +4622,7 @@ ALTER TABLE ONLY public.member_avatar_oversights
 --
 
 ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
-    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4630,7 +4630,7 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --

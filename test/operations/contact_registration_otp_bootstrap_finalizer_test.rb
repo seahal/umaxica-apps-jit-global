@@ -186,7 +186,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
         audits = audit_model.where(operation_ref: transaction.transaction_id)
 
         assert_equal 0, audits.count
-        assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
+        assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(**arguments),
                    "Unfinalized Source proof must not authorize receipt-only recovery"
 
         if %i(source_fault contact_receipt_fault bootstrap_receipt_fault).include?(scenario)
@@ -212,15 +212,22 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
             end
 
           ActiveSupport::Notifications.subscribed(fault, "sql.active_record") do
-            assert_raises(ActiveRecord::StatementInvalid) { EmailCredentialRegistrationOtpFinalizer.call!(**arguments) }
+            assert_raises(EmailCredentialRegistrationOtpFinalizer::DependencyFailure) do
+              EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
+            end
           end
           assert fired, "The real persistence boundary must be reached"
-          assert_withheld("Contact receipt must remain pending after failure") {
-            ticket_facts == transaction.reload.attributes
-          }
-          assert_withheld("Bootstrap receipt must remain pending after failure") {
-            parent_facts == parent.reload.attributes
-          }
+          if scenario == :source_fault
+            assert_predicate transaction.reload, :consumed?
+            assert_predicate parent.reload, :consumed?
+          else
+            assert_withheld("Ticket receipt must remain pending after failure") {
+              ticket_facts == transaction.reload.attributes
+            }
+            assert_withheld("Bootstrap receipt must remain pending after failure") {
+              parent_facts == parent.reload.attributes
+            }
+          end
           assert_withheld("Verified proof must survive failure") {
             proof == transaction.reload.attributes.slice(*proof.keys)
           }
@@ -231,18 +238,22 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
               source_facts == contact.reload.attributes
             }
             assert_equal 0, audits.count
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(**arguments),
+                       "A consumed Ticket without a committed Source fact remains terminal"
           else
-            assert_predicate contact, :binding_effective?
-            assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
-            assert EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
-                   "Original committed Source facts must permit only their pending receipt"
-            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            assert_withheld("Ticket failure must preserve the original candidate") {
+              source_facts == contact.reload.attributes
+            }
+            assert_equal 0, audits.count
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(**arguments),
+                       "An unconsumed Ticket cannot authorize receipt-only recovery"
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(
               **arguments.merge(browser_nonce: SecureRandom.urlsafe_base64(32)),
-            ), "A different browser cannot recover the committed Source receipt"
-            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            ), "A different browser cannot recover a committed Source receipt"
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(
               **arguments.merge(bootstrap_transaction: nil),
             ), "Committed Source is not a replacement for the original bootstrap permission"
-            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(
               **arguments.merge(
                 requirement: StepUpRequirement.new(
                   step_up_required: true,
@@ -256,8 +267,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           end
         end
 
-        if %i(success primary_freshness_elapsed source_fault contact_receipt_fault
-              bootstrap_receipt_fault).include?(scenario)
+        if %i(success primary_freshness_elapsed contact_receipt_fault bootstrap_receipt_fault).include?(scenario)
           finalization_now = contact_model.database_now +
             ((scenario == :primary_freshness_elapsed) ? 31.seconds : 0.seconds)
           contact_model.stub(:database_now, finalization_now) do
@@ -273,8 +283,8 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
                 assert_predicate contact.reload, :binding_effective?
                 assert_equal "consumed", transaction.reload.status
                 assert_equal "consumed", parent.reload.status
-                assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
-                           "Consumed receipts cannot authorize another operation"
+                assert EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(**arguments),
+                       "Exact committed Source provenance must permit receipt-only retry"
                 assert_equal "email_otp", parent[:method]
                 assert_withheld("Parent must name the original candidate") {
                   parent.verified_credential_ref == contact.public_id
@@ -301,6 +311,14 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
               end
             end
           end
+        elsif scenario == :source_fault
+          assert_equal :unavailable, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
+          assert_withheld("Refusal must preserve the candidate after terminal Ticket consumption") {
+            source_facts == contact.reload.attributes
+          }
+          assert_predicate transaction.reload, :consumed?
+          assert_predicate parent.reload, :consumed?
+          assert_equal 0, audits.count
         else
           assert_equal :unavailable, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
           assert_withheld("Refusal must preserve the candidate and verified proof") {

@@ -13,7 +13,9 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
 
   setup do
     @staff = operators(:one)
-    @token = operator_tokens(:one)
+    @token = OperatorToken.create!(
+      authentication_epoch: 0, staff: @staff, root_login_established_at: Time.current,
+    )
     @token.update!(authentication_context: nil)
     @passkey = OperatorPasskey.create!(
       staff: @staff, webauthn_id: SecureRandom.uuid, external_id: SecureRandom.uuid,
@@ -21,7 +23,8 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
       description: "Org step-up passkey", status_id: OperatorPasskeyStatus::ACTIVE,
     )
     @requirement = StepUpRequirement.new(
-      scope: "settings_passkey", required_aal: nil, step_up_required: true, allowed_methods: [:passkey],
+      scope: OidcAuthorizeRequestResolver::STEP_UP_SCOPE, required_aal: nil,
+      step_up_required: true, allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
       full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @staff.public_id,
       resource_ref: nil, tenant_ref: nil,
@@ -47,45 +50,43 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     passkey = @staff.staff_passkeys.create!(
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: @staff, token: @token,
-          requirement: @requirement, return_to: "/identity/passkeys",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: @token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @staff, resource_type: "operator")
+    oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor: @staff, token: @token, client:, params:, validated_request:,
+    )
+    entry_ref = oidc_issuance.entry_ref
+    transaction = oidc_issuance.ticket
+    binding = attach_auth_ceremony_entry!(
+      auth_org_verification_path, reference: entry_ref, params: { ri: "jp" },
+    )
+    binding.confirm_base!(
+      base_token: @token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "org", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+      ),
+    )
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    get auth_org_verification_path(ri: "jp", entry_ref: entry_ref), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!
@@ -110,8 +111,8 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
          params: { credential: assertion, challenge_id: record.passkey_challenge_ref }, as: :json
 
     assert_response :success
-    assert_equal "verified", issuance.transaction.reload.status
-    assert_equal passkey.external_id, issuance.transaction.verified_credential_ref
+    assert_equal "verified", transaction.reload.status
+    assert_equal passkey.external_id, transaction.verified_credential_ref
     assert_nil @token.reload.last_step_up_at
 
     get response.parsed_body.fetch("redirect_url")
@@ -125,55 +126,47 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     destination = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(destination.query)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), destination.host
-    assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
-    assert_match AuthAdmissionBinding::REFERENCE_PATTERN, query.fetch("result_ref")
-    assert_not query.key?("result")
+    expected_endpoint = URI.parse(OidcIssuer.authorization_endpoint("operator"))
+
+    assert_equal expected_endpoint.host, destination.host
+    assert_equal expected_endpoint.path, destination.path
+    assert_equal transaction.transaction_id, query.fetch("step_up_ticket_ref")
+    assert_equal oidc_issuance.context.public_id, query.fetch("step_up_context_ref")
+    assert_match AuthAdmissionBinding::REFERENCE_PATTERN, query.fetch("step_up_result_ref")
+    assert_not query.key?("step_up_cancellation_ref")
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
   test "Base refuses admission for an emergency session without creating a ticket" do
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @staff, resource_type: "operator")
     @token.update!(authentication_context: "standby")
 
     assert_no_difference ["OperatorStepUpCeremonyTransaction.count", "OperatorStepUpSession.count"] do
-      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        begin
-          admission_issuance = BaseStepUpAdmissionIssuer.call!(
-            actor: @staff, token: @token,
-            requirement: @requirement, return_to: "/identity/passkeys",
-            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-          )
-          admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-            surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-          )
-          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-          admission_binding.attach_auth_session!(
-            auth_session: admission_session,
-            confirmation_ref: SecureRandom.uuid,
-          )
-          admission_binding.confirm_base!(
-            base_token: @token,
-            browser_digest: AuthAdmissionBinding.browser_digest(
-              surface: admission_issuance.transaction.surface,
-              entry_ref: admission_issuance.reference,
-              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-            ),
-          )
-          admission_auth_host = {
-            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-          }.fetch(admission_issuance.transaction.surface)
-          admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-          # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-          store_raw_cookies(
-            cookies,
-            "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-            URI.parse("https://#{admission_auth_host}/"),
-          )
-          admission_issuance
-        end
+      assert_raises(OidcStepUpAuthorizationIssuer::NoActiveGrant) do
+        OidcStepUpAuthorizationIssuer.call!(
+          surface: "org", actor: @staff, token: @token, client:, params:, validated_request:,
+        )
       end
     end
     assert_nil @token.reload.last_step_up_at
@@ -204,7 +197,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
-  test "recorded normal freshness cannot satisfy a requirement after an emergency context change" do
+  test "legacy root freshness cannot satisfy an OIDC step-up requirement before or after emergency mode" do
     now = Time.current
     @token.update!(
       last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
@@ -214,7 +207,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
       last_step_up_session_public_id: @token.public_id,
     )
 
-    assert_predicate StepUpResolver.call(token: @token, requirement: @requirement, now: now), :satisfied?
+    assert_not_predicate StepUpResolver.call(token: @token, requirement: @requirement, now: now), :satisfied?
 
     @token.update!(authentication_context: "standby")
 
@@ -222,44 +215,42 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "Base refuses verified evidence when the session becomes emergency before finalization" do
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: @staff, token: @token,
-          requirement: @requirement, return_to: "/identity/passkeys",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: @token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    transaction = issuance.transaction
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @staff, resource_type: "operator")
+    oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor: @staff, token: @token, client:, params:, validated_request:,
+    )
+    entry_ref = oidc_issuance.entry_ref
+    transaction = oidc_issuance.ticket
+    binding = attach_auth_ceremony_entry!(
+      auth_org_verification_path, reference: entry_ref, params: { ri: "jp" },
+    )
+    binding.confirm_base!(
+      base_token: @token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "org", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+      ),
+    )
+    transaction = transaction
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
@@ -285,44 +276,42 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "normal Base admission reaches Auth passkey selection without Auth root credentials" do
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: @staff, token: @token,
-          requirement: @requirement, return_to: "/identity/passkeys",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: @token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @staff, resource_type: "operator")
+    oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor: @staff, token: @token, client:, params:, validated_request:,
+    )
+    entry_ref = oidc_issuance.entry_ref
+    transaction = oidc_issuance.ticket
+    binding = attach_auth_ceremony_entry!(
+      auth_org_verification_path, reference: entry_ref, params: { ri: "jp" },
+    )
+    binding.confirm_base!(
+      base_token: @token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "org", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+      ),
+    )
+    get auth_org_verification_path(ri: "jp", entry_ref: entry_ref), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!
@@ -332,51 +321,49 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
     assert_equal ["passkey"], props.fetch("methods").map { |method| method.fetch("key") }
-    assert_equal "pending", issuance.transaction.reload.status
+    assert_equal "pending", transaction.reload.status
     assert_nil @token.reload.last_step_up_at
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
   test "admitted Auth continuity refuses a session changed to emergency before passkey selection" do
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: @staff, token: @token,
-          requirement: @requirement, return_to: "/identity/passkeys",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: @token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @staff, resource_type: "operator")
+    oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor: @staff, token: @token, client:, params:, validated_request:,
+    )
+    entry_ref = oidc_issuance.entry_ref
+    transaction = oidc_issuance.ticket
+    binding = attach_auth_ceremony_entry!(
+      auth_org_verification_path, reference: entry_ref, params: { ri: "jp" },
+    )
+    binding.confirm_base!(
+      base_token: @token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "org", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+      ),
+    )
+    get auth_org_verification_path(ri: "jp", entry_ref: entry_ref), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     follow_redirect!
@@ -387,8 +374,8 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     get new_auth_org_verification_passkey_path(ri: "jp")
 
     assert_response :bad_request
-    assert_equal "pending", issuance.transaction.reload.status
-    assert_nil issuance.transaction.verified_at
+    assert_equal "pending", transaction.reload.status
+    assert_nil transaction.verified_at
     assert_nil @token.reload.last_step_up_at
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]

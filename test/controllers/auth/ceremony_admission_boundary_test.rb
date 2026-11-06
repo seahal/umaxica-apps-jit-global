@@ -60,30 +60,71 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         case surface
         when "app"
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
         when "org"
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
         end
-      requirement = StepUpRequirement.new(
-        scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-        phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-        audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      resource_type = (surface == "app") ? "client" : "operator"
+      client_id = (surface == "app") ? "core-app-jp" : "core-org-jp"
+      oidc_client = OidcClientRegistry.find!(client_id)
+      owner = OidcAuthorizationTransactionCoordinator.model_for(surface).connection_owner
+      now = owner.database_now
+      token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
+      grant_attributes = {
+        authentication_epoch: token.authentication_epoch,
+        oidc_client_id: oidc_client.client_id,
+        oidc_scope: "openid profile",
+        oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: now - 1.hour,
+        refresh_token_expires_at: now + 1.hour,
+      }
+      if surface == "app"
+        grant_attributes[:client_token] = token
+        grant_class = OpAppGrant
+        realm = "client"
+      else
+        grant_attributes[:operator_token] = token
+        grant_class = OpOrgGrant
+        realm = "operator"
+      end
+      grant = grant_class.create!(grant_attributes)
+      grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+      redirect_uri = oidc_client.redirect_uris_by_realm.fetch(realm).first
+      verifier = SecureRandom.urlsafe_base64(32)
+      params = {
+        response_type: "code",
+        client_id: oidc_client.client_id,
+        redirect_uri:,
+        scope: grant.oidc_scope,
+        state: SecureRandom.urlsafe_base64(32),
+        nonce: SecureRandom.urlsafe_base64(32),
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false),
+        code_challenge_method: "S256",
+        prompt: "login",
+        claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+      }
+      validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type:)
+      first = OidcStepUpAuthorizationIssuer.call!(
+        surface:, actor:, token:, client: oidc_client, params:, validated_request:,
       )
-      nonce = SecureRandom.hex(32)
-      first = BaseStepUpAdmissionIssuer.call!(
-        actor:, token:, requirement:, return_to: "/identity/passkeys", base_browser_nonce: nonce, base_token: token,
-      )
-      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: first.reference)
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: first.entry_ref)
       browser = open_session
       browser.https!
       browser.host!(host)
       headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin", **NAVIGATION_HEADERS }
-      attach_auth_ceremony_entry!("/verification", reference: first.reference, params: { ri: "jp" }, browser:)
+      attach_auth_ceremony_entry!("/verification", reference: first.entry_ref, params: { ri: "jp" }, browser:)
       # The independent Base HTTP matrix covers confirmation; isolate cancellation after real Auth redemption.
-      binding.reload.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
-      browser.get("/verification", params: { entry_ref: first.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+      binding.reload.confirm_base!(
+        base_token: token,
+        browser_digest: AuthAdmissionBinding.browser_digest(
+          surface:, entry_ref: first.entry_ref, nonce: first.authorization_transaction.login_challenge,
+        ),
+      )
+      browser.get("/verification", params: { entry_ref: first.entry_ref, ri: "jp" }, headers: NAVIGATION_HEADERS)
 
       assert_equal 303, browser.response.status
       browser.get("/verification", params: { ri: "jp" })
@@ -91,26 +132,34 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal 200, browser.response.status
       csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
       admitted = admitted_auth_ceremony_session_for_test(binding.reload)
-      replacement = BaseStepUpCancelAndStartCommitter.call!(
-        actor:, token:, previous_transaction: first.transaction,
-        requirement: StepUpRequirement.new(
-          step_up_required: true,
-          phishing_resistant_required: false,
-          user_verification_required: false,
-          full_reauthentication_required: false,
-          **requirement.to_h.merge(scope: "settings_email"),
-        ),
-        return_to: "/identity/emails", base_browser_nonce: nonce, base_token: token,
+      cancellation = BaseAuthAdmissionCoordinator.issue_cancellation!(
+        transaction: first.ticket, ceremony_session_ref: admitted.id.to_s,
+      )
+      OidcStepUpAuthorizationCancellationCommitter.call!(
+        surface:, actor:, token:, context: first.context, ticket: first.ticket,
+        authorization_transaction: first.authorization_transaction, admission_binding: binding,
+        cancellation_handoff: cancellation.handoff,
+      )
+      replacement_params = params.merge(
+        state: SecureRandom.urlsafe_base64(32), nonce: SecureRandom.urlsafe_base64(32),
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest(SecureRandom.urlsafe_base64(32)), padding: false),
+      )
+      replacement_validated_request = OidcAuthorizeRequestResolver.call(
+        params: replacement_params, resource: actor, resource_type:,
+      )
+      replacement = OidcStepUpAuthorizationIssuer.call!(
+        surface:, actor:, token:, client: oidc_client, params: replacement_params,
+        validated_request: replacement_validated_request,
       )
 
-      assert_not_equal first.transaction.transaction_id, replacement.transaction.transaction_id
+      assert_not_equal first.ticket.transaction_id, replacement.ticket.transaction_id
       assert_equal ["canceled", "pending", nil],
-                   [first.transaction.reload.status, replacement.transaction.reload.status,
+                   [first.ticket.reload.status, replacement.ticket.reload.status,
                     token.reload.last_step_up_at,]
-      old_facts = first.transaction.attributes
-      replacement_facts = replacement.transaction.attributes
+      old_facts = first.ticket.attributes
+      replacement_facts = replacement.ticket.attributes
       replacement_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface:, reference: replacement.reference,
+        surface:, reference: replacement.entry_ref,
       )
       replacement_binding_facts = replacement_binding.attributes
       session_model =
@@ -119,7 +168,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         when "org" then OperatorStepUpSession
         end
       replacement_session = session_model.find_by!(
-        step_up_ceremony_transaction_ref: replacement.transaction.transaction_id,
+        step_up_ceremony_transaction_ref: replacement.ticket.transaction_id,
       )
       replacement_session_facts = replacement_session.attributes
 
@@ -132,8 +181,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal [400, nil], [browser.response.status, browser.response.location]
-      assert_equal old_facts, first.transaction.reload.attributes
-      assert_equal replacement_facts, replacement.transaction.reload.attributes
+      assert_equal old_facts, first.ticket.reload.attributes
+      assert_equal replacement_facts, replacement.ticket.reload.attributes
       assert_equal replacement_binding_facts, replacement_binding.reload.attributes
       assert_equal replacement_session_facts, replacement_session.reload.attributes
       assert_nil replacement_binding.auth_ceremony_session_id
@@ -438,7 +487,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal [nil, nil, nil],
                    [binding.reload.base_confirmed_at, binding.redeemed_at,
                     binding.admitted_auth_ceremony_session_id,]
-      assert_equal "pending", issuance.transaction.reload.status
+      assert_equal "pending", issuance.transaction.reload.status_name
     end
   ensure
     ActionController::Base.allow_forgery_protection = protection
@@ -685,7 +734,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         assert_equal deadline, binding.expires_at
         assert_nil binding.base_confirmed_at
         assert_nil binding.redeemed_at
-        assert_equal "pending", issuance.transaction.reload.status
+        assert_equal "pending", issuance.transaction.reload.status_name
       ensure
         ActionController::Base.allow_forgery_protection = protection
       end
@@ -740,7 +789,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal [deadline, confirmed_at], [binding.expires_at, binding.base_confirmed_at]
-        assert_equal "pending", issuance.transaction.reload.status
+        assert_equal "pending", issuance.transaction.reload.status_name
       ensure
         ActionController::Base.allow_forgery_protection = protection
       end
@@ -814,8 +863,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       assert_equal retained_sid, browser.cookies[sid_key]
       assert_not_predicate auth_ceremony_session_for_test(binding), :admitted?
-      assert_equal "pending", authorization_transaction_for_test(binding).reload.status
-      assert_equal "pending", authorization_transaction_for_test(sibling).reload.status
+      assert_equal "pending", authorization_transaction_for_test(binding).reload.status_name
+      assert_equal "pending", authorization_transaction_for_test(sibling).reload.status_name
     ensure
       ActionController::Base.allow_forgery_protection = protection
     end
@@ -904,11 +953,17 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       assert_equal [auth_host, entry_path], [URI.parse(entry_url).host, URI.parse(entry_url).path]
       foreign.host!(auth_host)
+      owner_binding_before_foreign_entry = owner_binding.reload.attributes
+      ceremony_before_foreign_entry = auth_ceremony_session_for_test(owner_binding).reload.attributes
+      ceremony_model = BaseAuthAdmissionCoordinator.ceremony_session_class(surface)
+      ceremony_count_before_foreign_entry = ceremony_model.count
       foreign.get(entry_url, headers: NAVIGATION_HEADERS)
 
-      assert_equal [400, nil, nil],
-                   [foreign.response.status, foreign.response.location, owner_binding.reload.redeemed_at],
-                   "a confirmed URL in another browser cannot expose an admission form"
+      assert_foreign_auth_admission_refusal!(
+        browser: foreign, binding: owner_binding, ceremony_model:, binding_before: owner_binding_before_foreign_entry,
+        ceremony_before: ceremony_before_foreign_entry, ceremony_count_before: ceremony_count_before_foreign_entry,
+        surface:,
+      )
       owner.host!(auth_host)
       continuity = auth_ceremony_session_for_test(owner_binding)
       original_cookie = owner.cookies["__Host-auth_sid"] || owner.cookies["auth_sid"]
@@ -974,7 +1029,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                    **NAVIGATION_HEADERS, },
       )
 
-      assert_equal [400, nil, admitted_id, original_cookie, session_count, false],
+      assert_equal [409, nil, admitted_id, original_cookie, session_count, false],
                    [owner.response.status, owner.response.location,
                     owner_binding.reload.admitted_auth_ceremony_session_id, owner.cookies[cookie_name],
                     continuity.class.count, continuity.reload.active?,],
@@ -1096,7 +1151,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       second.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
     end
 
-    assert_equal 400, second.response.status
+    assert_equal 409, second.response.status
     assert_nil second.session[:oidc_authorization_login_challenge]
     assert_equal token_count, ClientToken.count
     assert_equal bindings_before_replay, binding.class.count
@@ -1430,5 +1485,32 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     raw_sid = cookies[AuthCeremonySidCookie::COOKIE_BASENAME].presence ||
       cookies["#{AuthIoKeys::HOST_COOKIE_PREFIX}#{AuthCeremonySidCookie::COOKIE_BASENAME}"].presence
     model.find_active_by_raw_sid(raw_sid)
+  end
+
+  def assert_foreign_auth_admission_refusal!(browser:, binding:, ceremony_model:, binding_before:, ceremony_before:,
+                                             ceremony_count_before:, surface:)
+    response = browser.response
+
+    assert_equal [409, nil, nil], [response.status, response.location, binding.reload.redeemed_at],
+                 "a confirmed URL in another browser cannot expose an admission form"
+    assert_equal "private, no-store", response.headers["Cache-Control"], surface
+    assert_equal "no-referrer", response.headers["Referrer-Policy"], surface
+    assert_equal binding_before, binding.reload.attributes, surface
+    assert_equal ceremony_before, auth_ceremony_session_for_test(binding).reload.attributes, surface
+    assert_equal ceremony_count_before, ceremony_model.count, surface
+
+    set_cookie_header = response.headers["Set-Cookie"]
+    set_cookie_lines = set_cookie_header.is_a?(Array) ? set_cookie_header : set_cookie_header.to_s.split("\n")
+    auth_cookies =
+      set_cookie_lines.filter_map do |line|
+        cookie_name = line.split("=", 2).first
+        cookie_name if AuthPhaseRefusalResponseBoundary::COOKIE_NAMES.include?(cookie_name)
+      end
+
+    assert_empty auth_cookies, surface
+
+    response_header_names = response.headers.to_h.keys.map(&:downcase)
+
+    assert_empty AuthPhaseRefusalResponseBoundary::DBSC_HEADERS & response_header_names
   end
 end

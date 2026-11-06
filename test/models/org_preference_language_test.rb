@@ -28,7 +28,10 @@ require "test_helper"
 class OrgPreferenceLanguageTest < ActiveSupport::TestCase
   setup do
     OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::ACTIVE)
-    @preference = OrgPreference.create!(status_id: OrgPreferenceStatus::ACTIVE)
+    @preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current, last_issued_expires_at: 400.days.from_now,
+      status_id: OrgPreferenceStatus::ACTIVE,
+    )
   end
 
   test "belongs to preference" do

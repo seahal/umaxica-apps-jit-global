@@ -105,7 +105,7 @@ module RuntimeRole
     switchers accounts organizations avatars avatar_ownership_transfers dashboard_avatar_images groups
     group_avatar_memberships billing billings iam support audit settings system
     identity identities verification verifications secrets secret_issuances secret_presentations
-    selectors welcomes social sign_outs api/v0/identity api/v0/membership
+    selectors welcomes social sign_outs actor_support api/v0/identity api/v0/membership
   ).freeze
 
   BASE_ANY_PREFIXES = %w(
@@ -115,6 +115,7 @@ module RuntimeRole
 
   VISA_OP_PREFIXES = %w(
     ceremony_binding_confirmations edge/v0/token oauth oidc roots sign_byes sign/in well_known
+    api/v0/sensitive_admissions api/v0/sensitive_admission_sessions
   ).freeze
   VISA_ANY_PREFIXES = %w(
     health healths revisions robots csp_violation_reports api/v0/healths api/v0/revisions

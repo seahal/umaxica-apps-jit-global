@@ -7,8 +7,8 @@
 
 - `app`: end-user application; Palm is its browser relying party
 - `org`: staff and organization surface; Tech is its global operator relying party
-- `com`: anonymous public and corporate surface; it serves public preference entry and
-  public read-only pages, with no credential, session, admission, or OIDC relying-party boundary
+- `com`: anonymous public and corporate surface; it serves public preference entry and public
+  read-only pages, with no credential, session, admission, or OIDC relying-party boundary
 - `visa`: OpenID Provider and browser-bound authority for the app and org realms
 - `www`: Base browser relying party and identity/session-management surface for the app and org
   realms
@@ -132,16 +132,15 @@ and test databases on `primary`, development replicas on `replica`, port `5432`,
 password `development`. These are non-secret local values and are not read from the environment.
 Production connections still come from the `NEON_*` variables.
 
-WebAuthn trusted origins are derived from the public Auth host variables used by browser-facing
-links:
+WebAuthn uses one RP ID and one exact origin per surface (`app` and `org`). Production requires them
+as environment variables; other environments read the same variables first and fall back to the
+encrypted credentials `webauthn.<surface>.rp_id` / `origin`. A missing value raises. The RP ID must
+equal the origin host (`app/values/webauthn/relying_party_config.rb`).
 
 ```bash
-PUBLIC_AUTH_SERVICE_URL=auth.umaxica.app
-PUBLIC_AUTH_CORPORATE_URL=auth.umaxica.com
-PUBLIC_AUTH_STAFF_URL=auth.umaxica.org
+WEBAUTHN_APP_RP_ID  WEBAUTHN_APP_ORIGIN
+WEBAUTHN_ORG_RP_ID  WEBAUTHN_ORG_ORIGIN
 ```
-
-`TRUSTED_ORIGINS` remains available only for additional explicit origins.
 
 `bin/setup` installs Ruby gems, runs `bun install --frozen-lockfile` and `bin/rails db:prepare`,
 clears logs and temp files, then starts `bin/dev` (pass `--skip-server` to stop before that).
@@ -190,8 +189,8 @@ Access, not Host Authorization, keeps the development listener non-public. See
 `research/implementation/2026-08-10-development-tunnel-access-verification.md` for the measured
 end-to-end evidence.
 
-`sign.{app,org}.localhost` resolves only when `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset.
-Under Compose the canonical local names for the credential gateway are `auth.*`.
+`sign.{app,org}.localhost` resolves only when `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset. Under
+Compose the canonical local names for the credential gateway are `auth.*`.
 
 ## Code Quality
 

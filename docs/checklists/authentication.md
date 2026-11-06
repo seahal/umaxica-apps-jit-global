@@ -8,12 +8,20 @@ surface-specific. These are durable requirements, not current verification resul
   continuation GETs of `adr/sign-in-path-continuation-protocol.md` (the six D-100/D-101 conditions)
   and the Back-Channel Logout receiver (`ActionController::API`, Logout Token signature only).
 - AUTH-2: A browser-bound ceremony refuses stale, mismatched, cross-browser and replayed admission.
-  A Design D continuation GET requires Fetch Metadata navigation/document, verifies the host-only
-  browser binding before touching the one-time record, consumes atomically, returns the same next
-  redirect for a same-browser repeat only within 10 seconds of the original issuance, sends
-  `no-store` and `no-referrer`, and leaves a clean final URL. The deadline is absolute for both
-  redemption and every same-browser repeat; `redeemed_at` does not open or extend a repeat window.
-  HEAD and all other non-navigation requests are refused.
+  An attached reference advances only when the current host-only `auth_sid` identifies its exact
+  active Auth continuity row; mismatch on the Auth entry or direct `/ceremony_bindings` endpoint
+  returns 409 before state change and issues no session/Auth cookie or DBSC header. APP social login
+  callbacks also match the ceremony row captured at provider start to the active row resolved from
+  the current `auth_sid` before consuming OAuth state; mismatch returns the shared 409 without
+  consuming state, changing either ceremony, or issuing Auth cookies/DBSC. State-consuming Design D
+  continuation GETs require Fetch Metadata navigation/document, verify the host-only browser binding
+  before touching the one-time record, consume atomically, return the same next redirect for a
+  same-browser repeat only within 10 seconds of the original issuance, send `no-store` and
+  `no-referrer`, and leave a clean final URL. The deadline is absolute for both redemption and every
+  same-browser repeat; `redeemed_at` does not open or extend a repeat window. Visa result,
+  cancellation, switch and silent-SSO display GETs are read-only; their existing same-origin
+  authorization POST revalidates and commits the signed continuation. HEAD and all other
+  non-navigation requests are refused.
 - AUTH-3: Missing or contradictory authentication evidence produces an explicit refusal, without
   inferring another actor, credential, browser or assurance level.
 - AUTH-4: Auth supplies ceremony continuity, not an independent general login session or authority
@@ -71,9 +79,9 @@ surface-specific. These are durable requirements, not current verification resul
   never restamped into the current profile.
 - AUTH-17: An RP verifying OP-issued JWTs uses only the fixed public JWKS. An unknown key ID gets at
   most one refetch; while that fetch fails, the unknown key stays untrusted and an already cached
-  key remains usable only within its fresh and bounded stale windows.
-  Concurrent requests sharing a cold JWKS client reuse the fresh key fetched by the first request
-  when the distributed window identifies that key as recently published (D-144).
+  key remains usable only within its fresh and bounded stale windows. Concurrent requests sharing a
+  cold JWKS client reuse the fresh key fetched by the first request when the distributed window
+  identifies that key as recently published (D-144).
 
 - AUTH-18: APP/COM/ORG Passkey lifecycle mutations and their audit outbox facts share the owning
   principal transaction. Additional metadata cannot replace the authoritative surface, target UUID
@@ -86,7 +94,10 @@ surface-specific. These are durable requirements, not current verification resul
   authentication result Base accepts and never establishes a Root Session. Its worst effect is
   denying the legitimate attempt while the reference lives (an accepted residual risk; the user
   restarts). Re-verify with foreign-browser refusal tests at attach, confirmation, redemption and
-  result receipt whenever the sign-in or sign-up relay components change. See
+  result receipt whenever the sign-in or sign-up relay components change. Two same-browser first
+  admissions made without an existing `auth_sid` may leave more than one admitted ceremony; the last
+  delivered `auth_sid` selects the only reachable target. A request for another admitted target
+  returns 409 without changing either attempt or issuing authentication cookies or DBSC headers. See
   [Base/Auth authority](../../adr/base-auth-ceremony-and-seven-rp-boundary.md).
 
 - AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or JSON
@@ -97,11 +108,11 @@ surface-specific. These are durable requirements, not current verification resul
   pending contact, principal and proof, queuing no OTP; no controller ends or cleans the earlier
   attempt. A birthdate of today or later is never written; it receives a 422 and leaves the
   checkpoint active. A birthdate before today satisfies the sign-up age rule (D-178, R-AU-50).
-  Stuck-registration reporting is read-only and logs identifiers, not
-  contact values; report failure does not interrupt cleanup. An operator retries only a diagnosed,
-  capped terminal Flow through the existing cleanup service; a missing-Flow case remains held for
-  escalation (D-180). See [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement)
-  the [stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md), and
+  Stuck-registration reporting is read-only and logs identifiers, not contact values; report failure
+  does not interrupt cleanup. An operator retries only a diagnosed, capped terminal Flow through the
+  existing cleanup service; a missing-Flow case remains held for escalation (D-180). See
+  [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement) the
+  [stuck registration runbook](../runbooks/stuck-sign-up-registration.md), and
   [sign-up eligibility](../policy/signup-eligibility.md).
 
 - AUTH-22: Protected CAPTCHA entry points reject missing and failed tokens server-side. Enabling
@@ -147,27 +158,29 @@ surface-specific. These are durable requirements, not current verification resul
   success redirect; missing required parameters remain `invalid_request`. See
   [authorization request profile](../../adr/oidc-authorization-request-profile.md).
 
-- AUTH-32: APP Google/Apple callbacks resolve the verified issuer/subject under the admitted
-  intent. Unknown subjects continue only Sign Up; registered subjects continue only Sign In;
-  unusable or unfinished Clients, release during the ceremony, revoked consent and deleted
-  provider accounts refuse. An in-force subject ban precedes identity lookup for Sign In,
-  Sign Up and linking. A missing Client behind an identity produces HTTP 500 and one FATAL
-  event without exposing the subject or clearing Auth continuity. Refused callbacks create no
-  Flow, pending Client, external identity or Root Session and record no authentication evidence.
-  See [identity binding](../../adr/identity-resolution-and-credential-binding.md) and
+- AUTH-32: APP Google/Apple callbacks resolve the verified issuer/subject under the admitted intent.
+  Unknown subjects continue only Sign Up; registered subjects continue only Sign In; unusable or
+  unfinished Clients, release during the ceremony, revoked consent and deleted provider accounts
+  refuse. An in-force subject ban precedes identity lookup for Sign In, Sign Up and linking. A
+  missing Client behind an identity produces HTTP 500 and one FATAL event without exposing the
+  subject or clearing Auth continuity. Refused callbacks create no Flow, pending Client, external
+  identity or Root Session and record no authentication evidence. See
+  [identity binding](../../adr/identity-resolution-and-credential-binding.md) and
   [enforcement](../../adr/unified-enforcement.md).
 
 - AUTH-33: Visa APP/COM/ORG authorization and result/cancellation/switch endpoints share only their
   realm-local protocol base. The base denies access by default; continuation endpoints expose only
   their navigation action and retain request-size, rate-limit and browser-binding protections.
-  Public Visa roots remain passive, with no preference or authentication cookie issuance.
-  See [Visa OP boundary](../../adr/visa-op-host.md).
+  Public Visa roots remain passive, with no preference or authentication cookie issuance. See
+  [Visa OP boundary](../../adr/visa-op-host.md).
 
 - AUTH-34: Visa APP/COM/ORG `/oauth/authorize` rejects HEAD and any result/cancellation/switch
-  continuation parameter, including empty values, before allocating a transaction. A result can
-  establish one Root Session only through its owning Visa browser's navigation to `/oidc/result`;
-  foreign browsers, missing navigation metadata, HEAD and replay cannot consume it or issue a root.
-  See [authorization request profile](../../adr/oidc-authorization-request-profile.md) and
+  continuation parameter, including empty values, before allocating a transaction. Its result,
+  cancellation, switch and silent-SSO display GETs validate and render a same-origin signed POST
+  continuation without committing. The existing authorization POST rechecks the browser and
+  transaction bindings and performs the one-shot result or requested operation. Foreign browsers,
+  missing navigation metadata, HEAD, invalid POSTs and replay cannot issue an additional root. See
+  [authorization request profile](../../adr/oidc-authorization-request-profile.md) and
   [continuation protocol](../../adr/sign-in-path-continuation-protocol.md).
 
 - AUTH-35: Global Base/Auth/Visa/Tech/Edit browser HTML canonicalizes missing region on GET/HEAD
@@ -182,6 +195,35 @@ surface-specific. These are durable requirements, not current verification resul
   treated as proof of delivery.
 - AUTH-37: APP Email and Telephone sign-up OTP resend and verification do not turn an unregistered
   internal result into a routine invalid-code response; an unsupported result fails explicitly.
+- AUTH-38: APP Google/Apple social L1/L2 guidance is shown only after the provider identity and
+  callback state/nonce match the admitted entry. The HTTP 400 page starts a fresh Base `/sign`
+  request using normalized `ri` only, clears prior Auth continuity and reuses no callback state or
+  evidence. Unverified callbacks, blocked/released/unfinished identities and other provider errors
+  keep the generic refusal; OTP entry never discloses social registration status.
+- AUTH-39: APP/ORG OIDC Sign In and APP OIDC Sign Up refuse a clean first-entry page reload with
+  HTTP 409 after the admitted ceremony has progressed through authentication evidence, Email OTP
+  issuance, or an APP sign-up Flow. APP Email refuses a return to the earlier address page after OTP
+  issuance even before a SignInFlow exists, while its current verification page and explicit resend
+  remain usable. APP Secret refuses a same-page GET after successful evidence. These refusals
+  preserve persisted and browser session state and omit authentication cookies and DBSC headers. A
+  new admission reference and a forward request continue to be evaluated against their current
+  binding and phase. See `two.md` §10.4/§10.6/§10.8 and `one.md` AC-51.
+- AUTH-40: APP Google/Apple Sign Up provider POSTs create neither a `ClientSignUpFlow` nor Auth
+  authentication evidence. Back returns to the first page with Cancel, Switch and the available
+  methods; a new provider POST replaces the current browser's provider/state/nonce and consumes its
+  prior callback state. Only a verified successful callback can create and advance the Flow, under
+  Admission Binding then Ceremony locks. A callback refuses after a prior Email, Telephone or social
+  Flow, after an earlier Cancel, or when callback state/provider/admission no longer matches. Two
+  callbacks for one state produce at most one Flow. Current checks cover sequential provider restart
+  and both provider entry paths; separate stale signed-cookie generation races remain under review.
+  See `two.md` §10.7 and `one.md` R-AU-49.
+- AUTH-41: When APP/ORG Sign In is unavailable, the entry Sentry returns 503 before curfew handling
+  can cancel an attached, Base-confirmed and redeemed admission. Immediately before, at and after
+  the stored curfew, the binding, admitted ceremony, OIDC transaction, sign-in/sign-up flows and
+  browser cookies remain unchanged. With Sign In available, curfew cancellation retains its existing
+  behavior. See
+  [`acceptance_wu29_sign_entry_sentry_blocked_test.rb`](../../test/integration/acceptance_wu29_sign_entry_sentry_blocked_test.rb)
+  and [`admission_curfew_test.rb`](../../test/integration/admission_curfew_test.rb).
 
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),

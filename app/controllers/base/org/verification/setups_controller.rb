@@ -17,6 +17,8 @@ module Base
 
         def show
           authorize!(current_operator, to: :show?)
+          return if reject_step_up_for_authentication_context!
+
           scope = requested_step_up_scope(StepUpScopeCatalog::ORG)
           requested_step_up_return_to(scope: scope, allowed_scopes: StepUpScopeCatalog::ORG)
           return redirect_to_ordinary_verification(scope) if available_step_up_methods(current_operator).present?
@@ -33,6 +35,8 @@ module Base
 
         def create
           authorize!(current_operator, to: :show?)
+          return if reject_step_up_for_authentication_context!
+
           scope = requested_step_up_scope(StepUpScopeCatalog::ORG)
           return_to = requested_step_up_return_to(scope: scope, allowed_scopes: StepUpScopeCatalog::ORG)
           method = params[:registration_method]

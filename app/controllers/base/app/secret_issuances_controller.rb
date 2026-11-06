@@ -10,7 +10,8 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
   rescue_from ClientSecretStorageConfirmationCommitter::Denied,
               ClientSecretManualIssuanceInvalidator::Denied,
               ClientSecretManualReattemptIssuer::Denied, with: :deny_secret_operation
-  rescue_from ClientSecretStorageConfirmationCommitter::DependencyFailure, with: :secret_storage_unavailable
+  rescue_from ClientSecretStorageConfirmationCommitter::DependencyFailure,
+              ClientSecretStorageConfirmationCommitter::TransactionConflict, with: :secret_storage_unavailable
   rescue_from ClientSecretManualReservationIssuer::CapacityFull,
               ClientSecretIssuanceCountValue::ReservationConflict, with: :conflicting_secret_operation
 
@@ -42,6 +43,7 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
 
     ClientSecretStorageConfirmationCommitter.call!(
       actor_context: secret_actor_context, token: current_session_token, issuance: @issuance,
+      step_up_evidence: current_step_up_evidence,
     )
     session[:inertia_clear_history] = true
     destination =
@@ -61,6 +63,7 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     ClientSecretManualIssuanceInvalidator.call!(
       actor_context: secret_actor_context, token: current_session_token, issuance: @issuance,
       purge_after: ClientSecretLifetimesValue.purge_delay,
+      step_up_evidence: current_step_up_evidence,
     )
     session[:inertia_clear_history] = true
     redirect_to(base_app_secrets_path, status: :see_other)
@@ -74,6 +77,7 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     successor = ClientSecretManualReattemptIssuer.call!(
       actor_context: secret_actor_context, token: current_session_token, predecessor: @issuance,
       purge_after: ClientSecretLifetimesValue.purge_delay,
+      step_up_evidence: current_step_up_evidence,
     )
     session[:inertia_clear_history] = true
     redirect_to(base_app_secret_issuance_path(successor.public_id), status: :see_other)

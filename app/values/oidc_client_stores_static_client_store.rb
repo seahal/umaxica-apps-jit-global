@@ -70,12 +70,14 @@ module OidcClientStoresStaticClientStore
       resource_type: "client",
       name: "Base App Self RP",
       jwt_namespace: "BASE_RP_APP_WW",
+      step_up_callback_path: AuthBoundaryAuthorityMap.step_up_callback_path_for("base-app-ww"),
     },
     "base-org" => {
       env_key: "BASE_STAFF_URL",
       resource_type: "operator",
       name: "Base Org Self RP",
       jwt_namespace: "BASE_RP_ORG_WW",
+      step_up_callback_path: AuthBoundaryAuthorityMap.step_up_callback_path_for("base-org-ww"),
     },
   }.freeze
 
@@ -96,11 +98,15 @@ module OidcClientStoresStaticClientStore
 
   def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
                      callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,
+                     step_up_callback_path: nil,
                      sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH,
                      required_operator_capability: nil)
+    callback_paths = [callback_path, step_up_callback_path].compact.uniq
     {
       redirect_uris_by_realm: {
-        resource_type => build_redirect_uris(env_key, default_host, path: callback_path),
+        resource_type => callback_paths.flat_map do |path|
+          build_redirect_uris(env_key, default_host, path: path)
+        end,
       },
       post_logout_redirect_uris: build_post_logout_redirect_uris(
         env_key, default_host, path: sign_out_path,

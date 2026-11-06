@@ -85,8 +85,9 @@ Common examples:
 
 - dashboards;
 - signed-in user settings under `/setting`;
-- operator-controlled configuration under Base ORG `/settings` (the owner-approved WU-X1
-  migration; separate from Auth APP/ORG identity `/settings`);
+- operator-controlled configuration under Base ORG `/settings` (the owner-approved WU-X1 migration);
+  Auth ORG has no `/settings` route, and Auth APP's remaining settings routes are under the accepted
+  O-11 migration;
 - credential management;
 - authenticated APIs tied to the current actor.
 

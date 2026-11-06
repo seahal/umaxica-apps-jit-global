@@ -75,6 +75,10 @@ module AuthBoundaryAuthorityMap
   }.freeze
 
   CANONICAL_RP_CALLBACK_PATH = "/oidc/callback"
+  BASE_STEP_UP_CALLBACK_PATHS = {
+    "base-app-ww" => "/verification/oidc/callback",
+    "base-org-ww" => "/verification/oidc/callback",
+  }.freeze
   CANONICAL_RP_SIGN_IN_PATH = "/sign"
   CANONICAL_RP_SIGN_OUT_PATH = "/sign/out/completion"
 
@@ -123,6 +127,12 @@ module AuthBoundaryAuthorityMap
 
   def callback_path_for(_client_id)
     CANONICAL_RP_CALLBACK_PATH
+  end
+
+  def step_up_callback_path_for(client_id)
+    BASE_STEP_UP_CALLBACK_PATHS.fetch(client_id.to_s) do
+      raise KeyError, "no registered Base step-up callback for #{client_id.inspect}"
+    end
   end
 
   def sign_out_path_for(_client_id)

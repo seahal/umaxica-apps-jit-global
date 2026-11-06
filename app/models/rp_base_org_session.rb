@@ -11,6 +11,16 @@ class RpBaseOrgSession < RpBaseOrgRecord
   include PublicId
 
   belongs_to :op_session_binding, class_name: "RpBaseOrgOpSessionBinding", inverse_of: :sessions
+  has_one :actor_selection,
+          class_name: "RpBaseOrgSessionSelection",
+          foreign_key: :rp_session_id,
+          inverse_of: :rp_session,
+          dependent: :destroy
+  has_many :step_up_states,
+           class_name: "RpBaseOrgStepUpState",
+           foreign_key: :rp_session_id,
+           inverse_of: :rp_session,
+           dependent: :restrict_with_error
 
   # The partial index counts every unrevoked row, including an expired one.
   validates :op_session_binding_id,
@@ -26,6 +36,12 @@ class RpBaseOrgSession < RpBaseOrgRecord
 
   def active?(now: Time.current)
     revoked_at.nil? && op_session_binding&.revoked_at.nil? && absolute_expires_at.present? && absolute_expires_at > now
+  end
+
+  def selected_actor_context?
+    RpBaseOrgRecord.connected_to(role: :writing) do
+      RpBaseOrgSessionSelection.exists?(rp_session_id: id)
+    end
   end
 
   private

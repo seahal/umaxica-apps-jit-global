@@ -34,7 +34,10 @@ class OrgPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "has many org_preference_timezones" do
     option = OrgPreferenceTimezoneOption.create!(id: 99)
-    preference = OrgPreference.create!
+    preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     timezone = OrgPreferenceTimezone.create!(preference: preference, option: option)
 
     assert_includes option.org_preference_timezones, timezone
@@ -42,7 +45,10 @@ class OrgPreferenceTimezoneOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = OrgPreferenceTimezoneOption.create!(id: 99)
-    preference = OrgPreference.create!
+    preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     OrgPreferenceTimezone.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

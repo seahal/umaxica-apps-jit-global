@@ -11,13 +11,13 @@ module Security
     class OrgWithdrawalGateInvariantTest < ActionDispatch::IntegrationTest
       fixtures :operators
 
-      test "a closing operator on the org auth surface is redirected to the org withdrawal path" do
-        org_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+      test "a closing operator on the Base org identity surface is redirected to withdrawal" do
+        org_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
         host! org_host
         operator = operators(:one)
         operator.update!(withdrawal_started_at: 1.hour.ago)
 
-        get auth_org_settings_url(ri: "jp"), headers: as_staff_headers(operator, host: org_host)
+        get base_org_identity_url(ri: "jp"), headers: as_staff_headers(operator, host: org_host)
 
         assert_predicate operator.reload, :closing?
         assert_response :redirect
@@ -27,14 +27,13 @@ module Security
         assert_not_equal edit_base_app_identity_withdrawal_path(ri: "jp"), location
       end
 
-      test "an active operator on the same route is not sent to the withdrawal path" do
-        org_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+      test "an active operator can open the Base org identity surface" do
+        org_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
         host! org_host
 
-        get auth_org_settings_url(ri: "jp"), headers: as_staff_headers(operators(:one), host: org_host)
+        get base_org_identity_url(ri: "jp"), headers: as_staff_headers(operators(:one), host: org_host)
 
-        assert_response :redirect
-        assert_not_equal base_org_identity_withdrawal_path(ri: "jp"), URI.parse(response.location).request_uri
+        assert_response :success
       end
     end
   end

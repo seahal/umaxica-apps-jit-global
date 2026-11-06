@@ -109,12 +109,14 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 ### 4.2 Preference management & localization
 
 - **FR-05**: Region/language/timezone updates in preference controllers must validate against the
-  current preference option registry, persist to DB-backed preference rows, and reissue the
-  Preference JWT projection in `preference_access` / `__Host-preference_access`.
+  current preference option registry, persist to realm DB-backed preference rows, and issue the
+  realm Preference JWT (`__Secure-preference`) with its `language` and `__Secure-experience` display
+  cookies.
 - **FR-06**: Theme selection (`Theme` concern) must support `system/dark/light` with shorthand codes
   (sy/dr/li) and rewrite to the correct edit URL per scope (Top::App/Com/Org).
 - **FR-07**: Cookie consent toggles (`Preference::CookieController` using `Cookie` concern) must
-  respect ePrivacy, storing permanent signed booleans for functional/performance/targeting cookies.
+  respect ePrivacy, storing a browser-bound consent receipt in the realm setting database. Consent
+  is not carried by the display JWT or permanent signed boolean cookies.
 
 ### 4.3 Identity, authentication, and account security (sign.\*)
 

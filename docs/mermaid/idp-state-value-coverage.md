@@ -6,14 +6,14 @@ Axis: the durable per-grant delivery participant created by an OP authority stop
 [OP authority-stop participant](./idp-op-authority-stop-participant.mmd). The three OP realms use
 the same reference IDs and named transition writers.
 
-| From | To | Public writer / guard and effect |
-|---|---|---|
-| absent | pending | `OpAuthorityStopCommitter` creates one participant in the same OP transaction as grant revocation |
-| pending | pending | `claim_delivery!` increments attempts and claims a bounded lease; `record_delivery_result!` schedules bounded retry for transient outcomes; a lease can be renewed before send |
-| pending | acknowledged | `record_delivery_result!` accepts HTTP 200 after the RP committed its receipt, tombstone and local session revocation |
-| pending | refused | `record_delivery_result!` records permanent endpoint/request failures, including stable 3xx and 413 classifications |
-| pending | expired | `expire_delivery_if_due!` or the Solid Queue sweep records expiry at or after BX-10 deadline; a late acknowledgment cannot replace it |
-| acknowledged / refused / expired | same | Terminal participant states are absorbing; retention may remove the row only after every target root is purge-eligible |
+| From                             | To           | Public writer / guard and effect                                                                                                                                               |
+| -------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| absent                           | pending      | `OpAuthorityStopCommitter` creates one participant in the same OP transaction as grant revocation                                                                              |
+| pending                          | pending      | `claim_delivery!` increments attempts and claims a bounded lease; `record_delivery_result!` schedules bounded retry for transient outcomes; a lease can be renewed before send |
+| pending                          | acknowledged | `record_delivery_result!` accepts HTTP 200 after the RP committed its receipt, tombstone and local session revocation                                                          |
+| pending                          | refused      | `record_delivery_result!` records permanent endpoint/request failures, including stable 3xx and 413 classifications                                                            |
+| pending                          | expired      | `expire_delivery_if_due!` or the Solid Queue sweep records expiry at or after BX-10 deadline; a late acknowledgment cannot replace it                                          |
+| acknowledged / refused / expired | same         | Terminal participant states are absorbing; retention may remove the row only after every target root is purge-eligible                                                         |
 
 HTTP executes after the claim transaction closes and without an OP row lock. Solid Queue enqueue is
 after commit; the recurring sweep recovers a missing enqueue, a crashed worker or an expired lease.
@@ -39,12 +39,12 @@ transition. See [DBSC HTTP boundary](../architecture/dbsc.md#http-header-boundar
 Axis: derived relation between a root's issuance epoch and its canonical actor's monotonic
 `authentication_epoch`. Diagram: [root epoch](./idp-root-authentication-epoch.mmd).
 
-| From    | To      | Public writer / guard and effect                                                                                                                                            |
-| ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| no root | current | root establishment stamps current actor epoch under actor-first locks                                                                                                       |
+| From    | To      | Public writer / guard and effect                                                                                                                                    |
+| ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| no root | current | root establishment stamps current actor epoch under actor-first locks                                                                                               |
 | current | current | Code/Refresh/reissue checks current active actor before OP commit; `BaseSelfRpCredentialIssuer.call!` also locks actor then device/root/grant before claim mutation |
-| current | cut off | `IdentityAuthenticationStopRecorder.call` increments actor epoch and inserts the Zenith event in the locked actor transaction                                               |
-| cut off | cut off | stale root cannot mint or redeliver; `OpIdentityEventInvalidator.call` applies durable OP invalidation separately and idempotently                                          |
+| current | cut off | `IdentityAuthenticationStopRecorder.call` increments actor epoch and inserts the Zenith event in the locked actor transaction                                       |
+| cut off | cut off | stale root cannot mint or redeliver; `OpIdentityEventInvalidator.call` applies durable OP invalidation separately and idempotently                                  |
 
 The Base claim update releases actor/OP locks before token exchange; the coordinator independently
 rechecks current actor authority through rotation commit. A stale actor passed to reissue cannot
@@ -75,8 +75,8 @@ in evidence, rather than this inventory. No secret-isolation or activation proof
 ## Separated RP local Refresh attempt (removed 2026-10-25)
 
 WU-10 (D-25) dropped `rp_refresh_attempts` and `idp-rp-local-refresh-attempt.mmd`. No local Refresh
-state axis remains; `RpRefreshCommitter` installs through an `installed_generation`
-compare-and-set only (`rp_refresh_committer_test.rb`, `rp_refresh_logout_concurrency_test.rb`).
+state axis remains; `RpRefreshCommitter` installs through an `installed_generation` compare-and-set
+only (`rp_refresh_committer_test.rb`, `rp_refresh_logout_concurrency_test.rb`).
 
 The six per-record Email/Telephone OTP sections in the historical inventory below retain the
 pre-ceremony Source-HOTP transition rows for traceability. They are not current runtime authority:
@@ -117,7 +117,7 @@ terminal absorption, and the adjacent representable microsecond TTL values.
 
 | Caller                                                                                                                                                                      | Refusal disposition                                                                                                                                                                          |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FlowSignIn`, `FlowSignUp`, `SignUpFlowTicket#complete_sign_up!`                                                                                             | Return the canonical named writer outcome unchanged.                                                                                                                                         |
+| `FlowSignIn`, `FlowSignUp`, `SignUpFlowTicket#complete_sign_up!`                                                                                                            | Return the canonical named writer outcome unchanged.                                                                                                                                         |
 | `SignInGuardrailParticipant#advance_if_clear!`, `SignInCheckpointParticipant#advance_if_clear!`, `SignInSelectorParticipant#auto_commit_single!`                            | Own `with_cycle_lock`; return expiry without evaluating further participants or selection writes.                                                                                            |
 | `AuthenticationBase#commit_login_session!`, `#advance_sign_in_flow_to_issuance!`, `#complete_sign_in_flow_issuance!`                                                        | One locked flow instance encloses token/device/refresh/receipt writes. Expiry unwinds those writes; `log_in` returns `invalid_request` before browser success effects.                       |
 | `AuthenticationSequenceGate` guardrail/checkpoint/selector redirects, `#advance_pending_sign_in_flow_after_primary!`, pending-session resume                                | Check participant refusal before issuing locators, gates or session continuation. AuthenticationBase preserves the returned failure.                                                         |
@@ -228,13 +228,13 @@ its digest with the original Ticket and repeats admission after taking its row l
 Ticket ID is not a browser credential. Missing, mistyped, malformed, foreign or rotated nonces
 refuse without proof consumption; Rails CSRF and the separate HTTP phase gate remain intact.
 
-| Transition ID                  | From               | Event                      | To                    | Guard and effect                                                                                                                            |
-| ------------------------------ | ------------------ | -------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| idp-sign-up-otp-challenge:T001 | absent             | channel issuer             | issued                | Original Ticket/nonce, pending owner and candidate, destination, operation, generation and keyed verifier; owning locks and fresh DB clocks |
+| Transition ID                  | From               | Event                      | To                    | Guard and effect                                                                                                                             |
+| ------------------------------ | ------------------ | -------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| idp-sign-up-otp-challenge:T001 | absent             | channel issuer             | issued                | Original Ticket/nonce, pending owner and candidate, destination, operation, generation and keyed verifier; owning locks and fresh DB clocks  |
 | idp-sign-up-otp-challenge:T002 | issued             | resend                     | issued                | Require a live OTP deadline, replace the unconsumed generation, retain the parent Flow deadline and preserve candidate/shared failure limits |
-| idp-sign-up-otp-challenge:T003 | issued             | successful verification    | verified              | Recheck admission after owning locks and budget wait; atomically consume proof on its typed Ticket ceremony                                 |
-| idp-sign-up-otp-challenge:T004 | verified           | exact retry                | verified              | Same input and binding, eligible owner/candidate, live fixed result deadline and common failure budget; proof unchanged                     |
-| idp-sign-up-otp-challenge:T005 | issued or verified | deadline or authority lost | unavailable predicate | No proof mutation; parent expiry uses the existing named Ticket termination                                                                 |
+| idp-sign-up-otp-challenge:T003 | issued             | successful verification    | verified              | Recheck admission after owning locks and budget wait; atomically consume proof on its typed Ticket ceremony                                  |
+| idp-sign-up-otp-challenge:T004 | verified           | exact retry                | verified              | Same input and binding, eligible owner/candidate, live fixed result deadline and common failure budget; proof unchanged                      |
+| idp-sign-up-otp-challenge:T005 | issued or verified | deadline or authority lost | unavailable predicate | No proof mutation; parent expiry uses the existing named Ticket termination                                                                  |
 
 Forward CHECK constraints validate finite bounded receipt timestamps. Receipt HMAC binds the exact
 verification/result deadlines; model validation protects terminal OTP facts. The fixed result expiry
@@ -546,25 +546,25 @@ Implementation: `SignInFlowBindingCodec`, `SignInPhaseBindingControllerSupport`,
 `SignInPhaseViolationEnforcer`. Scope: local sign-in routes whose authoritative phase is a
 realm-specific `ClientSignInFlow`, `VisitorSignInFlow`, or `OperatorSignInFlow`.
 
-| Transition ID                    | Request class                             | Binding condition                                                                                         | Result                                                           | Lifecycle effect                                               | Side-effect rule                                                           |
-| -------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| idp-sign-in-phase-admission:T001 | Same-phase GET/HEAD or mutation           | Signed binding names the current flow, surface, phase, and immutable generation                           | Request proceeds through the existing public controller boundary | Unchanged or the controller's ordinary advance                 | Existing OTP, challenge, and session rules apply                           |
-| idp-sign-in-phase-admission:T002 | Contradictory GET/HEAD                    | Missing, malformed, expired, cross-surface, cross-flow, or wrong-phase binding                            | HTTP 409 `text/plain` with `この画面は古くなっています。最初からやり直してください。`                      | None; this is not a lifecycle edge                             | No redirect, state write, OTP/challenge, session, or provider side effect  |
-| idp-sign-in-phase-admission:T003 | Attributable state-changing mismatch      | Binding identifies the original flow, but the locked/reloaded flow has moved away from the expected phase | Request refused and halt recorded                                | `HALTED = 930`, reason `phase_regression` or `phase_violation` | No revival, second terminal transition, session issuance, or new challenge |
-| idp-sign-in-phase-admission:T004 | Invalid or unbound state-changing request | Binding cannot identify an attributable flow                                                              | HTTP 409 refusal                                                 | No current-locator substitution and no unrelated flow halt     | No new side effect                                                         |
+| Transition ID                    | Request class                             | Binding condition                                                                                         | Result                                                                                | Lifecycle effect                                               | Side-effect rule                                                           |
+| -------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| idp-sign-in-phase-admission:T001 | Same-phase GET/HEAD or mutation           | Signed binding names the current flow, surface, phase, and immutable generation                           | Request proceeds through the existing public controller boundary                      | Unchanged or the controller's ordinary advance                 | Existing OTP, challenge, and session rules apply                           |
+| idp-sign-in-phase-admission:T002 | Contradictory GET/HEAD                    | Missing, malformed, expired, cross-surface, cross-flow, or wrong-phase binding                            | HTTP 409 `text/plain` with `この画面は古くなっています。最初からやり直してください。` | None; this is not a lifecycle edge                             | No redirect, state write, OTP/challenge, session, or provider side effect  |
+| idp-sign-in-phase-admission:T003 | Attributable state-changing mismatch      | Binding identifies the original flow, but the locked/reloaded flow has moved away from the expected phase | Request refused and halt recorded                                                     | `HALTED = 930`, reason `phase_regression` or `phase_violation` | No revival, second terminal transition, session issuance, or new challenge |
+| idp-sign-in-phase-admission:T004 | Invalid or unbound state-changing request | Binding cannot identify an attributable flow                                                              | HTTP 409 refusal                                                                      | No current-locator substitution and no unrelated flow halt     | No new side effect                                                         |
 
 The binding is a signed, purpose-bound application capability and never carries a raw locator nonce,
 database primary key, OAuth/OIDC state, PKCE, CSRF token, or return-target token. The flow row lock,
 actor check, expiry handling, concrete provider transaction, and existing `commit_login_session!` /
 `lock_sign_in_flow_for_issuance!` boundary remain authoritative. The inventory is evidence for this
-implementation slice; provider-owned social/Entra ceremonies and untouched lifecycle axes retain
-APP telephone Passkey saving takes the Flow lock before the principal and revalidates state,
-expiry and the request gate after any wait. Terminal, lapsed and expired work is refused without a
-credential or allocation and without writing the Flow (D-177); an expired live Flow reaches EXPIRED
-and cleanup only through `SignUpExpiryJob`. A concurrent save that finds an already pending Passkey returns the existing
-success without another write. A rendered refusal stops the shared registration helper rather
-than falling through to a success response. Real HTTP concurrency and microsecond deadline cases
-are in `test/concurrency/sign_up_passkey_termination_http_test.rb`.
+implementation slice; provider-owned social/Entra ceremonies and untouched lifecycle axes retain APP
+telephone Passkey saving takes the Flow lock before the principal and revalidates state, expiry and
+the request gate after any wait. Terminal, lapsed and expired work is refused without a credential
+or allocation and without writing the Flow (D-177); an expired live Flow reaches EXPIRED and cleanup
+only through `SignUpExpiryJob`. A concurrent save that finds an already pending Passkey returns the
+existing success without another write. A rendered refusal stops the shared registration helper
+rather than falling through to a success response. Real HTTP concurrency and microsecond deadline
+cases are in `test/concurrency/sign_up_passkey_termination_http_test.rb`.
 
 their concrete authority until their own slice is completed.
 
@@ -1022,28 +1022,32 @@ linked continuity.
 
 ## idp-auth-admission-binding
 
-Implementation: `AuthAdmissionBinding` / `AuthAdmissionBindingPurger`. Storage:
-`client_auth_admission_bindings`, `visitor_auth_admission_bindings`, and
-`operator_auth_admission_bindings` / `base_confirmed_at`, `redeemed_at`, `retired_at`, `expires_at`,
-required immutable `curfew_at` and `entry_intent` facts.
+Implementation: `AuthAdmissionBinding` / `AuthAdmissionBindingPurger`. Current storage:
+`client_auth_admission_bindings` and `operator_auth_admission_bindings`, each with a NOT NULL
+`status_id` reference. The visitor binding is historical; WU-5 removed its table and writer.
+Bindings retain proof and deadline facts, including `base_confirmed_at`, `redeemed_at`,
+`retired_at`, `expires_at`, `curfew_at` and `entry_intent`.
 
 Sources: `app/models/concerns/auth_admission_binding.rb`,
-`app/models/client_auth_admission_binding.rb`, `app/models/visitor_auth_admission_binding.rb`,
-`app/models/operator_auth_admission_binding.rb`, `app/operations/auth_admission_binding_purger.rb`.
+`app/models/client_auth_admission_binding.rb`, `app/models/operator_auth_admission_binding.rb`,
+`app/operations/auth_admission_binding_purger.rb`.
 
-| Transition ID                   | Mutation kind         | From                               | Event / Trigger            | To                  | Guard                                                                                                                                  | Side effect                                                                                    | Source file                                     | Confidence |
-| ------------------------------- | --------------------- | ---------------------------------- | -------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------- |
-| idp-auth-admission-binding:T001 | INITIALIZATION        | absent                             | admission issuer           | issued              | Exactly one realm-local parent; immutable entry_ref, purpose, token and browser digest; bounded expiry                                 | Binding row and opaque entry are created in the parent Ticket transaction                      | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
-| idp-auth-admission-binding:T002 | DOCUMENTED_TRANSITION | issued                             | attach_auth_session!       | attached            | Live binding; active Auth session, including previously admitted continuity; unique confirmation_ref; binding lock before session lock | Auth session and confirmation_ref recorded as one proof pair; no authority for the new purpose | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T003 | DOCUMENTED_TRANSITION | attached                           | confirm_base!              | Base confirmed      | Matching base token and SHA-256 browser nonce digest; attachment present; binding lock                                                 | base_confirmed_at recorded once                                                                | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T004 | DOCUMENTED_TRANSITION | Base confirmed                     | redeem!                    | redeemed / admitted | Matching attached sid; active admitted rotated session; confirmation present; expiry not reached                                       | redeemed_at and admitted_auth_ceremony_session_id recorded atomically with admission           | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T005 | DOCUMENTED_TRANSITION | issued / attached / Base confirmed | retire!                    | retired             | Unredeemed binding; explicit expiry or restart                                                                                         | retired_at recorded without clearing terminal proof facts                                      | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T006 | CLEANUP               | retired / redeemed                 | AuthAdmissionBindingPurger | absent              | Parent retention reached; referenced Auth sessions expired/terminal and retained; restrictive child-first order                        | Binding is deleted before parent and Auth-session rows                                         | app/operations/auth_admission_binding_purger.rb | CONFIRMED  |
+| Transition ID                   | Mutation kind         | From                               | Event / Trigger            | To                  | Guard                                                                                                                                 | Side effect                                                                                     | Source file                                     | Confidence |
+| ------------------------------- | --------------------- | ---------------------------------- | -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------- |
+| idp-auth-admission-binding:T001 | INITIALIZATION        | absent                             | admission issuer           | issued (10)         | Exactly one realm-local parent; immutable entry_ref, purpose, token and browser digest; bounded expiry                                | Binding row and opaque entry are created in the parent Ticket transaction                       | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
+| idp-auth-admission-binding:T002 | DOCUMENTED_TRANSITION | issued (10)                        | attach_auth_session!       | attached (20)       | Live binding; active Auth session; unique confirmation_ref; binding lock before session lock                                          | Auth session and confirmation_ref recorded as one proof pair                                    | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T003 | DOCUMENTED_TRANSITION | attached (20)                      | confirm_base!              | base-confirmed (30) | Matching Base token and browser nonce digest; attachment present; binding lock                                                        | base_confirmed_at recorded once                                                                 | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T004 | DOCUMENTED_TRANSITION | base-confirmed (30)                | redeem!                    | redeemed (40)       | Matching attached SID; active admitted rotated session; confirmation present; expiry not reached                                      | redeemed_at and admitted_auth_ceremony_session_id recorded atomically with admission            | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T005 | DOCUMENTED_TRANSITION | issued / attached / base-confirmed | retire!                    | retired (90)        | Active unredeemed binding; explicit expiry or restart                                                                                 | retired_at recorded without clearing prior proof facts                                          | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T006 | DOCUMENTED_TRANSITION | redeemed (40)                      | switch!                    | switched (91)       | Exact handoff source; canceled before authentication progress; parent, binding and browser/token proof rechecked under lock           | Terminal status changes; redeemed proof facts remain                                            | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
+| idp-auth-admission-binding:T007 | CLEANUP               | retired / redeemed / switched      | AuthAdmissionBindingPurger | absent              | Parent and binding retention reached; referenced Auth sessions expired with status-specific retention; no remaining binding reference | Flow children and binding are deleted before parent; unreferenced eligible Auth sessions follow | app/operations/auth_admission_binding_purger.rb | CONFIRMED  |
 
-The three tables have the same constraints: one parent, purpose-to-parent matching, step-up token
-requirement, all-or-none proof pairs, mutually exclusive redeemed/retired terminal facts, immutable
-identity/proof/deadline facts, and one live binding per parent. `entry_ref` and `confirmation_ref`
-are independent lookup references; neither is accepted as browser or Auth proof.
+The current client and operator tables share the same status IDs: 10 issued, 20 attached, 30
+base-confirmed, 40 redeemed, 90 retired and 91 switched. `status_id` is the lifecycle authority;
+proof timestamps and session references remain persisted facts. Each row has one realm-local parent,
+purpose-to-parent matching, all-or-none proof pairs, and one live binding per parent. `entry_ref`
+and `confirmation_ref` are independent lookup references; neither is accepted as browser or Auth
+proof. Switching retains redemption proof and changes the explicit terminal status.
 
 Sign-in entry and redemption validate one effective intent through `AuthEntryIntentResolver` before
 consumption: persisted Switch selection, otherwise the OP prompt (`create` means Sign Up; ordinary
@@ -1052,11 +1056,12 @@ same resolver. Re-verification retains its separate purpose check.
 
 WU-24c/d store one immutable `curfew_at` at OP database issuance time + 30 minutes; Switch copies
 the original deadline and refuses inconsistent history. `entry_intent` is NOT NULL and immutable:
-APP/COM Binding collection also locks every owned sign-up Flow in ID order and retains the whole
-set if any child is in progress, not physically purgeable, or awaiting artifact cleanup. A completed
+APP/COM Binding collection also locks every owned sign-up Flow in ID order and retains the whole set
+if any child is in progress, not physically purgeable, or awaiting artifact cleanup. A completed
 registration does not require artifact cleanup, but still obeys its own physical-retention boundary;
 the default infinite retention is not shortened here. Eligible Flow rows are deleted before their
-restrictive Binding. The collector does not delete principals or Auth-session rows.
+restrictive Binding. An expired Auth session is deleted only after status-specific retention and its
+final binding reference are gone; principals are not deleted.
 
 authorization purposes use `sign_in`/`sign_up`, and re-verification purposes use `not_applicable`,
 with the same rule enforced in each realm database. These are issuance facts, not new lifecycle
@@ -1431,10 +1436,10 @@ persisted expiry edge. Social supports provider-specific signed Auth-to-Base lin
 results; provider outcome does not create a social transaction state. TOTP is enrollment rather than
 primary login; new step-up enrollment final committer directly writes child consumed along with
 Signup commit and committed-receipt lookup require the signed session reference to identify a
-redeemed sign-up Admission whose `id` matches the Flow's immutable `auth_admission_binding_id`.
-The committer reads this ownership on the OP writer before principal creation or fresh result and
-candidate consumption. The Base receiver also scopes completion-reference access to that Binding.
-A valid signature or independent browser proof does not authorize another Binding's Flow, and a
+redeemed sign-up Admission whose `id` matches the Flow's immutable `auth_admission_binding_id`. The
+committer reads this ownership on the OP writer before principal creation or fresh result and
+candidate consumption. The Base receiver also scopes completion-reference access to that Binding. A
+valid signature or independent browser proof does not authorize another Binding's Flow, and a
 rejected receipt leaves registered identities intact.
 
 candidate and parent transaction under ticket locks. Results are unique and repeated consumption
@@ -3509,8 +3514,8 @@ Tests read: `test/operations/identity_totp_enrollment_final_committer_test.rb`.
 
 Shared AppTicket candidate, no state FK. Store consume is single-use and TTL guarded; delete is
 actually a direct consumed_at write and can replace terminal timestamps. Fetch validates payload;
-social consumed payload reconstruction can fail after burn, a hidden terminal. Candidate binding
-The Base signup committer now verifies the Flow's required Admission owner before fresh candidate
+social consumed payload reconstruction can fail after burn, a hidden terminal. Candidate binding The
+Base signup committer now verifies the Flow's required Admission owner before fresh candidate
 consumption. Signed candidate/session agreement remains necessary but does not authorize a Flow
 whose `auth_admission_binding_id` identifies another Admission. See
 `test/services/identity/social_signup_admission_ownership_test.rb` for fresh and committed ownership
@@ -4388,6 +4393,7 @@ transitions UNKNOWN. Client default NOTHING and explicit ordinary ACTIVE creatio
 states, no inferred transition. Visitor/Operator ACTIVE/NOTHING/RESERVED are creation
 classifications with no production existing-row status mutation found, recorded as excluded lookup
 candidates in discovery.
+
 ## idp-shared-webauthn-challenge
 
 Implementation: `Webauthn::ChallengeStore`. Storage: `None (Rails session)` /

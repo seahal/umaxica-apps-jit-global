@@ -9,19 +9,37 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
 
   test "an APP retry waiting for its parent refuses after cancellation commits" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
     device = token.device_session_record!
-    nonce = SecureRandom.urlsafe_base64(32)
-    requirement = StepUpRequirement.new(
-      scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-      require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor:, token:, requirement:, return_to: "/identity/passkeys", base_browser_nonce: nonce, base_token: token,
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("app-retry-cancel"), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
     )
-    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    transaction = issuance.ticket
+    context = issuance.context
+    authorization = issuance.authorization_transaction
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.entry_ref)
     attached, raw_sid = ClientAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
@@ -32,17 +50,17 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
     sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     _installed_cookie = browser.cookies.merge("#{sid_key}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{host}/"))
     headers = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
-    path = auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    path = auth_app_verification_path(ri: "jp", entry_ref: issuance.entry_ref)
     browser.get(path, headers:)
 
     assert_equal 303, browser.response.status
     binding.reload
     admitted_id = binding.admitted_auth_ceremony_session_id
     session_count =
-      ClientAuthCeremonySession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).count
+      ClientAuthCeremonySession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).count
     ready = Queue.new
     worker = nil
-    issuance.transaction.with_lock do
+    transaction.with_lock do
       holder_pid = OpBaseAppRecord.lease_connection.select_value("SELECT pg_backend_pid()").to_i
       worker =
         Thread.new do
@@ -70,26 +88,30 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
           Thread.pass
         end
       end
-      issuance.transaction.commit_cancellation!(now: ClientStepUpCeremonyTransaction.database_now)
+      transaction.commit_cancellation!(now: ClientStepUpCeremonyTransaction.database_now)
     end
 
     assert_equal [400, false], Timeout.timeout(10) { worker.value }
     assert_equal admitted_id, binding.reload.admitted_auth_ceremony_session_id
     assert_equal session_count,
                  ClientAuthCeremonySession.where(
-                   step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+                   step_up_ceremony_transaction_ref: transaction.transaction_id,
                  ).count
-    assert_predicate issuance.transaction.reload, :canceled?
+    assert_predicate transaction.reload, :canceled?
   ensure
     worker&.join(10)
-    if issuance
-      bindings = ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: issuance.transaction.id)
+    if transaction
+      bindings = ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transaction.id)
       ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
       bindings.delete_all
       ClientAuthCeremonySession.where(id: ids).delete_all
-      ClientStepUpSession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).delete_all
-      issuance.transaction.delete
+      ClientStepUpSession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).delete_all
+      transaction.delete
     end
+    context&.delete
+    authorization&.delete
+    grant&.delete
+    credential&.delete
     device&.update!(current_refresh_token_id: nil)
     token&.delete
     device&.delete
@@ -98,19 +120,37 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
 
   test "an APP retry waiting for its actor refuses after its root device is revoked" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
     device = token.device_session_record!
-    nonce = SecureRandom.urlsafe_base64(32)
-    requirement = StepUpRequirement.new(
-      scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-      require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor:, token:, requirement:, return_to: "/identity/passkeys", base_browser_nonce: nonce, base_token: token,
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("app-retry-actor"), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
     )
-    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    transaction = issuance.ticket
+    context = issuance.context
+    authorization = issuance.authorization_transaction
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.entry_ref)
     attached, raw_sid = ClientAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
@@ -121,14 +161,14 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
     sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     _installed_cookie = browser.cookies.merge("#{sid_key}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{host}/"))
     headers = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
-    path = auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    path = auth_app_verification_path(ri: "jp", entry_ref: issuance.entry_ref)
     browser.get(path, headers:)
 
     assert_equal 303, browser.response.status
     binding.reload
     admitted_id = binding.admitted_auth_ceremony_session_id
     session_count =
-      ClientAuthCeremonySession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).count
+      ClientAuthCeremonySession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).count
     ready = Queue.new
     worker = nil
     actor.with_lock do
@@ -169,20 +209,24 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
     assert_equal admitted_id, binding.reload.admitted_auth_ceremony_session_id
     assert_equal session_count,
                  ClientAuthCeremonySession.where(
-                   step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+                   step_up_ceremony_transaction_ref: transaction.transaction_id,
                  ).count
     assert_predicate device.reload, :revoked?
-    assert_equal "pending", issuance.transaction.reload.status
+    assert_equal "pending", transaction.reload.status
   ensure
     worker&.join(10)
-    if issuance
-      bindings = ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: issuance.transaction.id)
+    if transaction
+      bindings = ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transaction.id)
       ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
       bindings.delete_all
       ClientAuthCeremonySession.where(id: ids).delete_all
-      ClientStepUpSession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).delete_all
-      issuance.transaction.delete
+      ClientStepUpSession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).delete_all
+      transaction.delete
     end
+    context&.delete
+    authorization&.delete
+    grant&.delete
+    credential&.delete
     device&.update!(current_refresh_token_id: nil)
     token&.delete
     device&.delete
@@ -190,20 +234,41 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
   end
 
   test "an ORG retry waiting for its actor refuses after its root device is revoked" do
-    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    actor = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
     token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     device = token.device_session_record!
-    nonce = SecureRandom.urlsafe_base64(32)
-    requirement = StepUpRequirement.new(
-      scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
-      require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: token.authentication_epoch, operator_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor:, token:, requirement:, return_to: "/identity/passkeys", base_browser_nonce: nonce, base_token: token,
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("org-retry-actor"), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "operator")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor:, token:, client:, params:, validated_request:,
     )
-    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    transaction = issuance.ticket
+    context = issuance.context
+    authorization = issuance.authorization_transaction
+    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: issuance.entry_ref)
     attached, raw_sid = OperatorAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
@@ -214,14 +279,14 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
     sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     _installed_cookie = browser.cookies.merge("#{sid_key}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{host}/"))
     headers = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
-    path = auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    path = auth_org_verification_path(ri: "jp", entry_ref: issuance.entry_ref)
     browser.get(path, headers:)
 
     assert_equal 303, browser.response.status
     binding.reload
     admitted_id = binding.admitted_auth_ceremony_session_id
     session_count =
-      OperatorAuthCeremonySession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).count
+      OperatorAuthCeremonySession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).count
     ready = Queue.new
     worker = nil
     actor.with_lock do
@@ -262,20 +327,24 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
     assert_equal admitted_id, binding.reload.admitted_auth_ceremony_session_id
     assert_equal session_count,
                  OperatorAuthCeremonySession.where(
-                   step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+                   step_up_ceremony_transaction_ref: transaction.transaction_id,
                  ).count
     assert_predicate device.reload, :revoked?
-    assert_equal "pending", issuance.transaction.reload.status
+    assert_equal "pending", transaction.reload.status
   ensure
     worker&.join(10)
-    if issuance
-      bindings = OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: issuance.transaction.id)
+    if transaction
+      bindings = OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transaction.id)
       ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
       bindings.delete_all
       OperatorAuthCeremonySession.where(id: ids).delete_all
-      OperatorStepUpSession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).delete_all
-      issuance.transaction.delete
+      OperatorStepUpSession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).delete_all
+      transaction.delete
     end
+    context&.delete
+    authorization&.delete
+    grant&.delete
+    credential&.delete
     device&.update!(current_refresh_token_id: nil)
     token&.delete
     device&.delete
@@ -283,20 +352,41 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
   end
 
   test "an ORG retry waiting for its parent refuses after cancellation commits" do
-    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    actor = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
     token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     device = token.device_session_record!
-    nonce = SecureRandom.urlsafe_base64(32)
-    requirement = StepUpRequirement.new(
-      scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
-      require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: token.authentication_epoch, operator_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor:, token:, requirement:, return_to: "/identity/passkeys", base_browser_nonce: nonce, base_token: token,
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("org-retry-cancel"), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "operator")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor:, token:, client:, params:, validated_request:,
     )
-    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    transaction = issuance.ticket
+    context = issuance.context
+    authorization = issuance.authorization_transaction
+    binding = OperatorAuthAdmissionBinding.find_by!(entry_ref: issuance.entry_ref)
     attached, raw_sid = OperatorAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
@@ -307,17 +397,17 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
     sid_key = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     _installed_cookie = browser.cookies.merge("#{sid_key}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{host}/"))
     headers = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
-    path = auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    path = auth_org_verification_path(ri: "jp", entry_ref: issuance.entry_ref)
     browser.get(path, headers:)
 
     assert_equal 303, browser.response.status
     binding.reload
     admitted_id = binding.admitted_auth_ceremony_session_id
     session_count =
-      OperatorAuthCeremonySession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).count
+      OperatorAuthCeremonySession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).count
     ready = Queue.new
     worker = nil
-    issuance.transaction.with_lock do
+    transaction.with_lock do
       holder_pid = OpBaseOrgRecord.lease_connection.select_value("SELECT pg_backend_pid()").to_i
       worker =
         Thread.new do
@@ -345,26 +435,30 @@ class StepUpAdmissionRetryCancellationTest < ActionDispatch::IntegrationTest
           Thread.pass
         end
       end
-      issuance.transaction.commit_cancellation!(now: OperatorStepUpCeremonyTransaction.database_now)
+      transaction.commit_cancellation!(now: OperatorStepUpCeremonyTransaction.database_now)
     end
 
     assert_equal [400, false], Timeout.timeout(10) { worker.value }
     assert_equal admitted_id, binding.reload.admitted_auth_ceremony_session_id
     assert_equal session_count,
                  OperatorAuthCeremonySession.where(
-                   step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+                   step_up_ceremony_transaction_ref: transaction.transaction_id,
                  ).count
-    assert_predicate issuance.transaction.reload, :canceled?
+    assert_predicate transaction.reload, :canceled?
   ensure
     worker&.join(10)
-    if issuance
-      bindings = OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: issuance.transaction.id)
+    if transaction
+      bindings = OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transaction.id)
       ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
       bindings.delete_all
       OperatorAuthCeremonySession.where(id: ids).delete_all
-      OperatorStepUpSession.where(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id).delete_all
-      issuance.transaction.delete
+      OperatorStepUpSession.where(step_up_ceremony_transaction_ref: transaction.transaction_id).delete_all
+      transaction.delete
     end
+    context&.delete
+    authorization&.delete
+    grant&.delete
+    credential&.delete
     device&.update!(current_refresh_token_id: nil)
     token&.delete
     device&.delete

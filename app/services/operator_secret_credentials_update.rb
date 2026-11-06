@@ -7,19 +7,19 @@ class OperatorSecretCredentialsUpdate
 
   Result = Struct.new(:secret_credential, keyword_init: true)
 
-  def self.call(actor:, secret_credential:, params:, step_up_token:, step_up_requirement:, request: nil)
+  def self.call(actor:, secret_credential:, params:, step_up_token:, step_up_evidence: nil, request: nil)
     new(
       actor: actor, secret_credential: secret_credential, params: params,
-      step_up_token: step_up_token, step_up_requirement: step_up_requirement, request: request,
+      step_up_token: step_up_token, step_up_evidence: step_up_evidence, request: request,
     ).call
   end
 
-  def initialize(actor:, secret_credential:, params:, step_up_token:, step_up_requirement:, request:)
+  def initialize(actor:, secret_credential:, params:, step_up_token:, step_up_evidence:, request:)
     @actor = actor
     @secret_credential = secret_credential
     @params = params
     @step_up_token = step_up_token
-    @step_up_requirement = step_up_requirement
+    @step_up_evidence = step_up_evidence
     @request = request
   end
 
@@ -55,7 +55,7 @@ class OperatorSecretCredentialsUpdate
         raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret update requires a current session"
       end
 
-      now = verify_step_up!
+      verify_step_up!
       OperatorChronicle.transaction do
         OperatorSecretCredential.transaction do
           @secret_credential = OperatorSecretCredential.lock.find_by!(
@@ -68,7 +68,6 @@ class OperatorSecretCredentialsUpdate
           was_active = @secret_credential.active?
           @secret_credential.name = @params[:name].to_s.strip if @params[:name].present?
           @secret_credential.staff_secret_status_id = status_id_for(@params[:enabled]) if @params.key?(:enabled)
-          changed = @secret_credential.has_changes_to_save?
           credential_removed = was_active &&
             @secret_credential.staff_secret_status_id == OperatorSecretCredentialStatus::REVOKED
 
@@ -89,9 +88,6 @@ class OperatorSecretCredentialsUpdate
             occurred_at: Time.current,
             context: { action: ACTION },
           )
-          if changed && !credential_removed
-            @step_up_token.consume_step_up_evidence!(requirement: @step_up_requirement, now:)
-          end
         end
       end
     end
@@ -106,16 +102,11 @@ class OperatorSecretCredentialsUpdate
   end
 
   def verify_step_up!
-    now = OperatorToken.database_now
-    requirement = @step_up_requirement
-    unless requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
-        requirement.scope == "settings_secret_credential" && requirement.actor_ref == @actor.public_id &&
-        requirement.token_binding == @step_up_token.public_id && @step_up_token.active_status?(now) &&
-        StepUpResolver.call(token: @step_up_token, requirement:, now:).satisfied?
-      raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret update requires current Step-Up"
-    end
+    return if StepUpEvidenceVerifier.call(
+      evidence: @step_up_evidence, actor: @actor, token: @step_up_token,
+    )
 
-    now
+    raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret update requires current Step-Up"
   end
 
   def disabling?

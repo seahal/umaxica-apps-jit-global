@@ -6,15 +6,14 @@
 # the cycle's `cleanup_status_id` accordingly.
 #
 # Concurrency model:
-# - Per-cycle work runs entirely inside one `cycle.with_cycle_lock` so that
-#   concurrent callers (controller path + worker) cannot interleave the
-#   pending -> completed flip with dependent writes.
-# - The principal is locked after the Flow. Pending status is checked under that lock, and
-#   contact, Passkey, audit and actor changes share one principal transaction. The OP Flow and
+# - Per-cycle work runs inside `cycle.with_cycle_lock` so concurrent callers (controller path +
+#   worker) cannot interleave the pending -> completed flip with dependent writes. For a bound APP
+#   flow, that boundary locks the Client before the OP Flow and rechecks the flow binding.
+# - Contact, Passkey, audit and actor changes share the principal transaction. The OP Flow and
 #   principal databases cannot commit atomically; a failure leaves retryable cleanup facts.
 #
-# The worker entry point (`cleanup_pending_for`) pops one row at a time with
-# FOR UPDATE SKIP LOCKED so concurrent worker shards make progress.
+# The worker entry point reads one candidate without an OP row lock. Its per-cycle lock
+# serializes duplicate selections after the actor-first lock order is established.
 class SignUpArtifactCleanup
   BATCH_SIZE = 100
   PHYSICAL_PURGE_DELAY = SignUpTermination::PHYSICAL_PURGE_DELAY
@@ -35,9 +34,9 @@ class SignUpArtifactCleanup
     end
   end
 
-  # Pop one cycle at a time with FOR UPDATE SKIP LOCKED. Holding a large
-  # batch lock through long cross-DB cleanup work starves other shards; a
-  # single-row claim keeps parallelism even when individual cleanups are slow.
+  # Read one candidate at a time without taking an OP row lock before the actor lock.
+  # Concurrent workers may select the same candidate; with_cycle_lock rechecks its state
+  # under the required actor-first order, so later workers observe completed cleanup.
   def self.cleanup_pending_for(cycle_class, now:, batch_size:)
     attempts_column_present = cycle_class.column_names.include?("cleanup_attempts_count")
     cleanup_status_ids_to_pick = [
@@ -53,7 +52,7 @@ class SignUpArtifactCleanup
             .where(cleanup_status_id: cleanup_status_ids_to_pick)
             .where(status_id: cleanup_status_ids(cycle_class))
           scope = scope.where(cleanup_attempts_count: ...MAX_CLEANUP_ATTEMPTS) if attempts_column_present
-          claimed = scope.order(:id).limit(1).lock("FOR UPDATE SKIP LOCKED").first
+          claimed = scope.order(:id).limit(1).first
           break unless claimed
 
           call(cycle: claimed, now: now)
@@ -78,41 +77,64 @@ class SignUpArtifactCleanup
 
   def call
     return cycle unless cleanup_supported?
+    return cycle if cycle.cleanup_completed?
 
-    cycle.with_cycle_lock do
-      cycle.reload
-      return cycle if cycle.cleanup_completed?
-      return cycle unless cycle.sign_up_terminal?
-
-      begin
-        attempt_attrs = increment_attempts_attrs
-        cycle.update!(
-          attempt_attrs.merge(
-            cleanup_status_id: cycle.cleanup_status_id_for(:pending),
-            cleanup_attempted_at: now,
-            cleanup_error_code: nil,
-          ),
-        )
-        schedule_dependent_retention!
-        cycle.update!(
-          cleanup_status_id: cycle.cleanup_status_id_for(:completed),
-          cleanup_completed_at: now,
-          cleanup_error_code: nil,
-        )
-      rescue ActiveRecord::ActiveRecordError, ArgumentError => e
-        cycle.update!(
-          cleanup_status_id: cycle.cleanup_status_id_for(:failed),
-          cleanup_attempted_at: now,
-          cleanup_error_code: "#{e.class.name}: #{e.message}".first(255),
-        )
-      end
-    end
+    cleanup_from_principal_snapshot
     cycle
+  rescue SignUpCleanupStalePrincipalBindingError
+    # A stale unbound Flow takes the OP lock before the actor lock. Drop that lock, refresh the
+    # binding, and retry through ClientSignUpFlow#with_cycle_lock's actor-first branch.
+    cycle.reload
+    call
   end
 
   private
 
   attr_reader :cycle, :now
+
+  def cleanup_from_principal_snapshot
+    principal_id_before_lock = cycle.principal_id
+    cycle.with_cycle_lock do
+      cycle.reload
+      ensure_principal_binding_matches!(principal_id_before_lock)
+      cleanup_locked_cycle
+    end
+  end
+
+  def ensure_principal_binding_matches!(principal_id_before_lock)
+    return unless principal_id_before_lock.blank? && cycle.principal_id.present?
+
+    raise SignUpCleanupStalePrincipalBindingError,
+          "Sign-up Flow changed from unbound to bound before cleanup acquired its lock"
+  end
+
+  def cleanup_locked_cycle
+    return cycle if cycle.cleanup_completed?
+    return cycle unless cycle.sign_up_terminal?
+
+    begin
+      attempt_attrs = increment_attempts_attrs
+      cycle.update!(
+        attempt_attrs.merge(
+          cleanup_status_id: cycle.cleanup_status_id_for(:pending),
+          cleanup_attempted_at: now,
+          cleanup_error_code: nil,
+        ),
+      )
+      schedule_dependent_retention!
+      cycle.update!(
+        cleanup_status_id: cycle.cleanup_status_id_for(:completed),
+        cleanup_completed_at: now,
+        cleanup_error_code: nil,
+      )
+    rescue ActiveRecord::ActiveRecordError, ArgumentError => e
+      cycle.update!(
+        cleanup_status_id: cycle.cleanup_status_id_for(:failed),
+        cleanup_attempted_at: now,
+        cleanup_error_code: "#{e.class.name}: #{e.message}".first(255),
+      )
+    end
+  end
 
   def cleanup_supported?
     cycle&.has_attribute?(:cleanup_status_id) && cycle.respond_to?(:with_cycle_lock)

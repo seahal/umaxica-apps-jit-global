@@ -16,15 +16,21 @@ module Auth
           host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           nonce = SecureRandom.hex(32)
           issuance = OidcTestEntry.issue!(surface: "app", intent: "sign_in", base_browser_nonce: nonce, base_token: nil)
-          get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }
+          # An admission reference is accepted only on a top-level document navigation.
+          navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
+          get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: navigation
+
           assert_response :see_other
-          get response.location
+          get response.location, headers: navigation
+
           assert_response :see_other
           binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
           binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-          get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }
+          get "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: navigation
+
           assert_response :see_other
-          get response.location
+          get response.location, headers: navigation
+
           assert_response :success
           @primary_sign_in_binding = nil
           TurnstileVerifierStub.challenge_enabled = true

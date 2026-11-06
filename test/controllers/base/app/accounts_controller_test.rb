@@ -76,6 +76,7 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -149,6 +150,7 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -227,6 +229,7 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -295,6 +298,7 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -568,7 +572,6 @@ class Base::App::AccountsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -591,24 +594,6 @@ class Base::App::AccountsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

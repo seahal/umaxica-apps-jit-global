@@ -198,6 +198,45 @@ class OidcOpTokenClientTest < ActiveSupport::TestCase
     assert_equal OidcClientAssertionJwt::ASSERTION_TYPE, captured.fetch("client_assertion_type")
   end
 
+  test "authorization code passes the typed step-up expectation to client assertion issuance" do
+    expectation = OidcClientAssertionStepUpExpectationValue.new(grant: "grant-public-id", subject: "subject-ref")
+    captured_expectation = nil
+    captured_request = nil
+    stubs =
+      Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.post(TOKEN_URL) do |env|
+          captured_request = Rack::Utils.parse_query(env.body)
+          [200, json, { access_token: "a" }.to_json]
+        end
+      end
+    OidcClientAssertionJwt.stub(
+      :issue,
+      lambda { |client_id:, token_url:, step_up_expectation:|
+        captured_expectation = step_up_expectation
+        "assertion:#{client_id}:#{token_url}"
+      },
+    ) do
+      stub_outbound_http(stubs) do
+        result = OidcOpTokenClient.authorization_code(
+          client_id: "core-app-jp",
+          token_url: TOKEN_URL,
+          code: "single-use-code",
+          redirect_uri: "https://base.example.test/verification/oidc/callback",
+          code_verifier: "verifier",
+          step_up_expectation: expectation,
+        )
+
+        assert_predicate result, :success?
+      end
+    end
+
+    assert_same expectation, captured_expectation
+    assert_equal "authorization_code", captured_request.fetch("grant_type")
+    assert_equal "single-use-code", captured_request.fetch("code")
+    assert_equal "assertion:core-app-jp:#{TOKEN_URL}", captured_request.fetch("client_assertion")
+    assert_equal OidcClientAssertionJwt::ASSERTION_TYPE, captured_request.fetch("client_assertion_type")
+  end
+
   private
 
   def json

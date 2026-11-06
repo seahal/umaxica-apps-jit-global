@@ -216,8 +216,10 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
     audit = Chronicle.create!(
       event_uuid: event.event_uuid, action: event.event_type, result: "succeeded",
       occurred_at: event.occurred_at, request_id: event.operation_ref,
-      metadata: { "surface" => "app", "external_id" => event.external_id.to_s,
-                  "actor_ref" => actor.public_id, "reason_code" => "settings_registration" },
+      metadata: { "surface" => "app",
+                  "external_id" => event.external_id.to_s,
+                  "actor_ref" => actor.public_id,
+                  "reason_code" => "settings_registration", },
       actor_type: "Client", actor_id: actor.id, changeset: {}, chronicle_retention_policy: policy,
       erasable_at: ChronicleRecordPolicy.erasable_at_for(policy: policy, occurred_at: event.occurred_at),
     )
@@ -231,13 +233,14 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
 
   test "ORG conflicting Chronicle actor stays pending while a later event is delivered" do
     actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-    passkeys = 2.times.map do
-      PasskeyRegistrationOperation.call!(
-        actor: actor, passkey_class: OperatorPasskey,
-        attributes: { webauthn_id: SecureRandom.uuid, public_key: "org-audit-conflict-key" },
-        audit: { event_type: "passkey.registered.settings", surface: "org", actor_ref: actor.public_id },
-      )
-    end
+    passkeys =
+      2.times.map do
+        PasskeyRegistrationOperation.call!(
+          actor: actor, passkey_class: OperatorPasskey,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "org-audit-conflict-key" },
+          audit: { event_type: "passkey.registered.settings", surface: "org", actor_ref: actor.public_id },
+        )
+      end
     first, second = passkeys.map { |passkey| OperatorPasskeyAuditOutbox.find_by!(external_id: passkey.external_id) }
     policy = ChronicleRecordPolicy.retention_policy_for(action: first.event_type)
     Chronicle.create!(

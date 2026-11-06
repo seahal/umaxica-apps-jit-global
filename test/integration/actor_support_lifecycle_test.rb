@@ -162,24 +162,13 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
       created_at: Time.current,
       updated_at: Time.current,
     )
-    ClientPreference.create!(
-      user: user,
-      language: "en",
-      region: "us",
-      timezone: "America/New_York",
-      theme: "dr",
-      currency: "usd",
-      date_format: "mdy",
-      time_format: "hour_12",
-      motion: "reduced",
-      density: "compact",
-      page_size: "50",
-      consented: true,
-      functional: true,
-      performant: true,
-      targetable: false,
-      consent_version: SecureRandom.uuid,
-      consented_at: Time.current,
+    resource_preference = ClientPreference.create!(client: user)
+    ClientPreferenceCurrencyOption.ensure_defaults!
+    ClientPreferenceLanguage.create!(
+      preference: resource_preference, option_id: ClientPreferenceLanguageOption::EN,
+    )
+    ClientPreferenceCurrency.create!(
+      preference: resource_preference, option_id: ClientPreferenceCurrencyOption::USD,
     )
 
     host!(host)
@@ -234,14 +223,24 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"), sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            raise ArgumentError, "RP callback did not commit: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -293,24 +292,13 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PRIVATE_BASE_STAFF_URL")
     staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     OperatorPasskeyTestSupport.give_two_active_passkeys!(staff)
-    OperatorPreference.create!(
-      staff: staff,
-      language: "en",
-      region: "us",
-      timezone: "America/New_York",
-      theme: "dr",
-      currency: "usd",
-      date_format: "mdy",
-      time_format: "hour_12",
-      motion: "reduced",
-      density: "compact",
-      page_size: "50",
-      consented: true,
-      functional: true,
-      performant: false,
-      targetable: true,
-      consent_version: SecureRandom.uuid,
-      consented_at: Time.current,
+    resource_preference = OperatorPreference.create!(operator: staff)
+    OperatorPreferenceCurrencyOption.ensure_defaults!
+    OperatorPreferenceLanguage.create!(
+      preference: resource_preference, option_id: OperatorPreferenceLanguageOption::EN,
+    )
+    OperatorPreferenceCurrency.create!(
+      preference: resource_preference, option_id: OperatorPreferenceCurrencyOption::USD,
     )
 
     host!(host)
@@ -365,14 +353,24 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"), sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            raise ArgumentError, "RP callback did not commit: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -417,7 +415,6 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
     assert_equal Actor::Preference::NULL, Actor.preferences
     assert_nil Actor.tld
   end
-
 
   test "unauthenticated request exposes unauthenticated current_actor context" do
     host = ENV.fetch("PRIVATE_BASE_SERVICE_URL")
@@ -498,14 +495,24 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"), sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            raise ArgumentError, "RP callback did not commit: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -588,14 +595,24 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"), sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            raise ArgumentError, "RP callback did not commit: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -666,14 +683,24 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"), sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            raise ArgumentError, "RP callback did not commit: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -940,7 +967,6 @@ class ActorSupportLifecycleTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -963,24 +989,6 @@ class ActorSupportLifecycleTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

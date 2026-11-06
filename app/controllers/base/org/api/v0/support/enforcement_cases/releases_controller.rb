@@ -40,6 +40,8 @@ module Base
               before_action :set_current_actor
               before_action :apply_browser_context
               rescue_from ActionPolicy::Unauthorized, with: :render_forbidden
+              rescue_from EnforcementCaseAuthorizationRejected, with: :render_forbidden
+              rescue_from TokenStatusManagement::StepUpEvidenceUnavailable, with: :render_forbidden
               rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
               rescue_from ActionController::BadRequest, with: :render_bad_request
 
@@ -76,15 +78,15 @@ module Base
                   return render_rejection(t("base.org.admin.errors.conflict"), :conflict)
                 end
 
-                with_owner_step_up(STEP_UP_SCOPE) do |requirement|
-                  EnforcementCaseEndOperation.call(
-                    enforcement_case: @enforcement_case,
-                    reason: reason,
-                    ended_by_operator_public_id: current_operator.public_id,
-                    step_up_token: avatar_root,
-                    step_up_requirement: requirement,
-                  )
-                end
+                EnforcementCaseEndOperation.call(
+                  enforcement_case: @enforcement_case,
+                  reason: reason,
+                  ended_by_operator_public_id: current_operator.public_id,
+                  step_up_token: avatar_root,
+                  step_up_actor: current_operator,
+                  step_up_evidence: current_step_up_evidence,
+                  authorization_rule: :release,
+                )
                 return if performed?
 
                 respond_to do |format|

@@ -10,6 +10,7 @@ export type StepUpAdmissionProps = {
     action: string;
     scope: string;
     pt: string;
+    return_target: string;
     submit_label: string;
   };
   cancel: { href: string; label: string };
@@ -54,6 +55,12 @@ export default function StepUpAdmission({
           type="hidden"
           name="pt"
           value={form.pt}
+          readOnly
+        />
+        <input
+          type="hidden"
+          name="return_target"
+          value={form.return_target}
           readOnly
         />
         <div className="flex flex-wrap items-center gap-3">

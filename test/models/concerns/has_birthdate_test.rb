@@ -14,7 +14,6 @@ class HasBirthdateTest < ActiveSupport::TestCase
       OperatorVisibility.ensure_defaults!
       OperatorMfaStatus.ensure_defaults!
 
-
       ClientStatus.ensure_defaults!
       ClientVisibility.ensure_defaults!
       ClientMfaStatus.ensure_defaults!

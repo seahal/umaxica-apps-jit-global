@@ -62,11 +62,14 @@ module Base
 
           removed = IdentityCredentialRemovalCommitter.call!(
             actor: current_client, credential: telephone, current_session: current_session, request: request,
-            actor_context: current_actor,
+            step_up_evidence: current_step_up_evidence, actor_context: current_actor,
           )
           return render plain: t("errors.messages.invalid_request"), status: :unprocessable_content unless removed
 
           redirect_to(base_app_identity_telephones_path(ri: params[:ri]), status: :see_other)
+        rescue IdentityCredentialRemovalCommitter::TransactionConflict,
+               IdentityCredentialRemovalCommitter::DependencyFailure
+          head :service_unavailable
         end
 
         private

@@ -118,18 +118,6 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
     JitSecurityJwtRegistry.instance_variable_set(:@issuers, original_issuers)
   end
 
-  def assert_core_bridge_exists_for(_client_id, resource)
-    case resource
-    when Client
-
-      assert_predicate CoreAppClientBridge.find_by!(client_id: resource.id), :core?
-    when Operator
-
-      assert_predicate CoreOrgOperatorBridge.find_by!(operator_id: resource.id), :core?
-    else
-      flunk("unexpected core resource: #{resource.class.name}")
-    end
-  end
   private
 
   def bearer_headers(token, host: nil, headers: {})
@@ -398,7 +386,6 @@ class CoreRpBrowserFlowTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -421,24 +408,6 @@ class CoreRpBrowserFlowTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

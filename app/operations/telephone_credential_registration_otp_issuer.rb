@@ -6,21 +6,32 @@ class TelephoneCredentialRegistrationOtpIssuer
 
     def call(actor:, token:, telephone:, browser_nonce:)
       _surface, transaction_model, pending_status = components(actor, token, telephone)
-      actor.class.connection_class_for_self.connected_to(role: :writing) do
-        actor.with_lock do
-          transaction_model.connection_owner.connected_to(role: :writing) do
-            device_session = token.device_session_record!
-            device_session.with_lock do
-              token.with_lock do
-                telephone.with_lock do
-                  issue_locked(
-                    actor, token, telephone, transaction_model, pending_status, browser_nonce, device_session:,
-                  )
+      issue =
+        lambda do |registered_destination|
+          next result(:registered_destination) if registered_destination
+
+          actor.class.connection_class_for_self.connected_to(role: :writing) do
+            actor.with_lock do
+              transaction_model.connection_owner.connected_to(role: :writing) do
+                device_session = token.device_session_record!
+                device_session.with_lock do
+                  token.with_lock do
+                    telephone.with_lock do
+                      issue_locked(
+                        actor, token, telephone, transaction_model, pending_status, browser_nonce, device_session:,
+                      )
+                    end
+                  end
                 end
               end
             end
           end
         end
+
+      if actor.is_a?(Client)
+        AppRegisteredContactDestinationGuard.with_lock(contact: telephone, owner: actor, &issue)
+      else
+        issue.call(false)
       end
     end
 

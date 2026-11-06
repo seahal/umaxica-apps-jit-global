@@ -20,6 +20,10 @@ module VisaAppOidcLogoutEndpoint
 
   private
 
+  def logout_home_url
+    Rails.configuration.x.boot_config.fetch(:hosts).base_service.to_s
+  end
+
   def preference_write_context = PREFERENCE_WRITE_CONTEXT
 
   def oidc_logout_completed_path(ri:, _sot: nil)
@@ -73,7 +77,7 @@ module VisaAppOidcLogoutEndpoint
              active: false,
              description: description,
              form: nil,
-             home_link: { label: t("sign.shared.sign_out.home_link"), href: visa_app_root_path },
+             home_link: { label: t("sign.shared.sign_out.home_link"), href: logout_home_url },
            },
            status: status,
            clear_history: true
@@ -88,7 +92,7 @@ module VisaAppOidcLogoutEndpoint
       description: active ? t("sign.shared.sign_out.confirm_description") :
         t("sign.shared.sign_out.already_signed_out"),
       form: active ? sign_out_confirmation_form : nil,
-      home_link: { label: t("sign.shared.sign_out.home_link"), href: visa_app_root_path },
+      home_link: { label: t("sign.shared.sign_out.home_link"), href: logout_home_url },
     }
   end
 

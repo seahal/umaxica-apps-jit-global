@@ -62,6 +62,44 @@ class DomainAuthorityProtocolTest < ActiveSupport::TestCase
     end
   end
 
+  test "APP Avatar requests carry the complete RP-selected context for owner verification" do
+    selection = Actor::SelectedContext.new(
+      account_public_id: "persona-public-id",
+      collective_public_id: "organization-public-id",
+      collective_unit_public_id: "unit-public-id",
+      avatar_public_id: "avatar-public-id",
+    )
+    connection = Faraday.new
+    response = Faraday::Response.new(status: 200, body: { groups: [] }.to_json)
+    request =
+      lambda do |uri, params, _headers|
+        assert_equal "/api/v0/avatar/app/groups", uri.path
+        assert_equal(
+          {
+            persona: "persona-public-id",
+            organization_public_id: "organization-public-id",
+            organization_unit_public_id: "unit-public-id",
+            avatar_public_id: "avatar-public-id",
+          },
+          params,
+        )
+        response
+      end
+
+    OidcClientAssertionJwt.stub(:issue, "synthetic-assertion") do
+      OutboundHttp::Connection.stub(:build, connection) do
+        connection.stub(:get, request) do
+          result = AvatarAuthorityClient.new(
+            surface: "app", access_token: "synthetic", persona: "persona-public-id", selection:,
+          ).groups
+
+          assert_predicate result, :ok?
+          assert_equal [], result.data.fetch("groups")
+        end
+      end
+    end
+  end
+
   test "domain clients preserve owner objects and refuse non-object JSON as dependency failures" do
     browser_request = ActionDispatch::TestRequest.create
     clients = [
@@ -108,5 +146,33 @@ class DomainAuthorityProtocolTest < ActiveSupport::TestCase
         end
       end
     end
+  end
+
+  test "Tech reaches the Base staff capability check through the local back channel" do
+    connection = Faraday.new
+    built = []
+    posted = []
+    audiences = []
+    issuer =
+      lambda do |client_id:, token_url:|
+        audiences << [client_id, token_url]
+        "synthetic-assertion"
+      end
+    response = Faraday::Response.new(status: 200, body: { "allowed" => true }.to_json)
+    OidcClientAssertionJwt.stub(:issue, issuer) do
+      OutboundHttp::Connection.stub(:build, ->(**options) { (built << options) && connection }) do
+        connection.stub(:post, ->(uri, _body) { (posted << uri.to_s) && response }) do
+          assert TechCapabilityClient.allowed?(access_token: "synthetic")
+        end
+      end
+    end
+    sent = URI.parse(posted.sole)
+    base_host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
+
+    assert_equal ["http", base_host, Integer(ENV.fetch("PORT"), exception: false) || 3000,
+                  "/api/v0/tech-capability-checks", false,],
+                 [sent.scheme, sent.host, sent.port, sent.path, built.sole.fetch(:require_https)]
+    # Base checks the audience against the URL it receives, so the assertion names the same URL.
+    assert_equal [[TechCapabilityClient::CLIENT_ID, sent.to_s]], audiences
   end
 end

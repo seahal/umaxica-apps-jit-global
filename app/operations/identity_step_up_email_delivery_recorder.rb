@@ -40,7 +40,10 @@ class IdentityStepUpEmailDeliveryRecorder
                         generation, now,
                       )
 
-                      next false unless payload_matches?(transaction, credential, session_record, generation, encrypted_code)
+                      next false unless payload_matches?(
+                        transaction, credential, session_record, generation,
+                        encrypted_code,
+                      )
 
                       delivered = deliver_mail!(mailer, credential, encrypted_code)
                       session_record.mark_bound_email_delivery!(
@@ -95,8 +98,8 @@ class IdentityStepUpEmailDeliveryRecorder
 
     def credential_valid?(credential)
       credential.class.effective_binding.where(
-        :id => credential.id,
-        :user_email_status_id => [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
+        id: credential.id,
+        user_email_status_id: [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
       ).where("discard_at > clock_timestamp()").exists?
     end
 

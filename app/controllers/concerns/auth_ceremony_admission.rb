@@ -23,7 +23,10 @@ module AuthCeremonyAdmission
     return render_invalid_admission_request! if params[:admission].present?
     return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
 
-    return render_invalid_admission_request! if invalid_admission_navigation?
+    if invalid_admission_navigation?
+      log_invalid_admission_navigation
+      return render_invalid_admission_request!
+    end
 
     if request.get? && admission_reference_param.present?
       return render_admission_reference!(expected_intent:)
@@ -62,12 +65,21 @@ module AuthCeremonyAdmission
     binding = admission_binding_for_reference
     return render_invalid_admission_request! unless binding
     return render_invalid_admission_request! if binding.redeemed? && !(binding.attached? && binding.confirmed?)
+    # D-52/B-01: an old admitted or switched reference is a phase conflict when the current browser points elsewhere.
+    return render_sign_in_phase_refusal!(reason_code: "wrong_binding") if
+      binding.switched? || (binding.redeemed? && !current_auth_sid_matches_admitted_binding?(binding))
 
     authorization_parent = AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction)
     unless authorization_parent.include?(binding.purpose) || binding.redeemed?
       BaseAuthAdmissionCoordinator.validate_admission_continuation!(
         binding:, surface: auth_ceremony_surface, expected_intent:,
       )
+    end
+    requires_current_auth_sid = [
+      AuthAdmissionBinding::ATTACHED_STATUS_ID, AuthAdmissionBinding::BASE_CONFIRMED_STATUS_ID,
+    ].include?(binding.status_id)
+    if requires_current_auth_sid && binding.attached? && !current_auth_sid_matches_binding?(binding)
+      return render_sign_in_phase_refusal!(reason_code: "wrong_binding")
     end
     return redeem_admission_reference_and_redirect!(expected_intent:) if binding.attached? && binding.confirmed?
 
@@ -166,6 +178,23 @@ module AuthCeremonyAdmission
       binding.class.database_now < binding.created_at + BaseAuthAdmissionCoordinator::CONTINUATION_TTL
   end
 
+  def current_auth_sid_matches_binding?(binding)
+    raw_sid = read_auth_ceremony_sid_cookie
+    return false if raw_sid.blank?
+
+    session = binding.class.auth_admission_session_class.find_active_by_raw_sid(raw_sid)
+    session&.id == binding.auth_ceremony_session_id
+  end
+
+  def current_auth_sid_matches_admitted_binding?(binding)
+    raw_sid = read_auth_ceremony_sid_cookie
+    return false if raw_sid.blank?
+
+    session = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
+      .find_active_by_raw_sid(raw_sid)
+    session&.admitted? && session.id == binding.admitted_auth_ceremony_session_id
+  end
+
   def admit_oidc_payload!(payload, expected_intent:, binding:)
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
       surface: auth_ceremony_surface,
@@ -222,7 +251,7 @@ module AuthCeremonyAdmission
           previous_raw_sid: raw_sid,
           authorization_transaction_ref: authorization_transaction_ref,
           step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
-          expires_at: auth_ceremony_expires_at_for_binding(locked_binding, now), now:,
+          expires_at: auth_ceremony_expires_at_for_binding(locked_binding, now),
         )
         locked_binding.redeem!(auth_session: attached_session, admitted_auth_session: admitted)
         [admitted, admitted_sid]

@@ -46,6 +46,6 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
     entry = set_cookie_entries(name).sole
 
     assert_equal "", entry[:value]
-    assert(entry["max-age".to_sym] == "0" || (entry[:expires] && Time.httpdate(entry[:expires]) < Time.current))
+    assert(entry[:"max-age"] == "0" || (entry[:expires] && Time.httpdate(entry[:expires]) < Time.current))
   end
 end

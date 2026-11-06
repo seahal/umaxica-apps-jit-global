@@ -6,43 +6,50 @@ class EmailSignUpOtpVerificationCommitter
 
     def call(flow:, email:, session_nonce:, code:)
       owner, transaction_model, pending_status, surface = components(flow, email)
-      reset_snapshot = nil
-      verification =
-        owner.with_lock do
-          email.with_lock do
-            flow.with_lock do
-              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
-                  flow.nonce_matches?(session_nonce)
-                next result(:session_mismatch, email)
-              end
-              unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
-                  code.match?(/\A[0-9]{6}\z/)
-                next result(:invalid_code, email)
-              end
+      verify =
+        lambda do
+          reset_snapshot = nil
+          verification =
+            owner.with_lock do
+              email.with_lock do
+                flow.with_lock do
+                  unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+                      session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
+                      flow.nonce_matches?(session_nonce)
+                    next result(:session_mismatch, email)
+                  end
+                  unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
+                      code.match?(/\A[0-9]{6}\z/)
+                    next result(:invalid_code, email)
+                  end
 
-              now = flow.class.database_now
-              if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
-                next result(:inactive_flow, email)
-              end
-              unless eligible_source?(flow, email, owner, pending_status)
-                next result(:inactive_candidate, email)
-              end
+                  now = flow.class.database_now
+                  if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
+                    next result(:inactive_flow, email)
+                  end
+                  unless eligible_source?(flow, email, owner, pending_status)
+                    next result(:inactive_candidate, email)
+                  end
 
-              outcome = verify_locked(flow, email, owner, transaction_model, surface, pending_status, code)
-              reset_snapshot = email.attributes.slice(
-                "otp_attempts_count", "locked_at",
-                "updated_at",
-              ) if outcome.success?
-              outcome
+                  outcome = verify_locked(flow, email, owner, transaction_model, surface, pending_status, code)
+                  reset_snapshot = email.attributes.slice(
+                    "otp_attempts_count", "locked_at",
+                    "updated_at",
+                  ) if outcome.success?
+                  outcome
+                end
+              end
             end
-          end
-        end
-      unless verification.success?
-        return verification
-      end
+          next verification unless verification.success?
 
-      reset_consumed_attempts(flow, email, owner, transaction_model, pending_status, code, reset_snapshot)
+          reset_consumed_attempts(flow, email, owner, transaction_model, pending_status, code, reset_snapshot)
+        end
+
+      if email.is_a?(ClientEmail) && email.user_id == owner.id
+        AppRegisteredContactDestinationGuard.with_available_destination(contact: email, owner: owner, &verify)
+      else
+        verify.call
+      end
     end
 
     private

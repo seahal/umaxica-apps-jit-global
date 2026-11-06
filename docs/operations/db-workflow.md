@@ -47,7 +47,8 @@ Until the split happens, this repository still prepares the full fleet as one un
 
 1. **Do not use incremental `bin/rails db:migrate` on a branch with in-progress table-rename
    migrations.** Prepare the configured test databases with
-   `RAILS_ENV=test bin/rails db:test:prepare` so every database is rebuilt from migrations.
+   `RAILS_ENV=test bin/rails db:test:prepare`; it applies pending migrations without importing a
+   structure dump, but it does not drop databases or clear existing rows.
 2. **Do not write silent-skip helpers such as `rename_table_if_present`.** Use
    `rename_table_strict`, provided by `MigrationHelpers::SafeTableRename`.
 3. **Do not treat `db/*_structure.sql` files as proof of migration reconstruction.** Apply
@@ -193,6 +194,16 @@ isolated-fleet rebuild command is no longer available.
 Symptoms observed on 2026-10-20 explain why migration preparation and database reset are different
 operations. Reset requires explicit risk/recovery approval.
 
+Do not use `RAILS_ENV=test bin/rails db:migrate:reset` or a database-scoped
+`db:migrate:reset:<database>` task to rebuild test databases. Rails creates the database, writes the
+schema dump at that empty pre-migration point, and then applies migrations. Because
+`dump_schema_after_migration` is `false`, the task does not dump the completed schema afterward; the
+affected `db/*_structure.sql` can be truncated to its 18-line SQL header even though migrations then
+complete successfully. Rebuild an authorized disposable test database with the explicit drop/create
+and migrations-only recovery sequence below, then verify its catalog independently. Regenerate
+committed structure artifacts only from the owning development databases with their
+`db:schema:dump:<database>` tasks.
+
 | Symptom in `bin/rails test`                                                                                                                    | Cause                                                                                                                                                                                                                                                    | Fix                                                                                                                            |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Thousands of `ActiveRecord::InvalidForeignKey` errors while loading fixtures, for example `client_passkeys` referencing a missing `clients` id | A non-transactional test failed before cleanup and left committed rows. PostgreSQL 18 revalidates foreign keys when fixture loading re-enables them                                                                                                      | Reset the affected test databases after approval. `db:test:prepare` alone keeps the leftover rows when no migration is pending |
@@ -227,6 +238,12 @@ databases are being dropped and recreated. Connection-pool checkout then blocks 
 timeout, approximately ten seconds, and produces a `Rack::Timeout::RequestTimeoutException` with an
 HTTP 500 response.
 
+The `db:migrate:reset` command below is for a development database only. It must not be used for
+test-database reconstruction: Rails dumps the empty schema before applying migrations, and the test
+configuration does not dump again afterward. Use the migrations-only test-database recovery sequence
+in “Troubleshooting a broken test database” instead; otherwise the owning `db/*_structure.sql` can
+be reduced to its SQL header.
+
 ```bash
 # Correct procedure
 # 1. Stop Puma, Foreman, and docker compose.
@@ -237,11 +254,11 @@ bin/rails db:seed
 ```
 
 `db/seeds.rb` replays fixed sign-flow, token, authority-stop, membership, Entra, Chronicle and
-active Preference option catalogs after a schema-only load. It also contains development sample
-data and feature-flag setup, so review its effects before running it on an existing development
-database. `config/initializers/preference_reference_defaults.rb` warms status, audit and applicable
-binding reference tables at startup; it does not seed every Preference option table. Some option
-writers also populate their fixed IDs on demand.
+active Preference option catalogs after a schema-only load. It also contains development sample data
+and feature-flag setup, so review its effects before running it on an existing development database.
+`config/initializers/preference_reference_defaults.rb` warms status, audit and applicable binding
+reference tables at startup; it does not seed every Preference option table. Some option writers
+also populate their fixed IDs on demand.
 
 ## Writing Table-Rename Migrations
 

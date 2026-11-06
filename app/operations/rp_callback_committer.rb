@@ -15,6 +15,9 @@
 #    fill an unbound anchor once. There is no email or Global-ID linking.
 # 4. Create the single live local session for that anchor.
 class RpCallbackCommitter
+  class ExpiredCallback < StandardError; end
+  private_constant :ExpiredCallback
+
   Result =
     Data.define(:outcome, :session, :principal) do
       def success? = outcome == :committed
@@ -44,9 +47,9 @@ class RpCallbackCommitter
 
   def call
     record_class.connected_to(role: :writing) do
-      record_class.transaction do
+      record_class.transaction(requires_new: true) do
         anchor = lock_anchor!
-        next result(:revoked) if anchor.revoked_at || absolute_expires_at <= now
+        next result(:revoked) if anchor.revoked_at
 
         if anchor.identity_binding_id.nil?
           identity_binding = resolve_identity_binding!
@@ -62,11 +65,15 @@ class RpCallbackCommitter
           next result(:revoked) if identity_binding.principal.disabled_at
         end
 
-        next result(:already_enrolled) if live_session_for?(anchor)
+        # Read once after the anchor and identity locks: a pre-lock clock could admit a
+        # callback that expired while waiting. Roll back any newly resolved identity on refusal.
+        decision_time = enrollment_time!
+
+        next result(:already_enrolled) if live_session_for?(anchor, decision_time)
 
         # The live-session index counts any unrevoked row; close an expired one before enrolling.
         # rubocop:disable Rails/SkipsModelValidations -- a set-based close under the anchor lock; no callbacks apply
-        model(:Session).where(op_session_binding_id: anchor.id, revoked_at: nil).update_all(revoked_at: now)
+        model(:Session).where(op_session_binding_id: anchor.id, revoked_at: nil).update_all(revoked_at: decision_time)
         # rubocop:enable Rails/SkipsModelValidations
 
         session = model(:Session).create!(
@@ -75,6 +82,8 @@ class RpCallbackCommitter
         Result.new(outcome: :committed, session:, principal: identity_binding.principal)
       end
     end
+  rescue ExpiredCallback
+    result(:revoked)
   end
 
   private
@@ -87,7 +96,7 @@ class RpCallbackCommitter
     # Insert-or-nothing then lock, so concurrent callback/logout for the same sid serialize on one row.
     # rubocop:disable Rails/SkipsModelValidations -- idempotent anchor insert; the row is validated by its constraints
     anchor_class.insert_all(
-      [keys.merge(created_at: now, updated_at: now)],
+      [keys.merge(created_at: Arel.sql("clock_timestamp()"), updated_at: Arel.sql("clock_timestamp()"))],
       unique_by: %i(issuer realm client_id sid),
     )
     # rubocop:enable Rails/SkipsModelValidations
@@ -104,9 +113,16 @@ class RpCallbackCommitter
     binding_class.create!(keys.merge(principal:))
   end
 
-  def live_session_for?(anchor)
+  def enrollment_time!
+    decision_time = record_class.database_now
+    raise ExpiredCallback if absolute_expires_at <= decision_time
+
+    decision_time
+  end
+
+  def live_session_for?(anchor, decision_time)
     model(:Session).where(op_session_binding_id: anchor.id, revoked_at: nil)
-      .exists?(["absolute_expires_at > ?", now])
+      .exists?(["absolute_expires_at > ?", decision_time])
   end
 
   def record_class
@@ -116,11 +132,6 @@ class RpCallbackCommitter
   # Fixed cell models, e.g. RpCoreAppSession; the prefix comes from the trusted cell binding.
   def model(suffix)
     "#{cell.record_prefix}#{suffix}".constantize
-  end
-
-  # Database clock of the cell store, so expiry comparisons use the same clock as the rows.
-  def now
-    record_class.database_now
   end
 
   def require_value(value, name)

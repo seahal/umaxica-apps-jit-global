@@ -6,6 +6,7 @@ require "test_helper"
 
 class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses
+  self.fixture_table_names = %w(operators operator_statuses)
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
@@ -162,6 +163,41 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     # The first Sign In page of an OIDC parent offers Cancel; Org has no public Sign Up, so no Switch.
     assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
     assert_nil inertia_props.fetch("switch_form")
+  end
+
+  test "reloading the OIDC sign-in entry after Entra evidence is refused without mutation" do
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org",
+      intent: "sign_in",
+      params: authorize_params,
+    )
+
+    https!
+    admit_auth_ceremony_entry!(auth_org_sign_in_path, reference: admission_reference(issuance), params: { ri: "jp" })
+
+    assert_response :see_other
+    follow_redirect!
+
+    assert_response :success
+    ceremony = auth_ceremony_record
+    ceremony.record_authentication_evidence!(method: "entra")
+    before = [issuance.transaction.reload.attributes, ceremony.reload.attributes]
+    session_before = session.to_hash
+
+    get(auth_org_sign_in_path(ri: "jp"))
+
+    assert_equal [409, nil, I18n.t("errors.messages.phase_violation_refused"), "private, no-store"], [
+      response.status, response.location, response.body, response.headers["Cache-Control"],
+    ]
+    assert_equal before, [issuance.transaction.reload.attributes, ceremony.reload.attributes]
+    assert_equal session_before, session.to_hash
+    forbidden_names = (AuthPhaseRefusalResponseBoundary::COOKIE_NAMES + AuthPhaseRefusalResponseBoundary::DBSC_HEADERS)
+      .map(&:downcase)
+    cookie_lines = Array(response.headers["Set-Cookie"]).flat_map { |header| header.to_s.split("\n") }
+    cookie_names = cookie_lines.map { |header| header.split("=", 2).first.downcase }
+    response_names = cookie_names + response.headers.to_h.keys.map(&:downcase)
+
+    assert_empty forbidden_names & response_names
   end
 
   test "rejects direct entry when logged in without account-switching guidance" do

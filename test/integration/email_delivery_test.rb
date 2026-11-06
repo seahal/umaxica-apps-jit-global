@@ -5,9 +5,19 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class EmailDeliveryTest < ActionDispatch::IntegrationTest
+  include SignUpJourneyCleanup
+  include SignInFlowCleanup
+
+  self.use_transactional_tests = false
+
   fixtures :client_email_statuses, :client_statuses
 
   setup do
+    sign_up_journey_watermarks!
+    @existing_solid_queue_job_ids = SolidQueue::Job.pluck(:id)
+    @previous_adapter = ActiveJob::Base.queue_adapter
+    @previous_turnstile = [TurnstileVerifierStub.enabled, TurnstileVerifierStub.response]
+    @previous_challenge = [TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response]
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     cookies["csrf_token"] = csrf_token_value
     begin
@@ -25,15 +35,18 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      # An entry reference is accepted only on a top-level document navigation, and a live
+      # reference never renders: it answers 303 to the ceremony binding action and redeems only
+      # after Base confirmed the binding.
+      admission_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
       admission_browser.get(
         admission_path,
         params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        headers: admission_navigation,
       )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        "/ceremony_bindings",
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_browser.get(admission_browser.response.location, headers: admission_navigation)
 
       assert_equal 303, admission_browser.response.status
       admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -46,18 +59,16 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
       admission_browser.get(
         admission_path,
         params: { entry_ref: admission_issuance.reference, ri: "jp" },
-      )
-      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      admission_browser.post(
-        admission_path,
-        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        headers: admission_navigation,
       )
 
       assert_equal 303, admission_browser.response.status
+      admission_browser.get(admission_browser.response.location, headers: admission_navigation)
+
+      assert_equal 200, admission_browser.response.status
     end
 
     # Use the solid_queue adapter for this test to verify DB persistence
-    @previous_adapter = ActiveJob::Base.queue_adapter
     ActiveJob::Base.queue_adapter = :solid_queue
 
     # Mock Turnstile to pass validation
@@ -66,11 +77,11 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
   end
 
   teardown do
-    # Restore the original adapter
+    delete_solid_queue_jobs_created_by_test!
+    delete_sign_up_journey_rows!
     ActiveJob::Base.queue_adapter = @previous_adapter if @previous_adapter
-
-    TurnstileVerifierStub.challenge_enabled = false
-    TurnstileVerifierStub.challenge_response = nil
+    TurnstileVerifierStub.enabled, TurnstileVerifierStub.response = @previous_turnstile
+    TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response = @previous_challenge
   end
 
   test "deliver_later enqueues a job in solid_queue" do
@@ -104,6 +115,24 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def delete_solid_queue_jobs_created_by_test!
+    return if @existing_solid_queue_job_ids.nil?
+
+    job_ids = SolidQueue::Job.where.not(id: @existing_solid_queue_job_ids).pluck(:id)
+    return if job_ids.empty?
+
+    [
+      SolidQueue::BlockedExecution,
+      SolidQueue::ClaimedExecution,
+      SolidQueue::ReadyExecution,
+      SolidQueue::ScheduledExecution,
+      SolidQueue::FailedExecution,
+      SolidQueue::BatchExecution,
+      SolidQueue::RecurringExecution,
+    ].each { |execution| execution.where(job_id: job_ids).delete_all }
+    SolidQueue::Job.where(id: job_ids).delete_all
+  end
 
   def csrf_token_value
     "test_csrf_token"

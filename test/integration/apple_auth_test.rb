@@ -66,64 +66,27 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            JitSecurityJwtRegistry.surface("BASE_APP")
-            2.times do |flow1_index|
-              flow1_target = URI.parse(@base_browser.response.location)
-              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-              unless flow1_target.host == flow1_base_host
+            # Visa answers the authorization and the Auth admission with redirects; follow them until
+            # Auth renders the first sign page.
+            flow1_browser = @base_browser
+            12.times do
+              raise RuntimeError, "Social admission stopped before a redirect" unless flow1_browser.response.redirect?
+
+              flow1_target = URI.parse(flow1_browser.response.location)
+              if flow1_target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
                 flow1_target = URI.parse(jump_rt_url_from_location_for_test(flow1_target.to_s))
               end
-              if flow1_index.zero?
-                raise RuntimeError,
-                      "Base authorization host mismatch" unless flow1_target.host == visa_host_for_test_base_host(flow1_base_host)
-
-                @base_browser.host!(flow1_target.host)
-                @base_browser.get(flow1_target.request_uri)
-                flow1_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-                flow1_fields =
-                  flow1_form.css("input[name]").to_h { |flow1_input|
-                    [
-                      flow1_input["name"],
-                      flow1_input["value"],
-                    ]
-                  }
-                @base_browser.post(
-                  flow1_form["action"], params: flow1_fields, headers: {
-                    "Origin" => "https://#{visa_host_for_test_base_host(flow1_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                  },
-                )
-              else
-                raise RuntimeError,
-                      "Auth admission host mismatch" unless flow1_target.host == flow1_auth_host
-
-                host!(flow1_auth_host)
-                https!
-                get(flow1_target.request_uri)
-              end
-            end
-            3.times do |flow1_index|
-              flow1_sender = (flow1_index == 1) ? @base_browser : self
-              flow1_form = Nokogiri::HTML(flow1_sender.response.body).at_css("form")
-              flow1_fields =
-                flow1_form.css("input[name]").to_h { |flow1_input|
-                  [
-                    flow1_input["name"],
-                    flow1_input["value"],
-                  ]
-                }
-              flow1_sender.post(
-                flow1_form["action"], params: flow1_fields, headers: {
-                  "Origin" => "https://#{(flow1_index == 1) ? flow1_base_host : flow1_auth_host}",
-                  "Sec-Fetch-Site" => "same-origin",
-                },
+              flow1_browser = (flow1_target.host == flow1_auth_host) ? self : @base_browser
+              flow1_browser.host!(flow1_target.host) if flow1_target.host
+              flow1_browser.https!
+              flow1_browser.get(
+                flow1_target.request_uri,
+                headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
               )
-              raise RuntimeError,
-                    "Social admission failed at step #{flow1_index}" unless flow1_sender.response.status == 303
-              next if flow1_index == 2
-
-              flow1_receiver = flow1_index.zero? ? @base_browser : self
-              flow1_receiver.get(URI.parse(flow1_sender.response.location).request_uri)
+              break if flow1_browser == self && !response.redirect?
             end
+            raise RuntimeError,
+                  "Social admission did not reach Auth" unless flow1_browser == self && response.successful?
           end
           flow1_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow1_host)
@@ -289,8 +252,25 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               flow3_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                 surface: "app", transaction_id: flow3_ceremony.authorization_transaction_ref,
               )
-              get(auth_app_sign_oidc_handoff_path(ri: "jp"))
-              flow3_form = response.parsed_body.at_css("form")
+              # The Auth handoff redirects to the Visa result page, which continues the parent
+              # authorization by a same-origin POST.
+              get(
+                auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+              flow3_visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+              flow3_result_uri = URI.parse(response.location)
+
+              assert_equal [303, flow3_visa_host], [response.status, flow3_result_uri.host]
+              @base_browser.host!(flow3_visa_host)
+              @base_browser.https!
+              @base_browser.get(
+                flow3_result_uri.request_uri, headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+                },
+              )
+              flow3_form = @base_browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
               flow3_fields =
                 flow3_form.css("input[name]").to_h { |flow3_input|
                   [
@@ -298,66 +278,29 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                     flow3_input["value"],
                   ]
                 }
-              post(
+              @base_browser.post(
                 flow3_form["action"], params: flow3_fields, headers: {
-                  "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+                  "Origin" => "https://#{flow3_visa_host}",
+                  "Sec-Fetch-Site" => "same-origin",
+                  "Sec-Fetch-Mode" => "navigate",
+                  "Sec-Fetch-Dest" => "document",
                 },
               )
-              flow3_target = URI.parse(response.location)
               flow3_principal = Client.find_by!(public_id: flow3_parent.reload.actor_ref)
               BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow3_principal)
             end
-            break unless flow3_target.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
-              %w(/social/authentication/completion /oauth/authorize).include?(flow3_target.path)
+            break unless flow3_result_uri
 
+            flow3_continuation = @base_browser.response
             flow3_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-            flow3_base_cookie = @base_browser.cookies.to_hash.map { |flow3_name, flow3_value|
-              "#{flow3_name}=#{Rack::Utils.escape(flow3_value)}"
-            }.join("; ")
-            flow3_base_headers = { "Origin" => "https://#{flow3_base_host}",
-                                   "Sec-Fetch-Site" => "same-origin",
-                                   "Cookie" => flow3_base_cookie,
-                                   "HTTP_COOKIE" => flow3_base_cookie, }
-            host!(flow3_base_host)
-            https!
-            get(flow3_target.request_uri, headers: flow3_base_headers)
-            flow3_form = response.parsed_body.at_css("form")
-            flow3_fields =
-              flow3_form.css("input[name]").to_h { |flow3_input|
-                [
-                  flow3_input["name"],
-                  flow3_input["value"],
-                ]
-              }
-            post(
-              flow3_form["action"],
-              params: flow3_fields,
-              headers: flow3_base_headers,
-            )
-            if response.redirect? && URI.parse(response.location).path == "/oauth/authorize"
-              get(URI.parse(response.location).request_uri, headers: flow3_base_headers)
-              flow3_form = response.parsed_body.at_css("form")
-              flow3_fields =
-                flow3_form.css("input[name]").to_h { |flow3_input|
-                  [
-                    flow3_input["name"],
-                    flow3_input["value"],
-                  ]
-                }
-              post(
-                flow3_form["action"],
-                params: flow3_fields,
-                headers: flow3_base_headers,
-              )
-            end
-            break unless response.redirect?
+            break unless flow3_continuation.redirect?
             # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
-            break unless URI.parse(response.location).path == "/oidc/callback" ||
-              URI.parse(response.location).host ==
+            break unless URI.parse(flow3_continuation.location).path == "/oidc/callback" ||
+              URI.parse(flow3_continuation.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
             JitSecurityJwtRegistry.surface("BASE_APP")
-            flow3_callback_uri = URI.parse(response.location)
+            flow3_callback_uri = URI.parse(flow3_continuation.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow3_callback_uri.host == flow3_base_host
               flow3_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow3_callback_uri.to_s))
@@ -403,12 +346,11 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                   begin
                     flow3_protocol_browser.host!(flow3_env.url.authority)
                     flow3_protocol_browser.https!(flow3_env.url.scheme == "https")
-                    flow3_protocol_browser.get(
-                      flow3_env.url.request_uri, headers: {
-                        "Authorization" => flow3_env.request_headers.fetch("Authorization"),
-                        "Accept" => "application/json",
-                      },
-                    )
+                    # The JWKS request carries no Authorization; the UserInfo request does.
+                    flow3_get_headers = { "Accept" => "application/json" }
+                    flow3_get_headers["Authorization"] = flow3_env.request_headers["Authorization"] if
+                      flow3_env.request_headers["Authorization"].present?
+                    flow3_protocol_browser.get(flow3_env.url.request_uri, headers: flow3_get_headers)
                   ensure
                     ActiveSupport::IsolatedExecutionState[flow3_executor_key] =
                       flow3_outer_execution
@@ -429,12 +371,21 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               end
             OutboundHttp::Connection.stub(
               :build, ->(**flow3_args) {
-                assert_equal flow3_base_host, flow3_args.fetch(:url).host
+                assert_equal flow3_visa_host, URI(flow3_args.fetch(:url).to_s).host
                 flow3_connection
               },
             ) do
+              # The callback carries the Base browser's RP state cookies.
+              flow3_base_cookie = @base_browser.cookies.to_hash.map { |flow3_name, flow3_value|
+                "#{flow3_name}=#{Rack::Utils.escape(flow3_value)}"
+              }.join("; ")
+              host!(flow3_base_host)
+              https!
               TestSupport::OutboundHttpGuard.allow do
-                get(flow3_callback_uri.request_uri, headers: flow3_base_headers)
+                get(
+                  flow3_callback_uri.request_uri,
+                  headers: { "Cookie" => flow3_base_cookie, "HTTP_COOKIE" => flow3_base_cookie },
+                )
               end
             end
 
@@ -442,7 +393,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                          [response.redirect?,
                           cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
                           cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,]
-            flow3_transport.verify_stubbed_calls
+            # The RP cookies prove the token exchange; the JWKS GET is skipped when an earlier
+            # request in this process already cached the key set.
           end
         end
       end
@@ -506,64 +458,27 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow5_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            JitSecurityJwtRegistry.surface("BASE_APP")
-            2.times do |flow5_index|
-              flow5_target = URI.parse(@base_browser.response.location)
-              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-              unless flow5_target.host == flow5_base_host
+            # Visa answers the authorization and the Auth admission with redirects; follow them until
+            # Auth renders the first sign page.
+            flow5_browser = @base_browser
+            12.times do
+              raise RuntimeError, "Social admission stopped before a redirect" unless flow5_browser.response.redirect?
+
+              flow5_target = URI.parse(flow5_browser.response.location)
+              if flow5_target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
                 flow5_target = URI.parse(jump_rt_url_from_location_for_test(flow5_target.to_s))
               end
-              if flow5_index.zero?
-                raise RuntimeError,
-                      "Base authorization host mismatch" unless flow5_target.host == visa_host_for_test_base_host(flow5_base_host)
-
-                @base_browser.host!(flow5_target.host)
-                @base_browser.get(flow5_target.request_uri)
-                flow5_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-                flow5_fields =
-                  flow5_form.css("input[name]").to_h { |flow5_input|
-                    [
-                      flow5_input["name"],
-                      flow5_input["value"],
-                    ]
-                  }
-                @base_browser.post(
-                  flow5_form["action"], params: flow5_fields, headers: {
-                    "Origin" => "https://#{visa_host_for_test_base_host(flow5_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                  },
-                )
-              else
-                raise RuntimeError,
-                      "Auth admission host mismatch" unless flow5_target.host == flow5_auth_host
-
-                host!(flow5_auth_host)
-                https!
-                get(flow5_target.request_uri)
-              end
-            end
-            3.times do |flow5_index|
-              flow5_sender = (flow5_index == 1) ? @base_browser : self
-              flow5_form = Nokogiri::HTML(flow5_sender.response.body).at_css("form")
-              flow5_fields =
-                flow5_form.css("input[name]").to_h { |flow5_input|
-                  [
-                    flow5_input["name"],
-                    flow5_input["value"],
-                  ]
-                }
-              flow5_sender.post(
-                flow5_form["action"], params: flow5_fields, headers: {
-                  "Origin" => "https://#{(flow5_index == 1) ? flow5_base_host : flow5_auth_host}",
-                  "Sec-Fetch-Site" => "same-origin",
-                },
+              flow5_browser = (flow5_target.host == flow5_auth_host) ? self : @base_browser
+              flow5_browser.host!(flow5_target.host) if flow5_target.host
+              flow5_browser.https!
+              flow5_browser.get(
+                flow5_target.request_uri,
+                headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
               )
-              raise RuntimeError,
-                    "Social admission failed at step #{flow5_index}" unless flow5_sender.response.status == 303
-              next if flow5_index == 2
-
-              flow5_receiver = flow5_index.zero? ? @base_browser : self
-              flow5_receiver.get(URI.parse(flow5_sender.response.location).request_uri)
+              break if flow5_browser == self && !response.redirect?
             end
+            raise RuntimeError,
+                  "Social admission did not reach Auth" unless flow5_browser == self && response.successful?
           end
           flow5_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow5_host)
@@ -685,64 +600,27 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow7_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            JitSecurityJwtRegistry.surface("BASE_APP")
-            2.times do |flow7_index|
-              flow7_target = URI.parse(@base_browser.response.location)
-              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-              unless flow7_target.host == flow7_base_host
+            # Visa answers the authorization and the Auth admission with redirects; follow them until
+            # Auth renders the first sign page.
+            flow7_browser = @base_browser
+            12.times do
+              raise RuntimeError, "Social admission stopped before a redirect" unless flow7_browser.response.redirect?
+
+              flow7_target = URI.parse(flow7_browser.response.location)
+              if flow7_target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
                 flow7_target = URI.parse(jump_rt_url_from_location_for_test(flow7_target.to_s))
               end
-              if flow7_index.zero?
-                raise RuntimeError,
-                      "Base authorization host mismatch" unless flow7_target.host == visa_host_for_test_base_host(flow7_base_host)
-
-                @base_browser.host!(flow7_target.host)
-                @base_browser.get(flow7_target.request_uri)
-                flow7_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-                flow7_fields =
-                  flow7_form.css("input[name]").to_h { |flow7_input|
-                    [
-                      flow7_input["name"],
-                      flow7_input["value"],
-                    ]
-                  }
-                @base_browser.post(
-                  flow7_form["action"], params: flow7_fields, headers: {
-                    "Origin" => "https://#{visa_host_for_test_base_host(flow7_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                  },
-                )
-              else
-                raise RuntimeError,
-                      "Auth admission host mismatch" unless flow7_target.host == flow7_auth_host
-
-                host!(flow7_auth_host)
-                https!
-                get(flow7_target.request_uri)
-              end
-            end
-            3.times do |flow7_index|
-              flow7_sender = (flow7_index == 1) ? @base_browser : self
-              flow7_form = Nokogiri::HTML(flow7_sender.response.body).at_css("form")
-              flow7_fields =
-                flow7_form.css("input[name]").to_h { |flow7_input|
-                  [
-                    flow7_input["name"],
-                    flow7_input["value"],
-                  ]
-                }
-              flow7_sender.post(
-                flow7_form["action"], params: flow7_fields, headers: {
-                  "Origin" => "https://#{(flow7_index == 1) ? flow7_base_host : flow7_auth_host}",
-                  "Sec-Fetch-Site" => "same-origin",
-                },
+              flow7_browser = (flow7_target.host == flow7_auth_host) ? self : @base_browser
+              flow7_browser.host!(flow7_target.host) if flow7_target.host
+              flow7_browser.https!
+              flow7_browser.get(
+                flow7_target.request_uri,
+                headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
               )
-              raise RuntimeError,
-                    "Social admission failed at step #{flow7_index}" unless flow7_sender.response.status == 303
-              next if flow7_index == 2
-
-              flow7_receiver = flow7_index.zero? ? @base_browser : self
-              flow7_receiver.get(URI.parse(flow7_sender.response.location).request_uri)
+              break if flow7_browser == self && !response.redirect?
             end
+            raise RuntimeError,
+                  "Social admission did not reach Auth" unless flow7_browser == self && response.successful?
           end
           flow7_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow7_host)
@@ -857,64 +735,27 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow9_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            JitSecurityJwtRegistry.surface("BASE_APP")
-            2.times do |flow9_index|
-              flow9_target = URI.parse(@base_browser.response.location)
-              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-              unless flow9_target.host == flow9_base_host
+            # Visa answers the authorization and the Auth admission with redirects; follow them until
+            # Auth renders the first sign page.
+            flow9_browser = @base_browser
+            12.times do
+              raise RuntimeError, "Social admission stopped before a redirect" unless flow9_browser.response.redirect?
+
+              flow9_target = URI.parse(flow9_browser.response.location)
+              if flow9_target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
                 flow9_target = URI.parse(jump_rt_url_from_location_for_test(flow9_target.to_s))
               end
-              if flow9_index.zero?
-                raise RuntimeError,
-                      "Base authorization host mismatch" unless flow9_target.host == visa_host_for_test_base_host(flow9_base_host)
-
-                @base_browser.host!(flow9_target.host)
-                @base_browser.get(flow9_target.request_uri)
-                flow9_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-                flow9_fields =
-                  flow9_form.css("input[name]").to_h { |flow9_input|
-                    [
-                      flow9_input["name"],
-                      flow9_input["value"],
-                    ]
-                  }
-                @base_browser.post(
-                  flow9_form["action"], params: flow9_fields, headers: {
-                    "Origin" => "https://#{visa_host_for_test_base_host(flow9_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                  },
-                )
-              else
-                raise RuntimeError,
-                      "Auth admission host mismatch" unless flow9_target.host == flow9_auth_host
-
-                host!(flow9_auth_host)
-                https!
-                get(flow9_target.request_uri)
-              end
-            end
-            3.times do |flow9_index|
-              flow9_sender = (flow9_index == 1) ? @base_browser : self
-              flow9_form = Nokogiri::HTML(flow9_sender.response.body).at_css("form")
-              flow9_fields =
-                flow9_form.css("input[name]").to_h { |flow9_input|
-                  [
-                    flow9_input["name"],
-                    flow9_input["value"],
-                  ]
-                }
-              flow9_sender.post(
-                flow9_form["action"], params: flow9_fields, headers: {
-                  "Origin" => "https://#{(flow9_index == 1) ? flow9_base_host : flow9_auth_host}",
-                  "Sec-Fetch-Site" => "same-origin",
-                },
+              flow9_browser = (flow9_target.host == flow9_auth_host) ? self : @base_browser
+              flow9_browser.host!(flow9_target.host) if flow9_target.host
+              flow9_browser.https!
+              flow9_browser.get(
+                flow9_target.request_uri,
+                headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
               )
-              raise RuntimeError,
-                    "Social admission failed at step #{flow9_index}" unless flow9_sender.response.status == 303
-              next if flow9_index == 2
-
-              flow9_receiver = flow9_index.zero? ? @base_browser : self
-              flow9_receiver.get(URI.parse(flow9_sender.response.location).request_uri)
+              break if flow9_browser == self && !response.redirect?
             end
+            raise RuntimeError,
+                  "Social admission did not reach Auth" unless flow9_browser == self && response.successful?
           end
           flow9_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow9_host)
@@ -1081,8 +922,25 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               flow11_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                 surface: "app", transaction_id: flow11_ceremony.authorization_transaction_ref,
               )
-              get(auth_app_sign_oidc_handoff_path(ri: "jp"))
-              flow11_form = response.parsed_body.at_css("form")
+              # The Auth handoff redirects to the Visa result page, which continues the parent
+              # authorization by a same-origin POST.
+              get(
+                auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+              flow11_visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+              flow11_result_uri = URI.parse(response.location)
+
+              assert_equal [303, flow11_visa_host], [response.status, flow11_result_uri.host]
+              @base_browser.host!(flow11_visa_host)
+              @base_browser.https!
+              @base_browser.get(
+                flow11_result_uri.request_uri, headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+                },
+              )
+              flow11_form = @base_browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
               flow11_fields =
                 flow11_form.css("input[name]").to_h { |flow11_input|
                   [
@@ -1090,66 +948,29 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                     flow11_input["value"],
                   ]
                 }
-              post(
+              @base_browser.post(
                 flow11_form["action"], params: flow11_fields, headers: {
-                  "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+                  "Origin" => "https://#{flow11_visa_host}",
+                  "Sec-Fetch-Site" => "same-origin",
+                  "Sec-Fetch-Mode" => "navigate",
+                  "Sec-Fetch-Dest" => "document",
                 },
               )
-              flow11_target = URI.parse(response.location)
               flow11_principal = Client.find_by!(public_id: flow11_parent.reload.actor_ref)
               BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow11_principal)
             end
-            break unless flow11_target.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
-              %w(/social/authentication/completion /oauth/authorize).include?(flow11_target.path)
+            break unless flow11_result_uri
 
+            flow11_continuation = @base_browser.response
             flow11_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-            flow11_base_cookie = @base_browser.cookies.to_hash.map { |flow11_name, flow11_value|
-              "#{flow11_name}=#{Rack::Utils.escape(flow11_value)}"
-            }.join("; ")
-            flow11_base_headers = { "Origin" => "https://#{flow11_base_host}",
-                                    "Sec-Fetch-Site" => "same-origin",
-                                    "Cookie" => flow11_base_cookie,
-                                    "HTTP_COOKIE" => flow11_base_cookie, }
-            host!(flow11_base_host)
-            https!
-            get(flow11_target.request_uri, headers: flow11_base_headers)
-            flow11_form = response.parsed_body.at_css("form")
-            flow11_fields =
-              flow11_form.css("input[name]").to_h { |flow11_input|
-                [
-                  flow11_input["name"],
-                  flow11_input["value"],
-                ]
-              }
-            post(
-              flow11_form["action"],
-              params: flow11_fields,
-              headers: flow11_base_headers,
-            )
-            if response.redirect? && URI.parse(response.location).path == "/oauth/authorize"
-              get(URI.parse(response.location).request_uri, headers: flow11_base_headers)
-              flow11_form = response.parsed_body.at_css("form")
-              flow11_fields =
-                flow11_form.css("input[name]").to_h { |flow11_input|
-                  [
-                    flow11_input["name"],
-                    flow11_input["value"],
-                  ]
-                }
-              post(
-                flow11_form["action"],
-                params: flow11_fields,
-                headers: flow11_base_headers,
-              )
-            end
-            break unless response.redirect?
+            break unless flow11_continuation.redirect?
             # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
-            break unless URI.parse(response.location).path == "/oidc/callback" ||
-              URI.parse(response.location).host ==
+            break unless URI.parse(flow11_continuation.location).path == "/oidc/callback" ||
+              URI.parse(flow11_continuation.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
             JitSecurityJwtRegistry.surface("BASE_APP")
-            flow11_callback_uri = URI.parse(response.location)
+            flow11_callback_uri = URI.parse(flow11_continuation.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow11_callback_uri.host == flow11_base_host
               flow11_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow11_callback_uri.to_s))
@@ -1195,12 +1016,11 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                   begin
                     flow11_protocol_browser.host!(flow11_env.url.authority)
                     flow11_protocol_browser.https!(flow11_env.url.scheme == "https")
-                    flow11_protocol_browser.get(
-                      flow11_env.url.request_uri, headers: {
-                        "Authorization" => flow11_env.request_headers.fetch("Authorization"),
-                        "Accept" => "application/json",
-                      },
-                    )
+                    # The JWKS request carries no Authorization; the UserInfo request does.
+                    flow11_get_headers = { "Accept" => "application/json" }
+                    flow11_get_headers["Authorization"] = flow11_env.request_headers["Authorization"] if
+                      flow11_env.request_headers["Authorization"].present?
+                    flow11_protocol_browser.get(flow11_env.url.request_uri, headers: flow11_get_headers)
                   ensure
                     ActiveSupport::IsolatedExecutionState[flow11_executor_key] =
                       flow11_outer_execution
@@ -1221,12 +1041,21 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               end
             OutboundHttp::Connection.stub(
               :build, ->(**flow11_args) {
-                assert_equal flow11_base_host, flow11_args.fetch(:url).host
+                assert_equal flow11_visa_host, URI(flow11_args.fetch(:url).to_s).host
                 flow11_connection
               },
             ) do
+              # The callback carries the Base browser's RP state cookies.
+              flow11_base_cookie = @base_browser.cookies.to_hash.map { |flow11_name, flow11_value|
+                "#{flow11_name}=#{Rack::Utils.escape(flow11_value)}"
+              }.join("; ")
+              host!(flow11_base_host)
+              https!
               TestSupport::OutboundHttpGuard.allow do
-                get(flow11_callback_uri.request_uri, headers: flow11_base_headers)
+                get(
+                  flow11_callback_uri.request_uri,
+                  headers: { "Cookie" => flow11_base_cookie, "HTTP_COOKIE" => flow11_base_cookie },
+                )
               end
             end
 
@@ -1234,7 +1063,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                          [response.redirect?,
                           cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
                           cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,]
-            flow11_transport.verify_stubbed_calls
+            # The RP cookies prove the token exchange; the JWKS GET is skipped when an earlier
+            # request in this process already cached the key set.
           end
         end
       end
@@ -1291,64 +1121,27 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow13_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            JitSecurityJwtRegistry.surface("BASE_APP")
-            2.times do |flow13_index|
-              flow13_target = URI.parse(@base_browser.response.location)
-              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-              unless flow13_target.host == flow13_base_host
+            # Visa answers the authorization and the Auth admission with redirects; follow them until
+            # Auth renders the first sign page.
+            flow13_browser = @base_browser
+            12.times do
+              raise RuntimeError, "Social admission stopped before a redirect" unless flow13_browser.response.redirect?
+
+              flow13_target = URI.parse(flow13_browser.response.location)
+              if flow13_target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
                 flow13_target = URI.parse(jump_rt_url_from_location_for_test(flow13_target.to_s))
               end
-              if flow13_index.zero?
-                raise RuntimeError,
-                      "Base authorization host mismatch" unless flow13_target.host == visa_host_for_test_base_host(flow13_base_host)
-
-                @base_browser.host!(flow13_target.host)
-                @base_browser.get(flow13_target.request_uri)
-                flow13_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-                flow13_fields =
-                  flow13_form.css("input[name]").to_h { |flow13_input|
-                    [
-                      flow13_input["name"],
-                      flow13_input["value"],
-                    ]
-                  }
-                @base_browser.post(
-                  flow13_form["action"], params: flow13_fields, headers: {
-                    "Origin" => "https://#{visa_host_for_test_base_host(flow13_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                  },
-                )
-              else
-                raise RuntimeError,
-                      "Auth admission host mismatch" unless flow13_target.host == flow13_auth_host
-
-                host!(flow13_auth_host)
-                https!
-                get(flow13_target.request_uri)
-              end
-            end
-            3.times do |flow13_index|
-              flow13_sender = (flow13_index == 1) ? @base_browser : self
-              flow13_form = Nokogiri::HTML(flow13_sender.response.body).at_css("form")
-              flow13_fields =
-                flow13_form.css("input[name]").to_h { |flow13_input|
-                  [
-                    flow13_input["name"],
-                    flow13_input["value"],
-                  ]
-                }
-              flow13_sender.post(
-                flow13_form["action"], params: flow13_fields, headers: {
-                  "Origin" => "https://#{(flow13_index == 1) ? flow13_base_host : flow13_auth_host}",
-                  "Sec-Fetch-Site" => "same-origin",
-                },
+              flow13_browser = (flow13_target.host == flow13_auth_host) ? self : @base_browser
+              flow13_browser.host!(flow13_target.host) if flow13_target.host
+              flow13_browser.https!
+              flow13_browser.get(
+                flow13_target.request_uri,
+                headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
               )
-              raise RuntimeError,
-                    "Social admission failed at step #{flow13_index}" unless flow13_sender.response.status == 303
-              next if flow13_index == 2
-
-              flow13_receiver = flow13_index.zero? ? @base_browser : self
-              flow13_receiver.get(URI.parse(flow13_sender.response.location).request_uri)
+              break if flow13_browser == self && !response.redirect?
             end
+            raise RuntimeError,
+                  "Social admission did not reach Auth" unless flow13_browser == self && response.successful?
           end
           flow13_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow13_host)
@@ -1498,8 +1291,25 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               flow15_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                 surface: "app", transaction_id: flow15_ceremony.authorization_transaction_ref,
               )
-              get(auth_app_sign_oidc_handoff_path(ri: "jp"))
-              flow15_form = response.parsed_body.at_css("form")
+              # The Auth handoff redirects to the Visa result page, which continues the parent
+              # authorization by a same-origin POST.
+              get(
+                auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+              flow15_visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+              flow15_result_uri = URI.parse(response.location)
+
+              assert_equal [303, flow15_visa_host], [response.status, flow15_result_uri.host]
+              @base_browser.host!(flow15_visa_host)
+              @base_browser.https!
+              @base_browser.get(
+                flow15_result_uri.request_uri, headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+                },
+              )
+              flow15_form = @base_browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
               flow15_fields =
                 flow15_form.css("input[name]").to_h { |flow15_input|
                   [
@@ -1507,66 +1317,29 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                     flow15_input["value"],
                   ]
                 }
-              post(
+              @base_browser.post(
                 flow15_form["action"], params: flow15_fields, headers: {
-                  "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+                  "Origin" => "https://#{flow15_visa_host}",
+                  "Sec-Fetch-Site" => "same-origin",
+                  "Sec-Fetch-Mode" => "navigate",
+                  "Sec-Fetch-Dest" => "document",
                 },
               )
-              flow15_target = URI.parse(response.location)
               flow15_principal = Client.find_by!(public_id: flow15_parent.reload.actor_ref)
               BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow15_principal)
             end
-            break unless flow15_target.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
-              %w(/social/authentication/completion /oauth/authorize).include?(flow15_target.path)
+            break unless flow15_result_uri
 
+            flow15_continuation = @base_browser.response
             flow15_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-            flow15_base_cookie = @base_browser.cookies.to_hash.map { |flow15_name, flow15_value|
-              "#{flow15_name}=#{Rack::Utils.escape(flow15_value)}"
-            }.join("; ")
-            flow15_base_headers = { "Origin" => "https://#{flow15_base_host}",
-                                    "Sec-Fetch-Site" => "same-origin",
-                                    "Cookie" => flow15_base_cookie,
-                                    "HTTP_COOKIE" => flow15_base_cookie, }
-            host!(flow15_base_host)
-            https!
-            get(flow15_target.request_uri, headers: flow15_base_headers)
-            flow15_form = response.parsed_body.at_css("form")
-            flow15_fields =
-              flow15_form.css("input[name]").to_h { |flow15_input|
-                [
-                  flow15_input["name"],
-                  flow15_input["value"],
-                ]
-              }
-            post(
-              flow15_form["action"],
-              params: flow15_fields,
-              headers: flow15_base_headers,
-            )
-            if response.redirect? && URI.parse(response.location).path == "/oauth/authorize"
-              get(URI.parse(response.location).request_uri, headers: flow15_base_headers)
-              flow15_form = response.parsed_body.at_css("form")
-              flow15_fields =
-                flow15_form.css("input[name]").to_h { |flow15_input|
-                  [
-                    flow15_input["name"],
-                    flow15_input["value"],
-                  ]
-                }
-              post(
-                flow15_form["action"],
-                params: flow15_fields,
-                headers: flow15_base_headers,
-              )
-            end
-            break unless response.redirect?
+            break unless flow15_continuation.redirect?
             # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
-            break unless URI.parse(response.location).path == "/oidc/callback" ||
-              URI.parse(response.location).host ==
+            break unless URI.parse(flow15_continuation.location).path == "/oidc/callback" ||
+              URI.parse(flow15_continuation.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
             JitSecurityJwtRegistry.surface("BASE_APP")
-            flow15_callback_uri = URI.parse(response.location)
+            flow15_callback_uri = URI.parse(flow15_continuation.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow15_callback_uri.host == flow15_base_host
               flow15_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow15_callback_uri.to_s))
@@ -1612,12 +1385,11 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                   begin
                     flow15_protocol_browser.host!(flow15_env.url.authority)
                     flow15_protocol_browser.https!(flow15_env.url.scheme == "https")
-                    flow15_protocol_browser.get(
-                      flow15_env.url.request_uri, headers: {
-                        "Authorization" => flow15_env.request_headers.fetch("Authorization"),
-                        "Accept" => "application/json",
-                      },
-                    )
+                    # The JWKS request carries no Authorization; the UserInfo request does.
+                    flow15_get_headers = { "Accept" => "application/json" }
+                    flow15_get_headers["Authorization"] = flow15_env.request_headers["Authorization"] if
+                      flow15_env.request_headers["Authorization"].present?
+                    flow15_protocol_browser.get(flow15_env.url.request_uri, headers: flow15_get_headers)
                   ensure
                     ActiveSupport::IsolatedExecutionState[flow15_executor_key] =
                       flow15_outer_execution
@@ -1638,12 +1410,21 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               end
             OutboundHttp::Connection.stub(
               :build, ->(**flow15_args) {
-                assert_equal flow15_base_host, flow15_args.fetch(:url).host
+                assert_equal flow15_visa_host, URI(flow15_args.fetch(:url).to_s).host
                 flow15_connection
               },
             ) do
+              # The callback carries the Base browser's RP state cookies.
+              flow15_base_cookie = @base_browser.cookies.to_hash.map { |flow15_name, flow15_value|
+                "#{flow15_name}=#{Rack::Utils.escape(flow15_value)}"
+              }.join("; ")
+              host!(flow15_base_host)
+              https!
               TestSupport::OutboundHttpGuard.allow do
-                get(flow15_callback_uri.request_uri, headers: flow15_base_headers)
+                get(
+                  flow15_callback_uri.request_uri,
+                  headers: { "Cookie" => flow15_base_cookie, "HTTP_COOKIE" => flow15_base_cookie },
+                )
               end
             end
 
@@ -1651,7 +1432,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                          [response.redirect?,
                           cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
                           cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,]
-            flow15_transport.verify_stubbed_calls
+            # The RP cookies prove the token exchange; the JWKS GET is skipped when an earlier
+            # request in this process already cached the key set.
           end
         end
       end
@@ -1709,64 +1491,27 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{flow17_base_host}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            JitSecurityJwtRegistry.surface("BASE_APP")
-            2.times do |flow17_index|
-              flow17_target = URI.parse(@base_browser.response.location)
-              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-              unless flow17_target.host == flow17_base_host
+            # Visa answers the authorization and the Auth admission with redirects; follow them until
+            # Auth renders the first sign page.
+            flow17_browser = @base_browser
+            12.times do
+              raise RuntimeError, "Social admission stopped before a redirect" unless flow17_browser.response.redirect?
+
+              flow17_target = URI.parse(flow17_browser.response.location)
+              if flow17_target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
                 flow17_target = URI.parse(jump_rt_url_from_location_for_test(flow17_target.to_s))
               end
-              if flow17_index.zero?
-                raise RuntimeError,
-                      "Base authorization host mismatch" unless flow17_target.host == visa_host_for_test_base_host(flow17_base_host)
-
-                @base_browser.host!(flow17_target.host)
-                @base_browser.get(flow17_target.request_uri)
-                flow17_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-                flow17_fields =
-                  flow17_form.css("input[name]").to_h { |flow17_input|
-                    [
-                      flow17_input["name"],
-                      flow17_input["value"],
-                    ]
-                  }
-                @base_browser.post(
-                  flow17_form["action"], params: flow17_fields, headers: {
-                    "Origin" => "https://#{visa_host_for_test_base_host(flow17_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                  },
-                )
-              else
-                raise RuntimeError,
-                      "Auth admission host mismatch" unless flow17_target.host == flow17_auth_host
-
-                host!(flow17_auth_host)
-                https!
-                get(flow17_target.request_uri)
-              end
-            end
-            3.times do |flow17_index|
-              flow17_sender = (flow17_index == 1) ? @base_browser : self
-              flow17_form = Nokogiri::HTML(flow17_sender.response.body).at_css("form")
-              flow17_fields =
-                flow17_form.css("input[name]").to_h { |flow17_input|
-                  [
-                    flow17_input["name"],
-                    flow17_input["value"],
-                  ]
-                }
-              flow17_sender.post(
-                flow17_form["action"], params: flow17_fields, headers: {
-                  "Origin" => "https://#{(flow17_index == 1) ? flow17_base_host : flow17_auth_host}",
-                  "Sec-Fetch-Site" => "same-origin",
-                },
+              flow17_browser = (flow17_target.host == flow17_auth_host) ? self : @base_browser
+              flow17_browser.host!(flow17_target.host) if flow17_target.host
+              flow17_browser.https!
+              flow17_browser.get(
+                flow17_target.request_uri,
+                headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
               )
-              raise RuntimeError,
-                    "Social admission failed at step #{flow17_index}" unless flow17_sender.response.status == 303
-              next if flow17_index == 2
-
-              flow17_receiver = flow17_index.zero? ? @base_browser : self
-              flow17_receiver.get(URI.parse(flow17_sender.response.location).request_uri)
+              break if flow17_browser == self && !response.redirect?
             end
+            raise RuntimeError,
+                  "Social admission did not reach Auth" unless flow17_browser == self && response.successful?
           end
           flow17_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
           host!(flow17_host)
@@ -1932,8 +1677,25 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               flow19_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
                 surface: "app", transaction_id: flow19_ceremony.authorization_transaction_ref,
               )
-              get(auth_app_sign_oidc_handoff_path(ri: "jp"))
-              flow19_form = response.parsed_body.at_css("form")
+              # The Auth handoff redirects to the Visa result page, which continues the parent
+              # authorization by a same-origin POST.
+              get(
+                auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+              flow19_visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+              flow19_result_uri = URI.parse(response.location)
+
+              assert_equal [303, flow19_visa_host], [response.status, flow19_result_uri.host]
+              @base_browser.host!(flow19_visa_host)
+              @base_browser.https!
+              @base_browser.get(
+                flow19_result_uri.request_uri, headers: {
+                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+                },
+              )
+              flow19_form = @base_browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
               flow19_fields =
                 flow19_form.css("input[name]").to_h { |flow19_input|
                   [
@@ -1941,66 +1703,29 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                     flow19_input["value"],
                   ]
                 }
-              post(
+              @base_browser.post(
                 flow19_form["action"], params: flow19_fields, headers: {
-                  "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+                  "Origin" => "https://#{flow19_visa_host}",
+                  "Sec-Fetch-Site" => "same-origin",
+                  "Sec-Fetch-Mode" => "navigate",
+                  "Sec-Fetch-Dest" => "document",
                 },
               )
-              flow19_target = URI.parse(response.location)
               flow19_principal = Client.find_by!(public_id: flow19_parent.reload.actor_ref)
               BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow19_principal)
             end
-            break unless flow19_target.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
-              %w(/social/authentication/completion /oauth/authorize).include?(flow19_target.path)
+            break unless flow19_result_uri
 
+            flow19_continuation = @base_browser.response
             flow19_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-            flow19_base_cookie = @base_browser.cookies.to_hash.map { |flow19_name, flow19_value|
-              "#{flow19_name}=#{Rack::Utils.escape(flow19_value)}"
-            }.join("; ")
-            flow19_base_headers = { "Origin" => "https://#{flow19_base_host}",
-                                    "Sec-Fetch-Site" => "same-origin",
-                                    "Cookie" => flow19_base_cookie,
-                                    "HTTP_COOKIE" => flow19_base_cookie, }
-            host!(flow19_base_host)
-            https!
-            get(flow19_target.request_uri, headers: flow19_base_headers)
-            flow19_form = response.parsed_body.at_css("form")
-            flow19_fields =
-              flow19_form.css("input[name]").to_h { |flow19_input|
-                [
-                  flow19_input["name"],
-                  flow19_input["value"],
-                ]
-              }
-            post(
-              flow19_form["action"],
-              params: flow19_fields,
-              headers: flow19_base_headers,
-            )
-            if response.redirect? && URI.parse(response.location).path == "/oauth/authorize"
-              get(URI.parse(response.location).request_uri, headers: flow19_base_headers)
-              flow19_form = response.parsed_body.at_css("form")
-              flow19_fields =
-                flow19_form.css("input[name]").to_h { |flow19_input|
-                  [
-                    flow19_input["name"],
-                    flow19_input["value"],
-                  ]
-                }
-              post(
-                flow19_form["action"],
-                params: flow19_fields,
-                headers: flow19_base_headers,
-              )
-            end
-            break unless response.redirect?
+            break unless flow19_continuation.redirect?
             # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
-            break unless URI.parse(response.location).path == "/oidc/callback" ||
-              URI.parse(response.location).host ==
+            break unless URI.parse(flow19_continuation.location).path == "/oidc/callback" ||
+              URI.parse(flow19_continuation.location).host ==
                 URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
             JitSecurityJwtRegistry.surface("BASE_APP")
-            flow19_callback_uri = URI.parse(response.location)
+            flow19_callback_uri = URI.parse(flow19_continuation.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow19_callback_uri.host == flow19_base_host
               flow19_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow19_callback_uri.to_s))
@@ -2046,12 +1771,11 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                   begin
                     flow19_protocol_browser.host!(flow19_env.url.authority)
                     flow19_protocol_browser.https!(flow19_env.url.scheme == "https")
-                    flow19_protocol_browser.get(
-                      flow19_env.url.request_uri, headers: {
-                        "Authorization" => flow19_env.request_headers.fetch("Authorization"),
-                        "Accept" => "application/json",
-                      },
-                    )
+                    # The JWKS request carries no Authorization; the UserInfo request does.
+                    flow19_get_headers = { "Accept" => "application/json" }
+                    flow19_get_headers["Authorization"] = flow19_env.request_headers["Authorization"] if
+                      flow19_env.request_headers["Authorization"].present?
+                    flow19_protocol_browser.get(flow19_env.url.request_uri, headers: flow19_get_headers)
                   ensure
                     ActiveSupport::IsolatedExecutionState[flow19_executor_key] =
                       flow19_outer_execution
@@ -2072,12 +1796,21 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
               end
             OutboundHttp::Connection.stub(
               :build, ->(**flow19_args) {
-                assert_equal flow19_base_host, flow19_args.fetch(:url).host
+                assert_equal flow19_visa_host, URI(flow19_args.fetch(:url).to_s).host
                 flow19_connection
               },
             ) do
+              # The callback carries the Base browser's RP state cookies.
+              flow19_base_cookie = @base_browser.cookies.to_hash.map { |flow19_name, flow19_value|
+                "#{flow19_name}=#{Rack::Utils.escape(flow19_value)}"
+              }.join("; ")
+              host!(flow19_base_host)
+              https!
               TestSupport::OutboundHttpGuard.allow do
-                get(flow19_callback_uri.request_uri, headers: flow19_base_headers)
+                get(
+                  flow19_callback_uri.request_uri,
+                  headers: { "Cookie" => flow19_base_cookie, "HTTP_COOKIE" => flow19_base_cookie },
+                )
               end
             end
 
@@ -2085,7 +1818,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                          [response.redirect?,
                           cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
                           cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,]
-            flow19_transport.verify_stubbed_calls
+            # The RP cookies prove the token exchange; the JWKS GET is skipped when an earlier
+            # request in this process already cached the key set.
           end
         end
       end
@@ -2349,7 +2083,6 @@ class AppleAuthTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -2372,24 +2105,6 @@ class AppleAuthTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

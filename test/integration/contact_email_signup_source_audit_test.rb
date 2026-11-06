@@ -5,8 +5,18 @@ require "minitest/mock"
 
 class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
+  include SignInFlowCleanup
+
+  self.fixture_table_names = []
+  self.use_transactional_tests = false
 
   setup do
+    # The test lock serializes these HTTP journeys; retain pre-existing rows for scoped cleanup.
+    @initial_client_ids = Client.pluck(:id)
+    @initial_signup_ids = ClientSignUpFlow.pluck(:id)
+    @initial_binding_ids = ClientAuthAdmissionBinding.pluck(:id)
+    @initial_ceremony_ids = ClientAuthCeremonySession.pluck(:id)
+    @initial_parent_ids = ClientOidcAuthorizationTransaction.pluck(:id)
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
@@ -16,6 +26,61 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
   end
 
   teardown do
+    # Delivery runs after real commits, so rollback fixtures cannot clean up this journey.
+    owners = Client.where.not(id: @initial_client_ids).to_a
+    owner_ids = owners.map(&:id)
+    # Completed signup also commits the actor's bootstrap identity and collective graph.
+    owners.each do |owner|
+      identity_ids = ClientIdentity.where(source_record_id: owner.id).pluck(:id)
+      persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+      enterprise_ids =
+        (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
+          EnterpriseOwnership.where(client_id: owner.id).pluck(:enterprise_id)).uniq
+      unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+      PersonaMembership.where(persona_id: persona_ids)
+        .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+      PersonaAssignment.where(persona_id: persona_ids).delete_all
+      ClientOidcIdentityBinding.where(client_identity_id: identity_ids).delete_all
+      AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+      ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+      ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+      ClientPersona.where(id: persona_ids).delete_all
+      ClientIdentity.where(id: identity_ids).delete_all
+      EnterpriseUnitClosure.where(ancestor_id: unit_ids)
+        .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
+      EnterpriseUnit.where(id: unit_ids).delete_all
+      EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+      Enterprise.where(id: enterprise_ids).delete_all
+    end
+    flows = ClientSignUpFlow.where.not(id: @initial_signup_ids).to_a
+    session_refs =
+      flows.map do |flow|
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      end
+    ClientEmailCeremonyTransaction.where(session_ref: session_refs).delete_all
+    ClientSignUpFlow.where(id: flows.map(&:id)).delete_all
+    ClientAuthAdmissionBinding.where.not(id: @initial_binding_ids).delete_all
+    ClientAuthCeremonySession.where.not(id: @initial_ceremony_ids).delete_all
+    ClientOidcAuthorizationTransaction.where.not(id: @initial_parent_ids).delete_all
+    delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: owner_ids))
+    token_ids = ClientToken.where(user_id: owner_ids).select(:id)
+    OpAppGrant.where(client_token_id: token_ids).delete_all
+    ClientDeviceSession.where(user_id: owner_ids).update_all(current_refresh_token_id: nil)
+    ClientToken.where(user_id: owner_ids).delete_all
+    ClientDeviceSession.where(user_id: owner_ids).delete_all
+    ClientContactAuditOutbox.where(owner_ref: owners.map(&:public_id)).delete_all
+    ClientEmail.where(user_id: owner_ids).delete_all
+    ClientAccount.where(user_id: owner_ids).delete_all
+    ClientOidcConnection.where(user_id: owner_ids).delete_all
+    ClientRegistrationCompletion.where(client_id: owner_ids).delete_all
+    ClientAuthorityLock.where(client_id: owner_ids).delete_all
+    Client.where(id: owner_ids).delete_all
+  ensure
     ActionController::Base.allow_forgery_protection = @previous_forgery_protection
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
@@ -44,49 +109,24 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
             "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
           },
         )
-        JitSecurityJwtRegistry.surface("BASE_#{surface.to_s.upcase}")
-        2.times do |index|
+        12.times do
+          break unless browser.response.redirect?
+
           target = URI.parse(browser.response.location)
-          # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-          unless target.host == base_host
+          unless [base_host, visa_host_for_test_base_host(base_host), auth_host].include?(target.host)
             target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
           end
 
           assert_includes [base_host, visa_host_for_test_base_host(base_host), auth_host], target.host
           browser.host!(target.host)
-          browser.get(target.request_uri, params: { ri: "jp" })
-          next if index == 1
-
-          form = browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-          browser.post(
-            form["action"], params: fields, headers: {
-              "Origin" => "https://#{target.host}", "Sec-Fetch-Site" => "same-origin",
+          browser.get(
+            target.request_uri, headers: {
+              "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
             },
           )
         end
-        # Redeem through Auth POST, Base confirmation POST, then Auth POST.
-        # No admission, browser marker or signed flow locator is installed directly.
-        3.times do |index|
-          form = browser.response.parsed_body.at_css("form")
 
-          assert_not_nil form, "admission step #{index}, HTTP #{browser.response.status}"
-          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-          browser.post(
-            form["action"], params: fields, headers: {
-              "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
-            },
-          )
-          break if index == 2
-
-          target = URI.parse(browser.response.location)
-
-          assert_includes [base_host, visa_host_for_test_base_host(base_host), auth_host], target.host
-          browser.host!(target.host)
-          browser.get(target.request_uri, params: { ri: "jp" })
-        end
-
-        assert_equal 303, browser.response.status
+        assert_equal [200, auth_host], [browser.response.status, browser.host]
         switch_browser_to_sign_up!(browser, surface: surface.to_s)
         browser.get("/sign/up/email/new", params: { ri: "jp" })
 
@@ -205,8 +245,6 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
           end
         committed_at = nil
         committed_intent = nil
-        recovery_ids = nil
-        reveal_ids = nil
         flow_class.stub(:database_now, clock) do
           if outcome.to_s.start_with?("ticket_failure_")
             failure =
@@ -239,7 +277,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
             committed_at = contact.binding_finalized_at
             committed_intent = outbox.find_by!(operation_ref: flow.public_id)
 
-            assert_predicate flow.reload, :sign_up_checkpoint_pending?
+            assert_equal ClientSignUpFlowStatus::FINALIZING, flow.reload.status_id
             case outcome
             when :ticket_failure_duplicate_intent
               outbox.transaction do
@@ -259,9 +297,9 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
             end
           end
           if outcome.to_s.start_with?("ticket_failure_")
-            flow.reload
-            binding = SignFlowBindingCodec.encode(flow: flow, surface: surface)
-            binding_query = URI.encode_www_form(ri: "jp", fb: binding)
+            # The original checkpoint request is stale. Reconciliation uses the committed receipt,
+            # including after release, suspension or expiry; it never repeats source finalization.
+            flow.with_cycle_lock { flow.reload }
           end
           browser.patch(
             "/sign/up/check/email/birthdate?#{binding_query}",
@@ -280,15 +318,19 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         ) {
           verified_proof == transaction.reload.attributes
         }
-        if %i(ticket_failure_duplicate_intent ticket_failure_released_binding
-              ticket_failure_suspended_owner ticket_failure_expired_flow).include?(outcome)
+        if outcome.to_s.start_with?("ticket_failure_")
           assert_equal 409, browser.response.status
-          assert_not flow.reload.sign_up_completed?
+          assert_predicate flow.reload, :sign_up_completed?
+          receipt = ClientRegistrationCompletion.find_by!(client_id: flow.principal_id)
+
+          assert_equal [flow.public_id, ClientRegistrationCompletionMethod::IDS.fetch("email")],
+                       [receipt.sign_up_flow_ref, receipt.method_id]
           assert_equal committed_at, contact.reload.binding_finalized_at
           assert_equal(
             (outcome == :ticket_failure_duplicate_intent) ? 2 : 1,
             outbox.where(operation_ref: flow.public_id).count,
           )
+          assert_equal "1990-01-15", Client.find(flow.principal_id).birthdate
           next
         end
 
@@ -303,6 +345,8 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
 
         assert_includes [302, 303], browser.response.status
         assert_predicate flow.reload, :sign_up_completed?
+        assert_equal flow.public_id,
+                     ClientRegistrationCompletion.find_by!(client_id: flow.principal_id).sign_up_flow_ref
         assert_predicate contact.reload, :binding_effective?
         intent = outbox.find_by!(operation_ref: flow.public_id)
 

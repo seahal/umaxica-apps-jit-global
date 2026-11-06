@@ -34,8 +34,15 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       },
     )
 
-    assert_equal %i(client_id deadline refresh_token token_url), sent.keys.sort
+    assert_equal %i(client_id deadline refresh_token require_https token_url), sent.keys.sort
     assert_equal "refresh-plain", sent.fetch(:refresh_token)
+    # Locally the first-party OP is reached through the local HTTP port, as the Code Flow callback is.
+    sent_url = URI.parse(sent.fetch(:token_url))
+
+    local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
+
+    assert_equal ["http", "www.umaxica.app", local_port, "/oauth/token", false],
+                 [sent_url.scheme, sent_url.host, sent_url.port, sent_url.path, sent.fetch(:require_https)]
   end
 
   test "a definitive refusal installs nothing" do

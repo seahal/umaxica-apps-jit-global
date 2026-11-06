@@ -38,7 +38,8 @@ class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
 
     assert_equal "dr", body["theme"],
                  "the verified Preference JWT must win over a conflicting display mirror"
-    repaired = JSON.parse(set_cookie_entries(PreferenceCookieName.anonymous_experience).sole.fetch(:value))
+    raw_repaired_experience = set_cookie_entries(PreferenceCookieName.anonymous_experience).sole.fetch(:value)
+    repaired = JSON.parse(Rack::Utils.unescape(raw_repaired_experience))
 
     assert_equal "dark", repaired.fetch("theme")
   end
@@ -54,9 +55,11 @@ class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
     assert_response :redirect
 
     token = cookies[PreferenceCookieName.anonymous_jwt]
+    binding = cookies[PreferenceBrowserBinding::COOKIE_NAME]
     conflicting_cookies = [
       "#{PreferenceCookieName.anonymous_jwt}=#{Rack::Utils.escape(token)}",
-      "#{PreferenceCookieName.anonymous_experience}=#{Rack::Utils.escape('{}')}",
+      "#{PreferenceCookieName.anonymous_experience}=#{Rack::Utils.escape("{}")}",
+      "#{PreferenceBrowserBinding::COOKIE_NAME}=#{Rack::Utils.escape(binding)}",
     ].join("; ")
 
     get base_app_api_v0_preferences_cookie_url(ri: "jp"),

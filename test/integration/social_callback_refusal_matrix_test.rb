@@ -40,7 +40,7 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "A07-1e/A08/A34-2: inconsistent and unfinished callbacks refuse with no authority" do
+  test "A07-1e/A08/A34-2: ineligible callbacks refuse and eligible social signup creates only its Flow" do
     %w(google apple).product(
       %w(sign_in sign_up),
       %w(unknown registered unusable orphan released unfinished revoked deleted
@@ -152,21 +152,21 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
       callback_path =
         (provider == "google") ? auth_app_social_google_callback_path : auth_app_social_apple_callback_path
       fatal_events = []
-      assert_no_difference(
-        ["Client.count", "ClientSignUpFlow.count", "ClientToken.count",
-         "ClientExternalIdentity.count",],
-      ) do
-        if state == "orphan"
-          repository = ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider:)
-          repository.stub(:find_by_subject_for_link, OrphanIdentity.new("active")) do
-            ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.stub(:new, repository) do
-              Rails.logger.stub(:fatal, ->(message) { fatal_events << message.to_s }) do
-                browser.get(callback_path, params: { state: callback_state, ri: "jp" }, headers:)
+      signup_flow_delta = (state == "unknown" && intent == "sign_up") ? 1 : 0
+      assert_difference("ClientSignUpFlow.count", signup_flow_delta) do
+        assert_no_difference(["Client.count", "ClientToken.count", "ClientExternalIdentity.count"]) do
+          if state == "orphan"
+            repository = ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider:)
+            repository.stub(:find_by_subject_for_link, OrphanIdentity.new("active")) do
+              ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.stub(:new, repository) do
+                Rails.logger.stub(:fatal, ->(message) { fatal_events << message.to_s }) do
+                  browser.get(callback_path, params: { state: callback_state, ri: "jp" }, headers:)
+                end
               end
             end
+          else
+            browser.get(callback_path, params: { state: callback_state, ri: "jp" }, headers:)
           end
-        else
-          browser.get(callback_path, params: { state: callback_state, ri: "jp" }, headers:)
         end
       end
       expected_status =
@@ -194,6 +194,13 @@ class SocialCallbackRefusalMatrixTest < ActionDispatch::IntegrationTest
       end
 
       successful = (state == "registered" && intent == "sign_in") || (state == "unknown" && intent == "sign_up")
+
+      if signup_flow_delta == 1
+        flow = ClientSignUpFlow.find_by!(auth_admission_binding_id: binding.id)
+
+        assert_equal provider, flow.social_provider
+        assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, flow.status_id
+      end
 
       assert_equal successful, ceremony.reload.authentication_evidence_recorded?,
                    "#{provider}/#{intent}/#{state} evidence"

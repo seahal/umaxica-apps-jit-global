@@ -1,8 +1,8 @@
 // Registers the browser service worker that backs the offline fallback page.
 //
-// This is the browser Service Worker, not a Cloudflare Worker. Only the base and auth surfaces call
-// this; those are the surfaces whose layouts load a Vite bundle and whose origins serve
-// /service-worker, the route Rails' own PWA generator defines. See
+// This is the browser Service Worker, not a Cloudflare Worker. Only Base surfaces register this
+// offline worker. Auth serves a retirement script at /service-worker for old browser registrations.
+// See
 // adr/pwa-offline-route-exception.md.
 
 const SERVICE_WORKER_URL = "/service-worker";

@@ -5,18 +5,18 @@ class OperatorSecretCredentialsDestroy
   ACTION = "staff_secret_credential.delete"
   EVENT_ID = OperatorChronicleEvent::STAFF_SECRET_REMOVED
 
-  def self.call(actor:, secret_credential:, step_up_token:, step_up_requirement:, request: nil)
+  def self.call(actor:, secret_credential:, step_up_token:, step_up_evidence: nil, request: nil)
     new(
       actor: actor, secret_credential: secret_credential,
-      step_up_token: step_up_token, step_up_requirement: step_up_requirement, request: request,
+      step_up_token: step_up_token, step_up_evidence: step_up_evidence, request: request,
     ).call
   end
 
-  def initialize(actor:, secret_credential:, step_up_token:, step_up_requirement:, request:)
+  def initialize(actor:, secret_credential:, step_up_token:, step_up_evidence:, request:)
     @actor = actor
     @secret_credential = secret_credential
     @step_up_token = step_up_token
-    @step_up_requirement = step_up_requirement
+    @step_up_evidence = step_up_evidence
     @request = request
   end
 
@@ -90,16 +90,11 @@ class OperatorSecretCredentialsDestroy
   end
 
   def verify_step_up!
-    now = OperatorToken.database_now
-    requirement = @step_up_requirement
-    unless requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
-        requirement.scope == "settings_secret_credential" && requirement.actor_ref == @actor.public_id &&
-        requirement.token_binding == @step_up_token.public_id && @step_up_token.active_status?(now) &&
-        StepUpResolver.call(token: @step_up_token, requirement:, now:).satisfied?
-      raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret removal requires current Step-Up"
-    end
+    return if StepUpEvidenceVerifier.call(
+      evidence: @step_up_evidence, actor: @actor, token: @step_up_token,
+    )
 
-    now
+    raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret removal requires current Step-Up"
   end
 
   def ensure_audit_dependencies!

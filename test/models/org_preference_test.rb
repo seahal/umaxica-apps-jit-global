@@ -10,7 +10,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
                                      org_preference_density org_preference_page_size org_preference_consent_receipt
                                      org_preference_browser_binding org_preference_web_push
                                      org_preference_adult_content_gate
-                                     org_preference_chronicles replacements).freeze
+                                     org_preference_chronicles).freeze
 
   setup do
     OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::ACTIVE)
@@ -192,19 +192,6 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     preference.destroy!
 
     assert_nil OrgPreferenceTheme.find_by(id: theme_id)
-  end
-
-  test "adult_content_gate returns nothing when no gate is set" do
-    assert_equal "nothing", OrgPreference.new.adult_content_gate
-  end
-
-  test "adult_content_gate returns the gate option name when a gate is set" do
-    preference = OrgPreference.new
-    preference.build_org_preference_adult_content_gate(
-      option: OrgPreferenceAdultContentGateOption.new(id: OrgPreferenceAdultContentGateOption::APPROVED),
-    )
-
-    assert_equal "approved", preference.adult_content_gate
   end
 
   test "public_id is a fixed 21-character NanoID" do

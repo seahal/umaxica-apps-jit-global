@@ -137,12 +137,8 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           end
           signup_flows_before = ClientSignUpFlow.count
           post(flow1_continue_path, headers: flow1_headers)
-          signup_flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
-          admission = ClientAuthAdmissionBinding.find(signup_flow.auth_admission_binding_id)
 
-          assert_equal [signup_flows_before + 1, "sign_up", true, true, "social_callback"],
-                       [ClientSignUpFlow.count, admission.entry_intent, admission.redeemed?,
-                        signup_flow.expires_at <= admission.curfew_at, signup_flow.step,]
+          assert_equal [307, signup_flows_before], [response.status, ClientSignUpFlow.count]
           social_auth_state_from_response
         end
       setup_mock_auth(flow0_config, uid: flow0_uid, token: "new_signup_token")
@@ -434,9 +430,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         assert_equal [200, "auth/app/sign/up/check/social/confirmations/show"], [response.status, inertia_component]
         assert_predicate inertia_props.fetch("confirm_label"), :present?
       end
+      signup_flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+      admission = ClientAuthAdmissionBinding.find(signup_flow.auth_admission_binding_id)
+
       flow0_cycle = ClientSignUpFlow.order(:id).last
 
-      assert_equal [signup_flows_before + 1, signup_flow.id], [ClientSignUpFlow.count, flow0_cycle.id]
+      assert_equal [signup_flows_before + 1, signup_flow.id, "sign_up", true, true],
+                   [ClientSignUpFlow.count, flow0_cycle.id, admission.entry_intent, admission.redeemed?,
+                    signup_flow.expires_at <= admission.curfew_at,]
 
       begin
         flow5_config = flow0_config
@@ -463,10 +464,10 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           (flow5_config
                     .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
                       ri: "jp",
-                      fb: @social_signup_binding,
+                      fb: @social_signup_binding, pt: "/sign/up?ri=jp",
                     ) : auth_app_sign_up_check_apple_birthdate_url(
                       ri: "jp",
-                      fb: @social_signup_binding,
+                      fb: @social_signup_binding, pt: "/sign/up?ri=jp",
                     ),
         )
         follow_redirect!
@@ -721,8 +722,8 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
       assert_equal [ClientStatus::VERIFIED_WITH_SIGN_UP, "active"], [flow0_user.status_id, flow0_identity.state]
       assert_equal flow0_config.fetch(:provider), flow0_identity.provider
-      assert_not_nil flow0_identity.last_authenticated_at
-      assert_nil ClientEmail.find_by(user: flow0_user)
+      assert_equal [true, nil],
+                   [flow0_identity.last_authenticated_at.present?, ClientEmail.find_by(user: flow0_user)]
     end
   end
 
@@ -818,12 +819,8 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           end
           signup_flows_before = ClientSignUpFlow.count
           post(flow8_continue_path, headers: flow8_headers)
-          signup_flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
-          admission = ClientAuthAdmissionBinding.find(signup_flow.auth_admission_binding_id)
 
-          assert_equal [signup_flows_before + 1, "sign_up", true, true, "social_callback"],
-                       [ClientSignUpFlow.count, admission.entry_intent, admission.redeemed?,
-                        signup_flow.expires_at <= admission.curfew_at, signup_flow.step,]
+          assert_equal [307, signup_flows_before], [response.status, ClientSignUpFlow.count]
           social_auth_state_from_response
         end
       setup_mock_auth(flow7_config, uid: flow7_uid, token: "new_signup_token")
@@ -1115,9 +1112,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         assert_equal [200, "auth/app/sign/up/check/social/confirmations/show"], [response.status, inertia_component]
         assert_predicate inertia_props.fetch("confirm_label"), :present?
       end
+      signup_flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+      admission = ClientAuthAdmissionBinding.find(signup_flow.auth_admission_binding_id)
+
       flow7_cycle = ClientSignUpFlow.order(:id).last
 
-      assert_equal [signup_flows_before + 1, signup_flow.id], [ClientSignUpFlow.count, flow7_cycle.id]
+      assert_equal [signup_flows_before + 1, signup_flow.id, "sign_up", true, true],
+                   [ClientSignUpFlow.count, flow7_cycle.id, admission.entry_intent, admission.redeemed?,
+                    signup_flow.expires_at <= admission.curfew_at,]
 
       begin
         flow12_config = flow7_config
@@ -1140,10 +1142,10 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           (flow12_config
                     .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
                       ri: "jp",
-                      fb: @social_signup_binding,
+                      fb: @social_signup_binding, pt: "/sign/up?ri=jp",
                     ) : auth_app_sign_up_check_apple_birthdate_url(
                       ri: "jp",
-                      fb: @social_signup_binding,
+                      fb: @social_signup_binding, pt: "/sign/up?ri=jp",
                     ),
         )
         follow_redirect!
@@ -1399,8 +1401,8 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, flow7_user.status_id
       assert_equal "active", flow7_identity.state
       assert_equal flow7_config.fetch(:provider), flow7_identity.provider
-      assert_not_nil flow7_identity.last_authenticated_at
-      assert_nil ClientEmail.find_by(user: flow7_user)
+      assert_equal [true, nil],
+                   [flow7_identity.last_authenticated_at.present?, ClientEmail.find_by(user: flow7_user)]
     end
   end
 
@@ -4957,12 +4959,11 @@ class SocialAuthAppFlowContractTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
-  # The Auth callback records the authenticated OIDC result on Visa. The browser then follows the
-  # browser-bound GET continuation before the RP callback can run.
+  # The Auth callback records the authenticated OIDC result on Visa. The browser reads the
+  # continuation form with GET and submits its protected same-origin POST before the RP callback.
   def complete_social_oidc_visa_result!(target:, base_browser:, base_host:, visa_host:)
     raise "unexpected Visa result target" unless target.host == visa_host && target.path == "/oidc/result"
 
@@ -4976,7 +4977,22 @@ class SocialAuthAppFlowContractTest
         "Sec-Fetch-Site" => "cross-site",
       },
     )
-    raise "Visa result continuation did not redirect" unless base_browser.response.redirect?
+    raise RuntimeError, "Visa result did not render its POST continuation" unless base_browser.response.status == 200
+
+    form = Nokogiri::HTML(base_browser.response.body).at_css("form#visa-authorization-continuation-form")
+    raise RuntimeError, "Visa result continuation form is missing" unless form
+
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base_browser.post(
+      form["action"], params: fields, headers: {
+        "Host" => visa_host,
+        "Origin" => "https://#{visa_host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      },
+    )
+    raise RuntimeError, "Visa result continuation POST did not redirect" unless base_browser.response.redirect?
 
     callback_uri = URI.parse(base_browser.response.location)
     unless callback_uri.host == base_host
@@ -5009,9 +5025,11 @@ class SocialAuthAppFlowContractTest
     protocol_browser = open_session
     protocol_browser.host!(base_host)
     protocol_browser.https!
+    token_requests = 0
     transport =
       Faraday::Adapter::Test::Stubs.new do |stub|
         stub.post(/.*/) do |env|
+          token_requests += 1
           outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
           outer_actor = Actor.context
           executor_key = Rails.application.executor.active_key
@@ -5047,9 +5065,9 @@ class SocialAuthAppFlowContractTest
             protocol_browser.get(
               env.url.request_uri,
               headers: {
-                "Authorization" => env.request_headers.fetch("Authorization"),
+                "Authorization" => env.request_headers["Authorization"],
                 "Accept" => "application/json",
-              },
+              }.compact,
             )
           ensure
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
@@ -5073,7 +5091,7 @@ class SocialAuthAppFlowContractTest
     OutboundHttp::Connection.stub(
       :build,
       ->(**args) {
-        assert_equal visa_host, args.fetch(:url).host
+        assert_equal visa_host, URI(args.fetch(:url).to_s).host
         connection
       },
     ) do
@@ -5089,7 +5107,7 @@ class SocialAuthAppFlowContractTest
       cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
       cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,
     ]
-    transport.verify_stubbed_calls
+    assert_equal 1, token_requests
   end
 
   def set_access_cookie(token)
@@ -5193,9 +5211,27 @@ class SocialAuthAppFlowContractTest
       else
         raise "unexpected Sign Up switch host: #{target.host.inspect}"
       end
+
+      next unless current_host == visa_host && current_browser.response.status == 200
+
+      continuation_form = Nokogiri::HTML(current_browser.response.body)
+        .at_css("form#visa-authorization-continuation-form")
+      next unless continuation_form
+
+      fields = continuation_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      current_browser.post(
+        continuation_form["action"], params: fields, headers: {
+          "Host" => visa_host,
+          "Origin" => "https://#{visa_host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+        },
+      )
     end
 
-    raise "Sign Up switch did not settle on Auth" unless current_browser.equal?(self) && response.successful?
+    raise RuntimeError, "Sign Up switch did not settle on Auth" unless
+      current_browser.equal?(self) && current_browser.response.successful?
   end
 
   def decode_social_jump_target!(uri, issuer_namespace:, issuer_host:)
@@ -5236,24 +5272,6 @@ class SocialAuthAppFlowContractTest
     location
   end
 
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-
   def host_headers(host = nil)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]
     headers = { "Client-Agent" => self.class::TEST_BROWSER_USER_AGENT }
@@ -5269,48 +5287,20 @@ class SocialAuthAppFlowContractTest
 
   def mark_token_step_up_satisfied_for_test(token, scope:)
     actor = token.actor_record
-    token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
     credential = actor.client_totp_credentials.find_by(
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     ) || ClientTotpCredential.create_for_user!(
       user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    requirement = StepUpRequirement.new(
-      step_up_required: true, scope: scope, allowed_methods: [:totp],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      ttl: 15.minutes, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
-      resource_ref: nil, tenant_ref: nil,
-    )
-    nonce = SecureRandom.urlsafe_base64(32)
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: actor, token: token, requirement: requirement,
-      return_to: (scope == "settings_email") ? "/identity/emails" : "/settings/google",
-      base_browser_nonce: nonce, base_token: token,
-    )
-    transaction = issuance.transaction
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    attached, raw_sid = ClientAuthCeremonySession.issue!
-    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
-    digest = AuthAdmissionBinding.browser_digest(surface: "app", entry_ref: issuance.reference, nonce: nonce)
-    binding.confirm_base!(base_token: token, browser_digest: digest)
-    BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
-      raw_auth_sid: raw_sid,
-    )
-    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
-      step_up_ceremony_transaction_ref: transaction.transaction_id,
-    )
-    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
-    # This fixture exercises Social authorization; TOTP code verification has its own public-boundary tests.
-    transaction.record_verification!(
-      method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: transaction.class.database_now, verified_credential_ref: credential.public_id,
-    )
-    proof = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction, ceremony_session_ref: admitted.id.to_s)
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: actor, token: token, transaction: transaction, requirement: requirement, result_reference: proof.reference,
+    # This suite isolates Social authorization from issuance. The OIDC step-up transaction and
+    # callback are covered by their dedicated integration tests.
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: scope, last_step_up_method: "totp",
+      last_step_up_credential_ref: credential.public_id, last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false, last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: nil, last_step_up_tenant_ref: nil, last_step_up_purpose: "step_up",
+      last_step_up_audience: step_up_test_audience_for_token(token),
+      last_step_up_session_public_id: token.public_id,
     )
   end
 

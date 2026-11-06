@@ -3,103 +3,148 @@
 require "test_helper"
 
 class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
-  setup do
-    client_tokens(:one).update!(
-      last_step_up_at: ClientToken.database_now,
-      last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey",
-      last_step_up_session_public_id: client_tokens(:one).public_id,
-      last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true,
-      last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up",
-      last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: client_secret_credentials(:one).public_id,
-    )
-  end
-
   test "a superseded device token cannot authorize Secret revocation" do
     actor = clients(:one)
     token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     credential = client_secret_credentials(:one)
     actor.client_passkeys.create!(
       webauthn_id: "revocation-superseded-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     device = token.device_session_record!
+    token_before = token.reload.attributes
     replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
     device.update!(current_refresh_token_id: replacement.id)
 
     assert_raises(ClientSecretRevocationCommitter::Denied) do
       ClientSecretRevocationCommitter.call!(
         actor_context: context, token: token, credential: credential, purge_after: 1.day,
+        step_up_evidence: evidence,
       )
     end
     assert_nil credential.reload.revoked_at
-    assert_predicate token.reload.last_step_up_at, :present?
+    assert_equal token_before, token.reload.attributes
   end
 
   test "a revoked device cannot authorize Secret revocation" do
     actor = clients(:one)
     token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     credential = client_secret_credentials(:one)
     actor.client_passkeys.create!(
       webauthn_id: "revocation-device-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    token_before = token.attributes
     token.device_session_record!.revoke!
 
     assert_raises(ClientSecretRevocationCommitter::Denied) do
       ClientSecretRevocationCommitter.call!(
         actor_context: context, token: token, credential: credential, purge_after: 1.day,
+        step_up_evidence: evidence,
       )
     end
     assert_nil credential.reload.revoked_at
-    assert_predicate token.reload.last_step_up_at, :present?
+    assert_equal token_before, token.reload.attributes
   end
 
-  test "OP failure precedes Secret revocation and audit writes" do
+  test "a Step-Up event for a different OP grant is refused before revocation writes" do
     actor = clients(:one)
     token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     credential = client_secret_credentials(:one)
     actor.client_passkeys.create!(
       webauthn_id: "revocation-order-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
-    observed_revoked_at = :not_observed
-    observed_events = nil
-    observer =
-      lambda do |_name, _start, _finish, _id, event|
-        next unless event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_tokens"/i)
+    invalid_evidence = StepUpEvidenceValue.new(**evidence.to_h.merge(sid: SecureRandom.uuid))
+    token_before = token.attributes
 
-        observed_revoked_at = ClientSecretCredential.find(credential.id).revoked_at
-        observed_events = ClientSecretAuditOutbox.where(credential_ref: credential.public_id).count
-        raise TokenStatusManagement::StepUpEvidenceUnavailable, "injected OP consumption failure"
-      end
-
-    ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+    assert_no_difference("ClientSecretAuditOutbox.count") do
       assert_raises(ClientSecretRevocationCommitter::Denied) do
         ClientSecretRevocationCommitter.call!(
           actor_context: context, token: token, credential: credential, purge_after: 1.day,
+          step_up_evidence: invalid_evidence,
         )
       end
     end
 
-    assert_nil observed_revoked_at
-    assert_equal 0, observed_events
     assert_nil credential.reload.revoked_at
-    assert_predicate token.reload.last_step_up_at, :present?
+    assert_equal token_before, token.reload.attributes
   end
 
-  test "scoped owner revokes the final Secret while a Passkey remains and preserves the current session" do
+  test "owner revokes the final Secret while a Passkey remains and preserves the current session" do
     actor = clients(:one)
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      established_authentication_method: "secret", last_step_up_resource_ref: client_secret_credentials(:one).public_id,
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     actor.client_passkeys.create!(
       webauthn_id: "revocation-owner-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
@@ -114,6 +159,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       assert_difference("ClientSecretAuditOutbox.count", 2) do
         ClientSecretRevocationCommitter.call!(
           actor_context: context, token: token, credential: credential, purge_after: 1.day,
+          step_up_evidence: evidence,
         )
       end
     end
@@ -125,14 +171,12 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     assert_not credential.available_at?(at: Client.database_now)
     assert_nil ClientSecretLookupQuery.call(client: actor, secret: "a" * 32)
     assert_equal before - 1, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
-    # The session is preserved; only its Step-Up evidence is consumed (ADR D3).
-    step_up_columns = original_token.keys.grep(/\Alast_step_up_/)
-
-    assert_equal original_token.except(*step_up_columns, "updated_at"),
-                 token.reload.attributes.except(*step_up_columns, "updated_at")
-    assert_nil token.last_step_up_at
+    # Step-Up is reusable evidence and does not mutate the OP access-token row.
+    assert_equal original_token, token.reload.attributes
     assert_equal original_digest, credential.password_digest
-    events = ClientSecretAuditOutbox.where(credential_ref: credential.public_id)
+    events = ClientSecretAuditOutbox.where(
+      credential_ref: credential.public_id, event_name: %w(secret.discarded secret.revoked),
+    )
 
     assert_equal %w(secret.discarded secret.revoked), events.order(:event_name).pluck(:event_name)
     assert_equal ["user_revocation"], events.distinct.pluck(:reason)
@@ -140,18 +184,11 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     assert_equal 1, events.distinct.count(:operation_ref)
     assert_equal [nil], events.distinct.pluck(:delivered_at)
     first_deadline = credential.purge_eligible_at
-    # A replay is a new operation and needs its own Step-Up (ADR D3).
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: credential.public_id,
-    )
+    # The same current Step-Up evidence remains valid for a second operation.
     assert_no_difference("ClientSecretAuditOutbox.count") do
       ClientSecretRevocationCommitter.call!(
         actor_context: context, token: token, credential: credential, purge_after: 2.days,
+        step_up_evidence: evidence,
       )
     end
     assert_equal first_deadline, credential.reload.purge_eligible_at
@@ -171,10 +208,23 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
   test "generic persistence cannot clear or replace a committed revocation fact at adjacent microseconds" do
     actor = clients(:one)
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     actor.client_passkeys.create!(
       webauthn_id: "revocation-persistence-key", public_key: "synthetic-public-key",
@@ -184,6 +234,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 1.day,
+      step_up_evidence: evidence,
     )
     terminal_at = credential.reload.revoked_at
     [nil, terminal_at - Rational(1, 1_000_000), terminal_at, terminal_at + Rational(1, 1_000_000)].each do |replacement|
@@ -211,33 +262,46 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
   test "missing and mismatched Step-Up or a stale supplied session leave credential and audit unchanged" do
     actor = clients(:one)
     token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     credential = client_secret_credentials(:one)
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
-    mismatches = [
-      { last_step_up_at: nil }, { last_step_up_scope: "settings_passkey" },
-      { last_step_up_method: "secret" }, { last_step_up_session_public_id: client_tokens(:two).public_id },
-      { last_step_up_purpose: "bootstrap" }, { last_step_up_audience: "step_up:com" },
-      { last_step_up_at: ClientToken.database_now - StepUpRequirement::DEFAULT_TTL - 1.second },
-      { user_token_status_id: ClientTokenStatus::REVOKED },
-      { user_token_status_id: ClientTokenStatus::RESTRICTED },
-      { discard_at: ClientToken.database_now - 1.second },
+    invalid_evidence_values = [
+      nil,
+      evidence.to_h.merge(jti: SecureRandom.uuid),
+      evidence.to_h.merge(sid: SecureRandom.uuid),
+      evidence.to_h.merge(sub: "different-subject"),
+      evidence.to_h.merge(client_id: "different-client"),
+      evidence.to_h.merge(aud: ["different-audience"]),
+      evidence.to_h.merge(acr: "urn:example:invalid"),
+      evidence.to_h.merge(amr: ["secret"]),
+      evidence.to_h.merge(auth_time: now.to_i - StepUpEvidenceValue::MAX_AGE_SECONDS - 1),
+      evidence.to_h.merge(auth_time: now.to_i + 60),
     ]
-    mismatches.each do |mismatch|
+    invalid_evidence_values.each do |candidate_values|
+      candidate = candidate_values && StepUpEvidenceValue.new(**candidate_values)
       ClientToken.transaction(requires_new: true) do
-        ClientToken.where(id: token.id).update_all(
-          {
-            last_step_up_at: ClientToken.database_now,
-            last_step_up_scope: "settings_secret_credential",
-            last_step_up_method: "passkey",
-            last_step_up_session_public_id: token.public_id,
-            last_step_up_purpose: "step_up",
-            last_step_up_audience: "step_up:app",
-          }.merge(mismatch),
-        )
         assert_no_difference("ClientSecretAuditOutbox.count") do
           assert_raises(ClientSecretRevocationCommitter::Denied) do
             ClientSecretRevocationCommitter.call!(
               actor_context: context, token: token, credential: credential, purge_after: 1.day,
+              step_up_evidence: candidate,
             )
           end
         end
@@ -246,15 +310,48 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
         raise ActiveRecord::Rollback
       end
     end
+
+    [
+      { user_token_status_id: ClientTokenStatus::REVOKED },
+      { user_token_status_id: ClientTokenStatus::RESTRICTED },
+      { discard_at: ClientToken.database_now - 1.second },
+    ].each do |session_state|
+      ClientToken.transaction(requires_new: true) do
+        ClientToken.where(id: token.id).update_all(session_state)
+        assert_no_difference("ClientSecretAuditOutbox.count") do
+          assert_raises(ClientSecretRevocationCommitter::Denied) do
+            ClientSecretRevocationCommitter.call!(
+              actor_context: context, token: token, credential: credential, purge_after: 1.day,
+              step_up_evidence: evidence,
+            )
+          end
+        end
+        assert_nil credential.reload.revoked_at
+        raise ActiveRecord::Rollback
+      end
+    end
   end
 
   test "another owner's credential cannot be revoked with a valid scoped session" do
     actor = clients(:one)
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:two)
@@ -263,6 +360,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       assert_raises(ClientSecretRevocationCommitter::Denied) do
         ClientSecretRevocationCommitter.call!(
           actor_context: context, token: token, credential: credential, purge_after: 1.day,
+          step_up_evidence: evidence,
         )
       end
     end
@@ -275,10 +373,23 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       webauthn_id: "revocation-rollback-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -287,6 +398,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       Client.transaction(requires_new: true) do
         ClientSecretRevocationCommitter.call!(
           actor_context: context, token: token, credential: credential, purge_after: 1.day,
+          step_up_evidence: evidence,
         )
 
         assert_not_nil credential.reload.revoked_at
@@ -300,6 +412,25 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
 
   test "nonpositive retention boundary and type sentinels are refused before mutation" do
     actor = clients(:one)
+    token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     [-1.second, 0.seconds, nil, 0, "1", [], {}, Float::INFINITY.seconds].each do |duration|
@@ -307,6 +438,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
         assert_raises(ArgumentError) do
           ClientSecretRevocationCommitter.call!(
             actor_context: context, token: client_tokens(:one), credential: credential, purge_after: duration,
+            step_up_evidence: evidence,
           )
         end
       end
@@ -317,6 +449,24 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
   test "last available login method protection is retained even with current Step-Up" do
     actor = clients(:one)
     token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     actor.client_external_identities.delete_all
     actor.client_emails.delete_all
     actor.client_passkeys.delete_all
@@ -328,17 +478,13 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
       binding_finalized_at: ClientTelephone.database_now,
     )
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-    )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
 
     assert_no_difference("ClientSecretAuditOutbox.count") do
       assert_raises(ClientSecretRevocationCommitter::Denied) do
         ClientSecretRevocationCommitter.call!(
           actor_context: context, token: token, credential: client_secret_credentials(:one), purge_after: 1.day,
+          step_up_evidence: evidence,
         )
       end
     end
@@ -350,15 +496,29 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       webauthn_id: "revocation-retention-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
+      step_up_evidence: evidence,
     )
     credential.reload
 
@@ -371,10 +531,23 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       webauthn_id: "revocation-audit-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -385,6 +558,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
         assert_raises(ActiveRecord::RecordInvalid) do
           ClientSecretRevocationCommitter.call!(
             actor_context: context, token: token, credential: credential, purge_after: 1.day,
+            step_up_evidence: evidence,
           )
         end
       end
@@ -395,6 +569,25 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
 
   test "anonymous other surface and absent or foreign session bindings cannot authorize revocation" do
     actor = clients(:one)
+    token = client_tokens(:one)
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
+    )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     inputs = [
@@ -407,11 +600,12 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       [context, client_tokens(:one), ClientSecretCredential.new],
     ]
 
-    inputs.each do |actor_context, token, target|
+    inputs.each do |actor_context, candidate_token, target|
       assert_no_difference("ClientSecretAuditOutbox.count") do
         assert_raises(ClientSecretRevocationCommitter::Denied) do
           ClientSecretRevocationCommitter.call!(
-            actor_context: actor_context, token: token, credential: target, purge_after: 1.day,
+            actor_context: actor_context, token: candidate_token, credential: target, purge_after: 1.day,
+            step_up_evidence: evidence,
           )
         end
       end
@@ -425,10 +619,23 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       webauthn_id: "revocation-terminal-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -445,6 +652,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
           assert_raises(ClientSecretRevocationCommitter::Denied) do
             ClientSecretRevocationCommitter.call!(
               actor_context: context, token: token, credential: credential, purge_after: 1.day,
+              step_up_evidence: evidence,
             )
           end
         end
@@ -460,28 +668,34 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
       webauthn_id: "revocation-validation-key", public_key: "synthetic-public-key", status_id: ClientPasskeyStatus::ACTIVE,
     )
     token = client_tokens(:one)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    client = OidcClientRegistry.find!("base-app-ww")
+    auth_time = now.to_i
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(auth_time).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      aud: [client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     [{ name: "" }, { password_digest: "" }].each do |invalid|
-      token.reload.update!(
-        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-        last_step_up_resource_ref: credential.public_id,
-      )
       Client.transaction(requires_new: true) do
         ClientSecretCredential.where(id: credential.id).update_all(invalid)
         assert_no_difference("ClientSecretAuditOutbox.count") do
           assert_raises(ActiveRecord::RecordInvalid) do
             ClientSecretRevocationCommitter.call!(
               actor_context: context, token: token, credential: credential, purge_after: 1.day,
+              step_up_evidence: evidence,
             )
           end
         end

@@ -6,10 +6,41 @@ require "test_helper"
 # adr/unified-enforcement.md and adr/operator-capability-authorization.md. Every test states the
 # capability grants it relies on in its own body: being an operator authorizes nothing on its own.
 class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+  skip_transactional_tests_for_database :app_zenith
+  skip_transactional_tests_for_database :org_zenith
+  skip_transactional_tests_for_database :op_base_org
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    @operator = operators(:one)
-    @approver = operators(:two)
+    @operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    @approver = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    [@operator, @approver].each do |operator|
+      2.times do |index|
+        OperatorPasskey.create!(
+          staff_id: operator.id,
+          webauthn_id: SecureRandom.urlsafe_base64(32),
+          external_id: SecureRandom.uuid,
+          public_key: "enforcement-test-public-key",
+          sign_count: 0,
+          description: "Enforcement test Passkey #{index + 1}",
+          status_id: OperatorPasskeyStatus::ACTIVE,
+        )
+      end
+    end
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @operator_token = OperatorToken.create!(
       authentication_epoch: 0,
       staff_id: @operator.id,
@@ -26,6 +57,48 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
     )
+  end
+
+  teardown do
+    operator_ids = [@operator&.id, @approver&.id].compact
+    operator_public_ids = [@operator&.public_id, @approver&.public_id].compact
+    token_ids = [@operator_token&.id, @approver_token&.id].compact
+    client_ids = [@client&.id].compact
+    client_public_ids = [@client&.public_id].compact
+
+    app_cases = AppEnforcementCase.where(applied_by_operator_public_id: operator_public_ids)
+    app_cases = app_cases.or(AppEnforcementCase.where(principal_public_id: client_public_ids))
+    org_cases = OrgEnforcementCase.where(applied_by_operator_public_id: operator_public_ids)
+    org_cases = org_cases.or(OrgEnforcementCase.where(principal_public_id: operator_public_ids))
+
+    AppEnforcementAppeal.where(app_enforcement_case_id: app_cases.select(:id)).delete_all
+    AppEnforcementPrincipalEffect.where(app_enforcement_case_id: app_cases.select(:id)).delete_all
+    AppEnforcementAuthenticationMethodEffect.where(app_enforcement_case_id: app_cases.select(:id)).delete_all
+    AppEnforcementIdentifierEffect.where(app_enforcement_case_id: app_cases.select(:id)).delete_all
+    AppEnforcementPrincipalLink.where(app_enforcement_case_id: app_cases.select(:id)).delete_all
+    app_cases.delete_all
+
+    OrgEnforcementAppeal.where(org_enforcement_case_id: org_cases.select(:id)).delete_all
+    OrgEnforcementPrincipalEffect.where(org_enforcement_case_id: org_cases.select(:id)).delete_all
+    OrgEnforcementAuthenticationMethodEffect.where(org_enforcement_case_id: org_cases.select(:id)).delete_all
+    OrgEnforcementIdentifierEffect.where(org_enforcement_case_id: org_cases.select(:id)).delete_all
+    OrgEnforcementPrincipalLink.where(org_enforcement_case_id: org_cases.select(:id)).delete_all
+    org_cases.delete_all
+
+    OperatorCapabilityGrant.where(operator_id: operator_ids).or(
+      OperatorCapabilityGrant.where(granted_by_operator_id: operator_ids),
+    ).delete_all
+    OperatorPasskey.where(staff_id: operator_ids).delete_all
+    OpOrgGrant.where(operator_token_id: token_ids).includes(:logout_hint).destroy_all
+    device_session_ids = OperatorToken.where(id: token_ids).pluck(:device_session_id).compact
+    OperatorDeviceSession.where(id: device_session_ids).update_all(current_refresh_token_id: nil)
+    OperatorToken.where(id: token_ids).delete_all
+    OperatorDeviceSession.where(id: device_session_ids).delete_all
+
+    AppIdentityAuthenticationEvent.where(actor_ref: client_ids.map(&:to_s)).delete_all
+    OrgIdentityAuthenticationEvent.where(actor_ref: operator_ids.map(&:to_s)).delete_all
+    Client.where(id: client_ids).delete_all
+    Operator.where(id: operator_ids).delete_all
   end
 
   test "an operator with no grant is refused the case list" do
@@ -76,14 +149,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -157,14 +241,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -226,14 +321,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -242,7 +348,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       end
     post(
       base_org_support_app_enforcement_cases_url(host: @host),
-      params: { enforcement_case: { kind: "cooldown", principal_public_id: clients(:one).public_id } },
+      params: { enforcement_case: { kind: "cooldown", principal_public_id: @client.public_id } },
       headers: http_headers_18,
       as: :json,
     )
@@ -308,14 +414,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -379,14 +496,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -395,7 +523,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       end
     post(
       base_org_support_app_enforcement_cases_url(host: @host),
-      params: { enforcement_case: { kind: "cooldown", principal_public_id: clients(:one).public_id } },
+      params: { enforcement_case: { kind: "cooldown", principal_public_id: @client.public_id } },
       headers: http_headers_14,
       as: :json,
     )
@@ -466,14 +594,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                          resource_type: "operator",
                                        ), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_local_session = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+              ).session
+              raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+              ]
             end
             if @base_browser_rp_credentials[rp_key]
-              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
               rp_cookie = [
                 rp_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
               ].join("; ")
               rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
             end
@@ -491,7 +630,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
             effective_at: Time.current,
             expires_at: 1.day.from_now,
             reason_code: "abuse",
-            principal_public_id: clients(:one).public_id,
+            principal_public_id: @client.public_id,
           },
         },
         headers: http_headers_13,
@@ -499,11 +638,13 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       )
     end
 
-    assert_response :unprocessable_content
-    assert_includes response.parsed_body.fetch("error"), "Step-up authentication required"
+    assert_response :unauthorized
+    assert_match(/Bearer error="insufficient_user_authentication"/, response.headers.fetch("WWW-Authenticate"))
+    assert_match(/max_age="300"/, response.headers.fetch("WWW-Authenticate"))
+    assert_equal "private, no-store", response.headers.fetch("Cache-Control")
   end
 
-  test "Step-Up for a different scope does not satisfy the apply scope" do
+  test "recent Step-Up evidence is reusable for a different protected operation" do
     [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, OperatorCapabilityGrant::ENFORCEMENT_APPLY_APP].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @operator,
@@ -515,7 +656,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_release")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_12 =
       begin
@@ -564,14 +756,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -580,17 +783,28 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       end
     post(
       base_org_support_app_enforcement_cases_url(host: @host),
-      params: { enforcement_case: { kind: "cooldown", principal_public_id: clients(:one).public_id } },
+      params: {
+        enforcement_case: {
+          kind: "cooldown",
+          duration_mode: "timed",
+          visibility: "visible",
+          release_mode: "automatic",
+          effective_at: Time.current,
+          expires_at: 1.day.from_now,
+          reason_code: "abuse",
+          principal_public_id: @client.public_id,
+        },
+      },
       headers: http_headers_12,
       as: :json,
     )
 
-    assert_response :unprocessable_content
-    assert_includes response.parsed_body.fetch("error"), "Step-up authentication required"
+    assert_response :created
+    assert_equal "active", response.parsed_body.fetch("state")
   end
 
   test "operator with apply capability and Step-Up opens a cooldown case that applies immediately" do
-    client = clients(:one)
+    client = @client
     [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, OperatorCapabilityGrant::ENFORCEMENT_APPLY_APP].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @operator,
@@ -602,7 +816,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_apply")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_11 =
       begin
@@ -651,14 +916,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -689,7 +965,6 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_equal "active", body.fetch("state")
     assert_equal client.public_id, body.fetch("principal_public_id")
     assert_equal @operator.public_id, body.fetch("applied_by_operator_public_id")
-    assert_nil @operator_token.reload.last_step_up_at
   end
 
   test "a case naming no existing principal is not found" do
@@ -704,7 +979,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_apply")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     # A visitor principal no longer exists; any unknown principal references stay not-found.
     ["NO0SUCH0PRINCIPAL"].each do |principal_public_id|
@@ -757,14 +1083,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                            resource_type: "operator",
                                          ), client_id: rp_client.client_id,
                 )
-                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+                rp_local_session = RpCallbackCommitter.call(
+                  cell: RpCellBinding.for_client(rp_client.client_id),
+                  issuer: OidcIssuer.for_client(rp_client),
+                  subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                  sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+                ).session
+                raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+                @base_browser_rp_credentials[rp_key] = [
+                  rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+                ]
               end
               if @base_browser_rp_credentials[rp_key]
-                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
                 rp_cookie = [
                   rp_headers.fetch("Cookie"),
                   "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                   "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                  "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
                 ].join("; ")
                 rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
               end
@@ -806,7 +1143,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_apply")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     assert_no_difference -> { AppEnforcementCase.count } do
       http_headers_9 =
@@ -857,14 +1245,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                          resource_type: "operator",
                                        ), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_local_session = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+              ).session
+              raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+              ]
             end
             if @base_browser_rp_credentials[rp_key]
-              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
               rp_cookie = [
                 rp_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
               ].join("; ")
               rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
             end
@@ -881,7 +1280,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
             release_mode: "break_glass_only",
             effective_at: Time.current,
             reason_code: "abuse",
-            principal_public_id: clients(:one).public_id,
+            principal_public_id: @client.public_id,
             break_glass: true,
             break_glass_approved_by_operator_public_id: @approver.public_id,
           },
@@ -906,7 +1305,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_apply")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_8 =
       begin
@@ -955,14 +1405,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -979,7 +1440,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
           release_mode: "break_glass_only",
           effective_at: Time.current,
           reason_code: "abuse",
-          principal_public_id: clients(:one).public_id,
+          principal_public_id: @client.public_id,
           approved_by_operator_public_id: @approver.public_id,
         },
       },
@@ -996,7 +1457,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
   end
 
   test "a second operator with the approve capability approves, and the audit event names them" do
-    client = clients(:one)
+    client = @client
     the_case = AppEnforcementCase.create!(
       kind: "permanent_ban",
       duration_mode: "permanent",
@@ -1020,7 +1481,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@approver_token, scope: "enforcement_case_approve")
+    step_up_token = @approver_token
+    step_up_actor = @approver
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_7 =
       begin
@@ -1069,14 +1581,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1095,7 +1618,6 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
 
     assert_equal "active", the_case.state
     assert_equal @approver.public_id, the_case.approved_by_operator_public_id
-    assert_nil @approver_token.reload.last_step_up_at
     assert_predicate client.reload, :admin_locked?
     approved = EnforcementEvent.find_by!(case_public_id: the_case.public_id, event_type: "approved")
 
@@ -1103,7 +1625,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
   end
 
   test "a second approval of the same case is a conflict and does not apply it twice" do
-    client = clients(:one)
+    client = @client
     the_case = AppEnforcementCase.create!(
       kind: "permanent_ban",
       duration_mode: "permanent",
@@ -1127,7 +1649,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@approver_token, scope: "enforcement_case_approve")
+    step_up_token = @approver_token
+    step_up_actor = @approver
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
     headers =
       begin
         rp_headers = as_staff_headers(@approver, host: @host, session_public_id: @approver_token.public_id)
@@ -1175,14 +1748,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1198,28 +1782,27 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     )
 
     assert_response :ok
-    assert_nil @approver_token.reload.last_step_up_at
 
+    replay_headers = headers.dup
+    replay_cookie_values =
+      replay_headers.fetch("Cookie").split("; ").to_h do |entry|
+        entry.split("=", 2)
+      end
+    response.cookies.each { |name, value| replay_cookie_values[name] = value }
+    replay_cookie = replay_cookie_values.map { |name, value| "#{name}=#{value}" }.join("; ")
+    replay_headers = replay_headers.merge("Cookie" => replay_cookie, "HTTP_COOKIE" => replay_cookie)
+    if replay_cookie_values.key?(AuthenticationBase::ACCESS_COOKIE_KEY)
+      replay_headers["Authorization"] = "Bearer #{replay_cookie_values.fetch(AuthenticationBase::ACCESS_COOKIE_KEY)}"
+    end
     post(
       base_org_support_app_enforcement_case_approval_url(the_case.public_id, host: @host),
       params: { principal_effect: { access_blocking: true } },
-      headers: headers,
-      as: :json,
-    )
-
-    assert_response :unprocessable_content
-    assert_equal "active", the_case.reload.state
-
-    mark_token_step_up_satisfied_for_test(@approver_token, scope: "enforcement_case_approve")
-    post(
-      base_org_support_app_enforcement_case_approval_url(the_case.public_id, host: @host),
-      params: { principal_effect: { access_blocking: true } },
-      headers: headers,
+      headers: replay_headers,
       as: :json,
     )
 
     assert_response :conflict
-    assert_predicate @approver_token.reload.last_step_up_at, :present?
+    assert_equal "active", the_case.reload.state
     assert_equal 1, EnforcementEvent.where(case_public_id: the_case.public_id, event_type: "applied").count
   end
 
@@ -1231,7 +1814,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       release_mode: "break_glass_only",
       effective_at: Time.current,
       reason_code: "abuse",
-      principal_public_id: clients(:one).public_id,
+      principal_public_id: @client.public_id,
       applied_by_operator_public_id: @operator.public_id,
       state: "pending_approval",
     )
@@ -1247,7 +1830,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_approve")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_6 =
       begin
@@ -1296,14 +1930,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1329,7 +1974,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
       release_mode: "break_glass_only",
       effective_at: Time.current,
       reason_code: "abuse",
-      principal_public_id: clients(:one).public_id,
+      principal_public_id: @client.public_id,
       applied_by_operator_public_id: @operator.public_id,
       state: "pending_approval",
     )
@@ -1346,7 +1991,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
           expires_at: 1.day.from_now,
         )
       end
-    mark_token_step_up_satisfied_for_test(@approver_token, scope: "enforcement_case_approve")
+    step_up_token = @approver_token
+    step_up_actor = @approver
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
     grants.last.update!(revoked_at: Time.current, revoked_by_operator: @operator, revoke_reason_code: "duty_ended")
 
     http_headers_5 =
@@ -1396,14 +2092,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1422,7 +2129,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
   end
 
   test "releasing one blocking case keeps the principal locked while another blocking case is in force" do
-    client = clients(:one)
+    client = @client
     first, second =
       2.times.map do
       the_case = AppEnforcementCase.new(
@@ -1459,7 +2166,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_release")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
     headers =
       begin
         rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
@@ -1507,14 +2265,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1532,35 +2301,34 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_response :ok
     assert_predicate first.reload.ended_at, :present?
     assert_predicate client.reload, :admin_locked?
-    assert_nil @operator_token.reload.last_step_up_at
 
+    replay_headers = headers.dup
+    replay_cookie_values =
+      replay_headers.fetch("Cookie").split("; ").to_h do |entry|
+        entry.split("=", 2)
+      end
+    response.cookies.each { |name, value| replay_cookie_values[name] = value }
+    replay_cookie = replay_cookie_values.map { |name, value| "#{name}=#{value}" }.join("; ")
+    replay_headers = replay_headers.merge("Cookie" => replay_cookie, "HTTP_COOKIE" => replay_cookie)
+    if replay_cookie_values.key?(AuthenticationBase::ACCESS_COOKIE_KEY)
+      replay_headers["Authorization"] = "Bearer #{replay_cookie_values.fetch(AuthenticationBase::ACCESS_COOKIE_KEY)}"
+    end
     post(
       base_org_support_app_enforcement_case_release_url(second.public_id, host: @host),
       params: { reason: "revoked" },
-      headers: headers,
-      as: :json,
-    )
-
-    assert_response :unprocessable_content
-
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_release")
-    post(
-      base_org_support_app_enforcement_case_release_url(second.public_id, host: @host),
-      params: { reason: "revoked" },
-      headers: headers,
+      headers: replay_headers,
       as: :json,
     )
 
     assert_response :ok
     assert_not_predicate client.reload, :admin_locked?
-    assert_nil @operator_token.reload.last_step_up_at
     ended = EnforcementEvent.find_by!(case_public_id: second.public_id, event_type: "ended")
 
     assert_equal @operator.public_id, ended.operator_public_id
   end
 
   test "an unknown release reason is refused instead of defaulting" do
-    client = clients(:one)
+    client = @client
     the_case = AppEnforcementCase.new(
       kind: "temporary_freeze",
       duration_mode: "timed",
@@ -1588,8 +2356,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_release")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
 
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
     ["", "break_glass_released", "appeal_approved", "REVOKED"].each do |reason|
       http_headers_4 =
         begin
@@ -1639,14 +2457,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                          resource_type: "operator",
                                        ), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_local_session = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+              ).session
+              raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+              ]
             end
             if @base_browser_rp_credentials[rp_key]
-              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
               rp_cookie = [
                 rp_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
               ].join("; ")
               rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
             end
@@ -1660,13 +2489,21 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         as: :json,
       )
 
+      credential_key = ["base-org-ww", @operator_token.public_id]
+      rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(credential_key)
+      @base_browser_rp_credentials[credential_key] = [
+        response.cookies.fetch(OidcRpBrowserCredentialContract::ACCESS_COOKIE, rp_access),
+        response.cookies.fetch(OidcRpBrowserCredentialContract::REFRESH_COOKIE, rp_refresh),
+        rp_local_session_public_id,
+      ]
+
       assert_response :unprocessable_content
     end
     assert_nil the_case.reload.ended_at
   end
 
   test "a permanent ban is not released through the console" do
-    client = clients(:one)
+    client = @client
     the_case = AppEnforcementCase.new(
       kind: "permanent_ban",
       duration_mode: "permanent",
@@ -1699,7 +2536,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@operator_token, scope: "enforcement_case_release")
+    step_up_token = @operator_token
+    step_up_actor = @operator
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_3 =
       begin
@@ -1748,14 +2636,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1775,7 +2674,7 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
   end
 
   test "a separate operator with the review capability rejects an appeal, and the event names them" do
-    client = clients(:one)
+    client = @client
     the_case = AppEnforcementCase.create!(
       kind: "security_lock",
       state: "draft",
@@ -1807,7 +2706,58 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
         expires_at: 1.day.from_now,
       )
     end
-    mark_token_step_up_satisfied_for_test(@approver_token, scope: "enforcement_case_review_appeal")
+    step_up_token = @approver_token
+    step_up_actor = @approver
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_token.rotate_refresh_token!(now: step_up_now)
+    step_up_token.reload
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_acr = StepUpEvidenceResolver::STEP_UP_ACR
+    step_up_amr = ["passkey"]
+    step_up_event = OpOrgGrant.create!(
+      authentication_epoch: step_up_token.authentication_epoch,
+      operator_token: step_up_token,
+      oidc_client_id: step_up_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(step_up_now.to_time.to_i).utc,
+      oidc_acr: step_up_acr,
+      oidc_amr: JSON.generate(step_up_amr),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_refresh_token = step_up_event.issue_refresh_token!
+    step_up_access_token = AuthenticationTokenService.encode(
+      step_up_token.actor_record,
+      host: URI.parse(@host).host,
+      resource_type: "operator",
+      session_public_id: step_up_token.public_id,
+      base_session_public_id: step_up_token.public_id,
+      oidc_sid: step_up_event.public_id,
+      oidc_jti: step_up_event.oidc_jti,
+      expires_at: step_up_now + 10.minutes,
+      scopes: %w(openid profile),
+      acr: step_up_acr,
+      amr: step_up_amr,
+      auth_time: step_up_now.to_time.to_i,
+      client_id: step_up_client.client_id,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+      issuer: OidcIssuer.for_client(step_up_client),
+      audiences: [step_up_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+    )
+    step_up_local_session = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(step_up_actor, resource_type: "operator"),
+      sid: step_up_event.public_id, absolute_expires_at: 1.hour.from_now,
+    ).session
+    raise RuntimeError, "Base ORG Step-Up RP session enrollment failed" unless step_up_local_session
+
+    (@base_browser_rp_credentials ||= {})[[step_up_client.client_id, step_up_token.public_id]] = [
+      step_up_access_token, step_up_refresh_token, step_up_local_session.public_id,
+    ]
 
     http_headers_2 =
       begin
@@ -1856,14 +2806,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -1880,14 +2841,13 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     assert_response :ok
     assert_equal "rejected", appeal.reload.state
     assert_equal @approver.public_id, appeal.reviewer_operator_public_id
-    assert_nil @approver_token.reload.last_step_up_at
     event = EnforcementEvent.find_by!(case_public_id: the_case.public_id, event_type: "appeal_rejected")
 
     assert_equal @approver.public_id, event.operator_public_id
   end
 
   test "index scopes strictly to the app realm" do
-    app_client = clients(:one)
+    app_client = @client
     app_case = AppEnforcementCase.create!(
       kind: "cooldown",
       duration_mode: "timed",
@@ -1956,14 +2916,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -2040,14 +3011,25 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_local_session = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id, absolute_expires_at: 1.hour.from_now,
+            ).session
+            raise RuntimeError, "Base ORG RP session enrollment failed" unless rp_local_session
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_local_session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_public_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_public_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -2061,39 +3043,5 @@ class Base::Org::Support::EnforcementCasesControllerTest < ActionDispatch::Integ
     )
 
     assert_response :bad_request
-  end
-
-  private
-
-  # as_staff_headers / host_headers come from the globally-included
-  # AuthenticationHarness (test/test_helper.rb) -- it mints a real JWT access
-  # cookie for the operator, unlike the raw X-TEST-* headers some older test
-  # files shadow it with locally.
-
-  def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
-    return unless token.respond_to?(:update_columns)
-
-    attrs = {
-      last_step_up_at: at,
-      last_step_up_scope: scope.presence || token.try(:last_step_up_scope).presence || "verification",
-      last_step_up_aal: ("aal2" if token.respond_to?(:last_step_up_aal)),
-      last_step_up_method: ("passkey" if token.respond_to?(:last_step_up_method)),
-      last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
-      last_step_up_phishing_resistant: true,
-      last_step_up_user_verified: true,
-      last_step_up_full_reauthentication: false,
-      last_step_up_credential_ref: "test-step-up-credential",
-      updated_at: Time.current,
-    }.compact
-    token.update_columns(attrs)
-  end
-
-  def step_up_test_audience_for_token(token)
-    case token.class.name
-    when "OperatorToken" then "step_up:org"
-    else "step_up:app"
-    end
   end
 end

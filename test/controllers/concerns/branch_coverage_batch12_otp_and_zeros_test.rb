@@ -18,10 +18,10 @@ class BranchCoverageBatch12OtpAndZerosTest < ActionDispatch::IntegrationTest
         else
           ClientTelephone.create!(
             user_id: owner.id,
-            :raw_number => "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(
+            raw_number: "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(
               8,
               "0",
-            )}", :confirm_policy => true,
+            )}", confirm_policy: true,
           )
         end
       now = ClientSignUpFlow.database_now

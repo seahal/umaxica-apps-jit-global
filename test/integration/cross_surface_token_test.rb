@@ -17,8 +17,8 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
   CHECK_PATH = "/edge/v0/token/check"
 
   setup do
-    @app_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
-    @org_host = ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+    @app_host = ENV.fetch("PRIVATE_VISA_SERVICE_URL")
+    @org_host = ENV.fetch("PRIVATE_VISA_STAFF_URL")
     @user = clients(:one)
     @staff = operators(:one)
     ClientToken.where(user: @user).delete_all
@@ -75,7 +75,7 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: host) do
+    with_preference_realm_issuers do
       get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
@@ -93,7 +93,7 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: host) do
+    with_preference_realm_issuers do
       get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
@@ -135,13 +135,14 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
 
   def preference_token_for(host:, preference_type:, public_id:, preferences:)
     token = nil
-    with_preference_jwt_keys(host: host) do
+    with_preference_realm_issuers do
       token = PreferenceToken.encode(
         preferences,
         host: host,
         preference_type: preference_type,
         public_id: public_id,
         jti: "test-jti-#{SecureRandom.uuid}",
+        issued_at: Time.current,
       )
     end
     token
@@ -163,23 +164,6 @@ class CrossSurfaceTokenTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def jwt_issuer_id_for_test_host(host, resource_type)
-    normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
-    surface =
-      if service == "AUTH"
-        case resource_type
-        when "operator" then "ORG"
-        else "APP"
-        end
-      elsif normalized.include?(".org") || normalized.include?("org.")
-        "ORG"
-      else
-        "APP"
-      end
-    "surface:#{service}_#{surface}"
   end
 
   def ensure_user_reference_records!
@@ -383,7 +367,6 @@ class CrossSurfaceTokenTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -406,24 +389,6 @@ class CrossSurfaceTokenTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

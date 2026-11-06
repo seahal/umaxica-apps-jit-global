@@ -222,7 +222,7 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
 
   [
     [ClientEmail, ClientEmailHistory, :user_id, :clients],
-  ].each do |model, history_model, owner_key, fixture_name|
+  ].each do |model, history_model, owner_key, _fixture_name|
     test "#{model.name} physical retention purge creates one dead history and permits future reuse" do
       owner = clients(:one)
       record = model.create!(
@@ -264,7 +264,7 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
 
   [
     [ClientTelephone, ClientTelephoneHistory, :user_id, :clients],
-  ].each do |model, history_model, owner_key, fixture_name|
+  ].each do |model, history_model, owner_key, _fixture_name|
     test "#{model.name} physical retention purge creates dead telephone history without lookup material" do
       owner = clients(:one)
       record = model.create!(

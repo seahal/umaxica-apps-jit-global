@@ -23,48 +23,50 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
       },
     )
     JitSecurityJwtRegistry.surface("BASE_APP")
-    2.times do |index|
-      target = URI.parse(@base_browser.response.location)
+    # The Base sign entry hands the browser to the Visa OP authorize endpoint, which
+    # relays an unauthenticated browser to the Auth sign-in entry. The Auth admission
+    # then runs its ceremony-binding confirmation on Visa and redeems the reference,
+    # so the chain must be followed until Auth renders the sign-in page itself.
+    admission_browser = @base_browser
+    12.times do |admission_index|
+      raise RuntimeError, "Social admission stopped before a redirect" unless admission_browser.response.redirect?
+
+      target = URI.parse(admission_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless target.host == base_host
-        target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
+      3.times do
+        break unless target.host == "jump.umaxica.net"
+
+        unwrapped = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
+        break if unwrapped.to_s == target.to_s
+
+        target = unwrapped
       end
-      if index.zero?
+      if admission_index.zero?
         raise RuntimeError,
               "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
-
-        @base_browser.host!(target.host)
-        @base_browser.get(target.request_uri)
-        form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        @base_browser.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{visa_host_for_test_base_host(base_host)}", "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      else
+      elsif admission_index == 1
         raise RuntimeError, "Auth admission host mismatch" unless target.host == auth_host
-
-        host!(auth_host)
-        https!
-        get(target.request_uri)
       end
-    end
-    3.times do |index|
-      sender = (index == 1) ? @base_browser : self
-      form = Nokogiri::HTML(sender.response.body).at_css("form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      sender.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{(index == 1) ? visa_host_for_test_base_host(base_host) : auth_host}", "Sec-Fetch-Site" => "same-origin",
+      next_browser =
+        if target.host.nil?
+          admission_browser
+        elsif target.host == auth_host
+          self
+        else
+          @base_browser
+        end
+      next_browser.host!(target.host) if target.host
+      next_browser.https!
+      next_browser.get(
+        target.request_uri, headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
         },
       )
-      raise RuntimeError, "Social admission failed at step #{index}" unless sender.response.status == 303
-      next if index == 2
-
-      receiver = index.zero? ? @base_browser : self
-      receiver.get(URI.parse(sender.response.location).request_uri)
+      admission_browser = next_browser
+      break if next_browser == self && !response.redirect?
     end
+
+    assert_equal [auth_host, 200], [request.host, response.status]
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
   end
 
@@ -89,26 +91,49 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
   end
 
   %w(google apple).each do |provider|
-    test "#{provider} sign-up entry issues a sign-up flow" do
+    test "#{provider} sign-up attempt issues its sign-up flow at the verified callback" do
+      previous_test_mode = OmniAuth.config.test_mode
+      OmniAuth.config.test_mode = true
+      OmniAuth.config.mock_auth[provider.to_sym] = OmniAuth::AuthHash.new(
+        provider: provider, uid: "entry-flow-#{provider}-#{SecureRandom.hex(4)}", info: { name: "Fixture" },
+        credentials: { token: "fixture", expires_at: 1.hour.from_now.to_i },
+      )
       switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
-      assert_difference("ClientSignUpFlow.count", 1) do
-        post public_send(:"auth_app_social_#{provider}_registration_path", provider: provider, ri: "jp")
+      # The entry hands off to the provider without issuing a Flow; the verified
+      # callback issues the attempt's one Flow (AppSocialCeremonyEntry).
+      assert_no_difference("ClientSignUpFlow.count") do
+        post(public_send(:"auth_app_social_#{provider}_registration_path", provider: provider, ri: "jp"))
       end
 
       assert_response :temporary_redirect
+      state = session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
 
+      assert_difference("ClientSignUpFlow.count", 1) do
+        get(
+          public_send(:"auth_app_social_#{provider}_callback_path"),
+          params: { state: state, ri: "jp" },
+          headers: {
+            "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+      end
+
+      assert_response :found
       cycle = ClientSignUpFlow.order(:created_at).last
 
       assert_equal provider, cycle.entry_method
       assert_equal provider, cycle.social_provider
-      assert_equal "social_callback", cycle.step
+      assert_equal "checkpoint", cycle.step
       assert_equal cycle.public_id, session[:auth_app_up_sequence_id]
+    ensure
+      OmniAuth.config.mock_auth[provider.to_sym] = nil
+      OmniAuth.config.test_mode = previous_test_mode
     end
   end
 
-  # WU-05c (R2-A, A05-3/A05-4): the entry creates the attempt's one Flow; a callback whose Flow is
-  # gone is refused and never creates a replacement.
-  test "a sign-up callback without its entry Flow is refused and creates no Flow" do
+  # WU-05c (R2-A, A05-3/A05-4): a sign-up attempt owns one Flow; a callback whose
+  # admission already owns a Flow is refused and never creates a replacement.
+  test "a sign-up callback whose entry Flow already exists is refused and creates no Flow" do
     previous_test_mode = OmniAuth.config.test_mode
     OmniAuth.config.test_mode = true
     OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new(
@@ -120,7 +145,23 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
 
     assert_response :temporary_redirect
     state = session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
-    ClientSignUpFlow.order(:id).last.destroy!
+
+    # The entry issues no Flow; stage the attempt's own Flow as an already-issued
+    # one, which is the state a second issuance must never duplicate.
+    binding = ClientAuthAdmissionBinding.order(:id).last
+    now = Time.current
+    ClientSignUpFlow.create!(
+      auth_admission_binding: binding,
+      principal_id: nil,
+      status_id: ClientSignUpFlowStatus::STARTED,
+      step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 10.minutes,
+      entry_method: "google",
+      social_provider: "google",
+      return_to: auth_app_sign_up_path(ri: "jp"),
+    )
 
     assert_no_difference(["ClientSignUpFlow.count", "Client.count"]) do
       get(
@@ -129,7 +170,8 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
         },
       )
     end
-    # D-73: the browser's hint names a Flow its Binding no longer owns, so the uniform error ends nothing.
+    # D-73: the callback must not issue a second Flow for an admission that already
+    # owns one, so the uniform error ends nothing.
     assert_response :bad_request
   ensure
     OmniAuth.config.mock_auth[:google] = nil

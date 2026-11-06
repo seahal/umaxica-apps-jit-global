@@ -1,5 +1,11 @@
 ---
 en:
+  base_social_identities:
+    title: Connected accounts
+    description: View the accounts connected to your identity.
+    org_description: View the account provisioned for your organization sign-in.
+    linked: Connected
+    unlinked: Not connected
   acme:
     app:
       preference:
@@ -85,10 +91,10 @@ en:
             heading: Page Size
             option_label: Items per page
           options:
-            '10': 10 items
-            '100': 100 items
-            '20': 20 items
-            '50': 50 items
+            "10": 10 items
+            "100": 100 items
+            "20": 20 items
+            "50": 50 items
             infinity: Unlimited
         region:
           edit:
@@ -124,8 +130,8 @@ en:
             system: System default
         time_format:
           options:
-            '12': 12-hour
-            '24': 24-hour
+            "12": 12-hour
+            "24": 24-hour
             hour_12: 12-hour
             hour_24: 24-hour
         timezone:
@@ -291,10 +297,10 @@ en:
             standard: Standard motion
         page_size:
           options:
-            '10': 10 items
-            '100': 100 items
-            '20': 20 items
-            '50': 50 items
+            "10": 10 items
+            "100": 100 items
+            "20": 20 items
+            "50": 50 items
             infinity: Unlimited
         region:
           edit:
@@ -334,8 +340,8 @@ en:
             heading: Time Format
             option_label: Time format
           options:
-            '12': 12-hour
-            '24': 24-hour
+            "12": 12-hour
+            "24": 24-hour
             hour_12: 12-hour
             hour_24: 24-hour
         timezone:
@@ -486,10 +492,10 @@ en:
             standard: Standard motion
         page_size:
           options:
-            '10': 10 items
-            '100': 100 items
-            '20': 20 items
-            '50': 50 items
+            "10": 10 items
+            "100": 100 items
+            "20": 20 items
+            "50": 50 items
             infinity: Unlimited
         region:
           edit:
@@ -529,8 +535,8 @@ en:
             heading: Time Format
             option_label: Time format
           options:
-            '12': 12-hour
-            '24': 24-hour
+            "12": 12-hour
+            "24": 24-hour
             hour_12: 12-hour
             hour_24: 24-hour
         timezone:
@@ -803,9 +809,10 @@ en:
         code_format: must contain only uppercase letters, numbers, and underscores
         country_code_cannot_start_with_zero: country code cannot start with zero
         exceeds_e164_length: exceeds E.164 maximum length of %{max} digits
-        identity_audit_event_format_invalid: must be composed of uppercase letters and underscores only
+        identity_audit_event_format_invalid:
+          must be composed of uppercase letters and underscores only
         invalid_e164_format: must be in E.164 format (e.g., +819012345678)
-        record_invalid: 'Validation failed: %{errors}'
+        record_invalid: "Validation failed: %{errors}"
         restrict_dependent_destroy:
           has_many: Cannot delete record because dependent %{record} exist
           has_one: Cannot delete record because a dependent %{record} exists
@@ -899,7 +906,16 @@ en:
     client_emails: Email addresses
     client_id: Client ID
     client_persona_id: Persona ID
+    client_preference_adult_content_gates: Adult content preferences
+    client_preference_currencies: Currency preferences
+    client_preference_date_formats: Date format preferences
+    client_preference_densities: Density preferences
+    client_preference_languages: Language preferences
+    client_preference_motions: Motion preferences
+    client_preference_page_sizes: Page size preferences
+    client_preference_regions: Region preferences
     client_preference_themes: Theme preferences
+    client_preference_time_formats: Time format preferences
     client_preference_timezones: Timezone preferences
     client_telephones: Telephone numbers
     client_tokens: Tokens
@@ -974,6 +990,17 @@ en:
     org_preference_regions: Region preferences
     org_preference_themes: Theme preferences
     org_preference_timezones: Timezone preferences
+    operator_preference_adult_content_gates: Adult content preferences
+    operator_preference_currencies: Currency preferences
+    operator_preference_date_formats: Date format preferences
+    operator_preference_densities: Density preferences
+    operator_preference_languages: Language preferences
+    operator_preference_motions: Motion preferences
+    operator_preference_page_sizes: Page size preferences
+    operator_preference_regions: Region preferences
+    operator_preference_themes: Theme preferences
+    operator_preference_time_formats: Time format preferences
+    operator_preference_timezones: Timezone preferences
     org_preferences: Organization preferences
     organization: Organization
     organization_id: Organization
@@ -1045,6 +1072,7 @@ en:
     vocabulary_public_id_snapshot: Vocabulary public ID snapshot
     webauthn_id: WebAuthn ID
   auth:
+    rp_feature_unavailable: "This feature is temporarily unavailable. Please try again later."
     app:
       dashboards:
         show:
@@ -1102,8 +1130,13 @@ en:
     session_expired: Your session has expired. Please sign in again.
     step_up:
       canceled: Cancel verification
+      challenge:
+        description: Your request was not completed. Confirm your identity before trying again.
+        title: Confirm your identity
       completed: Continue
-      emergency_unavailable: This session was established through Emergency Access and cannot perform step-up verification. Sign out and sign in normally to continue.
+      emergency_unavailable:
+        This session was established through Emergency Access and cannot perform step-up
+        verification. Sign out and sign in normally to continue.
       fresh_sign_in_required: Sign out and sign in again to register your first verification method.
       invalid_request: Invalid verification request.
       method_unavailable: Selected verification method is unavailable.
@@ -1113,9 +1146,22 @@ en:
       verification_required: Verification required.
     unauthorized: You are not authorized to access this page.
   avatar_backfill:
-    legacy_client_bindings_desc: Backfill unambiguous legacy avatars.client_id bindings. Defaults to dry-run; set APPLY=1 to mutate.
+    legacy_client_bindings_desc:
+      Backfill unambiguous legacy avatars.client_id bindings. Defaults to dry-run; set APPLY=1 to
+      mutate.
   base:
     app:
+      selectors:
+        show:
+          account_label: Persona
+          avatar_label: Avatar
+          description: Choose the persona to use for this session.
+          empty_message: No available personas were found for this account.
+          invalid_selection: That persona is no longer available. Choose an available persona.
+          organization_label: Organization
+          submit_label: Continue
+          title: Choose a persona
+          unit_label: Organization unit
       avatars:
         already_assigned: You already have an avatar, so another one cannot be created.
         moniker_validation:
@@ -1125,14 +1171,17 @@ en:
           max_graphemes: Name must contain at most %{count} visible characters.
       identity:
         credential_warning:
-          body: Adding another sign-in method helps you access your account if Apple sign-in is unavailable.
+          body:
+            Adding another sign-in method helps you access your account if Apple sign-in is
+            unavailable.
           google: Link Google
           heading: Add another sign-in method
           passkey: Add a passkey
         emails:
           registrations:
             edit:
-              delivery_help: The code expires after a short time. Request a new one if it does not arrive.
+              delivery_help:
+                The code expires after a short time. Request a new one if it does not arrive.
               description: Enter the verification code that was sent to the address you added.
           show:
             page_title: Email address
@@ -1168,7 +1217,8 @@ en:
             page_title: Telephone removed
           registrations:
             edit:
-              delivery_help: The code expires after a short time. Request a new one if it does not arrive.
+              delivery_help:
+                The code expires after a short time. Request a new one if it does not arrive.
           show:
             page_title: Telephone
           update:
@@ -1246,10 +1296,10 @@ en:
             heading: Page Size
             option_label: Page Size
           options:
-            '10': 10 items
-            '100': 100 items
-            '20': 20 items
-            '50': 50 items
+            "10": 10 items
+            "100": 100 items
+            "20": 20 items
+            "50": 50 items
             infinity: Unlimited
         theme:
           edit:
@@ -1267,6 +1317,15 @@ en:
         calendar_settings: Calendar Settings
         clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        notification_settings: Notification Settings
+        notification:
+          title: Notifications
+          description: Choose how you receive notifications.
+          placeholder: This page is a mock-up. Notification settings are not available yet.
+          web_push:
+            label: Web Push
+            enabled: Enabled
+            disabled: Disabled
         currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
@@ -1290,20 +1349,29 @@ en:
         add: Add one Secret
         capacity_conflict: Secret capacity is full or another issuance is in progress.
         confirm: I have saved the displayed Secret
-        distribution_omitted: You have the maximum of 20 active Secrets, so no new Secrets were distributed. Your saved Secrets remain usable.
-        distribution_one_confirmed: You can hold at most 20 Secrets. To stay within the limit, this registration distributed one Secret instead of two.
-        distribution_one_present: You can hold at most 20 Secrets. To stay within the limit, this registration will distribute one Secret instead of two.
+        distribution_omitted:
+          You have the maximum of 20 active Secrets, so no new Secrets were distributed. Your saved
+          Secrets remain usable.
+        distribution_one_confirmed:
+          You can hold at most 20 Secrets. To stay within the limit, this registration distributed
+          one Secret instead of two.
+        distribution_one_present:
+          You can hold at most 20 Secrets. To stay within the limit, this registration will
+          distribute one Secret instead of two.
         payload_unavailable: The Secret payload is unavailable. Start a new issuance explicitly.
         present: Show the Secret once
         reattempt: "Issue again"
         rename: Rename
         revoke: Revoke
-        single_delivery: Save this value now. It cannot be displayed again. This value cannot sign in until you confirm saving it.
+        single_delivery:
+          Save this value now. It cannot be displayed again. This value cannot sign in until you
+          confirm saving it.
         title: Secrets
       sign:
         in:
           limitations:
-            capacity_still_full: "Session capacity is still full. Revoke another session to continue."
+            capacity_still_full:
+              "Session capacity is still full. Revoke another session to continue."
             invalid_or_expired: This sign-in limitation link is invalid or expired.
             revoke_failed: "The session could not be revoked."
     com:
@@ -1316,9 +1384,15 @@ en:
           erasures:
             new:
               paragraphs:
-                privacy_request: This is a privacy request for personal data deletion or restriction. It is separate from normal withdrawal.
-                records: Messages, posts, audit logs, billing records, and similar records may follow separate retention policies.
-                retention: After processing, recovery may no longer be available. Some data may be retained for legal, safety, audit, billing, or dispute handling reasons.
+                privacy_request:
+                  This is a privacy request for personal data deletion or restriction. It is
+                  separate from normal withdrawal.
+                records:
+                  Messages, posts, audit logs, billing records, and similar records may follow
+                  separate retention policies.
+                retention:
+                  After processing, recovery may no longer be available. Some data may be retained
+                  for legal, safety, audit, billing, or dispute handling reasons.
         recoveries:
           show:
             description: Complete verification to restore access.
@@ -1396,10 +1470,10 @@ en:
             heading: Page Size
             option_label: Page Size
           options:
-            '10': 10 items
-            '100': 100 items
-            '20': 20 items
-            '50': 50 items
+            "10": 10 items
+            "100": 100 items
+            "20": 20 items
+            "50": 50 items
             infinity: Unlimited
         resets:
           back: Back to Preferences
@@ -1424,6 +1498,15 @@ en:
         calendar_settings: Calendar Settings
         clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        notification_settings: Notification Settings
+        notification:
+          title: Notifications
+          description: Choose how you receive notifications.
+          placeholder: This page is a mock-up. Notification settings are not available yet.
+          web_push:
+            label: Web Push
+            enabled: Enabled
+            disabled: Disabled
         currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
@@ -1458,35 +1541,47 @@ en:
         dashboard:
           administration: Administration
         enforcement:
-          appeal_review_acknowledgement: I have reviewed the appeal independently of the operators who opened and approved the case.
+          appeal_review_acknowledgement:
+            I have reviewed the appeal independently of the operators who opened and approved the
+            case.
           appeal_review_action: Review appeal
-          appeal_review_effect: An approved appeal ends the case. A rejected appeal leaves it in force.
+          appeal_review_effect:
+            An approved appeal ends the case. A rejected appeal leaves it in force.
           appeal_review_submit: Record decision
           appeal_review_title: Review appeal
           apply_acknowledgement: I have checked the principal, the kind, and the reason.
           apply_effect: The case is applied now, or held for approval when its kind requires it.
           apply_submit: Open case
-          approve_acknowledgement: I have reviewed this case independently of the operator who opened it.
+          approve_acknowledgement:
+            I have reviewed this case independently of the operator who opened it.
           approve_action: Approve
           approve_effect: Approving applies the case with the effect chosen here.
           approve_submit: Approve and apply
           approve_title: Approve enforcement case
-          convergence_pending: This case is active, but its side effects or audit event are still being completed.
+          convergence_pending:
+            This case is active, but its side effects or audit event are still being completed.
           empty: No enforcement cases match.
           new_action: Open an enforcement case
           new_title: Open an enforcement case
           release_acknowledgement: I have checked why this case should end.
           release_action: Release
-          release_effect: Ending this case restores access only if no other case still blocks the principal. Earlier sessions are not restored.
+          release_effect:
+            Ending this case restores access only if no other case still blocks the principal.
+            Earlier sessions are not restored.
           release_submit: Release case
           release_title: Release enforcement case
           show_title: Enforcement case %{public_id}
           title: Enforcement cases
         errors:
-          audit_unavailable: The audit record could not be written, so the operation was not started.
-          break_glass_required: This case needs a break-glass release with a second approver, which the console does not provide.
+          audit_unavailable:
+            The audit record could not be written, so the operation was not started.
+          break_glass_required:
+            This case needs a break-glass release with a second approver, which the console does not
+            provide.
           capability: Choose a capability from the list.
-          conflict: This operation conflicts with one already recorded or with the target's current state. Reload and check the target.
+          conflict:
+            This operation conflicts with one already recorded or with the target's current state.
+            Reload and check the target.
           duration: Choose a validity period from the list.
           last_holder: This is the last in-force holder of this capability, so it cannot be revoked.
           operation_id: This confirmation screen is no longer valid. Open it again.
@@ -1543,7 +1638,8 @@ en:
           new_title: Grant a capability
           revoke_acknowledgement: I have checked this grant should end.
           revoke_action: Revoke
-          revoke_effect: Operations the operator starts after this are refused unless another grant covers them.
+          revoke_effect:
+            Operations the operator starts after this are refused unless another grant covers them.
           revoke_submit: Revoke grant
           revoke_title: Revoke grant
           show_title: Grant %{public_id}
@@ -1565,13 +1661,17 @@ en:
           failed: Failed
           failed_notice: The operation failed. Nothing was reported as completed.
           incomplete: Not confirmed
-          incomplete_notice: The audit record of this operation is not complete. Check the target's current state before retrying.
+          incomplete_notice:
+            The audit record of this operation is not complete. Check the target's current state
+            before retrying.
           recovery_required: Audit recovery required
           succeeded: Completed
         revocations:
           acknowledgement: I have checked the target account and the reason.
           action: Revoke all sessions
-          effect: Every session this account has right now is ended. The account is not locked and may sign in again.
+          effect:
+            Every session this account has right now is ended. The account is not locked and may
+            sign in again.
           new_title: Revoke all sessions
           show_title: Session revocation result
           submit: Revoke sessions
@@ -1704,10 +1804,10 @@ en:
             heading: Page Size
             option_label: Page Size
           options:
-            '10': 10 items
-            '100': 100 items
-            '20': 20 items
-            '50': 50 items
+            "10": 10 items
+            "100": 100 items
+            "20": 20 items
+            "50": 50 items
             infinity: Unlimited
         resets:
           back: Back to Preferences
@@ -1745,6 +1845,15 @@ en:
         calendar_settings: Calendar Settings
         clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        notification_settings: Notification Settings
+        notification:
+          title: Notifications
+          description: Choose how you receive notifications.
+          placeholder: This page is a mock-up. Notification settings are not available yet.
+          web_push:
+            label: Web Push
+            enabled: Enabled
+            disabled: Disabled
         currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
@@ -1846,6 +1955,7 @@ en:
           title: Passkeys
         sections:
           account: Account
+          external_services: External services
           profile: Profile
           security: Security
         sessions:
@@ -2057,7 +2167,8 @@ en:
             success: If the address is registered, we have emailed a secure link.
       preferences:
         back_to_settings: Back to settings
-        description: Request a link that lets you change notification settings immediately without signing in.
+        description:
+          Request a link that lets you change notification settings immediately without signing in.
         email_settings: Request an email preferences link
         email_settings_description: Enter your email address and we will send you a secure link.
         footer:
@@ -2117,57 +2228,57 @@ en:
       key: Custom Error
   date:
     abbr_day_names:
-    - Sun
-    - Mon
-    - Tue
-    - Wed
-    - Thu
-    - Fri
-    - Sat
+      - Sun
+      - Mon
+      - Tue
+      - Wed
+      - Thu
+      - Fri
+      - Sat
     abbr_month_names:
-    -
-    - Jan
-    - Feb
-    - Mar
-    - Apr
-    - May
-    - Jun
-    - Jul
-    - Aug
-    - Sep
-    - Oct
-    - Nov
-    - Dec
+      -
+      - Jan
+      - Feb
+      - Mar
+      - Apr
+      - May
+      - Jun
+      - Jul
+      - Aug
+      - Sep
+      - Oct
+      - Nov
+      - Dec
     day_names:
-    - Sunday
-    - Monday
-    - Tuesday
-    - Wednesday
-    - Thursday
-    - Friday
-    - Saturday
+      - Sunday
+      - Monday
+      - Tuesday
+      - Wednesday
+      - Thursday
+      - Friday
+      - Saturday
     formats:
       default: "%Y-%m-%d"
       long: "%B %d, %Y"
       short: "%b %d"
     month_names:
-    -
-    - January
-    - February
-    - March
-    - April
-    - May
-    - June
-    - July
-    - August
-    - September
-    - October
-    - November
-    - December
+      -
+      - January
+      - February
+      - March
+      - April
+      - May
+      - June
+      - July
+      - August
+      - September
+      - October
+      - November
+      - December
     order:
-    - year
-    - month
-    - day
+      - year
+      - month
+      - day
   datetime:
     distance_in_words:
       about_x_hours:
@@ -2215,7 +2326,9 @@ en:
       second: Seconds
       year: Year
   db_verify_no_schema_drift:
-    run_reset_workflow: Run the appropriate database reset/migration workflow, review the schema dump changes, and commit the intended dumps.
+    run_reset_workflow:
+      Run the appropriate database reset/migration workflow, review the schema dump changes, and
+      commit the intended dumps.
     unable_to_inspect: Unable to inspect schema dump drift.
   defaults:
     never: Never
@@ -2301,12 +2414,14 @@ en:
       in: must be in %{count}
       inclusion: is not included in the list
       invalid: is invalid
+      invalid_browser_request: Invalid browser request.
       invalid_request: Invalid request.
       less_than: must be less than %{count}
       less_than_or_equal_to: must be less than or equal to %{count}
-      login_cooldown_retry: Sign-in is temporarily unavailable. Please wait a moment, then start again at %{restart_url}
+      login_cooldown_retry:
+        Sign-in is temporarily unavailable. Please wait a moment, then start again at %{restart_url}
       login_required: "You must sign in."
-      model_invalid: 'Validation failed: %{errors}'
+      model_invalid: "Validation failed: %{errors}"
       not_a_number: is not a number
       not_an_integer: must be an integer
       not_authorized: "You are not authorized to perform this action."
@@ -2323,7 +2438,9 @@ en:
       sign_count_mismatch: Passkey security verification failed
       sign_in_unavailable: Sign-in is temporarily unavailable. Please try again later.
       sign_up_unavailable: Sign-up is temporarily unavailable. Please try again later.
+      stale_checkpoint: This page is out of date. Please reload it and try again.
       taken: has already been taken
+      temporarily_unavailable: Temporarily unavailable. Please try again later.
       too_long:
         one: is too long (maximum is %{count} character)
         other: is too long (maximum is %{count} characters)
@@ -2341,7 +2458,8 @@ en:
         no_passkeys_available: No passkeys available
         options_failed: Failed to get authentication options
         origin_invalid: Authentication from this site is not allowed
-        origin_not_trusted: Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
+        origin_not_trusted:
+          Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
         pii_required: Please enter your email address or telephone number
       wrong_length:
         one: is the wrong length (should be %{count} character)
@@ -2364,7 +2482,9 @@ en:
       fatal: A fatal error occurred
       identity_conflict: This account is already linked
       identity_not_found: No %{provider} account linked
-      insufficient_login_methods: Please add another login method (email, passkey with verified phone, or another social account) before unlinking
+      insufficient_login_methods:
+        Please add another login method (email, passkey with verified phone, or another social
+        account) before unlinking
       invalid_intent: Invalid authentication intent
       last_identity: Cannot remove your last login method
       linked_to_another_user: This %{provider} account is already linked to another user
@@ -2372,18 +2492,22 @@ en:
       missing_provider: Provider information missing
       missing_uid: User identifier not received from provider
       not_logged_in: Please log in first
-      pending_social_signup_failed: Could not complete the social sign-up confirmation. Please start over.
-      pending_social_signup_invalid_state: The social sign-up confirmation state is invalid. Please refresh and start over.
+      pending_social_signup_failed:
+        Could not complete the social sign-up confirmation. Please start over.
+      pending_social_signup_invalid_state:
+        The social sign-up confirmation state is invalid. Please refresh and start over.
       provider_error: Error communicating with provider
       state_expired: Session expired. Please try again.
       state_mismatch: Security verification failed. Please try again.
       state_missing: Security state parameter missing. Please try again.
-      step_up_identity_mismatch: Please use the same %{provider} account that is linked to your profile
-      step_up_required: This action requires recent step-up authentication. Please authenticate again.
+      step_up_identity_mismatch:
+        Please use the same %{provider} account that is linked to your profile
+      step_up_required:
+        This action requires recent step-up authentication. Please authenticate again.
       unauthorized: Authentication failed
       user_changed: User session changed during authentication
     template:
-      body: 'There were problems with the following fields:'
+      body: "There were problems with the following fields:"
       header:
         one: "%{count} error prohibited this %{model} from being saved"
         other: "%{count} errors prohibited this %{model} from being saved"
@@ -2399,11 +2523,14 @@ en:
       no_passkeys_available: No passkeys available
       options_failed: Failed to get authentication options
       origin_invalid: Authentication from this site is not allowed
-      origin_not_trusted: Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
-      passkey_limit_reached: You have reached the maximum number of passkeys. Remove one before adding another.
+      origin_not_trusted:
+        Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
+      passkey_limit_reached:
+        You have reached the maximum number of passkeys. Remove one before adding another.
       pii_required: Please enter your email address or telephone number
       sign_count_mismatch: Passkey security verification failed
-      sign_in_transaction_required: Your sign-in session has expired or was not started with Microsoft. Please start over.
+      sign_in_transaction_required:
+        Your sign-in session has expired or was not started with Microsoft. Please start over.
       verification_failed: Passkey verification failed
       verification_required: Passkey registration must be completed through WebAuthn verification.
   hello: Hello world 2
@@ -2535,7 +2662,7 @@ en:
     contact:
       errors:
         id_required: Contact ID is required
-        invalid_status: 'Invalid contact status: expected SET_UP, got %{current_status}'
+        invalid_status: "Invalid contact status: expected SET_UP, got %{current_status}"
         not_found: Contact not found
     org:
       contacts:
@@ -2611,7 +2738,9 @@ en:
       footer_cookie_controls:
         accept_all: Accept all
         close_button: Close
-        description_html: We use essential cookies and cookies for analytics and marketing purposes. Please review our %{privacy_policy} for details.
+        description_html:
+          We use essential cookies and cookies for analytics and marketing purposes. Please review
+          our %{privacy_policy} for details.
         open_settings: Manage settings
         privacy_policy: Privacy Policy
         reject_all: Reject all
@@ -2638,7 +2767,7 @@ en:
           create:
             expiration_note: This code will expire in 10 minutes.
             ignore_instruction: If you did not request this, please ignore this email.
-            instruction: 'Please use the following verification code to complete your registration:'
+            instruction: "Please use the following verification code to complete your registration:"
             subject: Your verification code
             subjects:
               sign_in: UMAXICA - Confirm your sign-in
@@ -2650,12 +2779,12 @@ en:
           create:
             expiration_note: This code will expire in 10 minutes.
             ignore_instruction: If you did not request this, please ignore this email.
-            instruction: 'Please use the following verification code to continue:'
+            instruction: "Please use the following verification code to continue:"
             subject: Your verification code
             title: Verify your staff email address
             verify_link: Verify email
   messages:
-    access_blocked_auth_error: 'Access blocked: Authentication error'
+    access_blocked_auth_error: "Access blocked: Authentication error"
     cannot_delete_last_passkey: Cannot delete the last passkey. You must have at least one passkey.
     confirm_destroy: Are you sure you want to delete this?
     email_successfully_created: Verification code has been sent to your email.
@@ -2671,10 +2800,13 @@ en:
     totp_title_placeholder: "Title (optional)"
     user_registration_error: An error occurred during user registration.
   model:
-    identity_audit_event_format_invalid: Invalid event ID format. Only uppercase letters and underscores are allowed.
+    identity_audit_event_format_invalid:
+      Invalid event ID format. Only uppercase letters and underscores are allowed.
   models:
     user:
-      recovery_identity_required: To register a passkey or secret_credential, please register and verify at least one email address or phone number first.
+      recovery_identity_required:
+        To register a passkey or secret_credential, please register and verify at least one email
+        address or phone number first.
   news:
     app:
       preferences:
@@ -2737,9 +2869,9 @@ en:
           quadrillion: Quadrillion
           thousand: Thousand
           trillion: Trillion
-          unit: ''
+          unit: ""
       format:
-        delimiter: ''
+        delimiter: ""
         precision: 3
         significant: true
         strip_insignificant_zeros: true
@@ -2757,14 +2889,16 @@ en:
           tb: TB
     percentage:
       format:
-        delimiter: ''
+        delimiter: ""
         format: "%n%"
     precision:
       format:
-        delimiter: ''
+        delimiter: ""
   oidc:
     rp_logout:
-      local_only: This domain has been signed out. You are still signed in to sign. To sign out everywhere, use session management at %{idp_sessions_url}.
+      local_only:
+        This domain has been signed out. You are still signed in to sign. To sign out everywhere,
+        use session management at %{idp_sessions_url}.
   oidc_rp:
     interruption:
       body: Sign-in could not be completed. Please sign in again.
@@ -2862,10 +2996,10 @@ en:
     duplicate_position: |2-
 
       Attempting to create AppPreferenceStatus with duplicate position...
-    expected_db_error: 'Expected DB Error: %{message}'
-    expected_error: 'Expected Error: %{message}'
+    expected_db_error: "Expected DB Error: %{message}"
+    expected_error: "Expected Error: %{message}"
     missing_position: Attempting to create AppPreferenceStatus without position...
-    success_created: 'Success: Created with id %{id}, position: %{position}'
+    success_created: "Success: Created with id %{id}, position: %{position}"
   root:
     app:
       com:
@@ -3099,9 +3233,13 @@ en:
       editor:
         description: Can create and edit all content. Can only delete own posts.
       manager:
-        description: Can manage content and edit other users' posts. Has delete permissions for managed resources.
+        description:
+          Can manage content and edit other users' posts. Has delete permissions for managed
+          resources.
       operator:
-        description: Full system access. Can manage users, settings, and perform all operations including deletions.
+        description:
+          Full system access. Can manage users, settings, and perform all operations including
+          deletions.
       viewer:
         description: Read-only access to content. Cannot create or modify anything.
   seeds:
@@ -3120,7 +3258,9 @@ en:
       cancel_logout: "Cancel and sign out."
       continue: Continue sign-in
       created_at: Created
-      description: You have reached the maximum number of concurrent sessions. To continue logging in, please select sessions to revoke.
+      description:
+        You have reached the maximum number of concurrent sessions. To continue logging in, please
+        select sessions to revoke.
       last_used: Last used
       no_sessions: No active sessions found.
       page_title: Session Management
@@ -3135,7 +3275,8 @@ en:
     pending:
       message: You need to tidy up your sessions. Revoke an existing session to continue.
     promoted: Session promoted.
-    restricted_notice: Your active session limit has been reached. Please manage your existing sessions.
+    restricted_notice:
+      Your active session limit has been reached. Please manage your existing sessions.
     session_revoked: Session revoked.
     sessions_purged: Sessions purged successfully.
     sessions_revoked: Sessions revoked. Please continue logging in.
@@ -3162,9 +3303,14 @@ en:
           edit:
             code_label: "Verification code"
             code_placeholder: "Enter the 6-digit code"
-            delivery_unavailable: "We could not confirm delivery. You can resend the code or go back to stop verification."
-            delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
-            description: "Almost done. Enter the 6-digit verification code sent to your email address."
+            delivery_unavailable:
+              "We could not confirm delivery. You can resend the code or go back to stop
+              verification."
+            delivery_help:
+              "If it doesn't arrive within a minute, check your email address and mail settings,
+              then try again."
+            description:
+              "Almost done. Enter the 6-digit verification code sent to your email address."
             page_title: "Enter verification code"
             return_page: "Back"
             submit: Register with Email
@@ -3293,9 +3439,12 @@ en:
               create_identity: A new Umaxica Identity will be created.
               no_merge: It cannot be merged into an existing account later.
               unregistered: This %{provider} account is not registered.
+        confirmation_required: Please confirm that you want to create a new Umaxica Identity.
         email:
           create:
-            contact_held: You can't start a registration with this email address right now. Please try again later.
+            contact_held:
+              You can't start a registration with this email address right now. Please try again
+              later.
             address_required: Please enter an email address.
             otp_resend_too_soon: Please wait before requesting another code.
             turnstile_validation_failed: Security verification failed. Please try again.
@@ -3307,7 +3456,6 @@ en:
             invalid: "Your session has expired."
           new:
             error_summary: Please check your input.
-            link_to_sign_in: "Sign in?"
             page_title: Sign up with email
           update:
             attempts_exceeded: Maximum verification attempts exceeded. Please start over.
@@ -3322,7 +3470,8 @@ en:
           methods:
             email:
               cta: Sign up with email
-              description: Receive a verification link by email and finish registration in a few minutes.
+              description:
+                Receive a verification link by email and finish registration in a few minutes.
               title: Email address
             telephone:
               cta: Sign up with telephone
@@ -3341,24 +3490,28 @@ en:
         session_missing: Your registration session has expired. Please start again.
         telephone:
           complete:
-            description: Your account registration has been successfully completed. You can now continue to use our services.
+            description:
+              Your account registration has been successfully completed. You can now continue to use
+              our services.
             link_to_home: Back to Home
             link_to_sign_in: Go to Sign In
             page_title: Registration Complete
           create:
-            contact_held: You can't start a registration with this phone number right now. Please try again later.
+            contact_held:
+              You can't start a registration with this phone number right now. Please try again
+              later.
             turnstile_validation_failed: Security verification failed. Please try again.
             verification_code_sent: Verification code has been sent via SMS.
           edit:
             code_label: "Verification code"
             code_placeholder: "Enter the 6-digit code"
-            delivery_help: "If it doesn't arrive within a minute, check the phone number and SMS settings, then try again."
+            delivery_help:
+              "If it doesn't arrive within a minute, check the phone number and SMS settings, then
+              try again."
             page_title: "Enter verification code"
             session_expired: Your session has expired. Please start over.
             submit: "Submit"
           new:
-            link_to_other_methods: "Use another sign-up method?"
-            link_to_sign_in: "Sign in?"
             page_title: "Sign up with a phone number"
           resend:
             rate_limited: Please wait before requesting another code.
@@ -3487,7 +3640,8 @@ en:
             new_link: Create a new recovery code
           new:
             confirm_label: I understand a new recovery code will be generated
-            description: Create a fresh recovery code to regain access if you lose your primary factors.
+            description:
+              Create a fresh recovery code to regain access if you lose your primary factors.
             page_title: Generate a recovery code
             submit: Generate recovery code
         secret_credentials:
@@ -3589,7 +3743,7 @@ en:
           recovery:
             available: Your account can still be recovered.
             confirm: Recover this account?
-            deadline: 'Recovery deadline: %{date}'
+            deadline: "Recovery deadline: %{date}"
             link: Recover account
             page_title: Withdrawal recovery
             submit: Recover account
@@ -3617,6 +3771,14 @@ en:
             invalid_request: "The request to Apple is invalid. Please try again."
             timeout: "The request timed out."
             unknown_error: "An unknown error occurred."
+        verified_subject_guidance:
+          registered:
+            body: This social account is already registered. Start a new request and choose sign-in.
+            title: This social account is already registered
+          start: Start a new request
+          unregistered:
+            body: This social account is not registered yet. Start a new request and choose sign-up.
+            title: This social account is not registered yet
       step_up:
         edit:
           authenticate_with_passkey: Authenticate with Passkey
@@ -3624,7 +3786,8 @@ en:
           code_label: Verification Code
           code_placeholder: 6 digits
           confirm_cancel: Are you sure?
-          description: Please enter the code or use passkey authentication for identity verification.
+          description:
+            Please enter the code or use passkey authentication for identity verification.
           submit: Confirm
           title: Step-up authentication
         index:
@@ -3663,12 +3826,17 @@ en:
           back: Back
           code_label: Verification Code
           code_placeholder: 6 digits
-          description: Please enter the code or use passkey authentication for identity verification.
-          email_delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
+          description:
+            Please enter the code or use passkey authentication for identity verification.
+          email_delivery_help:
+            "If it doesn't arrive within a minute, check your email address and mail settings, then
+            try again."
           email_description: Please enter the code for identity verification.
           submit: Confirm
           title: Verification
-          totp_help: "Verification codes refresh periodically. If a code doesn't work, enter the latest code shown in your authenticator app."
+          totp_help:
+            "Verification codes refresh periodically. If a code doesn't work, enter the latest code
+            shown in your authenticator app."
         errors:
           incorrect_code: "The verification code is incorrect."
           no_passkey: No passkey is registered.
@@ -3692,12 +3860,18 @@ en:
           submit: Continue
           title: Verification
         setup:
-          description: Please register a passkey, an authenticator app, or an email address before continuing.
+          description:
+            Please register a passkey, an authenticator app, or an email address before continuing.
           methods:
             email: Register email
             passkey: Register passkey
             totp: Register authenticator app (TOTP)
           title: Set up verification methods
+        step_up_refused:
+          Additional verification was not completed. Return to the page that requested it and start
+          again.
+        step_up_unavailable:
+          Additional verification is temporarily unavailable. Please try again later.
         success:
           complete: Verification completed.
     common:
@@ -3719,8 +3893,11 @@ en:
           edit:
             code_label: "Verification code"
             code_placeholder: "Enter the 6-digit code"
-            delivery_help: "If it doesn't arrive within a minute, check your email address and mail settings, then try again."
-            description: "Almost done. Enter the 6-digit verification code sent to your email address."
+            delivery_help:
+              "If it doesn't arrive within a minute, check your email address and mail settings,
+              then try again."
+            description:
+              "Almost done. Enter the 6-digit verification code sent to your email address."
             page_title: "Enter verification code"
             submit: Register with Email
           new:
@@ -3729,42 +3906,56 @@ en:
         emergency:
           passkey:
             new:
-              description: Sign in with the staff ID and your existing passkey. Microsoft sign-in is not used.
+              description:
+                Sign in with the staff ID and your existing passkey. Microsoft sign-in is not used.
               identifier_label: ID
               identifier_placeholder: Enter the staff ID
               page_title: Emergency Access
-              restricted_mode_notice: This sign-in produces a restricted session. Step-up verification and the operations that require it are unavailable until you sign out and sign in normally.
+              restricted_mode_notice:
+                This sign-in produces a restricted session. Step-up verification and the operations
+                that require it are unavailable until you sign out and sign in normally.
               submit: Sign in with passkey
         entra:
           errors:
-            authentication_method_locked: Microsoft sign-in is locked for this account. Please contact your administrator.
-            client_assertion_unavailable: Microsoft sign-in is not configured correctly. Please contact your administrator.
+            authentication_method_locked:
+              Microsoft sign-in is locked for this account. Please contact your administrator.
+            client_assertion_unavailable:
+              Microsoft sign-in is not configured correctly. Please contact your administrator.
             connection_not_found: The specified Microsoft connection was not found.
             entra_error: An error occurred during Microsoft authentication. Please try again.
             generic: An error occurred. Please try again.
-            identity_not_found: This account is not registered as a staff member. Please contact your administrator.
+            identity_not_found:
+              This account is not registered as a staff member. Please contact your administrator.
             internal_error: An internal error occurred. Please try again.
             invalid_callback: The authentication response was invalid. Please start over.
             missing_id_token: The authentication response was incomplete. Please start over.
             operator_not_found: Sign-in is not permitted for this account.
             pkce_verifier_missing: Your sign-in session expired. Please start over.
-            provider_unavailable: Microsoft sign-in is currently unavailable. Please try again later.
+            provider_unavailable:
+              Microsoft sign-in is currently unavailable. Please try again later.
             sign_in_failed: Sign-in failed. Please try again.
             state_mismatch: Security verification failed. Please start over.
             tenant_mismatch: This account belongs to a different organization.
-            tenant_not_allowed: This account type cannot be used to sign in. Please use your organization account.
+            tenant_not_allowed:
+              This account type cannot be used to sign in. Please use your organization account.
             token_exchange_failed: Failed to retrieve authentication token. Please try again.
             token_verification_failed: Authentication token verification failed. Please try again.
           new:
             connection_label: Connection ID
-            connection_not_found: That connection ID could not be verified. Check the value and contact your administrator.
+            connection_not_found:
+              That connection ID could not be verified. Check the value and contact your
+              administrator.
             connection_prompt: Enter the organization connection ID your administrator gave you.
             connection_submit: Continue
-            connection_unavailable: Microsoft sign-in is not configured for this organization. Please contact your administrator.
+            connection_unavailable:
+              Microsoft sign-in is not configured for this organization. Please contact your
+              administrator.
             page_title: Sign in with Microsoft
             submit: Sign in with Microsoft
         mode_switch:
-          sign_out_required: You are already signed in. Changing the sign-in mode requires signing out first (%{sign_out_url}).
+          sign_out_required:
+            You are already signed in. Changing the sign-in mode requires signing out first
+            (%{sign_out_url}).
         new:
           back: Back
           back_link: Back
@@ -3869,7 +4060,8 @@ en:
           methods:
             email:
               cta: Sign up with email
-              description: Receive a verification link by email and finish registration in a few minutes.
+              description:
+                Receive a verification link by email and finish registration in a few minutes.
               title: Email address
             telephone:
               cta: Sign up with telephone
@@ -3891,7 +4083,9 @@ en:
           edit:
             code_label: "Verification code"
             code_placeholder: "Enter the 6-digit code"
-            delivery_help: "If it doesn't arrive within a minute, check the phone number and SMS settings, then try again."
+            delivery_help:
+              "If it doesn't arrive within a minute, check the phone number and SMS settings, then
+              try again."
             page_title: "Enter verification code"
             session_expired: Session expired.
             submit: "Submit"
@@ -3978,7 +4172,9 @@ en:
             description: Google sign-in is available through your verified email addresses.
             disable: Disable
             disabled: Google sign-in is unavailable until you verify an email address.
-            email_hint: To disable Google sign-in, update or remove the matching email address from email settings.
+            email_hint:
+              To disable Google sign-in, update or remove the matching email address from email
+              settings.
             enabled: Google sign-in is available.
         mfa:
           show:
@@ -4012,7 +4208,9 @@ en:
             target_email: Invitation email
             target_operator_public_id: Target operator ID
           index:
-            description: Review operational requests for operator join, withdrawal, suspension, termination, and restoration.
+            description:
+              Review operational requests for operator join, withdrawal, suspension, termination,
+              and restoration.
             new: Create request
             title: Join and withdrawal requests
           new:
@@ -4051,7 +4249,8 @@ en:
             new_link: Create a new recovery code
           new:
             confirm_label: I understand a new recovery code will be generated
-            description: Create a fresh recovery code to regain access if you lose your primary factors.
+            description:
+              Create a fresh recovery code to regain access if you lose your primary factors.
             page_title: Generate a recovery code
             submit: Generate recovery code
         secret_credentials:
@@ -4096,15 +4295,20 @@ en:
             new_link: Create a new TOTP credential
         withdrawal:
           show:
-            description: Org withdrawal is not self-service. Another operator must review and execute it.
-            direct_message_unavailable: Direct message is not implemented yet, so this is recorded as an operational lifecycle request.
+            description:
+              Org withdrawal is not self-service. Another operator must review and execute it.
+            direct_message_unavailable:
+              Direct message is not implemented yet, so this is recorded as an operational lifecycle
+              request.
             request_link: Create withdrawal request
             title: Withdrawal
       sign:
         up:
           invitations:
             create:
-              success: Invitation accepted. Your operator ID is %{public_id}. Use Google sign-in with the invited email address, or ask an operator to help configure another sign-in method.
+              success:
+                Invitation accepted. Your operator ID is %{public_id}. Use Google sign-in with the
+                invited email address, or ask an operator to help configure another sign-in method.
               turnstile_failed: Verification failed. Please try again later.
       social:
         sessions:
@@ -4118,7 +4322,8 @@ en:
           code_label: Verification Code
           code_placeholder: 6 digits
           confirm_cancel: Are you sure?
-          description: Please enter the code or use passkey authentication for identity verification.
+          description:
+            Please enter the code or use passkey authentication for identity verification.
           submit: Confirm
           title: Step-up authentication
         index:
@@ -4151,7 +4356,9 @@ en:
       up:
         invitations:
           create:
-            success: Invitation accepted. Your operator ID is %{public_id}. Use Google sign-in with the invited email address, or ask an operator to help configure another sign-in method.
+            success:
+              Invitation accepted. Your operator ID is %{public_id}. Use Google sign-in with the
+              invited email address, or ask an operator to help configure another sign-in method.
             turnstile_failed: Verification failed. Please try again later.
           form:
             invitation_code: Invitation code
@@ -4175,7 +4382,8 @@ en:
           back: Back
           code_label: Verification Code
           code_placeholder: 6 digits
-          description: Please enter the code or use passkey authentication for identity verification.
+          description:
+            Please enter the code or use passkey authentication for identity verification.
           submit: Confirm
           title: Verification
         errors:
@@ -4202,11 +4410,18 @@ en:
           methods:
             passkey: Register passkey
           title: Set up verification methods
+        step_up_refused:
+          Additional verification was not completed. Return to the page that requested it and start
+          again.
+        step_up_unavailable:
+          Additional verification is temporarily unavailable. Please try again later.
         success:
           complete: Verification completed.
     recovery_passcodes:
       required:
-        description: You need at least %{minimum} unused recovery passcodes before registering this MFA method. You currently have %{count}.
+        description:
+          You need at least %{minimum} unused recovery passcodes before registering this MFA method.
+          You currently have %{count}.
         setup_link: Manage recovery passcodes
         title: Recovery passcodes required
       show:
@@ -4224,26 +4439,35 @@ en:
       sign_out:
         already_signed_out: You are already signed out.
         button: Sign out
-        cleanup_incomplete_description: You have signed out. This service could not finish removing its own sign-in data; it will be cleared the next time you use it.
-        completed_description: You have signed out. Sessions on the other services are no longer valid. Screens that are already open will ask you to sign in the next time they communicate.
+        cleanup_incomplete_description:
+          You have signed out. This service could not finish removing its own sign-in data; it will
+          be cleared the next time you use it.
+        completed_description:
+          You have signed out. Sessions on the other services are no longer valid. Screens that are
+          already open will ask you to sign in the next time they communicate.
         completed_title: You are signed out
         confirm_description: Once you log out, you will need to log in again.
         forbidden_description: This action is not allowed.
         home_link: Go to home
-        idp_session_error: We could not confirm the identity-provider session. No session was signed out.
+        idp_session_error:
+          We could not confirm the identity-provider session. No session was signed out.
         invalid_request: This sign-out request is invalid.
-        indeterminate_description: We could not confirm whether sign-out finished. Open this service again to see your current state.
+        indeterminate_description:
+          We could not confirm whether sign-out finished. Open this service again to see your
+          current state.
         indeterminate_title: Sign-out result is unknown
         retry_button: Try signing out again
-        stale_description: This sign-out request has expired. Start again if you still want to sign out.
+        stale_description:
+          This sign-out request has expired. Start again if you still want to sign out.
         title: Do you want to sign out?
-        unavailable_description: Your current session may still be active. Please try signing out again.
+        unavailable_description:
+          Your current session may still be active. Please try signing out again.
         unavailable_title: Sign-out was not completed
       verification:
         cancelled_title: Verification cancelled
         completed_title: Verification complete
     telephone_verification:
-      sms_message: 'Verification code: %{code}'
+      sms_message: "Verification code: %{code}"
     token_refresh:
       errors:
         invalid_refresh_token: "The refresh token is invalid or expired."
@@ -4400,11 +4624,15 @@ en:
                 help_text: A verification code will be sent to the entered phone number via SMS.
           totps:
             new:
-              first_token_delivery_help: "Verification codes refresh periodically. If a code doesn't work, enter the latest code shown in your authenticator app."
+              first_token_delivery_help:
+                "Verification codes refresh periodically. If a code doesn't work, enter the latest
+                code shown in your authenticator app."
               first_token_help: Please enter the 6-digit code shown in your authenticator app.
               first_token_label: Verification code
               first_token_placeholder: "Enter the 6-digit code"
-              qr_fallback: If you cannot scan the QR code, enter the secret_credential manually into your authenticator app.
+              qr_fallback:
+                If you cannot scan the QR code, enter the secret_credential manually into your
+                authenticator app.
               submit: "Submit"
         shared:
           sign_out:
@@ -4412,7 +4640,8 @@ en:
         sign:
           in:
             limitations:
-              capacity_still_full: Session capacity is still full. Revoke another session to continue.
+              capacity_still_full:
+                Session capacity is still full. Revoke another session to continue.
               invalid_or_expired: This sign-in limitation link is invalid or expired.
               revoke_failed: The selected session could not be revoked.
         up:
@@ -4447,4 +4676,6 @@ en:
           show:
             no_methods: Please register a passkey.
   withdrawal_ceremony_reentry:
-    generic_message: If an account can continue withdrawal procedures for the information entered, the next step is available here.
+    generic_message:
+      If an account can continue withdrawal procedures for the information entered, the next step is
+      available here.

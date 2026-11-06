@@ -7,7 +7,6 @@ module Security
   class TokenLifetimesTest < ActiveSupport::TestCase
     test "defines application token family lifetimes outside low-level jwt primitives" do
       assert_equal 5.minutes, SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL
-      assert_equal 7.days, SecurityTokenLifetimes::PREFERENCE_JWT_TTL
       assert_equal 5.minutes, SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL
       assert_equal 30.seconds, SecurityTokenLifetimes::JUMP_RT_TTL
     end
@@ -15,8 +14,6 @@ module Security
     test "defines old kid verification windows as token ttl plus jwks and cdn leeway" do
       assert_equal 2.hours + 5.minutes,
                    SecurityTokenLifetimes.old_kid_verification_window(SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL)
-      assert_equal 7.days + 2.hours,
-                   SecurityTokenLifetimes.old_kid_verification_window(SecurityTokenLifetimes::PREFERENCE_JWT_TTL)
       assert_equal 2.hours + 5.minutes,
                    SecurityTokenLifetimes.old_kid_verification_window(SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL)
       assert_equal 2.hours + 30.seconds,
@@ -45,8 +42,7 @@ module Security
 
     test "keeps existing family constants aligned with the application policy" do
       assert_equal SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL, AuthenticationBase::ACCESS_TOKEN_TTL
-      assert_equal 400.days, SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL
-      assert_equal SecurityTokenLifetimes::PREFERENCE_JWT_TTL, PreferenceToken::ACCESS_TOKEN_TTL
+      assert_equal 400.days, SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL
       assert_equal SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL, OidcIdTokenIssuer::TOKEN_TTL
       assert_equal SecurityTokenLifetimes::JUMP_RT_TTL, JumpRtIssuer::DEFAULT_TTL
       assert_equal SecurityTokenLifetimes::JUMP_RT_TTL, JumpRtIssuer::MAX_TTL

@@ -27,30 +27,36 @@ class StepUpEmailLockOrderTest < ActiveSupport::TestCase
     worker = nil
 
     transaction.with_lock do
-      worker = Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
-          other_transaction = ClientStepUpCeremonyTransaction.find(transaction.id)
-          other_session = ClientStepUpSession.find(session_record.id)
-          worker_ready << connection.select_value("SELECT pg_backend_pid()").to_i
-          other_session.mark_bound_email_delivery!(transaction: other_transaction, generation: generation, success: true)
+      worker =
+        Thread.new do
+          OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+            other_transaction = ClientStepUpCeremonyTransaction.find(transaction.id)
+            other_session = ClientStepUpSession.find(session_record.id)
+            worker_ready << connection.select_value("SELECT pg_backend_pid()").to_i
+            other_session.mark_bound_email_delivery!(
+              transaction: other_transaction, generation: generation,
+              success: true,
+            )
+          end
+        ensure
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
-      ensure
-        ActiveRecord::Base.connection_handler.clear_active_connections!
-      end
 
       pid = Timeout.timeout(10) { worker_ready.pop }
       Timeout.timeout(10) do
         loop do
-          waiting = OpBaseAppRecord.uncached do
-            OpBaseAppRecord.lease_connection.select_value(
-              "SELECT cardinality(pg_blocking_pids(#{Integer(pid)})) > 0",
-            )
-          end
+          waiting =
+            OpBaseAppRecord.uncached do
+              OpBaseAppRecord.lease_connection.select_value(
+                "SELECT cardinality(pg_blocking_pids(#{Integer(pid)})) > 0",
+              )
+            end
           break if waiting
 
           Thread.pass
         end
       end
+
       assert ClientStepUpSession.lock("FOR UPDATE NOWAIT").find(session_record.id)
       transaction.commit_cancellation!(now: ClientStepUpCeremonyTransaction.database_now)
     end

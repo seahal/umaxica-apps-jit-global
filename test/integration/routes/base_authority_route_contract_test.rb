@@ -461,7 +461,6 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # rubocop:disable Minitest/MultipleAssertions
   test "base authority com route contract" do
     assert_recognizes(
       { controller: "base/com/roots", action: "index" },
@@ -583,8 +582,6 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       end
     end
   end
-  # rubocop:enable Minitest/MultipleAssertions
-
   test "base authority org route contract" do
     assert_recognizes(
       { controller: "base/org/roots", action: "index" },
@@ -993,9 +990,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
         "/ceremony_bindings/00000000-0000-4000-8000-000000000000/confirmation" =>
           "base/#{surface}/ceremony_binding_confirmations",
       }.each do |path, controller|
-        assert_recognizes({ controller: controller, action: "show", **(path.include?("ceremony_bindings") ?
-          { binding_ref: "00000000-0000-4000-8000-000000000000" } : {}) },
-                          { path: "http://#{host}#{path}", method: :get })
+        assert_recognizes(
+          { controller: controller,
+            action: "show",
+            **(path.include?("ceremony_bindings") ?
+                    { binding_ref: "00000000-0000-4000-8000-000000000000" } : {}), },
+          { path: "http://#{host}#{path}", method: :get },
+        )
       end
       host! host
       https!
@@ -1004,10 +1005,11 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_equal "application/json", response.media_type
       assert_recognizes(
-        { controller: "base/#{surface}/ceremony_binding_confirmations", action: "create",
-          binding_ref: "00000000-0000-4000-8000-000000000000" },
+        { controller: "base/#{surface}/ceremony_binding_confirmations",
+          action: "create",
+          binding_ref: "00000000-0000-4000-8000-000000000000", },
         { path: "http://#{host}/ceremony_bindings/00000000-0000-4000-8000-000000000000/confirmation",
-          method: :post },
+          method: :post, },
       )
     end
   end

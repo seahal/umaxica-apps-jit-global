@@ -75,10 +75,9 @@ send `no-store`; several do for their own reasons.
 ## Policy-root inventory
 
 A policy root is a surface-local `ApplicationController` or `BareController` that inherits directly
-from `ActionController::Base`, plus `Auth::RedirectOnlyController` (the Auth-owned root of
-redirect-only controllers that inherit the repository-wide `ApplicationController`), plus every
-`ActionController::API` controller in an in-scope namespace, which is a standalone root of its own.
-Subclass counts are from the 2026-10-01 inventory and drift as controllers are added.
+from `ActionController::Base`, plus every `ActionController::API` controller in an in-scope
+namespace, which is a standalone root of its own. Subclass counts are from the 2026-10-01 inventory
+and drift as controllers are added.
 
 | Policy root                                            | Plane      | Subclasses | Representative routes                                     |
 | ------------------------------------------------------ | ---------- | ---------- | --------------------------------------------------------- |
@@ -86,8 +85,7 @@ Subclass counts are from the 2026-10-01 inventory and drift as controllers are a
 | `Auth::Com::ApplicationController`                     | Global     | 44         | `/`, `/sign/in`                                           |
 | `Auth::Org::ApplicationController`                     | Global     | 36         | `/`, `/sign/in`                                           |
 | `Auth::{App,Com,Org}::BareController`                  | Global     | 11 each    | `/health`, `/revision`, `/edge/v0/token/check`            |
-| `Auth::RedirectOnlyController`                         | Global     | 8          | `/iam`, `/billings`, `/accounts` (redirects)              |
-| `Base::App::ApplicationController`                     | Global     | 71         | `/`, dashboard pages                                       |
+| `Base::App::ApplicationController`                     | Global     | 71         | `/`, dashboard pages                                      |
 | `Base::Com::ApplicationController`                     | Global     | 59         | `/`, `/preference`                                        |
 | `Base::Org::ApplicationController`                     | Global     | 70         | `/`, `/iam`, `/support`, `/settings`                      |
 | `Base::{Dev,Net}::ApplicationController`               | Global     | 1 each     | `/`                                                       |

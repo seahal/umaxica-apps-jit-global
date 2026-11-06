@@ -33,6 +33,12 @@ class ComPreference < ComSettingRecord
 
   ACTIVE_STATUS_ID = ComPreferenceStatus::ACTIVE
   RETIRED_STATUS_ID = ComPreferenceStatus::RETIRED
+  DESTROY_DEPENDENT_ASSOCIATIONS = %i(
+    com_preference_cookie com_preference_consent_receipt com_preference_web_push com_preference_browser_binding
+    com_preference_region com_preference_timezone com_preference_language com_preference_theme
+    com_preference_currency com_preference_date_format com_preference_time_format com_preference_motion
+    com_preference_density com_preference_page_size com_preference_adult_content_gate
+  ).freeze
 
   attribute :status_id, default: ComPreferenceStatus::ACTIVE
 
@@ -100,7 +106,7 @@ class ComPreference < ComSettingRecord
           foreign_key: :preference_id,
           inverse_of: :preference,
           dependent: :destroy
-  has_many :com_preference_chronicles,
+  has_many :com_preference_chronicles, -> { where(subject_type: "ComPreference") },
            foreign_key: :subject_id,
            inverse_of: :com_preference,
            dependent: :restrict_with_exception
@@ -109,12 +115,19 @@ class ComPreference < ComSettingRecord
   validates :jti, presence: true, uniqueness: true
   validates :last_issued_at, :last_issued_expires_at, presence: true
   validate :retired_status_cannot_be_reactivated, on: :update
+  before_destroy :preload_dependent_associations, prepend: true
 
   def adult_content_gate
     com_preference_adult_content_gate&.option&.name || "nothing"
   end
 
   private
+
+  def preload_dependent_associations
+    ActiveRecord::Associations::Preloader.new(
+      records: [self], associations: DESTROY_DEPENDENT_ASSOCIATIONS,
+    ).call
+  end
 
   def retired_status_cannot_be_reactivated
     return unless status_id_in_database == ComPreferenceStatus::RETIRED && status_id == ComPreferenceStatus::ACTIVE

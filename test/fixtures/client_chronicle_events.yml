@@ -77,3 +77,5 @@ step_up_failed:
   id: 34
 refresh_token_reuse_detected:
   id: 35
+preferences_changed:
+  id: 36

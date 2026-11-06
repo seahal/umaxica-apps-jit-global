@@ -3,8 +3,7 @@
 require "test_helper"
 
 class EmailSignUpCandidateCreatorTest < ActiveSupport::TestCase
-  [[Client, ClientEmail, :user, :user_id]].each do |
-    owner_model, email_model, association, owner_key|
+  [[Client, ClientEmail, :user, :user_id]].each do |owner_model, email_model, association, owner_key|
     test "#{email_model.name} signup refuses persisted candidates and preserves their original owner" do
       owner = owner_model.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_model))
       email = email_model.create!(

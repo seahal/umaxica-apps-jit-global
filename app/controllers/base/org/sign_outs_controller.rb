@@ -35,11 +35,7 @@ module Base
       end
 
       def create
-        launch_oidc_rp_logout!(
-          client_id: "base-org-ww",
-          issuer_resource_type: "operator",
-          token_issuer: "operator",
-        )
+        launch_oidc_rp_logout!(client_id: "base-org-ww")
       end
 
       protected

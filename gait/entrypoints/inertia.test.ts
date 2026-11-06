@@ -1,4 +1,4 @@
-import { createInertiaApp } from "@inertiajs/react";
+import { createInertiaApp, router } from "@inertiajs/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -138,6 +138,49 @@ describe("surface page resolver", () => {
 describe("surface inertia defaults", () => {
   test("visits use bracket array syntax so Rack parses array parameters", () => {
     expect(surfaceInertiaDefaults.visitOptions()).toEqual({ queryStringArrayFormat: "brackets" });
+  });
+});
+
+describe("Base Inertia step-up challenge handling", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("routes the challenge to the entry and cancels Inertia's default HTTP exception handling", async () => {
+    vi.clearAllMocks();
+    document.body.innerHTML = "";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const location = {
+      href: "https://base.example.test/identity/passkeys/passkey-1?ri=jp",
+      origin: "https://base.example.test",
+      assign: vi.fn(),
+    };
+    vi.stubGlobal("location", location);
+
+    await bootSurfaceInertiaApp({}, "base/app");
+
+    const listener = vi
+      .mocked(router.on)
+      .mock.calls.find(([event]) => event === "httpException")?.[1];
+    expect(listener).toBeDefined();
+
+    const event = new CustomEvent("inertia:httpException", {
+      cancelable: true,
+      detail: {
+        response: {
+          status: 401,
+          headers: { "www-authenticate": 'Bearer error="insufficient_user_authentication"' },
+        },
+      },
+    });
+    listener?.(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(location.assign).toHaveBeenCalledWith(
+      "https://base.example.test/verification?return_target=%2Fidentity%2Fpasskeys%2Fpasskey-1&ri=jp",
+    );
+
+    errorSpy.mockRestore();
   });
 });
 

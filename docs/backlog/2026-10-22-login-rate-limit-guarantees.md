@@ -1,40 +1,42 @@
 # Login rate-limit guarantees
 
 Status: Deferred; recorded at the user's request on 2026-10-22. No implementation change is
-authorized by this entry. Stored in `docs/backlog/` at the user's explicit request.
+authorized by this entry. `.com` authentication was retired after this entry was recorded; this
+entry now covers `.app` and `.org`. Stored in `docs/backlog/` at the user's explicit request.
 
 ## Current findings
 
 App Secret login declares IP limits of 5/minute and 20/15 minutes, plus an account limit of
-5/minute. App/com email OTP issuance declares IP limits of 5/minute and 20/15 minutes and an
-identifier cooldown of 30 seconds. Passkey paths have their own declarations. Auth surfaces also
-have a 300/minute/IP baseline. These are layered controls, not evidence that every login method
-has equivalent coverage.
+5/minute. App email OTP issuance declares IP limits of 5/minute and 20/15 minutes and an identifier
+cooldown of 30 seconds. Passkey paths have their own declarations. Auth surfaces also have a
+300/minute/IP baseline. These are layered controls, not evidence that every login method has
+equivalent coverage.
 
-The development RedisCacheStore logs connection failures and returns nil. The installed Rails
-rate limiter rejects only when a non-nil count exceeds the limit, so this request-counting layer
-fails open. Other admission or credential checks may still refuse the request.
+The development RedisCacheStore logs connection failures and returns nil. The installed Rails rate
+limiter rejects only when a non-nil count exceeds the limit, so this request-counting layer fails
+open. Other admission or credential checks may still refuse the request.
 
 ## Follow-up when selected
 
-- Inventory login methods and public endpoints separately for app, com and org, including external
-  IdP initiation/callbacks, credential verification and MFA.
+- Inventory login methods and public endpoints separately for app and org, including external IdP
+  initiation/callbacks, credential verification and MFA.
 - Define the required IP, identifier and actor windows and explicit backend-failure behavior.
-- Verify refusal at limit boundaries, distributed attempts and backend outage through public interfaces.
+- Verify refusal at limit boundaries, distributed attempts and backend outage through public
+  interfaces.
 - Distinguish application enforcement from external IdP policy and future AWS edge controls.
 
 ## Scope and verification context
 
 Development environment only. Cloudflare Tunnel is excluded. The user plans Amazon EKS with
-CloudFront and AWS WAF; the AWS rate-limiting mechanism is undecided. Planned edge controls are
-not current guarantees, and this entry does not select an AWS product or authorize external changes.
+CloudFront and AWS WAF; the AWS rate-limiting mechanism is undecided. Planned edge controls are not
+current guarantees, and this entry does not select an AWS product or authorize external changes.
 Development configuration selects `SMS_PROVIDER=test` in the checked-in environment file and SES
 SMTP for email; live provider settings and quotas were not inspected. Provider quotas must not be
 assumed to enforce application destination budgets.
 
 The source inspection was performed on 2026-10-22 at commit
-`febec3225cc9a0cfa53b9cbe817d20d366aba5a2`, including pre-existing uncommitted changes.
-A combined run of `test/services/sign/in/otp_resend_policy_test.rb`,
+`febec3225cc9a0cfa53b9cbe817d20d366aba5a2`, including pre-existing uncommitted changes. A combined
+run of `test/services/sign/in/otp_resend_policy_test.rb`,
 `test/controllers/auth/authentication_rate_limit_test.rb` and
 `test/operations/telephone_sign_up_otp_issuer_test.rb` stopped during test database preparation:
 `PG::DuplicateTable` for `publishing_media_files`. Test bodies did not run. Existing tests were

@@ -99,30 +99,46 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
       target = URI.parse(claims.fetch("url"))
 
       assert_withheld("Step-Up must reach the configured Auth surface") { target.host == auth_host }
+      # The admitted Auth entry does not render: it relays the browser to Base, which holds the
+      # continuation form, and posting that form returns the browser to Auth to redeem the entry.
+      navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
       browser.host!(auth_host)
-      browser.get(target.request_uri)
-      3.times do |step|
-        form = browser.response.parsed_body.at_css("form")
+      browser.get(target.request_uri, headers: navigation)
 
-        assert_not_nil form
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        browser.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
-          },
-        )
+      assert_equal 303, browser.response.status
+      assert_equal auth_host, URI.parse(browser.response.location).host
+      browser.get(browser.response.location, headers: navigation)
 
-        assert_equal 303, browser.response.status
-        next if step == 2
+      assert_equal 303, browser.response.status
+      confirmation = URI.parse(browser.response.location)
 
-        target = URI.parse(browser.response.location)
+      assert_equal base_host, confirmation.host
+      browser.host!(base_host)
+      browser.get(confirmation.request_uri, headers: navigation)
 
-        assert_withheld("Admission must retain its original browser surfaces") {
-          target.host == (step.zero? ? base_host : auth_host)
-        }
-        browser.host!(target.host)
-        browser.get(target.request_uri)
-      end
+      assert_equal 200, browser.response.status
+      form = browser.response.parsed_body.at_css("form#base-ceremony-binding-confirmation-form")
+
+      assert_not_nil form, "Base must render the step-up continuation form"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      browser.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
+      assert_equal 303, browser.response.status
+      returned = URI.parse(browser.response.location)
+
+      assert_withheld("Admission must retain its original browser surfaces") { returned.host == auth_host }
+      browser.host!(auth_host)
+      browser.get(returned.request_uri, headers: navigation)
+
+      assert_equal 303, browser.response.status
+      browser.get(browser.response.location, headers: navigation)
+
+      assert_equal 200, browser.response.status
+      assert_equal auth_host, browser.request.host
       browser.get("/verification/passkey/new", params: { ri: "jp" })
 
       assert_equal 200, browser.response.status
@@ -236,14 +252,15 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
           end
 
         ActiveSupport::Notifications.subscribed(fault, "sql.active_record") do
-          assert_raises(ActiveRecord::StatementInvalid) do
-            browser.patch(
-              "/identity/emails/registration", params: {
-                :client_email => { pass_code: code }, "cf-turnstile-response" => "test", :ri => "jp",
-              }, headers:,
-            )
-          end
+          browser.patch(
+            "/identity/emails/registration", params: {
+              :client_email => { pass_code: code }, "cf-turnstile-response" => "test", :ri => "jp",
+            }, headers:,
+          )
         end
+        # The finalizer converts the Source fault into its dependency-failure boundary, so the
+        # browser receives the service refusal rather than the injected StatementInvalid.
+        assert_equal 503, browser.response.status
 
         assert_nil flow.reload.otp_verifier
         assert_not_nil flow.otp_consumed_at

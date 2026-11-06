@@ -5,23 +5,23 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   include ActiveJob::TestHelper
 
   COOKIE_NAME = AuthenticationBase::ACCESS_COOKIE_KEY
 
   SURFACES = [
-    { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+    {
+      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       client_id: "core-app-jp",
       acme_host: ENV.fetch("PUBLIC_VISA_SERVICE_URL"),
-      resource: -> {
-        clients(:one)
-      }, },
-    { host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+    },
+    {
+      host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       client_id: "core-org-jp",
       acme_host: ENV.fetch("PUBLIC_VISA_STAFF_URL"),
-      resource: -> {
-        operators(:one)
-      }, },
+    },
   ].freeze
 
   setup do
@@ -37,6 +37,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     https!
     ClientIdentityState.ensure_defaults!
     OperatorIdentityState.ensure_defaults!
+    @test_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+      birthdate: Date.new(1990, 1, 1),
+    )
   end
 
   test "legacy RP authorize and callback paths are unroutable" do
@@ -54,7 +60,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
       client = OidcClientRegistry.find!("core-app-jp")
       code_verifier = SecureRandom.urlsafe_base64(48)
-      user = clients(:one)
+      user = @test_client
       ClientToken.where(user_id: user.id).delete_all
 
       # The account is at its limit and the waiting browser holds no session of its own: the
@@ -139,6 +145,21 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         assert satisfied, "Resolution admission #{condition} must hold"
       end
       assert_equal 200, response.status
+      limitation_page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+      limitation_props = limitation_page.fetch("props")
+
+      assert_equal "visa/app/sign/in/limitations/show", limitation_page.fetch("component")
+      assert_equal "Session limit", limitation_props.fetch("heading")
+      assert_equal "Revoke and continue", limitation_props.fetch("submit_label")
+      assert_equal "Cancel sign-in", limitation_props.fetch("cancel_label")
+      assert_not limitation_props.fetch("can_continue")
+      assert_equal resolution.challenge, limitation_props.fetch("resolution").fetch("value")
+      displayed_sessions =
+        limitation_props.fetch("sessions").map do |session_entry|
+          SessionLimitResolutionTokenRef.find_client_token(session_entry.fetch("session_ref"))
+        end
+
+      assert_equal tokens.map(&:id).sort, displayed_sessions.map(&:id).sort
       selected = tokens.first
 
       active_session_count = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
@@ -195,7 +216,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
       sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
-      user = clients(:one)
+      user = @test_client
       ClientToken.where(user_id: user.id).delete_all
       email = user.client_emails.create!(address: "oidc_email_limit_#{SecureRandom.hex(4)}@example.com")
       email.finalize_binding!
@@ -327,6 +348,20 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       host!(acme_host)
       get(handoff_uri.request_uri, headers: oidc_navigation_headers(acme_host, site: "same-origin"))
 
+      assert_response :success
+      continuation_form = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+      assert continuation_form, "Visa result GET must render its signed same-origin POST continuation"
+      continuation_fields =
+        continuation_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      post(
+        continuation_form["action"],
+        params: continuation_fields,
+        headers: oidc_navigation_headers(acme_host, site: "same-origin").merge(
+          "Origin" => OidcIssuer.absolute_url(acme_host),
+        ),
+      )
+
       assert_response :see_other
       resume_uri = URI.parse(jump_rt_url_from_location(response.location))
       resume_query = Rack::Utils.parse_nested_query(resume_uri.query.to_s)
@@ -421,13 +456,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         error: nil,
       )
 
-      userinfo_result = OidcOpUserInfoClient::Result.new(
-        success: true,
-        claims: { "sub" => OidcSubject.for(user, resource_type: "client") },
-        error: nil,
-        dependency_failure: false,
-      )
-
       OidcOpTokenClient.stub(:authorization_code, token_result) do
         host!(callback_uri.host)
         cookies.delete("session")
@@ -438,9 +466,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
           URI.parse("https://#{core_host}/"),
         )
-        OidcOpUserInfoClient.stub(:call, userinfo_result) do
-          get(callback_uri.request_uri, headers: browser_headers)
-        end
+        get(callback_uri.request_uri, headers: browser_headers)
       end
 
       assert_response :redirect
@@ -458,7 +484,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert(response.parsed_body.fetch("authenticated"))
-      assert_equal user.public_id, response.parsed_body.dig("actor", "id")
+      identity_binding = RpCoreAppIdentityBinding.includes(:principal).find_by!(
+        issuer: OidcIssuer.for_resource_type("client"), realm: "app", client_id: core_client.client_id,
+        subject: OidcSubject.for(user, resource_type: "client"),
+      )
+
+      assert_equal identity_binding.principal.public_id, response.parsed_body.dig("actor", "id")
     ensure
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.challenge_response = nil
@@ -472,8 +503,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation rejects another actor session" do
     acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
-    user = clients(:one)
-    other = clients(:two)
+    user = @test_client
+    other = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+      birthdate: Date.new(1990, 1, 1),
+    )
     ClientToken.where(user_id: [user.id, other.id]).delete_all
     own_token = ClientToken.create!(
       authentication_epoch: 0,
@@ -574,7 +610,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation fails closed when active sessions exceed the limit" do
     acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
-    user = clients(:one)
+    user = @test_client
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
       authentication_epoch: 0,
@@ -674,7 +710,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation rejects tampered challenge without revoking" do
     acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
-    user = clients(:one)
+    user = @test_client
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
       authentication_epoch: 0,
@@ -699,7 +735,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   # flow or an OIDC resolution challenge, nothing is listed, revoked, or issued.
   test "acme app session-limit limitation ignores a social_resolution token in the request" do
     acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
-    user = clients(:one)
+    user = @test_client
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
     social_token = Rails.application.message_verifier(:social_session_limit_limitation).generate(
@@ -733,7 +769,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation cancel does not issue login or consume oidc transaction" do
     acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
-    user = clients(:one)
+    user = @test_client
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
     host!(acme_host)
@@ -820,7 +856,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation cancel from an inertia visit leaves the app via inertia location" do
     acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
-    user = clients(:one)
+    user = @test_client
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
     host!(acme_host)
@@ -899,11 +935,15 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
            headers: browser_headers.merge("X-Inertia" => "true")
 
     assert_response :conflict
-    # The neutral Base entry is on this host, so the visit needs no Jump gateway.
+    # The canceled OIDC parent resumes through Visa's same-host delivery endpoint.
     location = URI.parse(response.headers["X-Inertia-Location"])
 
     assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_VISA_SERVICE_URL")}").host, location.host
-    assert_equal "/sign", location.path
+    assert_equal "/oidc/cancellation", location.path
+    cancellation_query = Rack::Utils.parse_nested_query(location.query.to_s)
+
+    assert_equal issuance.transaction.transaction_id, cancellation_query.fetch("transaction_ref")
+    assert_predicate cancellation_query.fetch("cancellation_ref"), :present?
     assert_nil response.headers["Location"]
     assert_predicate resolution.transaction.reload, :cancelled?
   end
@@ -1025,7 +1065,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       @oidc_admission_entry_ref ||= query["entry_ref"] if query["entry_ref"].present?
 
       unless [initial_host, sign_host].include?(target.host)
-        raise "unexpected OIDC admission host: #{target.host.inspect}"
+        raise ArgumentError, "unexpected OIDC admission host: #{target.host.inspect}"
       end
 
       host!(target.host)
@@ -1034,7 +1074,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       current_host = target.host
     end
 
-    raise "OIDC admission did not reach Auth" unless host == sign_host && response.successful?
+    raise ArgumentError, "OIDC admission did not reach Auth" unless host == sign_host && response.successful?
   end
 
   def issue_authenticated_app_oidc_transaction(user, auth_method:, code_verifier: nil)
@@ -1383,7 +1423,6 @@ class OidcRpBrowserFlowTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1406,24 +1445,6 @@ class OidcRpBrowserFlowTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

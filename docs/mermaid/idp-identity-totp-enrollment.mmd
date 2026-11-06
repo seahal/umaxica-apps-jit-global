@@ -1,5 +1,6 @@
 stateDiagram-v2
-    %% CURRENT implementation; sources and guards in transition inventory.
+    %% Current state axis: Base consumes OP state under an independent OP commit before the Zenith credential commit.
+    %% Enrollment audit shape is not implemented; sources and guards are in the transition inventory.
     state "available: unconsumed, before deadline" as available
     state "consumed_at present" as consumed
     state "expired (derived; no stored status)" as expired

@@ -139,6 +139,10 @@ class OmniAuthSocialProviderHostMatrix
     path = env["PATH_INFO"].to_s
     return @app.call(env) unless path.start_with?("/social/")
 
+    if google_request_phase?(env) && !canonical_google_request_origin?(env)
+      return non_canonical_google_request
+    end
+
     surface = surface_for_host(Rack::Request.new(env).host)
     segment = path.delete_prefix("/social/").split("/", 2).first.presence
 
@@ -154,6 +158,28 @@ class OmniAuthSocialProviderHostMatrix
   end
 
   private
+
+  def google_request_phase?(env)
+    env["PATH_INFO"] == "/social/google" && env["REQUEST_METHOD"].to_s.casecmp("POST").zero?
+  end
+
+  def canonical_google_request_origin?(env)
+    request = Rack::Request.new(env)
+    request.host.casecmp?(OmniAuthCallbackOrigin.callback_host) &&
+      env["HTTP_ORIGIN"].to_s == OmniAuthCallbackOrigin.callback_origin
+  end
+
+  def non_canonical_google_request
+    [
+      403,
+      {
+        "Content-Type" => "text/plain; charset=utf-8",
+        "Cache-Control" => "no-store",
+        "Referrer-Policy" => "no-referrer",
+      },
+      [I18n.t("sign.app.social.sessions.create.failure")],
+    ]
+  end
 
   def allowed?(surface:, provider:, path:)
     case surface

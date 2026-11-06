@@ -19,7 +19,7 @@ updates:
       prefix: "[Security]"
       include: scope
     cooldown:
-      default-days: 7
+      default-days: 3
     groups:
       security-updates:
         patterns:
@@ -61,7 +61,7 @@ updates:
       prefix: "[Security]"
       include: scope
     cooldown:
-      default-days: 7
+      default-days: 3
     groups:
       security-updates:
         patterns:
@@ -83,7 +83,7 @@ updates:
       - docker
       - infrastructure
     cooldown:
-      default-days: 7
+      default-days: 3
     commit-message:
       prefix: "[Docker]"
 
@@ -101,6 +101,6 @@ updates:
       - github-actions
       - ci-cd
     cooldown:
-      default-days: 7
+      default-days: 3
     commit-message:
       prefix: "[CI]"

@@ -37,7 +37,7 @@
 #
 one:
   id: 1
-  subject_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  subject_id: 1
   subject_type: AppPreference
   occurred_at: <%= Time.current %>
   purge_eligible_at: <%= 20.years.from_now %>

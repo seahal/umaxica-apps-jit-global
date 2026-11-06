@@ -69,7 +69,7 @@ class EmailCredentialRegistrationBootstrapGuard
 
   def browser_matches?(session, binding, now)
     session.status == "PENDING" && session.discard_at > now && binding.base_token_id == token.id &&
-      binding.purpose == "bootstrap_handoff" && binding.retired_at.nil? &&
+      binding.purpose == "bootstrap_handoff" && !binding.retired? && !binding.switched? &&
       binding.base_browser_digest == AuthAdmissionBinding.browser_digest(
         surface: surface, entry_ref: binding.entry_ref, nonce: browser_nonce,
       )

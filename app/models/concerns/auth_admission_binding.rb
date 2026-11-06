@@ -21,10 +21,20 @@ module AuthAdmissionBinding
   }.freeze
   BASE_TOKEN_PURPOSES = PARENT_PURPOSES.fetch(:step_up_ceremony_transaction).freeze
   CURFEW_DURATION = 30.minutes
+  ISSUED_STATUS_ID = 10
+  ATTACHED_STATUS_ID = 20
+  BASE_CONFIRMED_STATUS_ID = 30
+  REDEEMED_STATUS_ID = 40
+  RETIRED_STATUS_ID = 90
+  SWITCHED_STATUS_ID = 91
+  ACTIVE_STATUS_IDS = [ISSUED_STATUS_ID, ATTACHED_STATUS_ID, BASE_CONFIRMED_STATUS_ID].freeze
+  ATTACHED_STATUS_IDS = [ATTACHED_STATUS_ID, BASE_CONFIRMED_STATUS_ID, REDEEMED_STATUS_ID, SWITCHED_STATUS_ID].freeze
+  CONFIRMED_STATUS_IDS = [BASE_CONFIRMED_STATUS_ID, REDEEMED_STATUS_ID, SWITCHED_STATUS_ID].freeze
+  STATUS_IDS = [*ACTIVE_STATUS_IDS, REDEEMED_STATUS_ID, RETIRED_STATUS_ID, SWITCHED_STATUS_ID].freeze
   IMMUTABLE_FACT_COLUMNS = %w(
     entry_ref purpose authorization_transaction_id step_up_ceremony_transaction_id
     base_token_id base_browser_digest expires_at curfew_at entry_intent auth_ceremony_session_id confirmation_ref
-    base_confirmed_at redeemed_at admitted_auth_ceremony_session_id retired_at
+    base_confirmed_at redeemed_at admitted_auth_ceremony_session_id retired_at status_id updated_at
   ).freeze
 
   class InvalidTransition < StandardError; end
@@ -52,6 +62,14 @@ module AuthAdmissionBinding
 
   public
 
+  def issued?
+    status_id == ISSUED_STATUS_ID
+  end
+
+  def active?
+    ACTIVE_STATUS_IDS.include?(status_id)
+  end
+
   def parent_count
     [authorization_transaction_id, step_up_ceremony_transaction_id].compact.one? ? 1 : 0
   end
@@ -65,7 +83,7 @@ module AuthAdmissionBinding
 
   def live?(now: nil)
     decision_time = now || self.class.database_now
-    retired_at.nil? && redeemed_at.nil? && expires_at > decision_time
+    active? && expires_at > decision_time
   end
 
   def expired?(now: nil)
@@ -74,19 +92,27 @@ module AuthAdmissionBinding
   end
 
   def confirmed?
-    base_confirmed_at.present?
+    CONFIRMED_STATUS_IDS.include?(status_id)
   end
 
   def attached?
-    auth_ceremony_session_id.present? && confirmation_ref.present?
+    ATTACHED_STATUS_IDS.include?(status_id)
   end
 
   def redeemed?
-    redeemed_at.present?
+    status_id == REDEEMED_STATUS_ID
+  end
+
+  def redeemed_or_switched?
+    [REDEEMED_STATUS_ID, SWITCHED_STATUS_ID].include?(status_id)
   end
 
   def retired?
-    retired_at.present?
+    status_id == RETIRED_STATUS_ID
+  end
+
+  def switched?
+    status_id == SWITCHED_STATUS_ID
   end
 
   # Attaches one currently active Auth session without admitting this new purpose, and records a fresh
@@ -107,6 +133,7 @@ module AuthAdmissionBinding
 
             raise InvalidTransition, "auth ceremony session is already attached"
           end
+          raise InvalidTransition, "binding is not issued" unless issued?
           raise InvalidTransition,
                 "binding proof is partial" if auth_ceremony_session_id.present? || self.confirmation_ref.present?
 
@@ -116,6 +143,7 @@ module AuthAdmissionBinding
             update!(
               auth_ceremony_session_id: auth_session.id,
               confirmation_ref: confirmation_ref,
+              status_id: ATTACHED_STATUS_ID,
               updated_at: decision_time,
             )
           end
@@ -133,18 +161,21 @@ module AuthAdmissionBinding
     writing_connection do
       with_lock do
         decision_time = self.class.database_now
-        if confirmed?
+        if status_id == BASE_CONFIRMED_STATUS_ID || redeemed?
           return self if base_confirmed_at <= decision_time && base_token_id == base_token&.id &&
             base_browser_digest == browser_digest.to_s
 
           raise InvalidTransition, "Base confirmation is already fixed"
         end
-        raise InvalidTransition, "binding is not live" unless live?(now: decision_time)
+        raise InvalidTransition,
+              "binding is not live" unless status_id == ATTACHED_STATUS_ID && live?(now: decision_time)
         raise InvalidTransition, "Auth attachment is required" unless attached?
         raise InvalidTransition, "Base token does not match binding" unless base_token_id == base_token&.id
         raise InvalidTransition, "browser binding digest mismatch" unless base_browser_digest == browser_digest.to_s
 
-        with_transition_write { update!(base_confirmed_at: decision_time, updated_at: decision_time) }
+        with_transition_write do
+          update!(base_confirmed_at: decision_time, status_id: BASE_CONFIRMED_STATUS_ID, updated_at: decision_time)
+        end
       end
     end
   end
@@ -168,9 +199,9 @@ module AuthAdmissionBinding
 
           raise InvalidTransition, "binding is already redeemed"
         end
-        raise InvalidTransition, "binding is retired" if retired?
+        raise InvalidTransition, "binding is terminal" if retired? || switched?
         raise InvalidTransition, "binding is expired" unless expires_at > decision_time
-        raise InvalidTransition, "Base confirmation is required" unless confirmed?
+        raise InvalidTransition, "Base confirmation is required" unless status_id == BASE_CONFIRMED_STATUS_ID
         raise InvalidTransition,
               "Auth session does not match binding" unless auth_ceremony_session_id == auth_session.id
         raise InvalidTransition, "Auth session was not admitted" unless admitted_auth_session.admitted?
@@ -182,6 +213,7 @@ module AuthAdmissionBinding
           update!(
             redeemed_at: decision_time,
             admitted_auth_ceremony_session_id: admitted_auth_session.id,
+            status_id: REDEEMED_STATUS_ID,
             updated_at: decision_time,
           )
         end
@@ -196,9 +228,33 @@ module AuthAdmissionBinding
       with_lock do
         decision_time = self.class.database_now
         return self if retired?
-        raise InvalidTransition, "redeemed binding cannot be retired" if redeemed?
+        raise InvalidTransition, "terminal binding cannot be retired" if redeemed? || switched?
+        raise InvalidTransition, "binding is not active" unless active?
 
-        with_transition_write { update!(retired_at: decision_time, updated_at: decision_time) }
+        with_transition_write do
+          update!(retired_at: decision_time, status_id: RETIRED_STATUS_ID, updated_at: decision_time)
+        end
+      end
+    end
+  end
+
+  # A Switch terminates a redeemed admission only after the Auth ceremony was
+  # explicitly cancelled at its first page. Its original proof remains intact.
+  def switch!(auth_session:)
+    ensure_configured_session!(auth_session)
+
+    writing_connection do
+      with_lock do
+        auth_session.with_lock do
+          decision_time = self.class.database_now
+          raise InvalidTransition, "binding is not redeemed" unless redeemed?
+          raise InvalidTransition, "Auth session does not match binding" unless
+            admitted_auth_ceremony_session_id == auth_session.id
+          raise InvalidTransition, "Auth ceremony was not cancelled before progress" unless
+            auth_session.cancelled_before_authentication_progress?
+
+          with_transition_write { update!(status_id: SWITCHED_STATUS_ID, updated_at: decision_time) }
+        end
       end
     end
   end
@@ -271,12 +327,6 @@ module AuthAdmissionBinding
     end
 
     errors.add(:base, "redemption timestamp and admitted session must be supplied together")
-  end
-
-  def validate_terminal_exclusivity
-    return unless redeemed_at.present? && retired_at.present?
-
-    errors.add(:base, "redeemed and retired states are mutually exclusive")
   end
 
   def ensure_configured_session!(session)

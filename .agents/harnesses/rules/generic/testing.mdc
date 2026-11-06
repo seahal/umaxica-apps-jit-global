@@ -25,14 +25,16 @@ Cover every case relevant to the change:
 
 ## Boundaries and partitions
 
-These obligations apply when a **public** contract includes a range, limit, format, or
+These obligations apply when an affected **public** contract includes a range, limit, format, or
 classification. They do not require extra cases on private or protected subroutines, and they do
 not replace success, failure, and authorization coverage.
 
-- **Boundaries (MUST):** for each identified boundary, verify the nearest representable value
-  immediately below it, the boundary itself, and the nearest representable value immediately above
-  it. When a neighboring value is not representable, valid, or reachable, use the nearest available
-  value and record that exception in the test name or a comment on that test.
+- **Ordered boundaries (MUST):** for ranges and limits, verify the nearest reachable values below,
+  at and above each boundary. When a neighboring value is not representable, valid or reachable,
+  use the nearest available value and explain the exception in the test name or a comment.
+- **Formats and classifications (MUST):** cover relevant accepted and rejected equivalence classes
+  and transitions. Apply ordered boundary checks where the contract also defines an ordered range
+  or limit, such as a format's length limit.
 - **Partitions (SHOULD):** take one representative value from each equivalence partition. Add
   further points inside a partition only when the contract distinguishes values inside that
   partition. Three points around a cutoff are boundary cases, not extra partition representatives.

@@ -8,23 +8,22 @@
 # (RpRequestAuthenticator). It never reads the OP store or the canonical actor. The callback commits
 # the verified (issuer, subject, sid) into the cell store (RpCallbackCommitter).
 #
-# The shared transitional role keeps the pre-R5 OP-chain path; RuntimeRole::SHARED records that
-# exit condition (R5-WU19 cell activation). The Base OP role keeps it permanently: it is the OP.
+# The shared role uses the local cell for Base APP and ORG RP-owned routes. Other shared
+# routes and the Base OP role retain the OP-chain path.
 module RpCellLocalSession
   extend ActiveSupport::Concern
-
-  # An HTTPS owner the cell depends on for this request did not answer; fail the request rather
-  # than guess the actor's context (same stance as the dashboard identity read).
-  class OwnerUnavailable < StandardError; end
 
   # Public signing keys of each realm OP, cached per process (not request state): one fetch per
   # issuer per OidcOpJwksClient::CACHE_TTL instead of one per request.
   private
 
-  # Only an `rp-*` process is a cell. The shared transitional role and the Base OP role (which
-  # serves the identity/credential pages on the same host) keep the OP-chain path.
   def rp_cell_process?
-    RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+    role = RuntimeRole.current
+    return true if RuntimeRole::RP_ROLES.include?(role)
+    return false unless RuntimeRole.shared?(role)
+    return false unless controller_path.start_with?("base/app/", "base/org/")
+
+    %w(rp-base-app-ww rp-base-org-ww).include?(RuntimeRole.route_owner(controller_path))
   end
 
   def rp_cell

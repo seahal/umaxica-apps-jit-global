@@ -2,7 +2,18 @@
 
 ## Status
 
-Accepted on 2026-05-14; amended on 2026-10-31 by the owner-approved WU-P0 decision.
+Accepted on 2026-05-14; amended on 2026-10-31 by the owner-approved WU-P0 decision and on 2026-11-04
+for the Experience redesign in `five.md` C3-C4.
+
+## Amendment 2026-11-04: Web Push in both Experience stores
+
+Web Push enabled/disabled remains a fixed reference-table option. The owner decided that the setting
+is available in Browser Experience on APP, COM and ORG, and in Account Experience on APP and ORG; an
+explicitly saved Account Experience value takes precedence over Browser Experience, while an unset
+value falls through to Browser Experience and then the `disabled` default. This setting is not
+browser notification permission or subscription state, and it does not authorize delivery. The
+Experience redesign's persistence names and routes are not fixed by this amendment; see `five.md` C5
+for the remaining shape and lifecycle decisions.
 
 ## Context
 

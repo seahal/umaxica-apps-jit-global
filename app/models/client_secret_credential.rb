@@ -254,7 +254,7 @@ class ClientSecretCredential < AppZenithRecord
       transaction_id: ceremony.authorization_transaction_ref, secret_sign_in_flow_id: flow.id,
     )
     now = ClientOidcAuthorizationTransaction.database_now
-    transaction && transaction.status == "pending" &&
+    transaction&.pending? &&
       !transaction.expired?(now: now) && !transaction.login_challenge_expired?(now: now)
   end
 

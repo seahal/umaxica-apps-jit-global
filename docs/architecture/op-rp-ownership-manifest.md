@@ -1,9 +1,9 @@
 # OP/RP Ownership Manifest (R5-WU01)
 
-Status: generated 2026-10-17 from the development boot (eager-loaded models, live development
-catalog, controller source). It is the evidence base for which store each RP cell may touch after R5
-and which current reads must move behind an OP or domain HTTPS contract. Regenerate it, do not
-hand-edit counts, when models or controllers change.
+Status: model inventory generated 2026-10-17 from the development boot (eager-loaded models, live
+development catalog, controller source). The `OidcCallback` reader entry was rechecked against
+current controller and service references on 2026-11-01; model counts and other reader rows were not
+regenerated.
 
 Owner specification: `one.md` sections 4, 5.3 and R5-WU01.
 
@@ -47,7 +47,6 @@ is a cross-owner read that R5 must replace; none may survive cell activation (R5
 | `app/controllers/edit/**` | —                                                        | `Operator`, `OperatorIdentity`, `OperatorOidcIdentityBinding`                     | 12 `Publishing::*::Entry` classes | R5-WU07; R5-WU13 Publishing HTTPS                  |
 | `app/controllers/tech/**` | `OpOrgGrant`, `OperatorToken`                            | `Operator`, `OperatorIdentity`, `OperatorOidcIdentityBinding`                     | —                                 | R5-WU07; R5-WU11 capability HTTPS                  |
 | `BrowserRpAuthentication` | `ClientToken`/`VisitorToken`/`OperatorToken`, `Op*Grant` | `Client`, `Visitor`, `Operator`                                                   | —                                 | R5-WU07 (local session + Access JWT)               |
-| `OidcCallback`            | —                                                        | `Client`                                                                          | —                                 | R5-WU07 callback into local principal              |
 | `AuthenticationJwtTokens` | `*DeviceSession`, `*Token`                               | —                                                                                 | —                                 | OP-only issuance (R5-WU04)                         |
 
 Indirect reads through services, operations and policies are not expanded here; each downstream

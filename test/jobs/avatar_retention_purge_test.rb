@@ -8,6 +8,13 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
+  # The organization row is ordinary committed data: unlike the Avatar history it has no
+  # append-only guard, and a leftover enterprise is what the next fixture load trips over when it
+  # re-enables the enterprise foreign keys.
+  teardown do
+    Enterprise.where(id: @organization.id).delete_all if @organization
+  end
+
   test "ownership history defers Avatar purge idempotently" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
@@ -67,7 +74,7 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
   end
 
   test "concurrent ownership deferrals converge on one row" do
-    organization = Enterprise.create!(name: "Retention race owner", title: "RetOwner")
+    @organization = Enterprise.create!(name: "Retention race owner", title: "RetOwner")
     avatar = nil
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
@@ -81,7 +88,7 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
       )
       AvatarEnterpriseOwnershipPeriod.create!(
         avatar: avatar,
-        enterprise_public_id: organization.public_id,
+        enterprise_public_id: @organization.public_id,
         valid_from: avatar.created_at,
       )
     end

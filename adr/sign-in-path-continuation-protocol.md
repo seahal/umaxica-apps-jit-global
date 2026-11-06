@@ -2,7 +2,7 @@
 
 ## Status
 
-**Accepted (2026-10-23); implemented in the Rails authentication-cycle slice on 2026-10-24.** Owner
+**Accepted (2026-10-23); amended for the Visa authorization result boundary on 2026-11-01.** Owner
 decisions D-100, D-101, D-46, D-49, D-50, D-52 of the 2026-10 authentication cycle are implemented
 by WU-12. The external Jump/Edge integration remains outside this repository.
 
@@ -71,3 +71,20 @@ CSRF-protected POSTs.
 `.agents/harnesses/rules/generic/authentication-boundaries.mdc` are the normative short-form rules.
 They must be read with this ADR: the six conditions above apply to every Sign-in path continuation,
 while unrelated GET requests still do not consume or mutate authentication state.
+
+## Visa authorization result amendment (2026-11-01)
+
+This amendment supersedes the final-result-GET behavior in Decision 1 and condition 4 above for the
+Visa APP/ORG OIDC result, cancellation, switch, and silent-SSO continuations. Their GET endpoints
+validate the browser binding and transaction, read the relevant handoff, and render a purpose-bound,
+short-lived same-origin POST form. They do not consume the result, finalize a Root Session, cancel
+or switch a transaction, issue an authorization code, or write Preference state. The existing
+`Visa::{App,Org}::Oauth::AuthorizationsController#create` POST is the commit boundary: it validates
+the Rails CSRF token, Origin/Fetch Metadata, signed purpose and expiry, then revalidates the browser
+binding and transaction before performing the requested result, cancellation, switch, or silent-SSO
+operation. Successful sign-in applies Preference only after authentication finalization.
+
+The earlier Design D rules remain in force for the explicitly state-consuming Auth admission and
+handoff continuations. A Visa display GET is not one of those consumption boundaries. Retries after
+the Visa POST continue to follow the transaction's existing idempotency and one-shot result rules.
+The final URL remains clean, and the GET response remains non-cacheable and referrer-safe.

@@ -20,28 +20,42 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     @passkey = @user.client_passkeys.create!(
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
-    requirement = StepUpRequirement.new(
-      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes,
-      session_binding: @token.public_id, token_binding: @token.public_id,
-      purpose: "step_up", audience: "step_up:app", require_session_binding: true,
-      actor_ref: @user.public_id, resource_ref: nil, tenant_ref: nil,
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: @token.authentication_epoch, client_token: @token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
     )
-    @issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: @user, token: @token, requirement: requirement, return_to: "/identity/birthdate?ri=jp",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @user, resource_type: "client")
+    @issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor: @user, token: @token, client:, params:, validated_request:,
     )
-    @ticket = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: @issuance.transaction.transaction_id)
+    @entry_ref = @issuance.entry_ref
+    @transaction = @issuance.ticket
+    @ticket = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: @transaction.transaction_id)
     https!
     host! @host
     admit_auth_ceremony_entry!(
       auth_app_verification_path,
-      reference: @issuance.reference,
+      reference: @entry_ref,
       params: { ri: "jp" },
       base_token: @token,
       browser_digest: AuthAdmissionBinding.browser_digest(
-        surface: "app", entry_ref: @issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        surface: "app", entry_ref: @entry_ref, nonce: @issuance.authorization_transaction.login_challenge,
       ),
     )
     # This controller test covers step-up evidence handling. Rails test mode disables forgery
@@ -69,15 +83,15 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
 
     assert_response :success
     assert_equal "ok", response.parsed_body.fetch("status")
-    assert_equal "verified", @issuance.transaction.reload.status
-    assert_equal @passkey.public_id, @issuance.transaction.verified_credential_ref
-    assert_equal "settings_birthdate", @issuance.transaction.required_scope
+    assert_equal "verified", @transaction.reload.status
+    assert_equal @passkey.public_id, @transaction.verified_credential_ref
+    assert_equal "step_up", @transaction.purpose
     assert_nil @token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
-  test "cancel issues an exact cancellation handoff to the fixed Base receiver" do
+  test "cancel issues an exact cancellation handoff to the OP authorize receiver" do
     post auth_app_verification_cancellation_path(ri: "jp"),
          params: { return_to: "/sign/in/challenge", pt: "/identity/birthdate" },
          headers: { "X-CSRF-Token" => @csrf }
@@ -86,18 +100,21 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     gateway = URI.parse(response.location)
     params = Rack::Utils.parse_nested_query(gateway.query)
 
-    assert_equal base_app_verification_cancellation_path, gateway.path
-    assert_equal @issuance.transaction.transaction_id, params.fetch("transaction_ref")
-    assert_not params.key?("cancellation_handoff")
-    assert_predicate params.fetch("cancellation_ref"), :present?
-    assert_equal "pending", @issuance.transaction.reload.status
+    expected_endpoint = URI.parse(OidcIssuer.authorization_endpoint("client"))
+
+    assert_equal expected_endpoint.host, gateway.host
+    assert_equal expected_endpoint.path, gateway.path
+    assert_equal @transaction.transaction_id, params.fetch("step_up_ticket_ref")
+    assert_equal @issuance.context.public_id, params.fetch("step_up_context_ref")
+    assert_predicate params.fetch("step_up_cancellation_ref"), :present?
+    assert_equal "pending", @transaction.reload.status
     assert_nil @token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
   test "GET renders the existing panel without issuing a challenge or extending the transaction" do
-    deadline = @issuance.transaction.expires_at
+    deadline = @transaction.expires_at
     attempts = @ticket.attempt_count
     2.times do
       get new_auth_app_verification_passkey_path(ri: "jp")
@@ -111,7 +128,7 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
       assert_equal "post", props.fetch("cancel").fetch("method")
       assert_nil @ticket.reload.passkey_challenge_ref
       assert_equal attempts, @ticket.attempt_count
-      assert_equal deadline, @issuance.transaction.reload.expires_at
+      assert_equal deadline, @transaction.reload.expires_at
     end
   end
 
@@ -127,7 +144,7 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
            headers: { "X-CSRF-Token" => @csrf }, as: :json
 
       assert_response :unprocessable_content
-      assert_equal "pending", @issuance.transaction.reload.status
+      assert_equal "pending", @transaction.reload.status
       assert_not_nil @ticket.reload.passkey_challenge_consumed_at
       assert_nil @token.reload.last_step_up_at
     end
@@ -139,8 +156,9 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     )
 
     assert_response :success
-    assert_equal "settings_birthdate", @issuance.transaction.reload.required_scope
-    assert_equal "/identity/birthdate?ri=jp", @issuance.transaction.return_to
+    assert_equal "step_up", @transaction.reload.purpose
+    assert_equal OidcAuthorizeRequestResolver::STEP_UP_SCOPE, @transaction.required_scope
+    assert_equal OidcAuthorizeRequestResolver::STEP_UP_RETURN_TO, @transaction.return_to
     assert_nil @ticket.reload.passkey_challenge_ref
     assert_nil @token.reload.last_step_up_at
   end
@@ -166,7 +184,7 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
       assert_equal 400, other_browser.response.status
     end
 
-    assert_equal "pending", @issuance.transaction.reload.status
+    assert_equal "pending", @transaction.reload.status
     assert_nil @ticket.reload.passkey_challenge_ref
     assert_nil @token.reload.last_step_up_at
   end

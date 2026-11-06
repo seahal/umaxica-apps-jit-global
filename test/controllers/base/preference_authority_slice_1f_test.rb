@@ -269,6 +269,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     assert_response :ok
     assert_equal "dr", response.parsed_body.dig("preference", "ct")
     actor_preference = user.client_preference
+
     assert_equal ClientPreferenceThemeOption::DARK, actor_preference.client_preference_theme.option_id
   end
 
@@ -330,11 +331,17 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   private
 
   def set_client_preference_option!(client, field, option_name)
-    preference = ClientPreference.find_or_create_by!(client_id: client.id, status_id: ClientPreferenceStatus::ACTIVE) do |record|
-      record.explicit_fields = []
-    end
+    preference =
+      ClientPreference.find_or_create_by!(
+        client_id: client.id,
+        status_id: ClientPreferenceStatus::ACTIVE,
+      ) do |record|
+        record.explicit_fields = []
+      end
     option_class = PreferenceClassRegistry.option_class("Client", field)
-    option = option_class.find_by!(name: option_name)
+    option = option_class.all.find { |candidate| candidate.name == option_name }
+    raise ActiveRecord::RecordNotFound, "preference option is unavailable" unless option
+
     record_class = PreferenceClassRegistry.record_class("Client", field)
     record = record_class.find_or_initialize_by(preference_id: preference.id)
     record.update!(option_id: option.id)

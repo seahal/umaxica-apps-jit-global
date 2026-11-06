@@ -269,7 +269,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     rows = inertia_props.fetch("activities")
 
     assert_equal 1, rows.length
-    assert_equal "Googleでサインイン", rows.first.fetch("activity")
+    assert_equal "Googleでログイン", rows.first.fetch("activity")
     assert_equal "低", rows.first.fetch("risk")
     %w(10.2.3.4 private-client-id internal-rp private-policy refresh-secret-sentinel).each do |value|
       assert_not_includes response.body, value
@@ -380,7 +380,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     assert_equal %w(occurred_at activity device source risk), inertia_props.fetch("columns").keys
     rows = inertia_props.fetch("activities")
 
-    assert_equal ["サインインに失敗", "Googleでサインイン"], rows.map { |row| row.fetch("activity") }
+    assert_equal ["ログインに失敗", "Googleでログイン"], rows.map { |row| row.fetch("activity") }
     assert_equal ["中", "低"], rows.map { |row| row.fetch("risk") }
     assert_equal %w(occurred_at activity device source risk risk_rank), rows.last.keys
     %w(172.16.0.2 10.0.0.5 private-operator-client internal-operator-rp private-policy internal-auth-value

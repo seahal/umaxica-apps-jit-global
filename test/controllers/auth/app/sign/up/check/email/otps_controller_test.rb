@@ -4,6 +4,9 @@
 require "test_helper"
 
 class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -11,8 +14,15 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
   include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
+  include SignInFlowCleanup
 
   setup do
+    # The test lock serializes these HTTP journeys; retain pre-existing rows for scoped cleanup.
+    @initial_client_ids = Client.pluck(:id)
+    @initial_signup_ids = ClientSignUpFlow.pluck(:id)
+    @initial_binding_ids = ClientAuthAdmissionBinding.pluck(:id)
+    @initial_ceremony_ids = ClientAuthCeremonySession.pluck(:id)
+    @initial_parent_ids = ClientOidcAuthorizationTransaction.pluck(:id)
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
@@ -43,10 +53,12 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
         payload, = JWT.decode(token, nil, false)
         target = URI.parse(payload.fetch("url"))
       end
+
       assert_includes [base_host, visa_host_for_test_base_host(base_host), auth_host], target.host
       browser.host!(target.host)
       browser.get(target.request_uri, headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" })
     end
+
     assert_equal 200, browser.response.status
     assert_equal auth_host, browser.host
     switch_browser_to_sign_up!(browser)
@@ -58,6 +70,59 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   end
 
   teardown do
+    # Delivery runs after real commits, so rollback fixtures cannot clean up this journey.
+    owners = Client.where.not(id: @initial_client_ids).to_a
+    owner_ids = owners.map(&:id)
+    # Completed signup also commits the actor's bootstrap identity and collective graph.
+    owners.each do |owner|
+      identity_ids = ClientIdentity.where(source_record_id: owner.id).pluck(:id)
+      persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+      enterprise_ids =
+        (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
+          EnterpriseOwnership.where(client_id: owner.id).pluck(:enterprise_id)).uniq
+      unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+      PersonaMembership.where(persona_id: persona_ids)
+        .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+      PersonaAssignment.where(persona_id: persona_ids).delete_all
+      ClientOidcIdentityBinding.where(client_identity_id: identity_ids).delete_all
+      AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+      ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+      ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+      ClientPersona.where(id: persona_ids).delete_all
+      ClientIdentity.where(id: identity_ids).delete_all
+      EnterpriseUnitClosure.where(ancestor_id: unit_ids)
+        .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
+      EnterpriseUnit.where(id: unit_ids).delete_all
+      EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+      Enterprise.where(id: enterprise_ids).delete_all
+    end
+    flows = ClientSignUpFlow.where.not(id: @initial_signup_ids).to_a
+    session_refs =
+      flows.map do |flow|
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      end
+    ClientEmailCeremonyTransaction.where(session_ref: session_refs).delete_all
+    ClientSignUpFlow.where(id: flows.map(&:id)).delete_all
+    ClientAuthAdmissionBinding.where.not(id: @initial_binding_ids).delete_all
+    ClientAuthCeremonySession.where.not(id: @initial_ceremony_ids).delete_all
+    ClientOidcAuthorizationTransaction.where.not(id: @initial_parent_ids).delete_all
+    delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: owner_ids))
+    ClientDeviceSession.where(user_id: owner_ids).update_all(current_refresh_token_id: nil)
+    ClientToken.where(user_id: owner_ids).delete_all
+    ClientDeviceSession.where(user_id: owner_ids).delete_all
+    ClientContactAuditOutbox.where(owner_ref: owners.map(&:public_id)).delete_all
+    ClientEmail.where(user_id: owner_ids).delete_all
+    ClientAccount.where(user_id: owner_ids).delete_all
+    ClientOidcConnection.where(user_id: owner_ids).delete_all
+    ClientRegistrationCompletion.where(client_id: owner_ids).delete_all
+    ClientAuthorityLock.where(client_id: owner_ids).delete_all
+    Client.where(id: owner_ids).delete_all
+  ensure
     ActionController::Base.allow_forgery_protection = @previous_forgery_protection
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
@@ -328,6 +393,8 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_predicate cycle.reload.completed_requirements.dig("otp", "cleared_at"), :present?
   end
 
+  # Control the owning Ticket clock without advancing the browser wall clock: advancing both
+  # also switches GETs to the separate replica fixture database after the resolver delay.
   test "show with an expired otp redirects to the start" do
     clear_enqueued_jobs
     post auth_app_sign_up_email_url(ri: "jp"),
@@ -371,9 +438,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       email_candidate_ref: user_email.public_id,
     ).sole.otp_expires_at
     ClientEmailCeremonyTransaction.stub(:database_now, expiry + 1.second) do
-      travel_to(expiry + 1.second) do
-        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
-      end
+      get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
     end
 
     assert_response :redirect
@@ -423,9 +488,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       email_candidate_ref: user_email.public_id,
     ).sole.otp_expires_at
     ClientEmailCeremonyTransaction.stub(:database_now, expiry) do
-      travel_to(expiry) do
-        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
-      end
+      get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
     end
 
     assert_response :redirect
@@ -475,9 +538,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       email_candidate_ref: user_email.public_id,
     ).sole.otp_expires_at
     ClientEmailCeremonyTransaction.stub(:database_now, expiry - 1.second) do
-      travel_to(expiry - 1.second) do
-        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
-      end
+      get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
     end
 
     assert_response :success
@@ -527,11 +588,9 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       email_candidate_ref: user_email.public_id,
     ).sole.otp_expires_at
     ClientEmailCeremonyTransaction.stub(:database_now, expiry + 1.second) do
-      travel_to(expiry + 1.second) do
-        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
-              params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
-              headers: @headers
-      end
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+            params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
+            headers: @headers
     end
 
     assert_response :redirect
@@ -581,11 +640,9 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       email_candidate_ref: user_email.public_id,
     ).sole.otp_expires_at
     ClientEmailCeremonyTransaction.stub(:database_now, expiry) do
-      travel_to(expiry) do
-        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
-              params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
-              headers: @headers
-      end
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+            params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
+            headers: @headers
     end
 
     assert_response :redirect
@@ -636,11 +693,9 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       email_candidate_ref: user_email.public_id,
     ).sole.otp_expires_at
     ClientEmailCeremonyTransaction.stub(:database_now, expiry - 1.second) do
-      travel_to(expiry - 1.second) do
-        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
-              params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
-              headers: @headers
-      end
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+            params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
+            headers: @headers
     end
 
     assert_response :redirect
@@ -1030,7 +1085,6 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1053,24 +1107,6 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

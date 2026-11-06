@@ -32,7 +32,7 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       get auth_app_api_v0_preferences_theme_path, as: :json
 
       assert_response :success
@@ -51,12 +51,12 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       patch auth_app_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
     end
 
     assert_response :forbidden
-    assert_nil response.headers["Set-Cookie"]
+    assert_no_preference_state_cookies
   end
 
   test "PATCH cannot create Preference state for an anonymous visitor on Auth" do
@@ -67,7 +67,7 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     end
 
     assert_response :forbidden
-    assert_nil response.headers["Set-Cookie"]
+    assert_no_preference_state_cookies
   end
 
   private
@@ -78,13 +78,14 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     defaults = SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first)
     token = nil
 
-    with_preference_jwt_keys(host: host) do
+    with_preference_realm_issuers do
       token = PreferenceToken.encode(
         defaults.merge(preferences),
         host: host,
         preference_type: preference_type,
         public_id: public_id,
         jti: jti,
+        issued_at: Time.current,
       )
     end
 
@@ -99,7 +100,6 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -126,24 +126,6 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

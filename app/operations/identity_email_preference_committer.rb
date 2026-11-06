@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class IdentityEmailPreferenceCommitter
+  # An enclosing OP transaction would defer the evidence consumption while the independent
+  # Zenith preference write commits. Refuse instead of reporting a committed preference.
+  class TransactionConflict < ArgumentError; end
+
   class Denied < StandardError; end
 
   class DependencyFailure < StandardError; end
@@ -10,8 +14,9 @@ class IdentityEmailPreferenceCommitter
   class << self
     public
 
-    def call!(actor:, token:, email:, preferences:)
+    def call!(actor:, token:, email:, preferences:, step_up_evidence: nil)
       validate_binding!(actor, token, email)
+      require_independent_ticket_commit!
       attributes = normalize_preferences!(preferences)
       Client.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
@@ -41,13 +46,14 @@ class IdentityEmailPreferenceCommitter
                     raise Denied, "Email preference session binding changed"
                   end
 
-                  authorize_and_consume!(actor, token, email: owned, changed: changed)
+                  authorize_step_up!(actor, token, evidence: step_up_evidence)
                 end
               end
             end
           end
 
           owned.save! if changed
+          ClientContactAuditOutbox.record_preferences_changed!(actor:, email: owned) if changed
           owned
         end
       end
@@ -58,6 +64,17 @@ class IdentityEmailPreferenceCommitter
     end
 
     private
+
+    # Evidence verification precedes the Zenith preference write, so it must own its commit.
+    # Checked before any lock or evidence consumption.
+    def require_independent_ticket_commit!
+      OpBaseAppRecord.connected_to(role: :writing) do
+        connection = OpBaseAppRecord.lease_connection
+        if connection.transaction_open?
+          raise TransactionConflict, "Email preference update requires an independent OP commit"
+        end
+      end
+    end
 
     def validate_binding!(actor, token, email)
       unless actor.is_a?(Client) && actor.persisted? && token.is_a?(ClientToken) && token.persisted? &&
@@ -77,21 +94,10 @@ class IdentityEmailPreferenceCommitter
       attributes
     end
 
-    def authorize_and_consume!(actor, token, email:, changed:)
-      now = ClientToken.database_now
-      requirement = StepUpRequirement.new(
-        scope: "settings_email", step_up_required: true, allowed_methods: %i(email_otp passkey totp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-        ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: email.public_id, tenant_ref: nil,
-      )
-      unless token.active_status?(now) &&
-          StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
-        raise Denied, "Email preference update requires current scoped Step-Up"
-      end
+    def authorize_step_up!(actor, token, evidence:)
+      return if StepUpEvidenceVerifier.call(evidence:, actor:, token:)
 
-      token.consume_step_up_evidence!(requirement:, now:) if changed
+      raise TokenStatusManagement::StepUpEvidenceUnavailable, "Email preference update requires current Step-Up"
     end
   end
 end

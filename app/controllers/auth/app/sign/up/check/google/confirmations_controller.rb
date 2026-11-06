@@ -24,8 +24,9 @@ module Auth
 
               def update
                 return unless load_gate_context!(gate_for_update)
-                return render plain: "social_signup_confirmation_required", status: :unprocessable_content unless
-                  ActiveModel::Type::Boolean.new.cast(params[:confirm_new_social_identity])
+                unless ActiveModel::Type::Boolean.new.cast(params[:confirm_new_social_identity])
+                  return render plain: t("sign.app.registration.confirmation_required"), status: :unprocessable_content
+                end
                 return render_turnstile_failure unless verify_social_signup_turnstile!
 
                 bind_social_pending_client!

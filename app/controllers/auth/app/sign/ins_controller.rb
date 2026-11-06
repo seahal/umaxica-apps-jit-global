@@ -18,8 +18,10 @@ module Auth
         before_action -> {
           enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") if params[:entry_ref].blank?
         }
-
         def show
+          return if params[:entry_ref].blank? &&
+            refuse_progressed_sign_entry_page!(expected_intent: auth_ceremony_entry_intent)
+
           admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
         end
 

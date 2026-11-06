@@ -34,7 +34,7 @@ module Base
               authorize!(::AvatarOwnershipTransfer, to: :create?)
               ensure_registry_admission_available! if registry_request?
               transfer =
-                with_owner_step_up("avatar_transfer_request") do |step_up_requirement|
+                with_owner_step_up("avatar_transfer_request") do |step_up_evidence|
                   if registry_request?
                     AvatarOwnershipTransfers::RegistryRequestOperation.call(
                       actor: avatar_actor,
@@ -45,7 +45,7 @@ module Base
                       target_collective_public_id: transfer_params.fetch(:target_collective_public_id, ""),
                       idempotency_key: idempotency_key,
                       request_fingerprint: registry_request_fingerprint,
-                      step_up_token: avatar_root, step_up_requirement: step_up_requirement,
+                      step_up_token: avatar_root, step_up_evidence: step_up_evidence,
                     )
                   else
                     AvatarOwnershipTransfers::RequestOperation.call(
@@ -55,7 +55,7 @@ module Base
                       avatar_public_id: Actor.selection.avatar_public_id,
                       target_surface: transfer_params.fetch(:target_surface, ""),
                       target_collective_public_id: transfer_params.fetch(:target_collective_public_id, ""),
-                      step_up_token: avatar_root, step_up_requirement: step_up_requirement,
+                      step_up_token: avatar_root, step_up_evidence: step_up_evidence,
                     )
                   end
                 end
@@ -74,14 +74,14 @@ module Base
               authorize!(transfer, to: :accept?) unless registry_transfer?
               ensure_registry_admission_available! if registry_transfer?
               accepted =
-                with_owner_step_up("avatar_transfer_accept") do |step_up_requirement|
+                with_owner_step_up("avatar_transfer_accept") do |step_up_evidence|
                   if registry_transfer?
                     AvatarOwnershipTransfers::RegistryAcceptOperation.call(
                       actor: avatar_actor,
                       surface: "org",
                       subject_public_id: Actor.selection.account_public_id,
                       reservation_public_id: params.expect(:ref),
-                      step_up_token: avatar_root, step_up_requirement: step_up_requirement,
+                      step_up_token: avatar_root, step_up_evidence: step_up_evidence,
                     )
                   else
                     AvatarOwnershipTransfers::AcceptOperation.call(
@@ -89,7 +89,7 @@ module Base
                       surface: "org",
                       subject_public_id: Actor.selection.account_public_id,
                       transfer_public_id: transfer.public_id,
-                      step_up_token: avatar_root, step_up_requirement: step_up_requirement,
+                      step_up_token: avatar_root, step_up_evidence: step_up_evidence,
                     )
                   end
                 end
@@ -110,14 +110,14 @@ module Base
               authorize!(transfer, to: :cancel?) unless registry_transfer?
               ensure_registry_admission_available! if registry_transfer?
               cancelled =
-                with_owner_step_up("avatar_transfer_cancel") do |step_up_requirement|
+                with_owner_step_up("avatar_transfer_cancel") do |step_up_evidence|
                   if registry_transfer?
                     AvatarOwnershipTransfers::RegistryCancelOperation.call(
                       actor: avatar_actor,
                       surface: "org",
                       subject_public_id: Actor.selection.account_public_id,
                       reservation_public_id: params.expect(:ref),
-                      step_up_token: avatar_root, step_up_requirement: step_up_requirement,
+                      step_up_token: avatar_root, step_up_evidence: step_up_evidence,
                     )
                   else
                     AvatarOwnershipTransfers::CancelOperation.call(
@@ -125,7 +125,7 @@ module Base
                       surface: "org",
                       subject_public_id: Actor.selection.account_public_id,
                       transfer_public_id: transfer.public_id,
-                      step_up_token: avatar_root, step_up_requirement: step_up_requirement,
+                      step_up_token: avatar_root, step_up_evidence: step_up_evidence,
                     )
                   end
                 end

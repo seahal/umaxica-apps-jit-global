@@ -31,6 +31,12 @@ module OidcClientRegistry
         registered_token_endpoint_auth_method == "private_key_jwt"
       end
     end
+  AssertionAuthenticationResult =
+    Data.define(:authenticated, :client, :step_up_claims_state, :step_up_expectation) do
+      def authenticated? = authenticated
+
+      def step_up_claims_present? = step_up_claims_state != :none
+    end
   CLIENTS_MUTEX = Mutex.new
   CLIENTS_CACHE = Concurrent::AtomicReference.new(nil)
 
@@ -105,10 +111,24 @@ module OidcClientRegistry
   end
 
   def authenticate_assertion(client_id, assertion, token_url:)
-    client = find(client_id)
-    return false unless client&.private_key_jwt_client?
+    verify_client_assertion(client_id, assertion, token_url:).authenticated?
+  end
 
-    OidcClientAssertionJwt.valid?(client_id: client_id, assertion: assertion, token_url: token_url)
+  def verify_client_assertion(client_id, assertion, token_url:)
+    client = find(client_id)
+    unless client&.private_key_jwt_client?
+      return AssertionAuthenticationResult.new(
+        authenticated: false, client: nil, step_up_claims_state: :none, step_up_expectation: nil,
+      )
+    end
+
+    verification = OidcClientAssertionJwt.verify(client_id:, assertion:, token_url:)
+    AssertionAuthenticationResult.new(
+      authenticated: verification.authenticated?,
+      client: verification.authenticated? ? client : nil,
+      step_up_claims_state: verification.step_up_claims_state,
+      step_up_expectation: verification.step_up_expectation,
+    )
   end
 
   def jwt_namespace_for(client_id)

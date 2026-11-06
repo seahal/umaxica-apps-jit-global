@@ -2,6 +2,16 @@
 
 This directory stores accepted architecture and design decisions.
 
+COM caution note (2026-11-06): `.com` authentication has been retired. Auth and Visa serve only the
+`app` and `org` realms, and the COM principal, OP and RP stores no longer exist; the anonymous `com`
+surface (Base Preference, Warp, Info, Help, Docs, News) remains. No ADR records this retirement yet,
+and many ADRs still describe COM sign-in, sign-up, Visitor identities, COM RPs or COM Auth/Visa
+hosts. Treat every COM statement in an ADR as unverified until it is checked against current code.
+When a task depends on such a statement, or finds one stale or contradictory, do not act on it and
+do not silently rewrite it: report it and propose a remediation (supersede, amend or retire the
+record) for the owner to decide. Remaining COM Auth/Visa code is tracked in
+`docs/backlog/2026-11-06-com-auth-and-visa-host-remnants.md`.
+
 Current Rails naming note (2026-09-25): references to the Rails `Side`/`Wide` surface in older
 decisions are historical. Its current internal namespace is `Warp`; registered OIDC client IDs, JWT
 namespaces, MCP realm, persisted logout values, and public hostnames retain their established
@@ -119,9 +129,9 @@ Current identity authority decision:
   of `adr/sign-up-authentication-handoff-and-social-rt.md`.
 
 - [Sign-up One-Day Minimum Age and Feature-Level Age Restrictions](sign-up-one-day-minimum-age-and-feature-level-age-restrictions.md)
-  — **Accepted (2026-10-28); not implemented.** `.app` and `.org` sign-up accept a birthdate at least
-  one day before the check date and refuse today or later; the identity is the OP's foundation and
-  age-based restrictions move to features such as avatars. Replaces the 16/13 thresholds in
+  — **Accepted (2026-10-28); not implemented.** `.app` and `.org` sign-up accept a birthdate at
+  least one day before the check date and refuse today or later; the identity is the OP's foundation
+  and age-based restrictions move to features such as avatars. Replaces the 16/13 thresholds in
   `docs/policy/signup-eligibility.md` when implemented. Amended the same day: the Preference
   adult-content gate is dormant (kept only in the model layer, unused by controllers) and, if used
   again, is a browser-scoped setting of the consent kind, never in the shared display cookie or the
@@ -131,9 +141,9 @@ Current identity authority decision:
   Flow-to-Admission authority, parent-scoped concurrency, status-scoped Flow cardinality, restart
   invariants, and explicit Pending evidence/migration/deletion decisions. New association and
   constraints are not implemented. The Base/Auth ADR's 2026-10-21 amendment separately accepts Auth
-  OIDC Result GET/POST `/sign/result`; routes remain unchanged in this ADR-only update.
-  Amended 2026-10-28: one browser progresses at most one Auth Ceremony per surface across all
-  parents; redeeming a new Admission replaces the previous one, whose later requests get the fixed
+  OIDC Result GET/POST `/sign/result`; routes remain unchanged in this ADR-only update. Amended
+  2026-10-28: one browser progresses at most one Auth Ceremony per surface across all parents;
+  redeeming a new Admission replaces the previous one, whose later requests get the fixed
   state-mismatch response.
 
 - `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19), amended
@@ -186,6 +196,8 @@ Current participation change (implemented locally; deployment and shared sign-ou
   requires `tech.access`) is admitted as a first-party browser RP, and Palm (`palm-app`) changes
   from native RP to first-party browser RP with its native role retired. Answers the
   Reclassification Rule of `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md`.
+  Its 2026-11-01 WU-A8 amendment binds callback identities in each RP cell without UserInfo or
+  OP/Zenith account reads; Tech retains its Org capability API check.
 
 The repository currently implements Tech and Palm browser RP entry, callback, host-local session,
 and local sign-out routes. The shared parent-and-RP sign-out transaction is locally implemented and
@@ -221,8 +233,9 @@ Current IdP flow lifecycle decisions (target contract; runtime not yet migrated)
 Current browser credential recovery decision:
 
 - `adr/invalid-browser-credential-recovery.md` — **current** contract for refused auth and
-  preference browser credentials: credential rejection and lifecycle ends are detached, system
-  failures raise, and stale preference reads never delete a newer generation. Supersedes
+  preference browser credentials: Auth credential rejection and lifecycle ends are detached, system
+  failures raise, and Preference read/write refusal is governed by the realm JWT contract.
+  Preference refresh/rotation recovery is retired. Supersedes
   `adr/preference-credential-entry-recovery.md`, which is retained for history.
 
 Current Ruby source decision (target contract; repository not yet conforming):
@@ -552,6 +565,9 @@ Session and token decisions:
   `sign/id`.
 - `adr/device-session-dbsc-device-id-boundary.md` — partially superseded for authority ownership;
   device-session, DBSC, and device-id vocabulary remains useful.
+- `adr/dbsc-scope-authentication-refresh-tokens.md` — **Accepted (2026-11-05).** DBSC binds only the
+  refresh tokens of the OP (and later RP) authentication sessions; a bound session's refresh always
+  verifies the proof and revokes on failure. Preference does not use DBSC.
 
 Credential gateway decisions:
 

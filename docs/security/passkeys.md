@@ -1,33 +1,34 @@
 # Passkeys
 
 Current behavior of Passkeys (WebAuthn) on APP (`auth.umaxica.app`) and ORG (`auth.umaxica.org`)
-Auth hosts and the Base management pages. COM (`auth.umaxica.com`) is an anonymous surface: it
-serves no Passkey ceremony and no identity management page. Decisions live in the ADRs in
-section (f); this page describes the code as of 2026-10-29, after WU-3 of the 2026-10 authentication
-cycle retired the com credential and session routes. Mechanically checked invariants stay in
+Auth hosts and the Base management pages. COM is an anonymous surface: it serves no Passkey ceremony
+and no identity management page. Decisions live in the ADRs in section (f); this page describes the
+code as of 2026-10-29, after WU-3 of the 2026-10 authentication cycle retired the com credential and
+session routes. Mechanically checked invariants stay in
 [WebAuthn security invariants](webauthn-security-invariants.md); RP ID and Origin rules in
 [WebAuthn RP ID and Origin boundary](webauthn-rp-id-origin-boundary.md).
 
 ## (a) Where Passkeys are used
 
-| Purpose | Routes | Surfaces | Controller | Concerns | Main tests |
-|---|---|---|---|---|---|
-| Sign-in (identifier-first) | `GET /sign/in/passkey/new`, `POST /sign/in/passkey/options`, `POST /sign/in/passkey/verification` | APP | `Auth::<S>::Sign::In::{Passkeys,Passkey::Options,Passkey::Verifications}Controller` | `PasskeySignInFlow`, `SignInPhaseBindingControllerSupport` | `test/controllers/auth/app/in/passkeys_controller_test.rb`, `test/queries/passkey_sign_in_identity_resolver_query_test.rb` |
-| ORG Normal sign-in after Entra | same three routes | ORG | `Auth::Org::Sign::In::…` | `SignOrgNormalPasskeyCeremony` | `test/controllers/auth/org/in/passkeys_controller_test.rb` |
-| ORG Emergency (Standby) | `GET /sign/in/emergency/passkey/new`, `POST …/options`, `POST …/verification` | ORG | `Auth::Org::Sign::In::Emergency::…` | `SignOrgStandbyPasskeyCeremony` | `test/controllers/auth/org/in/emergency/passkeys_controller_test.rb` |
-| Sign-in second factor (MFA) | `GET /sign/in/challenge/passkey/new`, `POST /sign/in/challenge/passkey` | APP | `Auth::<S>::Sign::In::Challenge::PasskeysController` | `PasskeyCeremonyContext`, `SignInPhaseBindingControllerSupport` | `test/controllers/auth/app/in/mfa/passkeys_controller_test.rb` |
-| Sign-up registration (telephone path) | `GET/POST/PATCH/PUT/DELETE /sign/up/check/telephone/passkey` | APP | `Auth::<S>::Sign::Up::Check::Telephone::PasskeysController` | `PasskeyRegistrationFlow` | `test/controllers/auth/app/up/checkpoint_passkeys_controller_test.rb` |
-| Step-Up | `GET /verification/passkey/new`, `POST /verification/passkey/options`, `POST /verification/passkey` | APP, ORG | `Auth::<S>::Verification::PasskeysController` | `AuthStepUpPasskeyCeremony` | `test/services/webauthn/verifier_uv_policy_test.rb` and Step-Up request tests |
-| Registration for a signed-in Identity | `GET /verification/registration/passkey/new`, `POST …/options`, `POST /verification/registration/passkey` | APP, ORG | `Auth::<S>::Verification::Registration::PasskeysController` | `AuthPasskeyRegistrationCeremony` → `IdentityPasskeyRegistrationVerificationCommitter` | `test/controllers/auth/ceremony_admission_boundary_test.rb` |
-| Management (list, show, rename, delete, start registration) | `GET/POST /identity/passkeys`, `GET /identity/passkeys/new`, `GET/PATCH/PUT/DELETE /identity/passkeys/:id` | APP, ORG (Base) | `Base::<S>::Identity::PasskeysController` | `BaseIdentityPasskeyManagement` | Base identity tests |
+| Purpose                                                     | Routes                                                                                                     | Surfaces        | Controller                                                                          | Concerns                                                                               | Main tests                                                                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in (identifier-first)                                  | `GET /sign/in/passkey/new`, `POST /sign/in/passkey/options`, `POST /sign/in/passkey/verification`          | APP             | `Auth::<S>::Sign::In::{Passkeys,Passkey::Options,Passkey::Verifications}Controller` | `PasskeySignInFlow`, `SignInPhaseBindingControllerSupport`                             | `test/controllers/auth/app/in/passkeys_controller_test.rb`, `test/queries/passkey_sign_in_identity_resolver_query_test.rb` |
+| ORG Normal sign-in after Entra                              | same three routes                                                                                          | ORG             | `Auth::Org::Sign::In::…`                                                            | `SignOrgNormalPasskeyCeremony`                                                         | `test/controllers/auth/org/in/passkeys_controller_test.rb`                                                                 |
+| ORG Emergency (Standby)                                     | `GET /sign/in/emergency/passkey/new`, `POST …/options`, `POST …/verification`                              | ORG             | `Auth::Org::Sign::In::Emergency::…`                                                 | `SignOrgStandbyPasskeyCeremony`                                                        | `test/controllers/auth/org/in/emergency/passkeys_controller_test.rb`                                                       |
+| Sign-in second factor (MFA)                                 | `GET /sign/in/challenge/passkey/new`, `POST /sign/in/challenge/passkey`                                    | APP             | `Auth::<S>::Sign::In::Challenge::PasskeysController`                                | `PasskeyCeremonyContext`, `SignInPhaseBindingControllerSupport`                        | `test/controllers/auth/app/in/mfa/passkeys_controller_test.rb`                                                             |
+| Sign-up registration (telephone path)                       | `GET/POST/PATCH/PUT/DELETE /sign/up/check/telephone/passkey`                                               | APP             | `Auth::<S>::Sign::Up::Check::Telephone::PasskeysController`                         | `PasskeyRegistrationFlow`                                                              | `test/controllers/auth/app/up/checkpoint_passkeys_controller_test.rb`                                                      |
+| Step-Up                                                     | `GET /verification/passkey/new`, `POST /verification/passkey/options`, `POST /verification/passkey`        | APP, ORG        | `Auth::<S>::Verification::PasskeysController`                                       | `AuthStepUpPasskeyCeremony`                                                            | `test/services/webauthn/verifier_uv_policy_test.rb` and Step-Up request tests                                              |
+| Registration for a signed-in Identity                       | `GET /verification/registration/passkey/new`, `POST …/options`, `POST /verification/registration/passkey`  | APP, ORG        | `Auth::<S>::Verification::Registration::PasskeysController`                         | `AuthPasskeyRegistrationCeremony` → `IdentityPasskeyRegistrationVerificationCommitter` | `test/controllers/auth/ceremony_admission_boundary_test.rb`                                                                |
+| Management (list, show, rename, delete, start registration) | `GET/POST /identity/passkeys`, `GET /identity/passkeys/new`, `GET/PATCH/PUT/DELETE /identity/passkeys/:id` | APP, ORG (Base) | `Base::<S>::Identity::PasskeysController`                                           | `BaseIdentityPasskeyManagement`                                                        | Base identity tests                                                                                                        |
 
 `bin/rails routes | grep -i passkey` lists 42 routes; every path above appears there for each
 surface it names, and no com host appears in that list.
 
 ## (b) Registration
 
-- Discoverable credentials on every Passkey surface (`RegistrationVerifier::RESIDENT_KEY_BY_SURFACE`,
-  `resident_key: "required"` for sign-up, Identity bootstrap and Base management), attestation `none`, User Verification required
+- Discoverable credentials on every Passkey surface
+  (`RegistrationVerifier::RESIDENT_KEY_BY_SURFACE`, `resident_key: "required"` for sign-up, Identity
+  bootstrap and Base management), attestation `none`, User Verification required
   (`Webauthn::UvPolicy`). Registration options request the `credProps` extension; ORG refuses a
   credential the client does not report as discoverable (`rk: true`) with
   `DiscoverableCredentialRequiredError`, and a UV=false attestation is refused on every surface.
@@ -45,14 +46,12 @@ surface it names, and no com host appears in that list.
 
 ## (c) Sign-in
 
-- APP is identifier-first: the options request carries `identifier` (an Email or
-  Telephone). `PasskeySignInIdentityResolverQuery` selects the Identity only through an effective
-  contact binding of that surface. A missing or empty identifier is refused with 422. An unknown,
-  malformed, unverified, unfinalized, released, expired or other-surface identifier is not
-  distinguished in the response: the challenge is bound to an actor key no credential owns
-  (`<surface>:0`).
-- `allowCredentials` is always empty on APP; the authenticator offers its discoverable
-  credentials.
+- APP is identifier-first: the options request carries `identifier` (an Email or Telephone).
+  `PasskeySignInIdentityResolverQuery` selects the Identity only through an effective contact
+  binding of that surface. A missing or empty identifier is refused with 422. An unknown, malformed,
+  unverified, unfinalized, released, expired or other-surface identifier is not distinguished in the
+  response: the challenge is bound to an actor key no credential owns (`<surface>:0`).
+- `allowCredentials` is always empty on APP; the authenticator offers its discoverable credentials.
 - Verification requires the presenting credential's owner to equal the Identity the challenge was
   bound to. The `userHandle` the client sends is not used for selection; when present, its decoded
   bytes must equal that Identity's immutable opaque handle. A credential of another Identity or a
@@ -75,23 +74,23 @@ surface it names, and no com host appears in that list.
 
 ## (e) Threats and limits
 
-- A lost authenticator together with its PIN and the victim's identifier still signs in on
-  APP. The account label removes the identifier from the authenticator, so the finder must
-  learn it elsewhere. The response is to remove the lost Passkey in the identity settings.
+- A lost authenticator together with its PIN and the victim's identifier still signs in on APP. The
+  account label removes the identifier from the authenticator, so the finder must learn it
+  elsewhere. The response is to remove the lost Passkey in the identity settings.
 - ORG Normal additionally requires the Entra sign-in.
-- Response timing between existing and unknown identifiers is bounded by `MinimumResponseBudget`;
-  no separate timing measurement is recorded for identifier-first sign-in yet.
+- Response timing between existing and unknown identifiers is bounded by `MinimumResponseBudget`; no
+  separate timing measurement is recorded for identifier-first sign-in yet.
 
 ## (f) Governing ADRs
 
-| ADR | Effect today |
-|---|---|
-| `adr/passkey-identifier-first-sign-in.md` | Identity selection before the ceremony; ten-Passkey capacity and discoverable ORG credentials, with the account-label amendment |
-| `adr/passkey-authenticator-account-label.md` | Non-identifying label; ORG discoverable; capacity ten |
-| `adr/credential-response-nondisclosure.md` | ORG discoverable + UV; Emergency without descriptors; one refusal message |
-| `adr/webauthn-discoverable-direct-sign-in.md` | Usernameless APP/COM selection superseded by identifier-first |
-| `adr/webauthn-user-handle.md` | Opaque immutable user handles |
-| `adr/passkey-uv-policy.md` | UV registry |
-| `adr/passkey-authenticator-metadata.md` | Metadata |
-| `adr/passkey-current-state-limit-and-chronicle-outbox.md` | Lifecycle, owner serialization, outbox |
-| `adr/authentication-security-mode.md` | `ADVANCED` two-Passkey minimum |
+| ADR                                                       | Effect today                                                                                                                    |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `adr/passkey-identifier-first-sign-in.md`                 | Identity selection before the ceremony; ten-Passkey capacity and discoverable ORG credentials, with the account-label amendment |
+| `adr/passkey-authenticator-account-label.md`              | Non-identifying label; ORG discoverable; capacity ten                                                                           |
+| `adr/credential-response-nondisclosure.md`                | ORG discoverable + UV; Emergency without descriptors; one refusal message                                                       |
+| `adr/webauthn-discoverable-direct-sign-in.md`             | Usernameless APP/COM selection superseded by identifier-first                                                                   |
+| `adr/webauthn-user-handle.md`                             | Opaque immutable user handles                                                                                                   |
+| `adr/passkey-uv-policy.md`                                | UV registry                                                                                                                     |
+| `adr/passkey-authenticator-metadata.md`                   | Metadata                                                                                                                        |
+| `adr/passkey-current-state-limit-and-chronicle-outbox.md` | Lifecycle, owner serialization, outbox                                                                                          |
+| `adr/authentication-security-mode.md`                     | `ADVANCED` two-Passkey minimum                                                                                                  |

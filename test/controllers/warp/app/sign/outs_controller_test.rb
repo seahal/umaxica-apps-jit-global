@@ -2,17 +2,19 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require_relative "../../../../support/oidc_rp_logout_hint_helper"
+require_relative "../../../../support/rp_cell_sign_out_helper"
 # require "helpers/global_test_support"
 
 class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
-  include OidcRpLogoutHintHelper
+  include RpCellSessionHelper
+  include RpCellSignOutHelper
 
   fixtures :clients, :client_token_kinds
 
   setup do
-    @host = ENV["PUBLIC_WARP_SERVICE_URL"] || "warp.app.localhost"
+    @host = ENV.fetch("PUBLIC_WARP_SERVICE_URL")
     host! @host
+    https!
   end
 
   test "get sign out renders confirmation without mutation" do
@@ -34,20 +36,20 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     authenticate_rp!(user, token)
 
     stops_before = OpAppAuthorityStop.count
-    post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "jp"))
 
     assert_response :see_other
     assert_equal stops_before, OpAppAuthorityStop.count
     assert_nil response.headers["Clear-Site-Data"]
     assert_predicate token.reload, :currently_usable?
-    assert_predicate @rp_session.reload, :active?
+    assert_predicate @rp_cell_op_grant.reload, :active?
   end
 
   test "sign-out launch does not issue a Visa Preference generation before logout commits" do
     user = clients(:sample_user)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
-    post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "jp"))
 
     assert_response :see_other
     assert_nil cookies[PreferenceCookieName.anonymous_jwt]
@@ -59,15 +61,11 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     authenticate_rp!(user, token)
 
     stops_before = OpAppAuthorityStop.count
-    post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "jp"))
 
     assert_response :see_other
     assert_equal stops_before, OpAppAuthorityStop.count
-    location = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(location.query.to_s)
-
-    assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")
-    assert_predicate @rp_session.reload, :active?
+    assert_rp_cell_sign_out_handoff!(client_id: "warp-app-jp", region: "jp")
   end
 
   test "post sign out accepts us region" do
@@ -76,15 +74,11 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     authenticate_rp!(user, token)
 
     stops_before = OpAppAuthorityStop.count
-    post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "us"))
 
     assert_response :see_other
     assert_equal stops_before, OpAppAuthorityStop.count
-    location = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(location.query.to_s)
-
-    assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "us")
-    assert_predicate @rp_session.reload, :active?
+    assert_rp_cell_sign_out_handoff!(client_id: "warp-app-jp", region: "us")
   end
 
   test "post sign out canonicalizes unsupported region to default" do
@@ -92,36 +86,21 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
-    post warp_app_sign_out_url(ri: "xx"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "xx"))
 
     assert_response :see_other
-    location = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(location.query.to_s)
-
-    redirect_uri = query.fetch("post_logout_redirect_uri")
-
-    assert_equal RequestContextContract.default_region,
-                 Rack::Utils.parse_nested_query(URI.parse(redirect_uri).query).fetch("ri")
-    assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")
+    assert_rp_cell_sign_out_handoff!(client_id: "warp-app-jp", region: RequestContextContract.default_region)
   end
 
-  test "sign-out without a stored ID Token hint fails closed" do
+  test "sign-out does not require or send a stored ID Token hint" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
-    @rp_session.logout_hint.destroy!
-
     stops_before = OpAppAuthorityStop.count
-    post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "us"))
 
-    assert_response :unprocessable_content
-    assert_equal "strict-origin", response.headers["Referrer-Policy"]
-    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_rp_cell_sign_out_handoff!(client_id: "warp-app-jp", region: "us")
     assert_equal stops_before, OpAppAuthorityStop.count
-    assert_predicate token.reload, :currently_usable?
-    assert_predicate @rp_session.reload, :active?
-    assert_not_includes response.body, I18n.t("sign.shared.sign_out.completed_title")
-    assert_equal "warp/app/sign/outs/unavailable", inertia_component
   end
 
   test "post sign out does not route through Auth" do
@@ -129,7 +108,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
-    post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    post_rp_cell_sign_out(warp_app_sign_out_url(ri: "jp"))
 
     assert_response :see_other
     location = URI.parse(response.location)
@@ -142,41 +121,12 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def authenticate_rp!(user, token)
-    oidc_client = OidcClientRegistry.find!("warp-app-jp")
-    @rp_session = OpAppGrant.create!(
-      authentication_epoch: 0,
-      client_token: token,
-      oidc_client_id: oidc_client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: 10.minutes.from_now,
-    )
-    store_oidc_rp_logout_hint!(@rp_session, user, oidc_client)
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      user,
-      host: @host,
-      resource_type: "client",
-      session_public_id: token.public_id,
-      base_session_public_id: token.public_id,
-      oidc_sid: @rp_session.public_id,
-      oidc_jti: @rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_client(oidc_client),
-      audiences: [oidc_client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
-      subject: OidcSubject.for(user, resource_type: "client"),
-      client_id: oidc_client.client_id,
-    )
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @rp_session.issue_refresh_token!
+    authenticate_rp_cell_for_sign_out!(client_id: "warp-app-jp", actor: user, root_token: token)
   end
 
   def app_session_headers(user, token)
-    bearer_headers(
-      jwt_access_token_for(user, session_public_id: token.public_id, resource_type: "client"),
-    )
+    authenticate_rp!(user, token) unless @rp_cell_session
+    { "Host" => @host }
   end
 end
 
@@ -438,7 +388,6 @@ class Warp::App::Sign::OutsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -465,24 +414,6 @@ class Warp::App::Sign::OutsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

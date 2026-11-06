@@ -51,8 +51,24 @@ class OperatorContactRegistrationDeviceTest < ActiveSupport::TestCase
         security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
       )
       token = OperatorToken.create!(authentication_epoch: 0, staff: operator, discard_at: 1.day.from_now)
-      token.rotate_refresh_token!
-      passkey = operator.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "org-contact-key")
+      now = OpBaseOrgRecord.database_now
+      token.device_session_record!
+      token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now:)
+      oidc_client = OidcClientRegistry.find!("base-org-ww")
+      grant = OpOrgGrant.create!(
+        authentication_epoch: token.authentication_epoch, operator_token: token,
+        oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+        oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+        refresh_token_expires_at: now + 1.hour,
+      )
+      grant.issue_refresh_token!(now:)
+      step_up_evidence = StepUpEvidenceValue.new(
+        acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+        sub: OidcSubject.for(operator, resource_type: "operator"), client_id: oidc_client.client_id,
+        aud: [oidc_client.aud], jti: grant.oidc_jti,
+      )
       contact, issuer, verifier, finalizer, policy, source =
         if channel == :email
           record = operator.staff_emails.create!(raw_address: "org-#{SecureRandom.hex(8)}@example.test")
@@ -65,13 +81,6 @@ class OperatorContactRegistrationDeviceTest < ActiveSupport::TestCase
           [record, TelephoneCredentialRegistrationOtpIssuer, TelephoneCredentialRegistrationOtpVerificationCommitter,
            OperatorTelephoneRegistrationOtpFinalizer, OperatorTelephonePolicy, { telephone: record },]
         end
-      token.update!(
-        last_step_up_at: OperatorToken.database_now, last_step_up_scope: "settings_#{channel}",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
-        last_step_up_credential_ref: passkey.external_id, last_step_up_phishing_resistant: true,
-        last_step_up_user_verified: true, last_step_up_full_reauthentication: false,
-      )
       nonce = SecureRandom.urlsafe_base64(32)
       issued = issuer.call(actor: operator, token: token, browser_nonce: nonce, **source)
 
@@ -93,7 +102,8 @@ class OperatorContactRegistrationDeviceTest < ActiveSupport::TestCase
 
       assert_equal :unavailable, finalizer.call!(
         actor: operator, actor_context: context, token: stale_token, transaction: issued.transaction,
-        browser_nonce: nonce, code: issued.code, requirement: requirement, **source,
+        browser_nonce: nonce, code: issued.code, requirement: requirement, step_up_evidence: step_up_evidence,
+        **source,
       )
       assert_equal before, contact.reload.attributes
       assert_not_predicate issued.transaction.reload, :consumed?

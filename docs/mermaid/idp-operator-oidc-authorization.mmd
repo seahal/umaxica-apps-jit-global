@@ -1,23 +1,27 @@
 stateDiagram-v2
     %% CURRENT implementation; sources and guards in transition inventory.
-    state "pending" as pending
-    state "authenticated" as authenticated
-    state "consumed" as consumed
-    state "canceled" as canceled
+    state "pending (status_id 10)" as pending
+    state "authenticated (status_id 20)" as authenticated
+    state "consumed (status_id 30)" as consumed
+    state "canceled (status_id 90)" as canceled
     [*] --> pending
     pending --> authenticated: register_authentication!
     authenticated --> authenticated: prepare_result_delivery!
     authenticated --> consumed: consume!
     authenticated --> consumed: finalize_base! success
     consumed --> consumed: claim_authorization_grant!
-    pending --> pending: prepare_cancellation_handoff!
-    pending --> canceled: cancel!
-    canceled --> canceled: cancel! same handoff digest
+    pending --> canceled: issue_cancellation! / cancel!
+    authenticated --> canceled: issue_cancellation! before finalization
+    canceled --> canceled: same-handoff delivery replay
     canceled --> [*]
     consumed --> [*]
     note right of pending
         Auth proof returns through opaque result to Base finalization.
+        Visa result GET validates and displays a same-origin POST continuation only;
+        authenticated finalization and code issuance occur on that protected POST.
         Consumed authorization can still claim its grant once for RP exchange.
         TTL refusal does not write an expired state.
-        canceled is the D09 first-page Cancel; a canceled parent refuses later results.
+        Cancellation handoff binding and cancel! commit under the parent lock in one Ticket transaction.
+        Visa continuation delivers access_denied after this durable transition; it does not reserve the parent.
+        A canceled parent refuses later results and finalization.
     end note

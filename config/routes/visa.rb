@@ -15,9 +15,6 @@ scope(module: :visa, as: :visa) do
 
     constraints(host: [origin&.host, ENV[public_env], local_host].compact) do
       scope(module: surface_namespace, as: surface_namespace) do
-        # Public root exception: adr/rails-routing-resourceful-policy.md, Visa public roots.
-        root "roots#index"
-
         resource(
           :ceremony_binding_confirmation,
           only: :show,
@@ -44,6 +41,12 @@ scope(module: :visa, as: :visa) do
           namespace(:v0) do
             resource(:health, only: :show, path: "health.json", format: false)
             resource(:revision, only: :show, path: "revision.json", format: false)
+            resources(:sensitive_admissions, only: :create)
+            resource(:sensitive_admission_session, only: :update)
+            resource(
+              :sensitive_admission_confirmation, only: :create,
+                                                 controller: :sensitive_admission_sessions,
+            )
           end
         end
         resource(:revision, only: :show, format: false)

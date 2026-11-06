@@ -4,9 +4,39 @@ require "test_helper"
 
 class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
+  self.use_transactional_tests = false
+
+  setup do
+    @test_actors = []
+  end
+
+  teardown do
+    token_ids = ClientToken.where(user_id: @test_actors.map(&:id)).select(:id)
+    OpAppGrant.where(client_token_id: token_ids).delete_all
+    @test_actors.each do |actor|
+      ClientTotpCredential.where(user_id: actor.id).delete_all
+      step_up_transactions = ClientStepUpCeremonyTransaction.where(actor_ref: actor.public_id)
+      transaction_ids = step_up_transactions.pluck(:id)
+      transaction_refs = step_up_transactions.pluck(:transaction_id)
+
+      ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transaction_ids).delete_all
+      ClientStepUpSession.where(step_up_ceremony_transaction_ref: transaction_refs).delete_all
+      ClientTotpCeremonyTransaction.where(step_up_ceremony_transaction_ref: transaction_refs).delete_all
+      IdentityTotpCeremonyCandidate.where(step_up_ceremony_transaction_ref: transaction_refs).delete_all
+      ClientAuthCeremonySession.where(step_up_ceremony_transaction_ref: transaction_refs).delete_all
+      step_up_transactions.delete_all
+
+      ClientDeviceSession.where(user_id: actor.id).update_all(current_refresh_token_id: nil)
+      ClientToken.where(user_id: actor.id).delete_all
+      ClientDeviceSession.where(user_id: actor.id).delete_all
+      ClientAuthorityLock.where(client_id: actor.id).delete_all
+      actor.delete
+    end
+  end
 
   test "a revoked device cannot finalize a verified TOTP enrollment" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @test_actors << actor
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
@@ -38,6 +68,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
         assert_raises(IdentityTotpCeremonyContract::Error) do
           IdentityTotpEnrollmentFinalCommitter.call!(
             actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: nil,
           )
         end
       end
@@ -47,6 +78,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "a superseded device token cannot finalize a verified TOTP enrollment" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @test_actors << actor
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
@@ -80,6 +112,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
         assert_raises(IdentityTotpCeremonyContract::Error) do
           IdentityTotpEnrollmentFinalCommitter.call!(
             actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: nil,
           )
         end
       end
@@ -89,8 +122,26 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "Base creates the confirmed credential once and retries return the same active credential without freshness" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @test_actors << actor
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
-    grant_settings_totp_step_up!(actor, token)
+    now = OpBaseAppRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
+    )
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -116,12 +167,46 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       result = BaseAuthAdmissionCoordinator.issue_result!(
         transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
       )
-      credential = nil
-      assert_difference("actor.client_totp_credentials.count", 1) do
-        credential = IdentityTotpEnrollmentFinalCommitter.call!(
-          actor: actor, token: token, transaction: transaction, raw_result: result.code,
-        )
+
+      OpBaseAppRecord.transaction do
+        assert_raises(IdentityTotpEnrollmentFinalCommitter::TransactionConflict) do
+          IdentityTotpEnrollmentFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: step_up_evidence,
+          )
+        end
+        raise ActiveRecord::Rollback
       end
+
+      assert_equal "verified", transaction.reload.status
+      assert_equal 0, actor.client_totp_credentials.count
+
+      commits = []
+      subscriber =
+        ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
+          event = ActiveSupport::Notifications::Event.new(*args)
+          payload = event.payload
+          next unless payload[:name].to_s.include?("TRANSACTION") && payload[:sql].to_s.start_with?("COMMIT")
+
+          commits << payload[:connection]&.pool&.db_config&.name
+        end
+      credential = nil
+      begin
+        assert_difference("actor.client_totp_credentials.count", 1) do
+          credential = IdentityTotpEnrollmentFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: step_up_evidence,
+          )
+        end
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+      op_base_index = commits.index("op_base_app")
+      zenith_index = commits.index("app_zenith")
+
+      assert_not_nil op_base_index, "the enrollment consumption must commit in op_base_app"
+      assert_not_nil zenith_index, "the TOTP credential must commit in app_zenith"
+      assert_operator op_base_index, :<, zenith_index, "OP consumption must commit before the credential"
 
       assert_predicate credential, :active?
       assert_equal candidate.private_key, credential.private_key
@@ -141,16 +226,20 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       assert_no_difference("actor.client_totp_credentials.count") do
         repeated = IdentityTotpEnrollmentFinalCommitter.call!(
           actor: actor, token: token, transaction: transaction, raw_result: result.code,
+          step_up_evidence: step_up_evidence,
         )
 
         assert_equal credential.id, repeated.id
       end
-      assert_nil token.reload.last_step_up_at
+      OpBaseAppRecord.transaction do
+        assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+      end
       credential.update!(user_totp_credential_status_id: ClientTotpCredentialStatus::REVOKED)
 
       assert_raises(IdentityTotpCeremonyContract::Error) do
         IdentityTotpEnrollmentFinalCommitter.call!(
           actor: actor, token: token, transaction: transaction, raw_result: result.code,
+          step_up_evidence: step_up_evidence,
         )
       end
       assert_predicate credential.reload, :revoked?
@@ -159,6 +248,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "a consumed registration with no principal credential fails closed instead of recreating one" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @test_actors << actor
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
@@ -184,29 +274,55 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       result = BaseAuthAdmissionCoordinator.issue_result!(
         transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
       )
-      credential = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: transaction, raw_result: result.code,
-      )
-      # A missing principal row also represents failure after the ticket commit and before the
-      # principal commit. The old result must never authorize a second credential creation.
-      credential.destroy!
+      client_connection = Client.lease_connection
+      failed_commit = -> { raise ActiveRecord::ConnectionNotEstablished, "injected Zenith commit failure" }
+
+      assert_raises(ActiveRecord::ConnectionNotEstablished) do
+        client_connection.stub(:commit_db_transaction, failed_commit) do
+          IdentityTotpEnrollmentFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: nil,
+          )
+        end
+      end
 
       assert_no_difference("actor.client_totp_credentials.count") do
         assert_raises(IdentityTotpCeremonyContract::Error) do
           IdentityTotpEnrollmentFinalCommitter.call!(
             actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: nil,
           )
         end
       end
       assert_equal "consumed", transaction.reload.status
+      assert_not_nil candidate.reload.consumed_at
+      assert_predicate ceremony.reload, :completed?
       assert_nil token.reload.last_step_up_at
     end
   end
 
   test "a principal write failure retains the unconsumed proof and candidate for a safe retry" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @test_actors << actor
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
-    grant_settings_totp_step_up!(actor, token)
+    now = OpBaseAppRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
+    )
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -232,6 +348,24 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       result = BaseAuthAdmissionCoordinator.issue_result!(
         transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
       )
+      op_connection = OpBaseAppRecord.lease_connection
+      failed_commit = -> { raise ActiveRecord::ConnectionNotEstablished, "injected OP commit failure" }
+
+      assert_raises(ActiveRecord::ConnectionNotEstablished) do
+        op_connection.stub(:commit_db_transaction, failed_commit) do
+          IdentityTotpEnrollmentFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: step_up_evidence,
+          )
+        end
+      end
+
+      assert_equal "verified", transaction.reload.status
+      assert_nil candidate.reload.consumed_at
+      assert_not_predicate ceremony.reload, :completed?
+      assert_equal 0, actor.client_totp_credentials.count
+      token.reload
+
       # The principal persistence boundary fails while the real ticket locks and validation run.
       unavailable = ->(**_attributes) { raise ActiveRecord::ConnectionNotEstablished, "principal unavailable" }
 
@@ -239,6 +373,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
         assert_raises(ActiveRecord::ConnectionNotEstablished) do
           IdentityTotpEnrollmentFinalCommitter.call!(
             actor: actor, token: token, transaction: transaction, raw_result: result.code,
+            step_up_evidence: step_up_evidence,
           )
         end
       end
@@ -248,20 +383,27 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       assert_nil candidate.reload.consumed_at
       assert_not_predicate ceremony.reload, :completed?
       assert_equal 0, actor.client_totp_credentials.count
-      assert_not_nil token.reload.last_step_up_at
+      OpBaseAppRecord.transaction do
+        assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+      end
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
         actor: actor, token: token, transaction: transaction, raw_result: result.code,
+        step_up_evidence: step_up_evidence,
       )
 
       assert_predicate credential, :active?
       assert_equal "consumed", transaction.reload.status
-      assert_nil token.reload.last_step_up_at
+      OpBaseAppRecord.transaction do
+        assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+      end
     end
   end
 
-  test "Base bootstrap retains the protected operation and only a subsequent TOTP assertion grants freshness" do
+  test "Base bootstrap finalization remains independent of OP Step-Up evidence" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @test_actors << actor
     token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
+    root_authentication_state = token.attributes.slice("root_login_established_at", "established_authentication_method")
     bootstrap_requirement = StepUpRequirement.new(
       step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
       phishing_resistant_required: false, user_verification_required: false,
@@ -293,69 +435,14 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       )
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
         actor: actor, token: token, transaction: transaction, raw_result: result.code,
+        step_up_evidence: nil,
       )
     end
-    requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", step_up_required: true, purpose: "step_up", audience: "step_up:app",
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-      resource_ref: nil, tenant_ref: nil, allowed_methods: [:totp],
-      session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-    )
 
     assert_predicate credential, :active?
     assert_equal "/identity/birthdate", transaction.reload.return_to
     assert_equal "bootstrap", transaction.purpose
     assert_equal "none", transaction.aal
-    assert_nil token.reload.last_step_up_at
-    assert_not StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
-    # The registration window is consumed; independent reauthentication requires a new window.
-    next_window = now + 30.seconds
-    ClientStepUpCeremonyTransaction.stub(:database_now, next_window) do
-      step_up = BaseStepUpAdmissionIssuer.call!(
-        actor: actor,
-        token: token,
-        requirement: requirement,
-        return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: token,
-      ).transaction
-      record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: step_up.transaction_id)
-      continuity, = ClientAuthCeremonySession.rotate_and_admit!(
-        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: step_up.transaction_id,
-      )
-
-      ClientTotpCredential.stub(:database_now, next_window) do
-        assert IdentityStepUpTotpVerificationCommitter.call!(
-          actor: actor, transaction: step_up, session_record: record, credential_public_id: credential.public_id,
-          code: ROTP::TOTP.new(credential.private_key).at(next_window.to_i),
-        )
-      end
-      result = BaseAuthAdmissionCoordinator.issue_result!(
-        transaction: step_up, ceremony_session_ref: continuity.id.to_s,
-      )
-      IdentityStepUpCeremonyFreshnessCommitter.call!(
-        actor: actor, token: token, transaction: step_up, requirement: requirement, raw_result: result.code,
-      )
-
-      assert_not_equal transaction.id, step_up.id
-      assert_equal "consumed", step_up.reload.status
-      assert_equal credential.public_id, step_up.verified_credential_ref
-      assert_equal next_window, token.reload.last_step_up_at
-      assert_equal "step_up", token.last_step_up_purpose
-      assert_predicate StepUpResolver.call(token: token, requirement: requirement, now: next_window), :satisfied?
-    end
-  end
-
-  private
-
-  def grant_settings_totp_step_up!(_actor, token)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-    )
+    assert_equal root_authentication_state, token.reload.attributes.slice(*root_authentication_state.keys)
   end
 end

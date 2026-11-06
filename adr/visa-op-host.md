@@ -15,12 +15,11 @@ contracts depend on one value named as a Base authority host.
 
 ## Decision
 
-Visa is the only Rails OpenID Provider and authority surface for the three UMAXICA realms:
+Visa is the only Rails OpenID Provider and authority surface for the app and org realms:
 
 | Realm | Visa OP            | Base RP           | Auth ceremony      | Logical host identities      |
 | ----- | ------------------ | ----------------- | ------------------ | ---------------------------- |
 | app   | `visa.umaxica.app` | `www.umaxica.app` | `auth.umaxica.app` | `visa-app-ww`, `base-app-ww` |
-| com   | `visa.umaxica.com` | `www.umaxica.com` | `auth.umaxica.com` | `visa-com-ww`, `base-com-ww` |
 | org   | `visa.umaxica.org` | `www.umaxica.org` | `auth.umaxica.org` | `visa-org-ww`, `base-org-ww` |
 
 Visa owns discovery, JWKS, authorization, token, UserInfo, revocation, end-session logout, authority
@@ -31,9 +30,9 @@ registrations do not move to Visa.
 
 The public and development host contracts are explicit. Visa uses
 `VISA_{SERVICE,CORPORATE,STAFF}_URL` or its public deployment equivalents
-`PUBLIC_VISA_{SERVICE,CORPORATE,STAFF}_URL`, with `visa.{app,com,org}.localhost` as local hosts.
-Base keeps its existing `BASE_*` / `PUBLIC_BASE_*` RP contract. Missing required production
-configuration fails closed; no host wildcard or Base-to-Visa fallback is permitted.
+`PUBLIC_VISA_{SERVICE,CORPORATE,STAFF}_URL`, with `visa.{app,org}.localhost` as local hosts. Base
+keeps its existing `BASE_*` / `PUBLIC_BASE_*` RP contract. Missing required production configuration
+fails closed; no host wildcard or Base-to-Visa fallback is permitted.
 
 Visa OIDC and authority credentials use independent `VISA_APP`, `VISA_COM` and `VISA_ORG` JWT
 namespaces and key sets. Base retains `BASE_APP`, `BASE_COM` and `BASE_ORG` for Base-owned Jump and
@@ -69,23 +68,19 @@ boundary.
 
 ### Controller lifecycle refinement (2026-10-25)
 
-Each realm has its own `Visa::{App,Com,Org}::AuthorizationBaseController`, derived from the
-matching AuthorityController. Authorization, result, cancellation and (APP/COM only) switch
-endpoints inherit this Rails abstract protocol base rather than another concrete endpoint. Actor lookup,
-credential finalization and Root issuance remain realm-local. The base denies access by default;
-each concrete endpoint declares its open protocol action. Authorization exposes GET/POST, while
-continuation controllers expose only their navigation GET action.
-Inherited lifecycle helpers are internal methods of the abstract base, not endpoint actions.
+Each realm has its own `Visa::{App,Com,Org}::AuthorizationBaseController`, derived from the matching
+AuthorityController. Authorization, result, cancellation and (APP/COM only) switch endpoints inherit
+this Rails abstract protocol base rather than another concrete endpoint. Actor lookup, credential
+finalization and Root issuance remain realm-local. The base denies access by default; each concrete
+endpoint declares its open protocol action. Authorization exposes GET/POST, while continuation
+controllers expose only their navigation GET action. Inherited lifecycle helpers are internal
+methods of the abstract base, not endpoint actions.
 
 The existing protocol exemption from region canonicalization moves to these three bases. Its
 effective endpoint set stays the same. Rate limiting remains on the inherited protocol pipeline;
-each concrete endpoint explicitly registers request-size validation. The passive public roots
-remain on their realm's BareController and do not initialize preferences or issue cookies.
-Their Auth-style public landing links target the matching Base RP sign entry and display
-preferences. Global region canonicalization now applies on the roots themselves: they explicitly
-include `PreferenceGlobal` and register `set_region`, so a missing region produces a same-path
-redirect before rendering and is carried into links. This opt-in stays on the three RootsControllers;
-the protocol BareControllers and their machine-facing endpoints retain their existing transport.
+each concrete endpoint explicitly registers request-size validation. The Visa hosts route nothing at
+`/` (owner decision, 2026-11-02); the protocol BareControllers and their machine-facing endpoints
+retain their existing transport.
 
 The implementation is covered by the host exclusivity, Base route withdrawal, issuer/JWKS,
 ceremony-binding purpose, Jump edge catalog, OIDC browser, logout and static invariant tests. The

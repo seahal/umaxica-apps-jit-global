@@ -108,6 +108,22 @@ module AuthCeremonyContext
     nil
   end
 
+  def auth_parent_cancellation_form
+    ceremony = admitted_auth_ceremony_session
+    return unless ceremony&.admission_purpose == "authentication_handoff"
+
+    transaction = auth_ceremony_authorization_transaction(ceremony)
+    return unless transaction&.cancellation_handoff_available?
+
+    action =
+      case auth_ceremony_surface
+      when "app" then auth_app_sign_cancellation_path(ri: current_region_identifier)
+      when "org" then auth_org_sign_cancellation_path(ri: current_region_identifier)
+      else raise ArgumentError, "unsupported Auth cancellation surface"
+      end
+    { label: t("actions.cancel"), action:, method: "post" }
+  end
+
   def oidc_authorization_login_challenge
     auth_ceremony_authorization_transaction&.login_challenge
   end

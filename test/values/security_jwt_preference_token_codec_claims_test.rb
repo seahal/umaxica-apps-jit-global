@@ -2,86 +2,82 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "openssl"
 
-# The preference token's signature proves only that this service issued it. The claims then bind it
-# to one host scope, audience, preference row and subject. Each case re-signs a genuine token with
-# one claim changed, so a refusal can only come from the claim check itself, and the anomaly
-# report names the reason an operator would see.
 class SecurityJwtPreferenceTokenCodecClaimsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "a genuine token decodes" do
+  PREFERENCES = {
+    "theme" => "dark",
+    "language" => "ja",
+    "timezone" => "Asia/Tokyo",
+    "currency" => "jpy",
+    "date_format" => "iso",
+    "time_format" => "24",
+    "motion" => "standard",
+    "density" => "standard",
+    "page_size" => "infinity",
+  }.freeze
+
+  test "a genuine app realm token carries only the current closed claims" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = SecurityJwtPreferenceTokenCodec.encode(
-      { "lx" => "ja" },
-      host: host, preference_type: "AppPreference", public_id: "pref-public-id", jti: SecureRandom.uuid,
+    public_id = PublicId.generate
+    token = PreferenceToken.encode(
+      PREFERENCES, host: host, preference_type: "AppPreference", public_id: public_id,
+                   jti: SecureRandom.uuid, jwt_issuer_id: "preference_app", issued_at: Time.current,
     )
+    claims, header = JWT.decode(token, nil, false)
 
-    payload = SecurityJwtPreferenceTokenCodec.decode(token, host: host)
-
-    assert_equal "pref-public-id", SecurityJwtPreferenceTokenCodec.extract_public_id(payload)
-    assert_equal "AppPreference", SecurityJwtPreferenceTokenCodec.extract_preference_type(payload)
+    assert_equal "JWT", header.fetch("typ")
+    assert_equal "ES384", header.fetch("alg")
+    assert_equal %w(aud exp iat iss jti preferences sub), claims.keys.sort
+    assert_equal "app", claims.fetch("aud")
+    assert_equal public_id, claims.fetch("sub")
+    assert_equal PREFERENCES, claims.fetch("preferences")
+    assert_operator token.bytesize, :<=, SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
+    assert_equal claims, PreferenceToken.decode(token, host: host, jwt_issuer_id: "preference_app")
+    assert_equal public_id, PreferenceToken.extract_public_id(claims)
+    assert_nil PreferenceToken.extract_public_id({ "public_id" => "retired-row-id" })
   end
 
-  test "legacy app and org tokens retain their existing size contract" do
-    [[ENV.fetch("PUBLIC_BASE_SERVICE_URL"), "AppPreference"],
-     [ENV.fetch("PUBLIC_BASE_STAFF_URL"), "OrgPreference"],].each do |host, preference_type|
-      preferences = { "lx" => "ja", "extension" => "x" * 2_500 }
-      token = SecurityJwtPreferenceTokenCodec.encode(
-        preferences, host: host, preference_type: preference_type,
-                     public_id: "pref-public-id", jti: SecureRandom.uuid,
-      )
+  test "legacy app and org claim shapes have no reader" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    token = PreferenceToken.encode(
+      PREFERENCES, host: host, preference_type: "AppPreference", public_id: "app-row-id",
+                   jti: "app-generation", jwt_issuer_id: "preference_app", issued_at: Time.current,
+    )
+    claims, header = JWT.decode(token, nil, false)
+    key = JitSecurityJwtRegistry.private_key_for("preference_app", header.fetch("kid"))
+    old_claim_shapes = [
+      claims.merge("preference_type" => "AppPreference"),
+      claims.merge("client_id" => "legacy-client"),
+      claims.merge("scope" => "preference"),
+      claims.merge("public_id" => "legacy-row-id"),
+    ]
 
-      assert_operator token.bytesize, :>, SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
-      assert_equal preferences, SecurityJwtPreferenceTokenCodec.decode(token, host: host).fetch("preferences")
+    old_claim_shapes.each do |old_claims|
+      legacy_token = JWT.encode(old_claims, key, header.fetch("alg"), header.except("alg"))
+
+      assert_nil PreferenceToken.decode(legacy_token, host: host, jwt_issuer_id: "preference_app")
     end
   end
 
-  test "a re-signed token with one binding claim changed is refused" do
+  test "a token signed by another realm key is reported as a signature failure" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    genuine = SecurityJwtPreferenceTokenCodec.encode(
-      { "lx" => "ja" },
-      host: host, preference_type: "AppPreference", public_id: "pref-public-id", jti: SecureRandom.uuid,
+    token = PreferenceToken.encode(
+      PREFERENCES, host: host, preference_type: "AppPreference", public_id: "app-row-id",
+                   jti: "app-generation", jwt_issuer_id: "preference_app", issued_at: Time.current,
     )
-    claims, header = JWT.decode(genuine, nil, false)
-    key = PreferenceJwtConfiguration.private_key_for_active
-    changes = {
-      "audience naming another host scope" => [{ "aud" => ["other.example.test"] }, "AUD_MISMATCH"],
-      "audience given as a non-string, non-list value" => [{ "aud" => 42 }, nil],
-      "missing preference row id" => [{ "public_id" => "" }, "OTHER"],
-      "non-string preference row id" => [{ "public_id" => 7 }, nil],
-      "missing preference type" => [{ "preference_type" => nil }, "OTHER"],
-      "subject naming another preference row" => [{ "sub" => "someone-else" }, "OTHER"],
-      "host claim of another scope" => [{ "host" => "evil.example.test" }, "HOST_MISMATCH"],
-      "non-string host claim" => [{ "host" => 1 }, nil],
-    }
-
-    changes.each do |label, (change, expected_reason)|
-      tampered = JWT.encode(claims.merge(change), key, header.fetch("alg"), header.except("alg"))
-      reasons = []
-
-      JitSecurityJwtAnomalyReporter.stub(:report_preference, ->(**kwargs) { reasons << kwargs[:reason] }) do
-        assert_nil SecurityJwtPreferenceTokenCodec.decode(tampered, host: host), label
-      end
-      assert_includes reasons, expected_reason, label if expected_reason
-    end
-  end
-
-  test "a token signed by another key is reported as a signature failure" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    genuine = SecurityJwtPreferenceTokenCodec.encode(
-      { "lx" => "ja" },
-      host: host, preference_type: "AppPreference", public_id: "pref-public-id", jti: SecureRandom.uuid,
+    claims, header = JWT.decode(token, nil, false)
+    forged = JWT.encode(
+      claims, OpenSSL::PKey::EC.generate("secp384r1"), header.fetch("alg"), header.except("alg"),
     )
-    claims, header = JWT.decode(genuine, nil, false)
-    forged = JWT.encode(claims, OpenSSL::PKey::EC.generate("secp384r1"), header.fetch("alg"), header.except("alg"))
-    reasons = []
+    reported_reasons = []
 
-    JitSecurityJwtAnomalyReporter.stub(:report_preference, ->(**kwargs) { reasons << kwargs[:reason] }) do
-      assert_nil SecurityJwtPreferenceTokenCodec.decode(forged, host: host)
-      assert_nil SecurityJwtPreferenceTokenCodec.decode("#{genuine.split(".").first(2).join(".")}.%%%", host: host)
+    JitSecurityJwtAnomalyReporter.stub(:report_preference, ->(**event) { reported_reasons << event.fetch(:reason) }) do
+      assert_nil PreferenceToken.decode(forged, host: host, jwt_issuer_id: "preference_app")
     end
 
-    assert_includes reasons, "SIGNATURE_INVALID"
+    assert_includes reported_reasons, "SIGNATURE_INVALID"
   end
 end

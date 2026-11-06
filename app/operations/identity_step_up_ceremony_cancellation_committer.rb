@@ -47,7 +47,7 @@ class IdentityStepUpCeremonyCancellationCommitter
                 transaction.commit_cancellation!(now: now, cancellation_handoff_digest: cancellation_handoff_digest)
                 ceremonies = ceremony_model.where(step_up_ceremony_transaction_ref: transaction.transaction_id)
                 ceremonies.order(:id).lock.each do |sid|
-                  sid.cancel!(now: now) if sid.active?(now: now) && sid.admitted?
+                  sid.cancel! if sid.active? && sid.admitted?
                 end
                 true
               end

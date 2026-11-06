@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -40,12 +42,21 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
     issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
       transaction: parent, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
-    get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
-    get(response.location)
+    get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
+    assert_response :see_other
+
+    get(response.location, headers: NAVIGATION_HEADERS)
+
+    assert_response :see_other
+
     binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
     binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-    get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
-    get(response.location)
+    get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
+    assert_response :see_other
+
+    get(response.location, headers: NAVIGATION_HEADERS)
 
     assert_response :success
     TurnstileVerifierStub.challenge_enabled = true

@@ -1,0 +1,5 @@
+%% Confirmed unit 2 behavior: StepUpAuditOutboxWriter and StepUpAuditDeliveryJob.
+flowchart LR
+  ABSENT((absent)) --> PENDING["PENDING (10)"]
+  PENDING -->|Matching Chronicle UUID; delivered attempt and state commit under row lock| DELIVERED["DELIVERED (20)"]
+  PENDING -->|Failed attempt recorded; recurring sweep retries| PENDING

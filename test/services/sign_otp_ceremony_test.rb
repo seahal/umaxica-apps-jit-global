@@ -94,7 +94,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     [
       [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
       [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-    ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
+    ].each do |owner_class, contact_class, owner_key, flow_class, _surface, channel|
       owner = owner_class.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
@@ -147,7 +147,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     [
       [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
       [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
-    ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
+    ].each do |owner_class, contact_class, owner_key, flow_class, _surface, channel|
       owner = owner_class.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,

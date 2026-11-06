@@ -1,0 +1,20 @@
+stateDiagram-v2
+    [*] --> issued: Visa admission issuance
+    issued --> browser_confirmed: Base CSRF confirmation through Visa
+    issued --> cancelled: Base sign-out Visa cancellation
+    browser_confirmed --> cancelled: Base sign-out Visa cancellation
+    browser_confirmed --> source_committed: Auth source commit after exact receipt
+    issued --> refused: Auth refusal before confirmation
+    browser_confirmed --> refused: Auth refusal after confirmation
+    source_committed --> [*]: exact Zenith receipt retained
+    refused --> [*]: retained fact
+    cancelled --> [*]: retained fact
+
+    note right of issued
+      APP passkey, APP social link, and ORG passkey use separate admission tables.
+      Each APP admission has its own source-transaction FK.
+      The Visa API caps expiry at Base RP-session absolute expiry.
+      Base CSRF confirmation through Visa is required before Auth can write.
+      Sign-out cancels pending admissions before Base local revocation and fails closed.
+      Auth source and result APIs remain in progress.
+    end note

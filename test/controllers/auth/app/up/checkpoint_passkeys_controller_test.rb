@@ -2,11 +2,18 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "webauthn/fake_client"
 # require "helpers/global_test_support"
 
 module Auth::App::Up
   class CheckpointPasskeysControllerTest < ActionDispatch::IntegrationTest
+    # The OTP delivery issuer refuses to run inside the fixture transaction, so this committed
+    # journey cleans up its own rows instead.
+    self.use_transactional_tests = false
+
     include ActiveJob::TestHelper
+    include SignInFlowCleanup
+    include SignUpJourneyCleanup
 
     SECRET_LIFETIME_VALUES = {
       "APP_SECRET_ISSUANCE_TTL_SECONDS" => "600",
@@ -18,8 +25,14 @@ module Auth::App::Up
     fixtures :app_preference_chronicle_levels, :app_preference_chronicle_events,
              :client_statuses, :client_telephone_statuses, :client_passkey_statuses,
              :client_chronicle_events, :client_chronicle_levels
+    self.fixture_table_names = %w(
+      app_preference_chronicle_levels app_preference_chronicle_events
+      client_statuses client_telephone_statuses client_passkey_statuses
+      client_chronicle_events client_chronicle_levels
+    )
 
     setup do
+      sign_up_journey_watermarks!
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       https!
       ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
@@ -45,6 +58,7 @@ module Auth::App::Up
       end
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.challenge_response = nil
+      delete_sign_up_journey_rows!
     end
 
     test "GET show returns 200 with passkey endpoint data attrs" do
@@ -556,6 +570,83 @@ module Auth::App::Up
         assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
         assert_equal (now.to_date - 1.day).iso8601, contact_owner_for_test(telephone).reload.birthdate
       end
+    end
+
+    test "a telephone registered by another flow before birthdate commit raises without changing sign-up state" do
+      telephone = verify_telephone_via_otp!
+      cycle = current_sign_up_flow(telephone)
+      competing_owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+        visibility_id: ClientVisibility::USER,
+      )
+      registered = competing_owner.client_telephones.create!(
+        raw_number: telephone.number,
+        confirm_policy: true,
+        confirm_using_mfa: true,
+        user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+        binding_finalized_at: ClientTelephone.database_now,
+      )
+      competing_owner_facts = competing_owner.reload.attributes
+      registered_facts = registered.reload.attributes
+
+      post auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding)
+
+      assert_response :ok
+      options = response.parsed_body
+      csrf = response.headers["X-CSRF-Token"]
+      credential = WebAuthn::FakeClient.new("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", encoding: :base64url)
+        .create(challenge: options.dig("options", "challenge"), user_verified: true)
+      patch auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding),
+            params: {
+              challenge_id: options.fetch("challenge_id"),
+              checkpoint_version: cycle.checkpoint_version,
+              credential: credential,
+            }, headers: csrf ? { "X-CSRF-Token" => csrf } : {}
+
+      assert_response :created
+      secret_path = auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: @signup_flow_binding)
+      get secret_path
+
+      assert_response :success
+      issuance = ClientSecretIssuance.find_by!(sign_up_flow_ref: cycle.public_id)
+      values = []
+      if issuance.planned_count.positive?
+        post secret_path
+
+        assert_response :success
+        values = response.parsed_body.css("[data-secret-value] code").map(&:text)
+      end
+      patch secret_path, params: {
+        checkpoint_version: cycle.reload.checkpoint_version, stored: values.any? ? "1" : nil,
+      }.compact
+
+      assert_response :see_other
+      @signup_flow_binding = refresh_sign_up_flow_binding_from_redirect!(
+        flow: cycle, previous_binding: @signup_flow_binding,
+        expected_path: auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
+      )
+      birthdate_path = auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @signup_flow_binding)
+      get birthdate_path
+
+      assert_response :success
+      telephone_facts = telephone.reload.attributes
+      cycle_facts = cycle.reload.attributes
+      candidate_owner = contact_owner_for_test(telephone)
+      candidate_owner_facts = candidate_owner.reload.attributes
+      assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
+        patch birthdate_path, params: {
+          requirement: "birthdate", birthdate: "2000-01-01", checkpoint_version: cycle.reload.checkpoint_version,
+        }
+      end
+
+      assert_equal telephone_facts, telephone.reload.attributes
+      assert_equal cycle_facts, cycle.reload.attributes
+      assert_equal candidate_owner_facts, candidate_owner.reload.attributes
+      assert_equal competing_owner_facts, competing_owner.reload.attributes
+      assert_equal registered_facts, registered.reload.attributes
+      assert_equal 0, ClientToken.where(user_id: candidate_owner.id).count
+      assert_equal 0, ClientToken.where(user_id: competing_owner.id).count
     end
 
     test "durable sign-up preserves account data before Base session completion" do

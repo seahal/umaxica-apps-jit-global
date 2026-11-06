@@ -150,21 +150,55 @@ module SignUpSequenceControllerSupport
       return
     end
 
-    unless actor.save
-      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
-      return
+    source_finalization_result = :not_attempted
+    preauthorized_finalization_context = nil
+    finalize_after_guard = false
+    complete =
+      lambda do
+        unless actor.save
+          render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
+          next
+        end
+
+        result = perform_sign_up_event(
+          :clear_requirement,
+          payload: {
+            requirement: :birthdate,
+            checkpoint_version: sign_up_checkpoint_version_param,
+          },
+        )
+        if result.success? && result.next_event == :finalize
+          context = sign_up_finalization_context
+          unless context && allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
+            render_sign_up_finalization_forbidden
+            next
+          end
+
+          preauthorized_finalization_context = context
+          source_finalization_result = sign_up_source_finalization_result
+          finalize_after_guard = true
+        else
+          render_sign_up_result(result)
+        end
+      end
+
+    contact =
+      if @sign_up_ticket.is_a?(ClientSignUpFlow) && @sign_up_ticket.principal_id == actor.id
+        case @sign_up_ticket.pending_contact_type
+        when "email" then ClientEmail.find_by(id: @sign_up_ticket.pending_contact_id)
+        when "telephone" then ClientTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
+        end
+      end
+    if contact && contact.user_id == actor.id
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: contact, owner: actor, &complete)
+    else
+      complete.call
     end
+    return unless finalize_after_guard
 
-    result = perform_sign_up_event(
-      :clear_requirement,
-      payload: {
-        requirement: :birthdate,
-        checkpoint_version: sign_up_checkpoint_version_param,
-      },
+    finalize_sign_up_from_checkpoint!(
+      source_finalization_result:, preauthorized_context: preauthorized_finalization_context,
     )
-    return finalize_sign_up_from_checkpoint! if result.success? && result.next_event == :finalize
-
-    render_sign_up_result(result)
   end
 
   def continue_after_cleared_sign_up_requirement
@@ -173,73 +207,61 @@ module SignUpSequenceControllerSupport
     render_sign_up_checkpoint
   end
 
-  def finalize_sign_up_from_checkpoint!(json: false)
-    context = sign_up_finalization_context
+  def finalize_sign_up_from_checkpoint!(json: false, source_finalization_result: :not_attempted,
+                                        preauthorized_context: nil)
+    context = preauthorized_context || sign_up_finalization_context
     return render_sign_up_finalization_forbidden(json: json) unless context
-    return render_sign_up_finalization_forbidden(json: json) unless
-      allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
+    if preauthorized_context.nil? && !allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
+      return render_sign_up_finalization_forbidden(json: json)
+    end
 
-    # The shared sign-up completion boundary: its credential work has already happened inside
-    # `finalize_sign_up_side_effect!`, and app is the only surface routed through this path.
-    #
-    # The cycle lock serializes finalize/handoff/complete. Without it, two concurrent finalizes
-    # for the same cycle each see CHECKPOINT_PENDING and both mutate the actor: one fails on
-    # rp_account uniqueness and leaves a half-built principal, and only afterwards the state
-    # machine rejects the duplicate transition. Holding the lock from the policy re-check through
-    # `:complete` keeps the actor mutation and the cycle transition atomic with peers.
-    finalized = nil
+    # Source registration commits independently. Its immutable receipt is reconciled before
+    # any OP expiry decision; no OP row lock is held before the source actor is locked.
+    finalization_result = source_finalization_result
+    finalization_result = sign_up_source_finalization_result if finalization_result == :not_attempted
+    if finalization_result == :expired
+      return render_sign_up_failure_result(perform_sign_up_event(:expire), json: json)
+    end
+    unless finalization_result == :accepted
+      return render_sign_up_failure_result(
+        SignUpResult.build(status: :failed, ticket: @sign_up_ticket, errors: ["registration refused"]), json: json,
+      )
+    end
+
     sign_in_result = nil
     outcome =
       sign_up_ticket_record_class.connected_to(role: :writing) do
         @sign_up_ticket.with_cycle_lock do
           @sign_up_ticket.reload
-          @sign_up_ticket.require_active_cycle!
-          context = sign_up_finalization_context
-          return render_sign_up_finalization_forbidden(json: json) unless context &&
-            allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
-
-          # D-105 / D-131: the deadline is decided on the Binding's OP clock under the Flow lock;
-          # at or after it nothing is registered. A checkpoint already left is an invalid transition.
-          unless @sign_up_ticket.sign_up_checkpoint_pending?
-            finalized = SignUpResult.build(
-              status: :invalid_transition,
-              ticket: @sign_up_ticket,
-              errors: ["ticket is not at checkpoint"],
-            )
-            next
+          unless @sign_up_ticket.sign_up_completed? && @sign_up_ticket.registration_completion
+            raise ClientRegistrationCompletion::Conflict, "Source registration has no completed flow"
           end
 
-          unless sign_up_flow_within_curfew?
-            finalized = SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["curfew passed"])
-            next
+          actor = context.pending_actor.reload
+          IdentityGraphProvisioner.call!(surface: sign_up_surface, principal: actor) if
+            actor.login_allowed? && actor.access_enabled?
+          if sign_up_flow_within_curfew?
+            sign_in_result = handoff_to_sign_in_flow!(actor)
+          else
+            @sign_up_handoff_after_curfew = true
           end
-
-          finalization_result = finalize_sign_up_side_effect!
-          finalized = perform_sign_up_event(
-            :finalize, payload: { finalization_result: finalization_result },
-          )
-          next unless finalized.success?
-
-          actor = context.pending_actor
-          # Avatar provisioning rejects a principal that cannot sign in. Such a principal
-          # fails the sign-in handoff below and is reported through that failure path.
-          if actor.login_allowed? && actor.access_enabled?
-            IdentityGraphProvisioner.call!(surface: sign_up_surface, principal: actor)
-          end
-          complete = perform_sign_up_event(:complete)
-          next unless complete.success?
-          # REQ-CURFEW 7: a registration committed across the deadline is kept; only its Sign In
-          # handoff is refused, and the person signs in normally later.
-          next @sign_up_handoff_after_curfew = true unless sign_up_flow_within_curfew?
-
-          # The actor read before Finalization still carries its unfinished status in memory.
-          sign_in_result = handoff_to_sign_in_flow!(context.pending_actor.reload)
         end
       end
+    finalized = SignUpResult.build(status: :completed, ticket: @sign_up_ticket)
 
     handle_sign_up_checkpoint_finalization_outcome!(
       outcome: outcome, finalized: finalized, sign_in_result: sign_in_result, json: json,
     )
+  end
+
+  def sign_up_source_finalization_result
+    finalize_sign_up_side_effect!
+  rescue FlowInvalidTransition
+    # A committed Source receipt must keep its reconciliation path; only an uncommitted
+    # registration refusal can become the ordinary expiry or validation response.
+    raise if @sign_up_ticket.registration_completion
+
+    @sign_up_ticket.expired?(@sign_up_ticket.class.database_now) ? :expired : :failed
   end
 
   # The post-transaction half of the checkpoint cycle lock scope:
@@ -257,14 +279,17 @@ module SignUpSequenceControllerSupport
     end
 
     sign_up_session_state.clear_all!
-    return exit_attempt_after_curfew!(admitted_auth_ceremony_session) if @sign_up_handoff_after_curfew
+    if @sign_up_handoff_after_curfew
+      binding = @sign_up_ticket.association(:auth_admission_binding).scope.take!
+      return exit_attempt_after_curfew!(admitted_auth_ceremony_session, binding:)
+    end
 
     redirect_after_sign_up_handoff!(sign_in_result, json: json)
   end
 
   def sign_up_flow_within_curfew?
-    binding = @sign_up_ticket.association(:auth_admission_binding).scope.take
-    binding.present? && AdmissionCurfewValue.for(binding).within?
+    binding = @sign_up_ticket.association(:auth_admission_binding).scope.take!
+    AdmissionCurfewValue.for(binding).within?
   end
 
   def sign_up_session_state
@@ -315,14 +340,14 @@ module SignUpSequenceControllerSupport
     if json
       render json: { error: "stale_checkpoint" }, status: :conflict
     else
-      render plain: "stale_checkpoint", status: :conflict
+      render plain: t("errors.messages.stale_checkpoint"), status: :conflict
     end
     false
   rescue ArgumentError, TypeError
     if json
       render json: { error: "stale_checkpoint" }, status: :conflict
     else
-      render plain: "stale_checkpoint", status: :conflict
+      render plain: t("errors.messages.stale_checkpoint"), status: :conflict
     end
     false
   end
@@ -457,9 +482,7 @@ module SignUpSequenceControllerSupport
     when "email"
       # Email sign-up only needs the actor promoted into the verified-with-sign-up state before the
       # durable graph is provisioned.
-      actor.with_lock do
-        raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
-
+      AppSignUpRegistrationCommitter.call!(flow: @sign_up_ticket, client: actor, method: "email") do
         email = ClientEmail.lock.find(@sign_up_ticket.pending_contact_id)
         raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
 

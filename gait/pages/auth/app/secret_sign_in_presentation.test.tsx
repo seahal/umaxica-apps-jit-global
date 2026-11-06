@@ -7,7 +7,7 @@ import SecretSignIn from "@/pages/auth/app/sign/in/secrets/new";
 vi.mock("@/features/turnstile/TurnstileWidget", () => ({ default: () => null }));
 
 const turnstile = { site_key: "test", action: "sign_in", mode: "render" as const, cdata: null };
-const backLink = { label: "Choose another method?", href: "/sign/in?ri=jp" };
+const backLink = { label: "もどる", href: "/sign/in?ri=jp" };
 
 describe("Secret sign-in presentation", () => {
   it.each([
@@ -37,6 +37,8 @@ describe("Secret sign-in presentation", () => {
         back_link={backLink}
       />,
     );
+    const back = screen.getByRole("link", { name: "もどる" });
+    expect(back.closest("header")).not.toBeNull();
     const control = screen.getByLabelText<HTMLInputElement>("Secret");
     expect(control.value).toBe("");
     expect(control.getAttribute("value")).toBeNull();
@@ -105,7 +107,7 @@ describe("Secret sign-in presentation", () => {
         back_link={backLink}
       />,
     );
-    const link = screen.getByRole("link", { name: "Choose another method?" });
+    const link = screen.getByRole("link", { name: "もどる" });
     expect(link.getAttribute("href")).toBe("/sign/in?ri=jp");
   });
 });

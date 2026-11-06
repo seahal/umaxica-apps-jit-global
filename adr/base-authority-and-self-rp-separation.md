@@ -97,7 +97,10 @@ expiry. Server-side validity covers state the token cannot carry.
 The Browser RP access credential, the cookie that authenticates Base self-RP, Warp, Edit and Core
 pages, passes both on every request. After cryptographic verification the request reads the RP
 Session, its Browser Session, that session's current root token and the actor, and treats the
-browser as authenticated only when every link is present, unrevoked and consistent with the token.
+browser as authenticated only when every link is present, unrevoked and consistent with the token
+and the actor remains eligible to log in (`Identity#login_allowed?`). A transition to a
+login-blocked or inactive identity status therefore invalidates the Browser RP credential on the
+next request. Withdrawal lifecycle markers remain distinct and continue through the withdrawal gate.
 The rule is the same on every page. With an invalid credential Home renders its anonymous page and a
 protected page refuses; no page has a rule of its own.
 

@@ -68,6 +68,18 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
     assert_equal RuntimeRole::ANY_ROLE, RuntimeRole.route_owner("base/com/preferences")
     assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/oidc/closures")
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/avatars")
+    assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/actor_support")
+    assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/actor_support")
+  end
+
+  test "Visa sensitive admission receipts belong to the realm OP" do
+    %w(app org).each do |realm|
+      controller = "visa/#{realm}/api/v0/sensitive_admission_sessions"
+
+      assert_equal "op-base-#{realm}", RuntimeRole.route_owner(controller)
+      assert RuntimeRole.serves?(controller, "op-base-#{realm}")
+      assert_not RuntimeRole.serves?(controller, "rp-base-#{realm}-ww")
+    end
   end
 
   test "domain owner APIs belong to their domain authority" do

@@ -10,7 +10,7 @@ class SignInCyclePolicyTest < ActiveSupport::TestCase
       principal_id: operator.id, state_id: OperatorSignInFlow.state_id_for("MFA_PENDING"),
     )
 
-    assert SignIn::CyclePolicy.new(flow, user: operator).show_mfa?
+    assert_predicate SignIn::CyclePolicy.new(flow, user: operator), :show_mfa?
     assert_not SignIn::CyclePolicy.new(flow, user: clients(:one)).show_mfa?
     assert_not SignIn::CyclePolicy.new(flow, user: nil).show_mfa?
   end

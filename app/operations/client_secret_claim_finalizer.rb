@@ -73,7 +73,7 @@ class ClientSecretClaimFinalizer
 
       repair_terminal_flow_owner!(credential, flow)
       canceled_oidc_handoff = oidc_handoff_canceled?(ceremony, flow)
-      (ceremony.cancelled_at || canceled_oidc_handoff) ? "flow_canceled" : reason
+      (ceremony.cancelled? || canceled_oidc_handoff) ? "flow_canceled" : reason
     end
 
     def terminal_flow_failure_reason!(flow)

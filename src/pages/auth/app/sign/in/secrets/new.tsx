@@ -2,6 +2,9 @@ import { useRef } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import type { SignInLink, SignInTurnstile } from "@/features/auth/signin/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
@@ -15,6 +18,7 @@ type Props = {
   authenticity_token: string;
   turnstile: SignInTurnstile;
   back_link: SignInLink;
+  parent_cancel?: CeremonyCancellationProps | null;
 };
 
 export default function SecretSignIn({
@@ -27,11 +31,13 @@ export default function SecretSignIn({
   authenticity_token: csrf,
   turnstile,
   back_link: backLink,
+  parent_cancel: parentCancel,
 }: Props) {
   const challenge = useRef<HTMLInputElement>(null);
   return (
     <Page
       title={title}
+      up={backLink}
       width="narrow"
     >
       {error && (
@@ -92,15 +98,7 @@ export default function SecretSignIn({
         <Button type="submit">{submit}</Button>
       </form>
 
-      <p className="text-base">
-        {/* Document visit: leaving the ceremony returns to the method selection page. */}
-        <a
-          href={backLink.href}
-          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
-        >
-          {backLink.label}
-        </a>
-      </p>
+      {parentCancel ? <CeremonyCancellation {...parentCancel} /> : null}
     </Page>
   );
 }

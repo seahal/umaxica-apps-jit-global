@@ -23,6 +23,10 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
       assert_response :redirect
       assert_equal "/selector", URI.parse(response.location).path
 
+      get base_app_identity_path(ri: "jp")
+
+      assert_response :success
+
       get base_app_preference_path(ri: "jp")
 
       assert_response :success
@@ -32,6 +36,34 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
 
       assert_response :redirect
       assert_includes response.location, "/preference/region"
+
+      browser_registry = PreferenceClassRegistry.fetch("App")
+      account_registry = PreferenceClassRegistry.fetch("Client")
+      notification_state_models = [
+        browser_registry.fetch(:preference), browser_registry.fetch(:status), browser_registry.fetch(:cookie),
+        browser_registry.fetch(:audit), browser_registry.fetch(:audit_event), browser_registry.fetch(:audit_level),
+        *browser_registry.fetch(:option_classes).values, *browser_registry.fetch(:record_classes).values,
+        AppPreferenceBrowserBinding, AppPreferenceConsentReceipt, AppPreferenceWebPush,
+        account_registry.fetch(:preference), ClientPreferenceStatus,
+        *account_registry.fetch(:option_classes).values, *account_registry.fetch(:record_classes).values,
+        ClientEmail,
+      ].uniq
+      before_notification_state =
+        notification_state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      patch base_app_preference_notification_path(ri: "jp"),
+            params: { preference_notification: { email: "daily", web_push: "enabled", unknown: "ignored" } }
+
+      assert_response :see_other
+      assert_redirected_to edit_base_app_preference_notification_path(ri: "jp")
+      after_notification_state =
+        notification_state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      assert_equal before_notification_state, after_notification_state
     end
 
     token = cookies[PreferenceCookieName.anonymous_jwt]
@@ -58,6 +90,10 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
 
     as_rp_cell("base-org-ww") do
       sign_in_rp_cell("base-org-ww", actor:, root_token:)
+      get base_org_identity_path(ri: "jp")
+
+      assert_response :success
+
       get base_org_preference_path(ri: "jp")
 
       assert_response :success
@@ -67,6 +103,34 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
 
       assert_response :redirect
       assert_includes response.location, "/preference/region"
+
+      browser_registry = PreferenceClassRegistry.fetch("Org")
+      account_registry = PreferenceClassRegistry.fetch("Operator")
+      notification_state_models = [
+        browser_registry.fetch(:preference), browser_registry.fetch(:status), browser_registry.fetch(:cookie),
+        browser_registry.fetch(:audit), browser_registry.fetch(:audit_event), browser_registry.fetch(:audit_level),
+        *browser_registry.fetch(:option_classes).values, *browser_registry.fetch(:record_classes).values,
+        OrgPreferenceBrowserBinding, OrgPreferenceConsentReceipt, OrgPreferenceWebPush,
+        account_registry.fetch(:preference), OperatorPreferenceStatus,
+        *account_registry.fetch(:option_classes).values, *account_registry.fetch(:record_classes).values,
+        OperatorEmail,
+      ].uniq
+      before_notification_state =
+        notification_state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      patch base_org_preference_notification_path(ri: "jp"),
+            params: { preference_notification: { email: "daily", web_push: "enabled", unknown: "ignored" } }
+
+      assert_response :see_other
+      assert_redirected_to edit_base_org_preference_notification_path(ri: "jp")
+      after_notification_state =
+        notification_state_models.to_h do |model|
+          [model.name, model.order(model.primary_key).pluck(*model.column_names)]
+        end
+
+      assert_equal before_notification_state, after_notification_state
     end
 
     token = cookies[PreferenceCookieName.anonymous_jwt]
@@ -93,9 +157,11 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
     as_rp_cell("base-app-ww") do
       sign_in_rp_cell("base-app-ww", actor:, root_token:)
       get base_app_preference_path(ri: "jp")
+
       assert_response :success
 
       patch base_app_preference_theme_path(ri: "jp"), params: { preference_theme: { option_id: "dr" } }
+
       assert_response :redirect
       old_token = cookies[PreferenceCookieName.anonymous_jwt]
       old_claims = PreferenceToken.decode(old_token, host:, jwt_issuer_id: "preference_app")
@@ -119,15 +185,17 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
        PreferenceCookieName.anonymous_experience,].each do |name|
         assert cookie_headers.any? { |header| header.start_with?("#{name}=") }, name
       end
-      binding_header = cookie_headers.find do |header|
-        header.start_with?("#{PreferenceBrowserBinding::COOKIE_NAME}=")
-      end
+      binding_header =
+        cookie_headers.find do |header|
+          header.start_with?("#{PreferenceBrowserBinding::COOKIE_NAME}=")
+        end
 
       assert_not_nil binding_header
       assert_operator Time.httpdate(binding_header.match(/expires=([^;]+)/i)[1]), :<, Time.current
       assert_no_match(/\bdomain=/i, binding_header)
       assert_empty cookies[PreferenceBrowserBinding::COOKIE_NAME].to_s
-      assert_equal AppPreferenceThemeOption::SYSTEM, new_anonymous.app_preference_theme.option_id
+      assert_equal AppPreferenceThemeOption::SYSTEM,
+                   AppPreferenceTheme.find_by!(preference_id: new_anonymous.id).option_id
     end
   end
 
@@ -141,9 +209,11 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
     as_rp_cell("base-org-ww") do
       sign_in_rp_cell("base-org-ww", actor:, root_token:)
       get base_org_preference_path(ri: "jp")
+
       assert_response :success
 
       patch base_org_preference_theme_path(ri: "jp"), params: { preference_theme: { option_id: "dr" } }
+
       assert_response :redirect
       old_token = cookies[PreferenceCookieName.anonymous_jwt]
       old_claims = PreferenceToken.decode(old_token, host:, jwt_issuer_id: "preference_org")
@@ -167,15 +237,17 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
        PreferenceCookieName.anonymous_experience,].each do |name|
         assert cookie_headers.any? { |header| header.start_with?("#{name}=") }, name
       end
-      binding_header = cookie_headers.find do |header|
-        header.start_with?("#{PreferenceBrowserBinding::COOKIE_NAME}=")
-      end
+      binding_header =
+        cookie_headers.find do |header|
+          header.start_with?("#{PreferenceBrowserBinding::COOKIE_NAME}=")
+        end
 
       assert_not_nil binding_header
       assert_operator Time.httpdate(binding_header.match(/expires=([^;]+)/i)[1]), :<, Time.current
       assert_no_match(/\bdomain=/i, binding_header)
       assert_empty cookies[PreferenceBrowserBinding::COOKIE_NAME].to_s
-      assert_equal OrgPreferenceThemeOption::SYSTEM, new_anonymous.org_preference_theme.option_id
+      assert_equal OrgPreferenceThemeOption::SYSTEM,
+                   OrgPreferenceTheme.find_by!(preference_id: new_anonymous.id).option_id
     end
   end
 end

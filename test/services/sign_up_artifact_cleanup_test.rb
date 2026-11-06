@@ -16,7 +16,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     ClientEmailStatus.ensure_defaults!
     ClientTelephoneStatus.ensure_defaults!
     ClientPasskeyStatus.ensure_defaults!
-
   end
 
   test "returns unsupported cycles unchanged" do

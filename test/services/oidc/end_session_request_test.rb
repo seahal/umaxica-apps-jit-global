@@ -32,6 +32,42 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_equal :no_hint, result.source
   end
 
+  test "accepts an exact registered return for a no-hint RP completion" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    result = OidcEndSessionRequest.call(
+      params: {
+        client_id: @client.client_id,
+        post_logout_redirect_uri: redirect_uri,
+        state: "rp-cell-state",
+      },
+      request: @request,
+    )
+
+    assert_predicate result, :success?
+    assert_predicate result, :requires_confirmation?
+    assert_equal :no_hint, result.source
+    assert_equal @client, result.client
+    assert_equal @client.client_id, result.client_id
+    assert_equal redirect_uri, result.post_logout_redirect_uri
+    assert_equal "rp-cell-state", result.state
+  end
+
+  test "rejects an unregistered no-hint RP return before preserving its state" do
+    result = OidcEndSessionRequest.call(
+      params: {
+        client_id: @client.client_id,
+        post_logout_redirect_uri: "https://attacker.example/signed-out",
+        state: "attacker-state",
+      },
+      request: @request,
+    )
+
+    assert_predicate result, :error?
+    assert_equal "invalid_request", result.error_code
+    assert_nil result.post_logout_redirect_uri
+    assert_nil result.state
+  end
+
   test "returns the grant sid from a verified RP hint for the Visa boundary to authorize" do
     install_actor_context!
 

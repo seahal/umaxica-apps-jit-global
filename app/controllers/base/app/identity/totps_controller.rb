@@ -53,6 +53,7 @@ module Base
             return_to: base_app_identity_totps_path,
             base_browser_nonce: base_admission_browser_nonce_for_request!, base_token: token,
             restart_of: params[:restart_of],
+            step_up_evidence: current_step_up_evidence,
           )
           if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
             return redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
@@ -76,7 +77,7 @@ module Base
           authorize!(@totp)
           IdentityTotpNameCommitter.call!(
             actor: current_client, token: current_session_token, credential: @totp,
-            title: totp_params[:title],
+            title: totp_params[:title], step_up_evidence: current_step_up_evidence,
           )
           redirect_to(base_app_identity_totps_path(ri: params[:ri]), status: :see_other)
         rescue IdentityTotpNameCommitter::InvalidTitle => e
@@ -95,11 +96,15 @@ module Base
           find_totp
           authorize!(@totp)
           removed = IdentityCredentialRemovalCommitter.call!(
-            actor: current_client, credential: @totp, current_session: current_session, request: request,
+            actor: current_client, credential: @totp, current_session: current_session,
+            step_up_evidence: current_step_up_evidence, request: request,
           )
           return render plain: t("errors.messages.invalid_request"), status: :unprocessable_content unless removed
 
           redirect_to(base_app_identity_totps_path(ri: params[:ri]), status: :see_other)
+        rescue IdentityCredentialRemovalCommitter::TransactionConflict,
+               IdentityCredentialRemovalCommitter::DependencyFailure
+          head :service_unavailable
         rescue ArgumentError, ActiveRecord::RecordInvalid
           redirect_to(base_app_identity_totp_path(@totp.public_id, ri: params[:ri]), status: :see_other)
         end

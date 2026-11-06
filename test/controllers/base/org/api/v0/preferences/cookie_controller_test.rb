@@ -3,6 +3,8 @@
 require "test_helper"
 
 class Base::Org::Api::V0::Preferences::CookieControllerTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
@@ -18,7 +20,10 @@ class Base::Org::Api::V0::Preferences::CookieControllerTest < ActionDispatch::In
     assert_response :ok
     assert_equal({ "show_banner" => true }, response.parsed_body)
     assert_equal preference_count, OrgPreference.count
-    assert_not_includes response.headers["Set-Cookie"].to_s, "#{PreferenceCookieName.anonymous_jwt}="
+    expired_preference_cookie = set_cookie_entries(PreferenceCookieName.anonymous_jwt).sole
+
+    assert_equal "", expired_preference_cookie.fetch(:value)
+    assert_equal "0", expired_preference_cookie.fetch(:"max-age")
   end
 
   test "an explicit refusal creates a bound receipt and remains readable on GET" do
@@ -28,7 +33,18 @@ class Base::Org::Api::V0::Preferences::CookieControllerTest < ActionDispatch::In
           params: { consented: false }.to_json,
           headers: headers
 
-    assert_response :no_content
+    assert_response :ok
+    assert_equal(
+      {
+        "cookie" => {
+          "consented" => false,
+          "functional" => false,
+          "performant" => false,
+          "targetable" => false,
+        },
+      },
+      response.parsed_body,
+    )
     claims = PreferenceToken.decode(cookies[PreferenceCookieName.anonymous_jwt], host: @host)
     preference = OrgPreference.find_by!(public_id: claims.fetch("sub"))
     cookie = OrgPreferenceCookie.find_by!(preference_id: preference.id)

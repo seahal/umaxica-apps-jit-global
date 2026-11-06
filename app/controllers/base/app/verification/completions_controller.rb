@@ -30,18 +30,24 @@ module Base
 
         def finalize_completion_transaction!(actor:, token:, transaction:, result_reference:)
           case transaction.purpose
-          when "step_up", "reauthentication"
+          when "step_up"
+            raise BaseAuthAdmissionCoordinator::Denied.new(
+              "ordinary step-up uses the OP callback", code: "invalid_admission",
+            )
+          when "reauthentication"
             super
           when "bootstrap", "credential_registration"
             case transaction.method
             when "totp"
               IdentityTotpEnrollmentFinalCommitter.call!(
                 actor: actor, token: token, transaction: transaction, result_reference: result_reference,
+                step_up_evidence: (current_step_up_evidence if transaction.purpose == "credential_registration"),
               )
             when "passkey"
               @registered_passkey = IdentityPasskeyRegistrationFinalCommitter.call!(
                 actor: actor, token: token, transaction: transaction, result_reference: result_reference,
                 ip_address: request.remote_ip, user_agent: request.user_agent,
+                step_up_evidence: (current_step_up_evidence if transaction.purpose == "credential_registration"),
               )
               if transaction.purpose == "credential_registration"
                 @secret_issuance = ClientSecretPasskeyReservationIssuer.call!(
@@ -50,6 +56,7 @@ module Base
                   ),
                   token: token, passkey: @registered_passkey,
                   expires_after: ClientSecretLifetimesValue.issuance_ttl,
+                  step_up_evidence: current_step_up_evidence,
                 )
               end
             else

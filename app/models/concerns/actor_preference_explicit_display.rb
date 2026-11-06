@@ -8,12 +8,12 @@ module ActorPreferenceExplicitDisplay
   DISPLAY_FIELDS = %w(
     language timezone region theme currency date_format time_format motion density page_size
   ).freeze
-  NON_TRANSFERABLE_FIELDS = %w(region adult_content_gate).freeze
-  ALLOWED_FIELDS = (DISPLAY_FIELDS + ["adult_content_gate"]).freeze
+  NON_TRANSFERABLE_FIELDS = %w(region).freeze
+  ALLOWED_FIELDS = DISPLAY_FIELDS
 
   public
 
-  def explicit_display_snapshot
+  def explicit_values
     raise ActiveRecord::RecordNotSaved, "actor preference must be persisted" unless persisted?
 
     # Child values alone do not establish user intent; only the explicit field list authorizes transfer.

@@ -3,6 +3,8 @@
 require "test_helper"
 
 class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   include ActiveJob::TestHelper
 
   setup do
@@ -27,12 +29,19 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
     )
-    issued = EmailSignUpOtpDeliveryIssuer.call(flow: flow, email: email, session_nonce: nonce)
+    issued = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
 
     assert_predicate issued, :success?
     transaction = issued.transaction
     generation = transaction.otp_generation
     expires_at = transaction.otp_expires_at
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
+      OtpAdapter.for(surface: :app, channel: :email).deliver(
+        record: email, otp_code: issued.code, public_id: email.public_id, purpose: "sign_up",
+        sign_up_flow_ref: flow.public_id, sign_up_email_transaction_ref: transaction.transaction_id,
+        sign_up_email_otp_generation: generation,
+      )
+    end
     before_deliveries = ActionMailer::Base.deliveries.length
     OutboundChannelSuspension.stub(:suspended?, ->(channel) { channel == :email }) do
       perform_enqueued_jobs only: OtpNotifierEmailDeliveryJob
@@ -65,9 +74,15 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
     )
-    issued = nil
+    issued = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
+
+    assert_predicate issued, :success?
     assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do
-      issued = TelephoneSignUpOtpDeliveryIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
+      OtpAdapter.for(surface: :app, channel: :telephone).deliver(
+        record: telephone, otp_code: issued.code, purpose: "sign_up", sign_up_flow_ref: flow.public_id,
+        sign_up_telephone_transaction_ref: issued.transaction.transaction_id,
+        sign_up_telephone_otp_generation: issued.transaction.otp_generation,
+      )
     end
 
     assert_predicate issued, :success?

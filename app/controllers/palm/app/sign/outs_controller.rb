@@ -34,12 +34,7 @@ module Palm
         end
 
         def create
-          launch_oidc_rp_logout!(
-            client_id: RpDeploymentBindingValue.client_id("palm-app"),
-            issuer_resource_type: "client",
-            token_issuer: "client",
-            session_authority: :rp_session,
-          )
+          launch_oidc_rp_logout!(client_id: RpDeploymentBindingValue.client_id("palm-app"))
         end
 
         private

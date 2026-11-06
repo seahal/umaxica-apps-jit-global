@@ -16,7 +16,10 @@ module Auth
 
       def show
         apply_admission_transport_headers!
-        return render_invalid_admission_request! unless document_navigation_request?
+        unless document_navigation_request?
+          log_invalid_admission_navigation
+          return render_invalid_admission_request!
+        end
 
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
         if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
@@ -33,8 +36,12 @@ module Auth
         end
 
         attach_and_redirect!(binding, OperatorAuthCeremonySession)
-      rescue BaseAuthAdmissionCoordinator::Denied, AuthAdmissionBinding::InvalidTransition,
-             ActiveRecord::RecordNotFound, ArgumentError
+      rescue BaseAuthAdmissionCoordinator::Denied => e
+        return render_sign_in_phase_refusal!(reason_code: "wrong_binding") if
+          e.code == "session_binding_mismatch"
+
+        render_invalid_admission_request!
+      rescue AuthAdmissionBinding::InvalidTransition, ActiveRecord::RecordNotFound, ArgumentError
         render_invalid_admission_request!
       end
 

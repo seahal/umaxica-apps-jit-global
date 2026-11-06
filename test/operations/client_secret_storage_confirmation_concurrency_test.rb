@@ -11,22 +11,32 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
-  test "source audit failures after OP commits spend Secret rename and revocation proofs" do
+  test "source audit failures after OP verification preserve Secret rename and revocation state" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fallback", uv_verified_at: Time.current)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Original", password: SecureRandom.base58(32),
     )
@@ -38,7 +48,10 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
         operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
       )
     end
-    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
     commits = []
     observer =
       lambda do |_name, _start, _finish, _id, event|
@@ -46,14 +59,6 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       end
     failure = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "injected source audit failure" }
     %i(rename revoke).each do |operation|
-      token.reload.update!(
-        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-        last_step_up_resource_ref: candidate.public_id,
-      )
       commits.clear
       ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
         ClientSecretAuditOutbox.stub(:record!, failure) do
@@ -62,12 +67,14 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
             assert_raises(ClientSecretNameCommitter::DependencyFailure) do
               ClientSecretNameCommitter.call!(
                 actor_context: context, token: token, credential: candidate, name: "Failed",
+                step_up_evidence: evidence,
               )
             end
           when :revoke
             assert_raises(ClientSecretRevocationCommitter::DependencyFailure) do
               ClientSecretRevocationCommitter.call!(
                 actor_context: context, token: token, credential: candidate, purge_after: 1.day,
+                step_up_evidence: evidence,
               )
             end
           end
@@ -75,7 +82,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       end
 
       assert_includes commits, "op_base_app"
-      assert_nil token.reload.last_step_up_at
+      assert OpAppGrant.exists?(public_id: evidence.sid)
       assert_equal "Original", candidate.reload.name
       assert_nil candidate.revoked_at
       assert_equal 0, ClientSecretAuditOutbox.where(
@@ -87,28 +94,42 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
-      token&.destroy!
-      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      actor.strict_loading!(false)
-      actor.destroy!
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        actor.destroy!
+      end
     end
   end
 
-  test "a source write failure after the separate OP commit spends proof without confirming" do
+  test "a source write failure after OP verification does not confirm storage" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Confirmation failure", password: SecureRandom.base58(32),
     )
@@ -133,12 +154,15 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
 
     ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
       assert_raises(ClientSecretStorageConfirmationCommitter::DependencyFailure) do
-        ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+        ClientSecretStorageConfirmationCommitter.call!(
+          actor_context: context, token: token, issuance: issuance,
+          step_up_evidence: evidence,
+        )
       end
     end
 
     assert_includes commits, "op_base_app"
-    assert_nil token.reload.last_step_up_at
+    assert OpAppGrant.exists?(public_id: evidence.sid)
     assert_nil issuance.reload.confirmed_at
     assert_nil candidate.reload.confirmed_at
     assert_equal 0, ClientSecretAuditOutbox.where(
@@ -149,28 +173,212 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
-      token&.destroy!
-      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      actor.strict_loading!(false)
-      actor.destroy!
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        actor.destroy!
+      end
+    end
+  end
+
+  test "a Zenith commit failure after OP verification confirms none of the batch" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
+    )
+    candidate = ClientSecretCredential.create!(
+      client: actor, issuance: issuance, name: "Original", password: SecureRandom.base58(32),
+    )
+    at = Client.database_now
+    ClientSecretAuditOutbox.transaction do
+      issuance.update!(presented_at: at)
+      ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: actor.public_id, credential_ref: candidate.public_id,
+        operation_ref: issuance.origin_operation_id, occurred_at: at, event_name: "secret.presented", item_count: 1,
+      )
+    end
+    failed_commit = -> { raise ActiveRecord::ConnectionNotEstablished, "injected batch Zenith commit failure" }
+
+    assert_raises(ClientSecretStorageConfirmationCommitter::DependencyFailure) do
+      AppZenithRecord.lease_connection.stub(:commit_db_transaction, failed_commit) do
+        ClientSecretStorageConfirmationCommitter.call!(
+          actor_context: context, token: token, issuance: issuance,
+          step_up_evidence: evidence,
+        )
+      end
+    end
+
+    assert_nil issuance.reload.confirmed_at
+    assert_nil candidate.reload.confirmed_at
+    assert_equal 0, ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id,
+      event_name: %w(secret.storage_declared secret.created),
+    ).count
+    assert OpAppGrant.exists?(public_id: evidence.sid)
+  ensure
+    if actor
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
+      ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
+      ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        actor.destroy!
+      end
+    end
+  end
+
+  test "a lost Zenith commit acknowledgement retries the committed confirmation without duplicate audit" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
+    )
+    candidate = ClientSecretCredential.create!(
+      client: actor, issuance: issuance, name: "Lost acknowledgement", password: SecureRandom.base58(32),
+    )
+    presented_at = Client.database_now
+    ClientSecretAuditOutbox.transaction do
+      issuance.update!(presented_at: presented_at)
+      ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: actor.public_id, credential_ref: candidate.public_id,
+        operation_ref: issuance.origin_operation_id, occurred_at: presented_at,
+        event_name: "secret.presented", item_count: 1,
+      )
+    end
+    connection = AppZenithRecord.lease_connection
+    commit = connection.method(:commit_db_transaction)
+    lose_acknowledgement =
+      lambda do
+        commit.call
+        connection.disconnect!
+        raise ActiveRecord::ConnectionNotEstablished, "injected lost Secret confirmation commit acknowledgement"
+      end
+
+    assert_raises(ClientSecretStorageConfirmationCommitter::DependencyFailure) do
+      connection.stub(:commit_db_transaction, lose_acknowledgement) do
+        connection.stub(:rollback_db_transaction, -> { }) do
+          ClientSecretStorageConfirmationCommitter.call!(
+            actor_context: context, token: token, issuance: issuance,
+            step_up_evidence: evidence,
+          )
+        end
+      end
+    end
+
+    confirmed_issuance = ClientSecretIssuance.find(issuance.id)
+    confirmed_candidate = ClientSecretCredential.find(candidate.id)
+
+    assert_predicate confirmed_issuance.confirmed_at, :present?
+    assert_equal confirmed_issuance.confirmed_at, confirmed_candidate.confirmed_at
+    assert OpAppGrant.exists?(public_id: evidence.sid)
+    assert_equal 1, ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.storage_declared",
+    ).count
+    assert_equal 1, ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.created",
+    ).count
+
+    retry_result = ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: token, issuance: confirmed_issuance,
+      step_up_evidence: evidence,
+    )
+
+    assert_equal confirmed_issuance.id, retry_result.id
+    assert_equal confirmed_issuance.confirmed_at, retry_result.confirmed_at
+    assert OpAppGrant.exists?(public_id: evidence.sid), "the same evidence remains valid for a retry"
+    assert_equal 1, ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.storage_declared",
+    ).count
+    assert_equal 1, ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.created",
+    ).count
+  ensure
+    if actor
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
+      ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
+      ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        actor.destroy!
+      end
     end
   end
 
   test "confirmation racing cancellation commits one consistent terminal state and releases the reservation" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Confirmation cancellation race", password: raw,
@@ -203,10 +411,12 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
                     when :confirm
                       ClientSecretStorageConfirmationCommitter.call!(
                         actor_context: bound, token: token, issuance: issuance,
+                        step_up_evidence: evidence,
                       )
                     when :cancel
                       ClientSecretManualIssuanceInvalidator.call!(
                         actor_context: bound, token: token, issuance: issuance, purge_after: 1.day,
+                        step_up_evidence: evidence,
                       )
                     end
                   result.state(at: Client.database_now)
@@ -252,30 +462,50 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
-      token&.destroy!
-      # An Identity is physically erased only once it has lapsed and is purgeable.
-      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      destroy_test_client_after_cross_database_cleanup!(actor)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        destroy_test_client_after_cross_database_cleanup!(actor)
+      end
     end
   end
 
   test "confirmation racing claim never authenticates an unconfirmed candidate or reactivates a claim" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
-    raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
+    raw = ClientSecretPresentationIssuer.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    ).first
     admission = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
@@ -327,6 +557,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
                 owner = Client.find(actor.id)
                 ClientSecretStorageConfirmationCommitter.call!(
                   actor_context: context.with(subject: owner), token: token, issuance: issuance,
+                  step_up_evidence: evidence,
                 ).public_id
               else
                 ClientSecretClaimCommitter.call_for_oidc!(
@@ -362,11 +593,15 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       assert ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: raw, transaction:, ceremony:)
     end
     claim_operation = candidate.reload.claim_operation_id
-    assert_raises(ClientSecretStorageConfirmationCommitter::Denied) do
-      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
-    end
+    claimed_at = candidate.claimed_at
+    retry_result = ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
 
     assert_equal claim_operation, candidate.reload.claim_operation_id
+    assert_equal issuance.public_id, retry_result.public_id
+    assert_equal claimed_at, candidate.claimed_at
     assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert_nil ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: raw, transaction:, ceremony:)
     events = ClientSecretAuditOutbox.where(client_ref: actor.public_id)
@@ -390,28 +625,42 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
-      token&.destroy!
-      # An Identity is physically erased only once it has lapsed and is purgeable.
-      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      destroy_test_client_after_cross_database_cleanup!(actor)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        destroy_test_client_after_cross_database_cleanup!(actor)
+      end
     end
   end
 
-  test "concurrent confirmations spend one Step-Up once and activate one credential" do
+  test "concurrent confirmations reuse Step-Up evidence while activating one credential" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Concurrent confirmation", password: raw,
@@ -441,6 +690,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
                 OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                   result = ClientSecretStorageConfirmationCommitter.call!(
                     actor_context: bound, token: token, issuance: issuance,
+                    step_up_evidence: evidence,
                   )
                   [result.public_id, result.confirmed_at]
                 end
@@ -468,10 +718,12 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     assert_equal 2, pids.uniq.length
     successful_results = results.reject { |result| result == :denied }
 
-    assert_equal 1, successful_results.length
-    assert_equal 1, results.count(:denied)
+    assert_equal 2, successful_results.length
+    assert_equal 0, results.count(:denied)
     assert_equal issuance.public_id, successful_results.first.first
-    assert_nil token.reload.last_step_up_at
+    assert_equal [issuance.public_id], successful_results.map(&:first).uniq
+    assert_equal 1, successful_results.map(&:last).uniq.length
+    assert OpAppGrant.exists?(public_id: evidence.sid)
     assert_equal issuance.reload.confirmed_at, candidate.reload.confirmed_at
     assert_equal 1, ClientSecretAuditOutbox.where(client_ref: actor.public_id, event_name: "secret.created").count
     declarations = ClientSecretAuditOutbox.where(client_ref: actor.public_id, event_name: "secret.storage_declared")
@@ -488,10 +740,14 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
-      token&.destroy!
-      # An Identity is physically erased only once it has lapsed and is purgeable.
-      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      destroy_test_client_after_cross_database_cleanup!(actor)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.where(client_token_id: token&.id).delete_all
+        token&.association(:op_app_grants)&.reset
+        token&.destroy!
+        actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+        actor.strict_loading!(false)
+        destroy_test_client_after_cross_database_cleanup!(actor)
+      end
     end
   end
 end

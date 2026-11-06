@@ -21,7 +21,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
     ).tap(&:finalize_binding!)
   end
 
-  test "destroy with fresh step-up removes the email" do
+  test "destroy returns unavailable when the request transaction cannot own Ticket commit" do
     http_headers_2 =
       begin
         fx0_step_up_scope = "settings_email"
@@ -170,14 +170,10 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
     delete base_app_identity_email_url(@email.public_id, ri: "jp", host: @host),
            headers: http_headers_2
 
-    assert_response :see_other
-    assert_equal ClientEmailStatus::DELETED, @email.reload.user_email_status_id
-    assert_predicate @email, :binding_released?
-    audit = ClientContactAuditOutbox.find_by!(contact_ref: @email.public_id, event_name: "released")
-
-    assert_equal @client.public_id, audit.owner_ref
-    assert_equal @client.public_id, audit.actor_ref
-    assert_nil audit.acknowledged_at
+    assert_response :service_unavailable
+    assert_equal ClientEmailStatus::VERIFIED, @email.reload.user_email_status_id
+    assert_predicate @email, :binding_effective?
+    assert_not ClientContactAuditOutbox.exists?(contact_ref: @email.public_id, event_name: "released")
   end
 
   test "destroy without fresh step-up is refused and keeps the email" do

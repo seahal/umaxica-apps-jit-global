@@ -24,7 +24,10 @@ class AppPreferenceRegionOptionTest < ActiveSupport::TestCase
 
   test "has many app_preference_regions" do
     option = AppPreferenceRegionOption.create!(id: 99)
-    preference = AppPreference.create!
+    preference = AppPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     region = AppPreferenceRegion.create!(preference: preference, option: option)
 
     assert_includes option.app_preference_regions, region
@@ -32,7 +35,10 @@ class AppPreferenceRegionOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = AppPreferenceRegionOption.create!(id: 99)
-    preference = AppPreference.create!
+    preference = AppPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     AppPreferenceRegion.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

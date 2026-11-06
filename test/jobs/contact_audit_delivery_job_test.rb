@@ -105,6 +105,75 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
     end
   end
 
+  test "Email preference change is delivered as a reference-only Chronicle event" do
+    event =
+      ClientContactAuditOutbox.transaction do
+        ClientContactAuditOutbox.record!(
+          contact_kind: "email", event_name: "preferences_changed", owner_ref: "owner-ref",
+          contact_ref: "email-ref", operation_ref: SecureRandom.uuid, actor_ref: "owner-ref",
+        )
+      end
+
+    ContactAuditDeliveryJob.perform_now
+
+    audit = Chronicle.find_by!(event_uuid: event.event_uuid)
+
+    assert_equal "contact.email.preferences_changed", audit.action
+    assert_equal event.operation_ref, audit.request_id
+    expected_metadata = {
+      "surface" => "app",
+      "owner_ref" => "owner-ref",
+      "contact_ref" => "email-ref",
+      "actor_ref" => "owner-ref",
+    }
+
+    assert_equal expected_metadata, audit.metadata
+    assert_equal({}, audit.changeset)
+    assert_predicate event.reload.acknowledged_at, :present?
+  end
+
+  test "preferences_changed requires an Email contact and a nonblank actor reference" do
+    base = {
+      contact_kind: "email",
+      event_name: "preferences_changed",
+      owner_ref: "owner-ref",
+      contact_ref: "email-ref",
+      operation_ref: SecureRandom.uuid,
+      actor_ref: "owner-ref",
+    }
+
+    [base.merge(actor_ref: nil), base.merge(contact_kind: "telephone")].each do |attributes|
+      assert_raises(ActiveRecord::RecordInvalid) do
+        ClientContactAuditOutbox.transaction do
+          ClientContactAuditOutbox.record!(**attributes)
+        end
+      end
+    end
+  end
+
+  test "database rejects a preferences_changed row without its actor reference" do
+    attributes = {
+      event_uuid: SecureRandom.uuid,
+      contact_kind: "email",
+      event_name: "preferences_changed",
+      owner_ref: "owner-ref",
+      contact_ref: "email-ref",
+      operation_ref: SecureRandom.uuid,
+      actor_ref: nil,
+      occurred_at: ClientContactAuditOutbox.database_now,
+      created_at: Time.current,
+      updated_at: Time.current,
+    }
+
+    assert_no_difference -> { ClientContactAuditOutbox.count } do
+      assert_raises(ActiveRecord::StatementInvalid) do
+        ClientContactAuditOutbox.transaction(requires_new: true) do
+          ClientContactAuditOutbox.insert_all!([attributes])
+        end
+      end
+    end
+  end
+
   test "Contact mutation and Source intent roll back together" do
     owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     contact = ClientEmail.create!(user_id: owner.id, address: "outbox@example.test", confirm_policy: "1")

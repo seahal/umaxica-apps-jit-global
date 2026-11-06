@@ -3,6 +3,8 @@
 require "test_helper"
 
 class EnforcementCaseApplyAuthorityTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   test "a stale draft cannot apply an APP or ORG Case already applied by another request" do
     [[Client, ClientStatus::ACTIVE, AppEnforcementCase],
      [Operator, OperatorStatus::ACTIVE, OrgEnforcementCase],].each do |actor_class, status, case_class|

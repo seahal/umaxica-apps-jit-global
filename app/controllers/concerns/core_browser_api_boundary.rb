@@ -43,45 +43,7 @@ module CoreBrowserApiBoundary
       install_unauthenticated_actor!
       return false
     end
-    return authenticate_core_cell_session!(token) if rp_cell_process?
-
-    payload = OidcRpBrowserCredentialContract.decode_access_token(
-      token: token,
-      host: request.host,
-      resource_type: core_resource_type,
-      client_id: core_rp_client_id,
-    )
-    if payload.blank?
-      reject_core_browser_cookie!(reason: "invalid_access_token")
-      render_problem(:authentication_required)
-      return false
-    end
-
-    authentication = OidcAccessTokenAuthenticator.call(
-      access_token: token,
-      resource_type: core_resource_type,
-      host: request.host,
-      authorization_scheme: request.headers["DPoP"].present? ? "DPoP" : nil,
-      dpop_proof: request.headers["DPoP"],
-      request_method: request.request_method,
-      request_uri: request.original_url,
-    )
-    unless authentication.success?
-      reject_core_browser_cookie!(reason: "invalid_access_token")
-      render_problem(:authentication_required)
-      return false
-    end
-
-    @current_token_payload = payload
-    @current_resource = find_core_resource(payload)
-    unless current_resource&.active?
-      reject_core_browser_cookie!(reason: current_resource ? "inactive_resource" : "record_not_found")
-      render_problem(:authentication_required)
-      return false
-    end
-
-    install_authenticated_actor!
-    true
+    authenticate_core_cell_session!(token)
   end
 
   # R5-WU17 cell process: the Access JWT plus this cell's local session; the actor is the local
@@ -98,7 +60,7 @@ module CoreBrowserApiBoundary
     @current_resource = result.principal
     install_authenticated_actor!
     true
-  rescue OidcOpJwksClient::FetchError, ActiveRecord::ActiveRecordError
+  rescue OidcOpJwksClient::FetchError, ActiveRecord::ActiveRecordError, PG::Error
     render_problem(:service_unavailable)
     false
   end
@@ -148,44 +110,7 @@ module CoreBrowserApiBoundary
       return
     end
 
-    return refresh_core_cell_token!(refresh_plain) if rp_cell_process?
-
-    # Public HTTPS to the OP token endpoint (R5-WU05); no in-process OP coordinator.
-    result = OidcOpTokenClient.refresh(
-      client_id: core_rp_client_id,
-      token_url: OidcIssuer.token_endpoint(core_resource_type),
-      refresh_token: refresh_plain,
-    )
-    unless result.success?
-      # D-25: a refusal, or an indeterminate commit that may have rotated the credential, is final for
-      # this browserless request (401); a dependency failure is not an expired credential.
-      render_problem(%i(refused indeterminate).include?(result.outcome) ? :token_expired : :service_unavailable)
-      return
-    end
-
-    access_token = result.token_response.fetch(:access_token)
-    new_refresh_token = result.token_response.fetch(:refresh_token)
-    expiries = {
-      access_expires_at: OidcRpBrowserCredentialContract.access_expires_at_from_response(result.token_response),
-      refresh_expires_at: OidcRpBrowserCredentialContract.refresh_expires_at_from_response(result.token_response),
-    }
-
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
-      OidcRpBrowserCredentialContract.access_cookie_options(expires_at: expiries.fetch(:access_expires_at)).merge(
-        value: access_token,
-      )
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] =
-      OidcRpBrowserCredentialContract.refresh_cookie_options(expires_at: expiries.fetch(:refresh_expires_at)).merge(
-        value: new_refresh_token,
-      )
-
-    # The rotated credentials travel as `Set-Cookie`, so there is no representation to return.
-    # RFC 9110 15.3.5 and docs/reference/api-design-standards.md both call for 204 rather than a
-    # `{"ok": true}` placeholder. The previous 200 with `{"refreshed": true}` was justified in a
-    # comment here by the claim that the Next.js edge application read that key; an audit of
-    # `seahal/umaxica-apps-edge` on 2026-08-22 found it forwards `/api/v0/*` without parsing it and
-    # has no reader for the key. See decision D14 in research/rails-nextjs-openapi-contract-audit.md.
-    head :no_content
+    refresh_core_cell_token!(refresh_plain)
   end
 
   # R5-WU17 cell process: Refresh is checked/installed under the local session (RpRefreshCommitter).
@@ -283,15 +208,6 @@ module CoreBrowserApiBoundary
     Actor.install_context!(**context.to_h)
   end
 
-  def find_core_resource(payload)
-    subject = OidcSubject.public_id_from(
-      AuthorizationTokenClaims.subject(payload), resource_type: core_resource_type,
-    )
-    return nil if subject.blank?
-
-    core_resource_class.find_by(public_id: subject)
-  end
-
   def core_rp_client_id
     case core_resource_type.to_s
     when "operator" then RpDeploymentBindingValue.client_id("core-org")
@@ -305,14 +221,6 @@ module CoreBrowserApiBoundary
 
   def core_actor_type
     core_resource_type.to_sym
-  end
-
-  def core_resource_class
-    raise NotImplementedError, "controller must define core_resource_class"
-  end
-
-  def core_token_class
-    raise NotImplementedError, "controller must define core_token_class"
   end
 
   def core_resource_type

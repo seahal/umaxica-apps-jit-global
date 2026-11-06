@@ -6,8 +6,8 @@
 #
 # Adds everything the app surface needs on top of the surface-neutral
 # SocialCeremonyEntry: sign-up entry detection and its availability gate,
-# intent session state, ceremony replay grants, the ClientSignUpFlow issuance,
-# and the link/step-up intents.
+# intent session state, ceremony replay grants, and the link/step-up intents.
+# A verified sign-up callback creates the ClientSignUpFlow.
 #
 # The OmniAuth callbacks are handled by Auth::App::Omniauth::OmniauthCallbacksController.
 module AppSocialCeremonyEntry
@@ -61,8 +61,9 @@ module AppSocialCeremonyEntry
       return false
     end
 
-    auth_social_admission_binding! if intent.to_s == "login"
-    # D-198 (3): one Sign-up Flow per admission; a second social start in the same attempt is refused.
+    admission_binding = auth_social_admission_binding! if intent.to_s == "login"
+    # R-AU-49: only an already-created Flow closes sign-up entry. A provider request
+    # without a callback has no Flow and can be replaced by another provider start.
     if social_auth_entry == "sign_up" && sign_up_flow_issued_for_admission?
       refuse_social_sign_path!("phase_violation")
       return false
@@ -75,12 +76,11 @@ module AppSocialCeremonyEntry
       pt: nil,
       entry: social_auth_entry,
       ri: params[:ri].presence,
+      admission_ceremony_session_id: admission_binding&.admitted_auth_ceremony_session_id,
     )
     if intent.to_s != "login" && params[:social_ceremony_grant].present?
       store_social_ceremony_grant!(params[:social_ceremony_grant])
     end
-    issue_sign_up_flow!(provider) if social_auth_entry == "sign_up"
-
     true
   end
 
@@ -103,50 +103,12 @@ module AppSocialCeremonyEntry
     "sign_in"
   end
 
-  def issue_sign_up_flow!(provider)
-    cycle =
-      OpBaseAppRecord.connected_to(role: :writing) do
-        ClientSignUpFlow.create!(
-          auth_admission_binding: auth_sign_up_admission_binding!,
-          principal_id: nil,
-          status_id: ClientSignUpFlowStatus::STARTED,
-          step: "start",
-          nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-          issued_at: Time.current,
-          expires_at: ClientSignUpFlow.default_ttl.from_now,
-          entry_method: social_entry_method(provider),
-          social_provider: social_entry_method(provider),
-          return_to: resolved_path_or_navigation_target,
-        )
-      end
-    result =
-      OpBaseAppRecord.connected_to(role: :writing) do
-        SignUpStateMachine.call(
-          ticket: cycle,
-          event: :start_social_callback,
-          actor_context: Actor.authn,
-        )
-      end
-    raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless result.status == :advanced
-
-    sign_up_flow_locator.issue!(cycle)
-    session[:auth_app_up_sequence_id] = cycle.public_id
-  end
-
   # This concern is mounted only on app-surface controllers (see the file
   # header), so the gated surface is fixed rather than derived per request.
   def sign_up_surface = :app
 
   def social_login_actor_ref
     "anonymous"
-  end
-
-  def social_entry_method(provider)
-    SocialIdentifiable.normalize_provider(provider)
-  end
-
-  def sign_up_flow_locator
-    SignUpCycleLocator.new(session, surface: :app, cycle_class: ClientSignUpFlow)
   end
 
   # A link intent arriving from settings has to be recently step-up verified.

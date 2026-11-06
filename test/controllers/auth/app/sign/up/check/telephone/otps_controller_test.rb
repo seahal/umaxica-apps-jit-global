@@ -5,6 +5,11 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch::IntegrationTest
+  # The OTP delivery issuer refuses to run inside the fixture transaction, so this committed
+  # journey cleans up its own rows instead.
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -12,8 +17,15 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
 
   include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
+  include SignInFlowCleanup
+  include SignUpJourneyCleanup
+  include DatabaseSelectorPrimary
 
   setup do
+    # The expiry case travels past the DatabaseSelector's read-your-writes delay, which would
+    # route its GET to the replica; the test environment's replica does not hold this case's rows.
+    keep_reads_on_primary!
+    sign_up_journey_watermarks!
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
@@ -37,6 +49,11 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
     Rails.configuration.x.rate_limit.fetch(:store).clear
+    begin
+      delete_sign_up_journey_rows!
+    ensure
+      restore_database_selector_delay!
+    end
   end
 
   test "show renders the otp form" do
@@ -421,7 +438,6 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   test "show renders visible Turnstile props on the otp form" do
     start_telephone_signup!("+1234567880")
@@ -498,24 +514,6 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

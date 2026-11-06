@@ -37,7 +37,8 @@ module BrowserRpUnsafeRequestRefresh
 
   def render_browser_rp_unsafe_request_rejected!
     response.set_header("Cache-Control", "no-store")
-    render plain: "Invalid browser request", status: :unprocessable_content, content_type: "text/plain"
+    render plain: t("errors.messages.invalid_browser_request"), status: :unprocessable_content,
+           content_type: "text/plain"
   end
 
   def browser_rp_fetch_metadata_allowed?

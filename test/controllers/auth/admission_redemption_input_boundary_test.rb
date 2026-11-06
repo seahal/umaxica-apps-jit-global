@@ -45,7 +45,12 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
         original = Valkey::AuthState::OpaqueAdmissionStore.new.read_reference!(reference: issuance.reference)
         browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers:)
 
-        expected_status = %w(unconfirmed unattached).include?(attack) ? 303 : 400
+        expected_status =
+          case attack
+          when "unconfirmed", "unattached" then 303
+          when "missing_cookie", "foreign_cookie" then 409
+          else 400
+          end
 
         assert_equal expected_status, browser.response.status
         if %w(unconfirmed unattached).include?(attack)
@@ -74,7 +79,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
         assert_predicate binding.reload, :redeemed?
         assert_predicate admitted_auth_ceremony_session_for_test(binding), :admitted?
         assert_equal session_count + 1, model.count
-        assert_equal "pending", issuance.transaction.reload.status
+        assert_equal "pending", issuance.transaction.reload.status_name
         admitted_id = binding.admitted_auth_ceremony_session_id
         browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers:)
 
@@ -125,7 +130,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
         when "long" then fields["entry_ref"] = "#{issuance.reference}0"
         when "array" then fields["entry_ref"] = [issuance.reference]
         when "object" then fields["entry_ref"] = { "value" => issuance.reference }
-        when "duplicate", "query_duplicate"
+        when "duplicate", "query_duplicate" then fields["entry_ref"] = issuance.reference
         else fields[attack] = issuance.reference
         end
         path = "/sign/in"
@@ -142,7 +147,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
         assert_equal retained_sid, browser.cookies[sid_key]
         assert_equal original,
                      Valkey::AuthState::OpaqueAdmissionStore.new.read_reference!(reference: issuance.reference)
-        assert_equal "pending", issuance.transaction.reload.status
+        assert_equal "pending", issuance.transaction.reload.status_name
         assert_not_predicate binding.reload, :redeemed?
       ensure
         ActionController::Base.allow_forgery_protection = protection

@@ -7,35 +7,22 @@
 # Database name: app_principal
 #
 #  id              :bigint           not null, primary key
-#  consent_version :uuid
-#  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
-#  currency        :string           default("jpy"), not null
-#  date_format     :string           default("iso"), not null
-#  density         :string           default("standard"), not null
-#  functional      :boolean          default(FALSE), not null
-#  language        :string           default("ja"), not null
-#  motion          :string           default("standard"), not null
-#  page_size       :string           default("20"), not null
-#  performant      :boolean          default(FALSE), not null
-#  region          :string           default("jp"), not null
-#  targetable      :boolean          default(FALSE), not null
-#  theme           :string           default("sy"), not null
-#  time_format     :string           default("hour_24"), not null
-#  timezone        :string           default("Asia/Tokyo"), not null
+#  client_id       :bigint           not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
-#  public_id       :string(21)
-#  user_id         :bigint           not null
+#  public_id        :string(21)       not null
+#  explicit_fields :jsonb            default([]), not null
+#  status_id        :bigint           default(0), not null
 #
 # Indexes
 #
-#  index_client_preferences_on_public_id  (public_id) UNIQUE
-#  index_client_preferences_on_user_id    (user_id) UNIQUE
+#  index_client_preferences_on_public_id       (public_id) UNIQUE
+#  index_client_preferences_on_active_client_id (client_id) UNIQUE WHERE status_id = 0
 #
 # Foreign Keys
 #
-#  fk_rails_...  (user_id => clients.id) ON DELETE => cascade
+#  fk_client_preferences_on_client_id  (client_id => clients.id)
+#  fk_client_preferences_on_status_id  (status_id => client_preference_statuses.id)
 #
 class ClientPreference < AppPrincipalRecord
   include ::PublicId
@@ -52,25 +39,25 @@ class ClientPreference < AppPrincipalRecord
     client_preference_adult_content_gate
   ).freeze
 
-  belongs_to :client, class_name: "Client", foreign_key: :client_id, inverse_of: :client_preference
+  belongs_to :client, class_name: "Client", inverse_of: :client_preference
   belongs_to :client_preference_status, foreign_key: :status_id, inverse_of: :client_preferences
 
   has_one :client_preference_language, class_name: "ClientPreferenceLanguage",
-                                     foreign_key: :preference_id,
-                                     inverse_of: :preference,
-                                     dependent: :destroy
+                                       foreign_key: :preference_id,
+                                       inverse_of: :preference,
+                                       dependent: :destroy
   has_one :client_preference_timezone, class_name: "ClientPreferenceTimezone",
+                                       foreign_key: :preference_id,
+                                       inverse_of: :preference,
+                                       dependent: :destroy
+  has_one :client_preference_region, class_name: "ClientPreferenceRegion",
                                      foreign_key: :preference_id,
                                      inverse_of: :preference,
                                      dependent: :destroy
-  has_one :client_preference_region, class_name: "ClientPreferenceRegion",
-                                   foreign_key: :preference_id,
-                                   inverse_of: :preference,
-                                   dependent: :destroy
   has_one :client_preference_theme, class_name: "ClientPreferenceTheme",
-                                  foreign_key: :preference_id,
-                                  inverse_of: :preference,
-                                  dependent: :destroy
+                                    foreign_key: :preference_id,
+                                    inverse_of: :preference,
+                                    dependent: :destroy
   has_one :client_preference_currency,
           foreign_key: :preference_id,
           inverse_of: :preference,
@@ -101,7 +88,6 @@ class ClientPreference < AppPrincipalRecord
           dependent: :destroy
 
   attribute :status_id, default: ACTIVE_STATUS_ID
-  validates :client_id, presence: true
   validates :status_id, inclusion: { in: ClientPreferenceStatus::DEFAULTS }
   validates :public_id, presence: true, uniqueness: true
   validate :retired_status_cannot_be_reactivated, on: :update

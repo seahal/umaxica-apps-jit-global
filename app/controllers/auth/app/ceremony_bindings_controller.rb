@@ -16,7 +16,10 @@ module Auth
 
       def show
         apply_admission_transport_headers!
-        return render_invalid_admission_request! unless document_navigation_request?
+        unless document_navigation_request?
+          log_invalid_admission_navigation
+          return render_invalid_admission_request!
+        end
 
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
         if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
@@ -32,9 +35,17 @@ module Auth
           return render_invalid_admission_request!
         end
 
+        if binding.attached? && binding.confirmed? && current_auth_session_matches_binding?(binding)
+          return redirect_to(auth_ceremony_continue_url(binding), status: :see_other)
+        end
+
         attach_and_redirect!(binding, ClientAuthCeremonySession)
-      rescue BaseAuthAdmissionCoordinator::Denied, AuthAdmissionBinding::InvalidTransition,
-             ActiveRecord::RecordNotFound, ArgumentError
+      rescue BaseAuthAdmissionCoordinator::Denied => e
+        return render_sign_in_phase_refusal!(reason_code: "wrong_binding") if
+          e.code == "session_binding_mismatch"
+
+        render_invalid_admission_request!
+      rescue AuthAdmissionBinding::InvalidTransition, ActiveRecord::RecordNotFound, ArgumentError
         render_invalid_admission_request!
       end
 
@@ -113,6 +124,15 @@ module Auth
       end
 
       def ceremony_binding_confirmation_url(binding)
+        admission = o9_admission_for_binding(binding)
+        if admission
+          return base_app_identity_sensitive_admission_confirmation_url(
+            admission_ref: admission.public_ref, entry_ref: binding.entry_ref,
+            ri: params[:ri], lx: normalized_locale(params[:lx]),
+            host: base_rp_host, protocol: "https",
+          )
+        end
+
         query = { binding_ref: binding.confirmation_ref, ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
         case binding.purpose
         when *AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction)
@@ -126,6 +146,43 @@ module Auth
         else
           raise ArgumentError, "unsupported ceremony binding purpose"
         end
+      end
+
+      def o9_admission_for_binding(binding)
+        admission_model = ClientVisaSensitiveAdmission
+        social_model = ClientVisaSocialLinkAdmission
+        admission_model.connection_owner.connected_to(role: :writing) do
+          records = [
+            admission_model.find_by(auth_admission_binding_id: binding.id),
+            social_model.find_by(auth_admission_binding_id: binding.id),
+          ].compact
+          raise ActiveRecord::RecordNotFound unless records.length <= 1
+
+          records.first
+        end
+      end
+
+      def current_auth_session_matches_binding?(binding)
+        raw_sid = read_auth_ceremony_sid_cookie
+        return false if raw_sid.blank?
+
+        session_record = ClientAuthAdmissionBinding.auth_admission_session_class.find_active_by_raw_sid(raw_sid)
+        session_record&.id == binding.auth_ceremony_session_id
+      end
+
+      def auth_ceremony_continue_url(binding)
+        query = { entry_ref: binding.entry_ref, ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
+        if binding.purpose == "credential_registration_handoff"
+          return new_auth_app_verification_registration_passkey_url(
+            **query, host: auth_service_host, protocol: "https",
+          )
+        end
+
+        auth_app_verification_url(**query, host: auth_service_host, protocol: "https")
+      end
+
+      def auth_service_host
+        ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       end
     end
   end

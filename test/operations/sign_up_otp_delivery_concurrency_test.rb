@@ -3,9 +3,217 @@
 require "test_helper"
 require "timeout"
 
+class SignUpOtpDeliveryEnqueueObservation
+  def initialize(observer)
+    @observer = observer
+  end
+
+  def perform_later(...)
+    @observer.call(...)
+  end
+end
+
 class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
+
+  test "telephone signup refuses an outer Source or Ticket transaction before issuing or enqueueing" do
+    flow = ClientSignUpFlow.new
+    telephone = ClientTelephone.new
+    enqueued = []
+    transactions_before = ClientTelephoneCeremonyTransaction.count
+
+    Outbound::SmsDeliveryJob.stub(
+      :perform_later,
+      lambda do |*|
+        enqueued << true
+        false
+      end,
+    ) do
+      Client.connection_class_for_self.connected_to(role: :writing) do
+        Client.transaction do
+          assert_raises(TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable) do
+            TelephoneSignUpOtpDeliveryIssuer.call(
+              flow: flow, telephone: telephone, session_nonce: "browser", initial_submission: true,
+              actor_context: Actor.authn,
+            )
+          end
+        end
+      end
+
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.transaction do
+          assert_raises(TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable) do
+            TelephoneSignUpOtpDeliveryIssuer.call(
+              flow: flow, telephone: telephone, session_nonce: "browser", initial_submission: true,
+              actor_context: Actor.authn,
+            )
+          end
+        end
+      end
+    end
+
+    assert_empty enqueued
+    assert_equal transactions_before, ClientTelephoneCeremonyTransaction.count
+  end
+
+  test "initial Email signup commits Flow binding and OTP generation before enqueue" do
+    fixture = create_initial_signup_fixture(channel: :email)
+    events = []
+    notify =
+      lambda do |**|
+        events << :enqueued
+        true
+      end
+    after_commit =
+      lambda do |issued|
+        events << :committed
+
+        assert_initial_signup_state_visible(fixture, issued)
+      end
+
+    Chronicle.stub(:capture, ->(**) { }) do
+      Notify::App::OtpNotifier.stub(:issue, notify) do
+        issued = EmailSignUpOtpDeliveryIssuer.call(
+          flow: fixture.fetch(:flow), email: fixture.fetch(:contact),
+          session_nonce: fixture.fetch(:nonce), initial_submission: true,
+          actor_context: Actor.authn, after_commit:,
+        )
+
+        assert_predicate issued, :success?
+        assert_equal %i(committed enqueued), events
+        assert_initial_signup_state(fixture, issued)
+      end
+    end
+  ensure
+    cleanup_initial_signup_fixture(fixture) if fixture
+  end
+
+  test "initial Telephone signup commits Flow binding and OTP generation before enqueue" do
+    fixture = create_initial_signup_fixture(channel: :telephone)
+    events = []
+    after_commit =
+      lambda do |issued|
+        events << :committed
+
+        assert_initial_signup_state_visible(fixture, issued)
+      end
+    accepted = OutboundResult.accepted(channel: :sms)
+
+    OutboundSms.stub(
+      :deliver_later,
+      lambda do |**|
+        events << :enqueued
+        accepted
+      end,
+    ) do
+      issued = TelephoneSignUpOtpDeliveryIssuer.call(
+        flow: fixture.fetch(:flow), telephone: fixture.fetch(:contact),
+        session_nonce: fixture.fetch(:nonce), initial_submission: true,
+        actor_context: Actor.authn, after_commit:,
+      )
+
+      assert_predicate issued, :success?
+      assert_equal %i(committed enqueued), events
+      assert_initial_signup_state(fixture, issued)
+    end
+  ensure
+    cleanup_initial_signup_fixture(fixture) if fixture
+  end
+
+  test "initial signup refusal leaves the Flow unbound and creates no OTP generation" do
+    %i(email telephone).each do |channel|
+      begin
+        fixture = create_initial_signup_fixture(channel:)
+        contact = fixture.fetch(:contact)
+        contact.update!(otp_last_sent_at: contact.class.database_now)
+        callback_calls = 0
+        enqueue_calls = 0
+        issuer =
+          if channel == :email
+            Notify::App::OtpNotifier.stub(:issue, ->(**) { enqueue_calls += 1 }) do
+              EmailSignUpOtpDeliveryIssuer.call(
+                flow: fixture.fetch(:flow), email: contact, session_nonce: fixture.fetch(:nonce),
+                initial_submission: true, actor_context: Actor.authn,
+                after_commit: ->(_) { callback_calls += 1 },
+              )
+            end
+          elsif channel == :telephone
+            OutboundSms.stub(:deliver_later, ->(**) { enqueue_calls += 1 }) do
+              TelephoneSignUpOtpDeliveryIssuer.call(
+                flow: fixture.fetch(:flow), telephone: contact, session_nonce: fixture.fetch(:nonce),
+                initial_submission: true, actor_context: Actor.authn,
+                after_commit: ->(_) { callback_calls += 1 },
+              )
+            end
+          else
+            raise ArgumentError, "unsupported signup channel"
+          end
+
+        assert_equal :rate_limited, issuer.status
+        assert_equal 0, callback_calls
+        assert_equal 0, enqueue_calls
+        assert_initial_signup_flow_unbound(fixture)
+        assert_equal 0, initial_signup_transaction_model(channel).where(
+          session_ref: initial_signup_session_ref(fixture, channel),
+        ).count
+      ensure
+        cleanup_initial_signup_fixture(fixture) if fixture
+      end
+    end
+  end
+
+  test "initial signup refusal after phase transition rolls the Flow back to start" do
+    %i(email telephone).each do |channel|
+      begin
+        fixture = create_initial_signup_fixture(channel:)
+        cooldown =
+          case channel
+          when :email then EmailOtpPolicy::SEND_COOLDOWN
+          when :telephone then TelephoneOtpPolicy::SEND_COOLDOWN
+          else raise ArgumentError, "unsupported signup channel"
+          end
+        contact = fixture.fetch(:contact)
+        contact.update!(otp_last_sent_at: contact.class.database_now - cooldown - 1.second)
+        transaction = seed_cancelled_initial_signup_transaction(fixture)
+        original_cooldown = contact.reload.otp_last_sent_at
+        callback_calls = 0
+        enqueue_calls = 0
+        issued =
+          if channel == :email
+            Chronicle.stub(:capture, ->(**) { }) do
+              Notify::App::OtpNotifier.stub(:issue, ->(**) { enqueue_calls += 1 }) do
+                EmailSignUpOtpDeliveryIssuer.call(
+                  flow: fixture.fetch(:flow), email: fixture.fetch(:contact), session_nonce: fixture.fetch(:nonce),
+                  initial_submission: true, actor_context: Actor.authn,
+                  after_commit: ->(_) { callback_calls += 1 },
+                )
+              end
+            end
+          elsif channel == :telephone
+            OutboundSms.stub(:deliver_later, ->(**) { enqueue_calls += 1 }) do
+              TelephoneSignUpOtpDeliveryIssuer.call(
+                flow: fixture.fetch(:flow), telephone: fixture.fetch(:contact),
+                session_nonce: fixture.fetch(:nonce), initial_submission: true,
+                actor_context: Actor.authn, after_commit: ->(_) { callback_calls += 1 },
+              )
+            end
+          else
+            raise ArgumentError, "unsupported signup channel"
+          end
+
+        assert_equal :closed_challenge, issued.status
+        assert_equal 0, callback_calls
+        assert_equal 0, enqueue_calls
+        assert_initial_signup_flow_unbound(fixture)
+        assert_equal transaction.otp_generation, transaction.reload.otp_generation
+        assert_predicate transaction.reload.otp_cancelled_at, :present?
+        assert_equal original_cooldown, contact.reload.otp_last_sent_at
+      ensure
+        cleanup_initial_signup_fixture(fixture) if fixture
+      end
+    end
+  end
 
   test "email cancellation waits for the current delivery and makes its code unusable" do
     client = OidcClientRegistry.find!("core-app-jp")
@@ -66,13 +274,13 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     cancellation_started = Queue.new
     delivery =
       Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection do |connection|
+        OpBaseAppRecord.connection_pool.with_connection do
           EmailSignUpOtpDeliveryGuard.call(
             flow: ClientSignUpFlow.find(flow.id), email: ClientEmail.find(email.id),
             transaction: ClientEmailCeremonyTransaction.find(issued.transaction.id),
             generation: issued.transaction.otp_generation, destination: email.address, code: issued.code,
           ) do
-            delivery_started << connection.select_value("SELECT pg_backend_pid()")
+            delivery_started << Client.lease_connection.select_value("SELECT pg_backend_pid()")
             release_delivery.pop
             true
           end
@@ -83,15 +291,15 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     delivery_pid = Timeout.timeout(10) { delivery_started.pop }
     cancellation =
       Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection do |connection|
-          cancellation_started << connection.select_value("SELECT pg_backend_pid()")
+        OpBaseAppRecord.connection_pool.with_connection do
+          cancellation_started << Client.lease_connection.select_value("SELECT pg_backend_pid()")
           SignUpTermination.call(cycle: ClientSignUpFlow.find(flow.id), event: :cancel)
         end
       ensure
         ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     cancellation_pid = Timeout.timeout(10) { cancellation_started.pop }
-    connection = OpBaseAppRecord.lease_connection
+    connection = Client.lease_connection
     Timeout.timeout(10) do
       loop do
         waiting =
@@ -345,6 +553,40 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
+  test "email signup refuses an outer Source or Ticket transaction before issuing or enqueueing" do
+    flow = ClientSignUpFlow.new
+    email = ClientEmail.new
+    enqueued = []
+    transactions_before = ClientEmailCeremonyTransaction.count
+
+    Notify::App::OtpNotifier.stub(:issue, ->(**) { enqueued << true }) do
+      Client.connection_class_for_self.connected_to(role: :writing) do
+        Client.transaction do
+          assert_raises(EmailSignUpOtpDeliveryIssuer::DeliveryUnavailable) do
+            EmailSignUpOtpDeliveryIssuer.call(
+              flow: flow, email: email, session_nonce: "browser", initial_submission: true,
+              actor_context: Actor.authn,
+            )
+          end
+        end
+      end
+
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.transaction do
+          assert_raises(EmailSignUpOtpDeliveryIssuer::DeliveryUnavailable) do
+            EmailSignUpOtpDeliveryIssuer.call(
+              flow: flow, email: email, session_nonce: "browser", initial_submission: true,
+              actor_context: Actor.authn,
+            )
+          end
+        end
+      end
+    end
+
+    assert_empty enqueued
+    assert_equal transactions_before, ClientEmailCeremonyTransaction.count
+  end
+
   test "email signup retains the new generation when the queue refuses delivery" do
     client = OidcClientRegistry.find!("core-app-jp")
     parent = OidcAuthorizationTransactionCoordinator.issue!(
@@ -402,8 +644,63 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     old_generation = issued.transaction.otp_generation
     email.update!(otp_last_sent_at: ClientEmail.database_now - EmailOtpPolicy::SEND_COOLDOWN - 1.second)
     original_cooldown = email.reload.otp_last_sent_at
-    refused_job = Object.new
-    refused_job.define_singleton_method(:perform_later) { |*_, **_| false }
+    test_case = self
+    enqueue_observation =
+      lambda do |*_, **_|
+        source_transaction_open =
+          Client.connection_class_for_self.connected_to(role: :writing) do
+            Client.lease_connection.transaction_open?
+          end
+        ticket_transaction_open =
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientSignUpFlow.lease_connection.transaction_open?
+          end
+
+        test_case.assert_not source_transaction_open
+        test_case.assert_not ticket_transaction_open
+
+        source_backend_pid =
+          Client.connection_class_for_self.connected_to(role: :writing) do
+            Client.lease_connection.select_value("SELECT pg_backend_pid()").to_i
+          end
+        ticket_backend_pid =
+          OpBaseAppRecord.connected_to(role: :writing) do
+            ClientSignUpFlow.lease_connection.select_value("SELECT pg_backend_pid()").to_i
+          end
+        observed =
+          Timeout.timeout(10) do
+            Thread.new do
+              source_state =
+                Client.connection_class_for_self.connected_to(role: :writing) do
+                  Client.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+                    [
+                      connection.select_value("SELECT pg_backend_pid()").to_i,
+                      ClientEmail.find(email.id).otp_last_sent_at,
+                    ]
+                  end
+                end
+              ticket_state =
+                OpBaseAppRecord.connected_to(role: :writing) do
+                  OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+                    [
+                      connection.select_value("SELECT pg_backend_pid()").to_i,
+                      ClientEmailCeremonyTransaction.find(issued.transaction.id).otp_generation,
+                    ]
+                  end
+                end
+
+              [source_state, ticket_state]
+            end.value
+          end
+
+        test_case.assert_not_equal source_backend_pid, observed.fetch(0).fetch(0)
+        test_case.assert_not_equal ticket_backend_pid, observed.fetch(1).fetch(0)
+        test_case.assert_operator observed.fetch(0).fetch(1), :>, original_cooldown
+        test_case.assert_not_equal old_generation, observed.fetch(1).fetch(1)
+
+        false
+      end
+    refused_job = SignUpOtpDeliveryEnqueueObservation.new(enqueue_observation)
 
     assert_no_difference -> { Chronicle.where(action: "notification.delivery.email.enqueued").count } do
       OtpNotifierEmailDeliveryJob.stub(:set, refused_job) do
@@ -700,14 +997,59 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     old_generation = issued.transaction.otp_generation
     telephone.update!(otp_last_sent_at: ClientTelephone.database_now - TelephoneOtpPolicy::SEND_COOLDOWN - 1.second)
     original_cooldown = telephone.reload.otp_last_sent_at
+    queue_calls = 0
     OutboundSms.stub(:provider, Object.new) do
-      Outbound::SmsDeliveryJob.stub(:perform_later, false) do
+      Outbound::SmsDeliveryJob.stub(
+        :perform_later,
+        lambda do |**|
+          queue_calls += 1
+          source_transaction_open =
+            Client.connection_class_for_self.connected_to(role: :writing) do
+              Client.lease_connection.transaction_open?
+            end
+          ticket_transaction_open =
+            OpBaseAppRecord.connected_to(role: :writing) do
+              ClientSignUpFlow.lease_connection.transaction_open?
+            end
+
+          assert_not source_transaction_open
+          assert_not ticket_transaction_open
+
+          enqueue_backend_pid =
+            OpBaseAppRecord.connected_to(role: :writing) do
+              ClientSignUpFlow.lease_connection.select_value("SELECT pg_backend_pid()").to_i
+            end
+          observed =
+            Timeout.timeout(10) do
+              Thread.new do
+                OpBaseAppRecord.connected_to(role: :writing) do
+                  ClientSignUpFlow.connection_pool.with_connection(
+                    prevent_permanent_checkout: true,
+                  ) do |connection|
+                    [
+                      connection.select_value("SELECT pg_backend_pid()").to_i,
+                      ClientTelephoneCeremonyTransaction.find_by!(
+                        transaction_id: issued.transaction.transaction_id,
+                      ).otp_generation,
+                    ]
+                  end
+                end
+              end.value
+            end
+
+          assert_not_equal enqueue_backend_pid, observed.fetch(0)
+          assert_not_equal old_generation, observed.fetch(1)
+
+          false
+        end,
+      ) do
         assert_raises(ActiveJob::EnqueueError) do
           TelephoneSignUpOtpDeliveryIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
         end
       end
     end
 
+    assert_equal 1, queue_calls
     assert_not_equal old_generation, issued.transaction.reload.otp_generation
     assert_operator telephone.reload.otp_last_sent_at, :>, original_cooldown
     assert_not_predicate flow.reload, :sign_up_terminal?
@@ -936,7 +1278,7 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
           event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_sign_up_flows"/i)
 
         paused = true
-        cancellation_locked << OpBaseAppRecord.lease_connection.select_value("SELECT pg_backend_pid()")
+        cancellation_locked << Client.lease_connection.select_value("SELECT pg_backend_pid()")
         release_cancellation.pop
       end
     subscription = ActiveSupport::Notifications.subscribe("sql.active_record", observer)
@@ -949,8 +1291,8 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     cancellation_pid = Timeout.timeout(10) { cancellation_locked.pop }
     delivery =
       Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection do |connection|
-          delivery_started << connection.select_value("SELECT pg_backend_pid()")
+        OpBaseAppRecord.connection_pool.with_connection do
+          delivery_started << Client.lease_connection.select_value("SELECT pg_backend_pid()")
           EmailSignUpOtpDeliveryGuard.call(
             flow: ClientSignUpFlow.find(flow.id), email: ClientEmail.find(email.id),
             transaction: ClientEmailCeremonyTransaction.find(issued.transaction.id),
@@ -961,7 +1303,7 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
         ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     delivery_pid = Timeout.timeout(10) { delivery_started.pop }
-    connection = OpBaseAppRecord.lease_connection
+    connection = Client.lease_connection
     Timeout.timeout(10) do
       loop do
         waiting =
@@ -1517,7 +1859,7 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
           event.fetch(:sql).match?(/\A\s*UPDATE\s+"client_sign_up_flows"/i)
 
         paused = true
-        cancellation_locked << OpBaseAppRecord.lease_connection.select_value("SELECT pg_backend_pid()")
+        cancellation_locked << Client.lease_connection.select_value("SELECT pg_backend_pid()")
         release_cancellation.pop
       end
     subscription = ActiveSupport::Notifications.subscribe("sql.active_record", observer)
@@ -1530,8 +1872,8 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     cancellation_pid = Timeout.timeout(10) { cancellation_locked.pop }
     delivery =
       Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection do |connection|
-          delivery_started << connection.select_value("SELECT pg_backend_pid()")
+        OpBaseAppRecord.connection_pool.with_connection do
+          delivery_started << Client.lease_connection.select_value("SELECT pg_backend_pid()")
           TelephoneSignUpOtpDeliveryGuard.call(
             flow: ClientSignUpFlow.find(flow.id), telephone: ClientTelephone.find(telephone.id),
             transaction: ClientTelephoneCeremonyTransaction.find(issued.transaction.id),
@@ -1542,7 +1884,7 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
         ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     delivery_pid = Timeout.timeout(10) { delivery_started.pop }
-    connection = OpBaseAppRecord.lease_connection
+    connection = Client.lease_connection
     Timeout.timeout(10) do
       loop do
         waiting =
@@ -1648,13 +1990,13 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     cancellation_started = Queue.new
     delivery =
       Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection do |connection|
+        OpBaseAppRecord.connection_pool.with_connection do
           TelephoneSignUpOtpDeliveryGuard.call(
             flow: ClientSignUpFlow.find(flow.id), telephone: ClientTelephone.find(telephone.id),
             transaction: ClientTelephoneCeremonyTransaction.find(issued.transaction.id),
             generation: issued.transaction.otp_generation, destination: telephone.number, code: issued.code,
           ) do
-            delivery_started << connection.select_value("SELECT pg_backend_pid()")
+            delivery_started << Client.lease_connection.select_value("SELECT pg_backend_pid()")
             release_delivery.pop
             true
           end
@@ -1665,15 +2007,15 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
     delivery_pid = Timeout.timeout(10) { delivery_started.pop }
     cancellation =
       Thread.new do
-        OpBaseAppRecord.connection_pool.with_connection do |connection|
-          cancellation_started << connection.select_value("SELECT pg_backend_pid()")
+        OpBaseAppRecord.connection_pool.with_connection do
+          cancellation_started << Client.lease_connection.select_value("SELECT pg_backend_pid()")
           SignUpTermination.call(cycle: ClientSignUpFlow.find(flow.id), event: :cancel)
         end
       ensure
         ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     cancellation_pid = Timeout.timeout(10) { cancellation_started.pop }
-    connection = OpBaseAppRecord.lease_connection
+    connection = Client.lease_connection
     Timeout.timeout(10) do
       loop do
         waiting =
@@ -1715,5 +2057,240 @@ class SignUpOtpDeliveryConcurrencyTest < ActiveSupport::TestCase
       ClientAuthorityLock.where(client_id: owner.id).delete_all
       Client.where(id: owner.id).delete_all
     end
+  end
+
+  private
+
+  def create_initial_signup_fixture(channel:)
+    fixture = { channel: channel }
+    fixture[:binding] = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
+    fixture[:owner] = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    fixture[:contact] =
+      case channel
+      when :email
+        ClientEmail.create!(
+          user: fixture.fetch(:owner), address: "initial-otp-#{SecureRandom.hex(10)}@example.test",
+          confirm_policy: "1", user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+        )
+      when :telephone
+        ClientTelephone.create!(
+          user: fixture.fetch(:owner),
+          number: "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}",
+          confirm_policy: "1", user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
+        )
+      else
+        raise ArgumentError, "unsupported signup channel: #{channel.inspect}"
+      end
+    fixture[:nonce] = SecureRandom.hex(32)
+    now = ClientSignUpFlow.database_now
+    fixture[:flow] = ClientSignUpFlow.create!(
+      auth_admission_binding: fixture.fetch(:binding),
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(fixture.fetch(:nonce)),
+      issued_at: now, expires_at: now + 15.minutes, entry_method: channel.to_s,
+      completed_requirements: {},
+    )
+    fixture
+  rescue StandardError
+    cleanup_initial_signup_fixture(fixture) if fixture
+    raise
+  end
+
+  def assert_initial_signup_state(fixture, issued)
+    flow = fixture.fetch(:flow).reload
+
+    assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, flow.status_id
+    assert_equal "contact", flow.step
+    assert_equal fixture.fetch(:owner).id, flow.principal_id
+    assert_equal fixture.fetch(:channel).to_s, flow.pending_contact_type
+    assert_equal fixture.fetch(:contact).id, flow.pending_contact_id
+    assert_predicate fixture.fetch(:contact).reload.otp_last_sent_at, :present?
+
+    transaction = initial_signup_transaction_model(fixture.fetch(:channel)).find_by!(
+      transaction_id: issued.transaction.transaction_id,
+    )
+
+    assert_equal issued.transaction.otp_generation, transaction.otp_generation
+  end
+
+  def assert_initial_signup_flow_unbound(fixture)
+    flow = fixture.fetch(:flow).reload
+
+    assert_equal ClientSignUpFlowStatus::STARTED, flow.status_id
+    assert_equal "start", flow.step
+    assert_nil flow.principal_id
+    assert_nil flow.pending_contact_type
+    assert_nil flow.pending_contact_id
+  end
+
+  def assert_initial_signup_state_visible(fixture, issued)
+    assert_initial_signup_transactions_closed
+
+    observed = independent_initial_signup_state(fixture, issued)
+
+    assert_not_equal observed.fetch(:source_backend), observed.fetch(:current_source_backend)
+    assert_not_equal observed.fetch(:ticket_backend), observed.fetch(:current_ticket_backend)
+    assert_predicate observed.fetch(:cooldown), :present?
+    flow = observed.fetch(:flow)
+
+    assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, flow.status_id
+    assert_equal fixture.fetch(:owner).id, flow.principal_id
+    assert_equal fixture.fetch(:contact).id, flow.pending_contact_id
+    assert_equal issued.transaction.otp_generation, observed.fetch(:otp_generation)
+  end
+
+  def assert_initial_signup_transactions_closed
+    source_connection_open =
+      Client.connection_class_for_self.connected_to(role: :writing) do
+        Client.lease_connection.transaction_open?
+      end
+    ticket_connection_open =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.lease_connection.transaction_open?
+      end
+
+    assert_not source_connection_open
+    assert_not ticket_connection_open
+  end
+
+  def independent_initial_signup_state(fixture, issued)
+    source_backend, ticket_backend = current_initial_signup_backends
+    observed =
+      Timeout.timeout(10) do
+        Thread.new do
+          source_state =
+            Client.connection_class_for_self.connected_to(role: :writing) do
+              Client.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+                contact = fixture.fetch(:contact).class.find(fixture.fetch(:contact).id)
+                [connection.select_value("SELECT pg_backend_pid()").to_i, contact.otp_last_sent_at]
+              end
+            end
+          ticket_state =
+            OpBaseAppRecord.connected_to(role: :writing) do
+              OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+                flow = ClientSignUpFlow.find(fixture.fetch(:flow).id)
+                transaction = initial_signup_transaction_model(fixture.fetch(:channel)).find_by!(
+                  transaction_id: issued.transaction.transaction_id,
+                )
+                [connection.select_value("SELECT pg_backend_pid()").to_i, flow, transaction.otp_generation]
+              end
+            end
+          [source_state, ticket_state]
+        ensure
+          ActiveRecord::Base.connection_handler.clear_active_connections!
+        end.value
+      end
+
+    {
+      current_source_backend: source_backend,
+      current_ticket_backend: ticket_backend,
+      source_backend: observed.fetch(0).fetch(0),
+      cooldown: observed.fetch(0).fetch(1),
+      ticket_backend: observed.fetch(1).fetch(0),
+      flow: observed.fetch(1).fetch(1),
+      otp_generation: observed.fetch(1).fetch(2),
+    }
+  end
+
+  def current_initial_signup_backends
+    source_backend =
+      Client.connection_class_for_self.connected_to(role: :writing) do
+        Client.lease_connection.select_value("SELECT pg_backend_pid()").to_i
+      end
+    ticket_backend =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.lease_connection.select_value("SELECT pg_backend_pid()").to_i
+      end
+    [source_backend, ticket_backend]
+  end
+
+  def initial_signup_transaction_model(channel)
+    case channel
+    when :email then ClientEmailCeremonyTransaction
+    when :telephone then ClientTelephoneCeremonyTransaction
+    else raise ArgumentError, "unsupported signup channel: #{channel.inspect}"
+    end
+  end
+
+  def seed_cancelled_initial_signup_transaction(fixture)
+    owner = fixture.fetch(:owner)
+    contact = fixture.fetch(:contact)
+    flow = fixture.fetch(:flow)
+    transaction_model = initial_signup_transaction_model(fixture.fetch(:channel))
+    binding = {
+      surface: "app",
+      actor_ref: owner.public_id,
+      session_ref: initial_signup_session_ref(fixture, fixture.fetch(:channel)),
+      operation: "sign_up",
+      expires_at: flow.expires_at,
+    }
+    transaction =
+      case contact
+      when ClientEmail
+        transaction_model.create_transaction!(
+          **binding, email_candidate_ref: contact.public_id, normalized_email_digest: contact.address_digest,
+        )
+      when ClientTelephone
+        transaction_model.create_transaction!(
+          **binding, telephone_candidate_ref: contact.public_id, normalized_number_digest: contact.number_digest,
+        )
+      else
+        raise ArgumentError, "unsupported signup contact: #{contact.class.name}"
+      end
+    case fixture.fetch(:channel)
+    when :email
+      transaction.issue_email_otp!(purpose: "sign_up")
+      transaction.cancel_email_otp!
+    when :telephone
+      transaction.issue_telephone_otp!(purpose: "sign_up")
+      transaction.cancel_telephone_otp!
+    else
+      raise ArgumentError, "unsupported signup channel"
+    end
+    transaction.reload
+  end
+
+  def initial_signup_session_ref(fixture, channel)
+    prefix =
+      case channel
+      when :email then "email_sign_up"
+      when :telephone then "telephone_sign_up"
+      else raise ArgumentError, "unsupported signup channel: #{channel.inspect}"
+      end
+    flow = fixture.fetch(:flow)
+    Digest::SHA256.hexdigest(JSON.generate([prefix, flow.public_id, flow.nonce_digest]))
+  end
+
+  def cleanup_initial_signup_fixture(fixture)
+    return unless fixture
+
+    flow = fixture[:flow]
+    channel = fixture[:channel]
+    if flow && channel
+      initial_signup_transaction_model(channel).where(session_ref: initial_signup_session_ref(fixture, channel))
+        .delete_all
+      ClientSignUpFlow.where(id: flow.id).delete_all
+    end
+
+    binding = fixture[:binding]
+    if binding
+      session_ids = [binding.auth_ceremony_session_id, binding.admitted_auth_ceremony_session_id].compact
+      parent_id = binding.authorization_transaction_id
+      ClientAuthAdmissionBinding.where(id: binding.id).delete_all
+      ClientAuthCeremonySession.where(id: session_ids).delete_all
+      ClientOidcAuthorizationTransaction.where(id: parent_id).delete_all if parent_id
+    end
+
+    owner = fixture[:owner]
+    return unless owner
+
+    ClientContactAuditOutbox.where(owner_ref: owner.public_id).delete_all
+    ClientEmail.where(id: fixture[:contact].id).delete_all if fixture[:contact].is_a?(ClientEmail)
+    ClientTelephone.where(id: fixture[:contact].id).delete_all if fixture[:contact].is_a?(ClientTelephone)
+    ClientAuthorityLock.where(client_id: owner.id).delete_all
+    Client.where(id: owner.id).delete_all
   end
 end

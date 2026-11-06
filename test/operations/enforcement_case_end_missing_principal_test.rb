@@ -13,7 +13,10 @@ class EnforcementCaseEndMissingPrincipalTest < ActiveSupport::TestCase
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: actor.public_id, applied_by_operator_public_id: operator.public_id,
     )
-    the_case.build_principal_effect(principal_public_id: actor.public_id, access_blocking: true, effective_at: Time.current)
+    the_case.build_principal_effect(
+      principal_public_id: actor.public_id, access_blocking: true,
+      effective_at: Time.current,
+    )
     the_case.save!
 
     assert EnforcementCaseEndOperation.call(enforcement_case: AppEnforcementCase.find(the_case.id), reason: "revoked")
@@ -48,7 +51,10 @@ class EnforcementCaseEndMissingPrincipalTest < ActiveSupport::TestCase
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: actor.public_id, applied_by_operator_public_id: "missing-operator",
     )
-    the_case.build_principal_effect(principal_public_id: actor.public_id, access_blocking: true, effective_at: Time.current)
+    the_case.build_principal_effect(
+      principal_public_id: actor.public_id, access_blocking: true,
+      effective_at: Time.current,
+    )
     the_case.save!
 
     assert_raises(ActiveRecord::RecordNotFound) do

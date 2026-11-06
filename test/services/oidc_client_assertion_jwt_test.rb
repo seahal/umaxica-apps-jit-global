@@ -5,6 +5,7 @@ require "test_helper"
 require "base64"
 
 class OidcClientAssertionJwtTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
   test "issue returns nil when the client is not registered" do
     assert_nil OidcClientAssertionJwt.issue(client_id: "missing_client", token_url: "https://id.example/token")
   end
@@ -106,6 +107,77 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
         assertion: assertion,
         token_url: token_url,
       )
+    end
+  end
+
+  test "the result-returning verifier exposes an authenticated client and the signed expectation" do
+    token_url = "https://log.umaxica.app/oauth/token"
+    expectation = OidcClientAssertionStepUpExpectationValue.new(grant: "grant-public-id", subject: "subject-ref")
+
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(
+        client_id: "core-app-jp", token_url:, step_up_expectation: expectation,
+      )
+      result = OidcClientRegistry.verify_client_assertion("core-app-jp", assertion, token_url:)
+
+      assert_predicate result, :authenticated?
+      assert_equal "core-app-jp", result.client.client_id
+      assert_equal :valid, result.step_up_claims_state
+      assert_equal ["grant-public-id", "subject-ref"],
+                   [result.step_up_expectation.grant, result.step_up_expectation.subject]
+    end
+  end
+
+  test "the result-returning verifier marks ordinary assertions as having no step-up expectation" do
+    token_url = "https://log.umaxica.app/oauth/token"
+
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url:)
+      result = OidcClientRegistry.verify_client_assertion("core-app-jp", assertion, token_url:)
+
+      assert_predicate result, :authenticated?
+      assert_equal :none, result.step_up_claims_state
+      assert_nil result.step_up_expectation
+    end
+  end
+
+  test "signed partial and wrongly typed step-up claims remain authenticated but invalid" do
+    token_url = "https://log.umaxica.app/oauth/token"
+    now = Time.current
+
+    with_oidc_client_key("CORE_APP_JP") do
+      issuer_id = "oidc_client:#{OidcClientRegistry.jwt_namespace_for("core-app-jp")}"
+      [
+        { "step_up_grant" => "grant-public-id" },
+        { "step_up_grant" => ["grant-public-id"], "step_up_sub" => "subject-ref" },
+      ].each do |expectation_claims|
+        payload = {
+          "iss" => "core-app-jp",
+          "sub" => "core-app-jp",
+          "aud" => token_url,
+          "jti" => SecureRandom.uuid,
+          "iat" => now.to_i,
+          "exp" => (now + OidcClientAssertionJwt::TTL).to_i,
+          "typ" => OidcClientAssertionJwt::TOKEN_TYPE,
+        }.merge(expectation_claims)
+        assertion = JitSecurityJwtKeyring.encode(
+          payload, typ: OidcClientAssertionJwt::TOKEN_TYPE, issuer_id:,
+        )
+        result = OidcClientRegistry.verify_client_assertion("core-app-jp", assertion, token_url:)
+
+        assert_predicate result, :authenticated?
+        assert_equal :invalid, result.step_up_claims_state
+        assert_nil result.step_up_expectation
+      end
+    end
+  end
+
+  test "step-up expectation values require two non-empty strings" do
+    assert_raises(ArgumentError) do
+      OidcClientAssertionStepUpExpectationValue.new(grant: "", subject: "subject-ref")
+    end
+    assert_raises(ArgumentError) do
+      OidcClientAssertionStepUpExpectationValue.new(grant: "grant-public-id", subject: nil)
     end
   end
 

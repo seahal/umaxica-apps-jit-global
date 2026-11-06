@@ -10,7 +10,7 @@ class ClientSecretManualReservationIssuer
   class << self
     public
 
-    def call!(actor_context:, token:, operation_id:, expires_after:)
+    def call!(actor_context:, token:, operation_id:, expires_after:, step_up_evidence:)
       validate_input!(actor_context, token, operation_id, expires_after)
 
       # Keep the Client lock while checking the browser and reserving capacity.
@@ -24,7 +24,7 @@ class ClientSecretManualReservationIssuer
                   raise Denied, "Secret reservation device is unavailable"
                 end
 
-                reserve!(actor_context, token, operation_id, expires_after, device)
+                reserve!(actor_context, token, operation_id, expires_after, device, step_up_evidence)
               end
             end
           end
@@ -50,7 +50,7 @@ class ClientSecretManualReservationIssuer
 
     end
 
-    def reserve!(context, token, operation_id, duration, device)
+    def reserve!(context, token, operation_id, duration, device, step_up_evidence)
       actor = context.subject
       unless actor.login_allowed? && ClientSecretCredentialPolicy.new(
         ClientSecretCredential,
@@ -59,7 +59,7 @@ class ClientSecretManualReservationIssuer
         raise Denied, "Secret reservation actor is unavailable"
       end
 
-      current = verify_session!(actor, token, device)
+      current = verify_session!(actor, token, device, step_up_evidence)
       if ClientSecretAuditOutbox.exists?(operation_ref: operation_id, event_name: "secret.issuance_purged")
         raise Denied, "Secret reservation operation has already been retired"
       end
@@ -79,7 +79,8 @@ class ClientSecretManualReservationIssuer
       capacity = ClientSecretCapacityQuery.call(client: actor, at: now)
       raise CapacityFull, "twenty active Secrets prevent manual addition" if capacity.manual_count.zero?
 
-      deadline = [now + duration, current.last_step_up_at + StepUpRequirement::DEFAULT_TTL].min.round(6)
+      step_up_deadline = Time.at(step_up_evidence.auth_time + StepUpEvidenceValue::MAX_AGE_SECONDS).utc
+      deadline = [now + duration, step_up_deadline].min.round(6)
       raise ArgumentError, "Secret reservation duration must advance the database timestamp" unless deadline > now
 
       issuance = ClientSecretIssuance.create!(
@@ -96,23 +97,16 @@ class ClientSecretManualReservationIssuer
       issuance
     end
 
-    def verify_session!(actor, token, device)
+    def verify_session!(actor, token, device, step_up_evidence)
       current = ClientToken.lock.find_by(id: token.id, user_id: actor.id, public_id: token.public_id)
       unless current && current.device_session_id == device.id && device.current_refresh_token_id == current.id
         raise Denied, "Secret reservation session is unavailable"
       end
 
       now = ClientToken.database_now
-      requirement = StepUpRequirement.new(
-        scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: current.public_id, token_binding: current.public_id,
-        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      unless current.active_status?(now) && StepUpEvidenceVerifier.call(
+        evidence: step_up_evidence, actor: actor, token: current,
       )
-      unless current.active_status?(now) &&
-          StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret reservation requires current scoped Step-Up"
       end
 

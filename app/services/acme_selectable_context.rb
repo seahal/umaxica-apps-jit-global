@@ -16,6 +16,7 @@
 module AcmeSelectableContext
   # Raised when a chosen context cannot be persisted (e.g. no session token to write to).
   InvalidSelection = Class.new(StandardError)
+  SelectionAlreadyEstablished = Class.new(StandardError)
 
   # Every (account, collective, unit, avatar) combination the principal may act as. For
   # optional and unsupported Avatar modes the nil slot is explicit. Avatar candidates require
@@ -57,12 +58,16 @@ module AcmeSelectableContext
   # Atomically write the chosen candidate's public ids onto the session token. Validation is
   # the caller's responsibility (candidate must already be confirmed). A changed selection
   # invalidates prior ceremony authority in the same token transaction; revisiting does not.
-  def persist_selection!(candidate)
+  def persist_selection!(candidate, once: false)
     raise InvalidSelection, "session_required" if session.blank?
 
     public_ids = candidate.fetch(:public)
+    return persist_rp_app_selection!(public_ids, once:) if session.instance_of?(RpBaseAppSession)
+    return persist_rp_org_selection!(public_ids, once:) if session.instance_of?(RpBaseOrgSession)
+
     connection_owner(session.class).connected_to(role: :writing) do
       session.with_lock do
+        raise SelectionAlreadyEstablished if once && session.selected_actor_context?
         raise InvalidSelection, "invalid_selection" unless candidate_still_authorized?(public_ids)
 
         attributes = {
@@ -78,6 +83,53 @@ module AcmeSelectableContext
         selection = attributes.except(:selected_at)
         session.revoke_step_up_authority! unless session.slice(*selection.keys) == selection.stringify_keys
         session.update!(attributes)
+      end
+    end
+  end
+
+  def persist_rp_app_selection!(public_ids, once:)
+    RpBaseAppRecord.connected_to(role: :writing) do
+      session.with_lock do
+        raise InvalidSelection, "invalid_selection" unless session.active?
+        raise InvalidSelection, "invalid_selection" unless candidate_still_authorized?(public_ids)
+
+        attributes = {
+          account_public_id: public_ids.fetch(:account_public_id),
+          organization_public_id: public_ids.fetch(:organization_public_id),
+          organization_unit_public_id: public_ids.fetch(:organization_unit_public_id),
+          avatar_public_id: public_ids.fetch(:avatar_public_id),
+        }
+        existing = RpBaseAppSessionSelection.find_by(rp_session_id: session.id)
+        if existing
+          raise SelectionAlreadyEstablished if once
+
+          existing.update!(attributes)
+        else
+          RpBaseAppSessionSelection.create!(attributes.merge(rp_session_id: session.id, selected_at: Time.current))
+        end
+      end
+    end
+  end
+
+  def persist_rp_org_selection!(public_ids, once:)
+    RpBaseOrgRecord.connected_to(role: :writing) do
+      session.with_lock do
+        raise InvalidSelection, "invalid_selection" unless session.active?
+        raise InvalidSelection, "invalid_selection" unless candidate_still_authorized?(public_ids)
+
+        attributes = {
+          account_public_id: public_ids.fetch(:account_public_id),
+          organization_public_id: public_ids.fetch(:organization_public_id),
+          organization_unit_public_id: public_ids.fetch(:organization_unit_public_id),
+        }
+        existing = RpBaseOrgSessionSelection.find_by(rp_session_id: session.id)
+        if existing
+          raise SelectionAlreadyEstablished if once
+
+          existing.update!(attributes)
+        else
+          RpBaseOrgSessionSelection.create!(attributes.merge(rp_session_id: session.id, selected_at: Time.current))
+        end
       end
     end
   end

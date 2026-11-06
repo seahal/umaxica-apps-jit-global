@@ -6,14 +6,14 @@ require "test_helper"
 
 class DbscRegistrationEndpointWiringTest < ActiveSupport::TestCase
   test "sign dbsc controllers use shared registration endpoint concern" do
-    assert_includes Auth::App::Edge::V0::Token::DbscController, SignDbscRegistrationEndpoint
-    assert_includes Auth::Org::Edge::V0::Token::DbscController, SignDbscRegistrationEndpoint
+    assert_includes Visa::App::Edge::V0::Token::DbscController, SignDbscRegistrationEndpoint
+    assert_includes Visa::Org::Edge::V0::Token::DbscController, SignDbscRegistrationEndpoint
   end
 
   test "every dbsc controller asserted here is one the router mounts" do
     {
-      "auth/app/edge/v0/token/dbsc" => "create",
-      "auth/org/edge/v0/token/dbsc" => "create",
+      "visa/app/edge/v0/token/dbsc" => "create",
+      "visa/org/edge/v0/token/dbsc" => "create",
     }.each do |controller, action|
       mounted =
         Rails.application.routes.routes.any? do |route|
@@ -26,8 +26,8 @@ class DbscRegistrationEndpointWiringTest < ActiveSupport::TestCase
 
   test "controllers do not redefine dbsc registration internals locally" do
     sign_controllers = [
-      Auth::App::Edge::V0::Token::DbscController,
-      Auth::Org::Edge::V0::Token::DbscController,
+      Visa::App::Edge::V0::Token::DbscController,
+      Visa::Org::Edge::V0::Token::DbscController,
     ]
     sign_controllers.each do |controller|
       assert_not_includes controller.instance_methods(false), :handle_registration

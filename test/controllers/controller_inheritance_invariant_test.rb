@@ -28,7 +28,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
   PERMITTED_LOCAL_BASES = %w(
     app/controllers/auth/app/sign/in/challenges_controller.rb
     app/controllers/auth/app/sign/in/emails_controller.rb
-    app/controllers/auth/app/sign/in/guards_controller.rb
     app/controllers/auth/app/sign/in/passkeys_controller.rb
     app/controllers/auth/app/sign/up/check/apple/birthdates_controller.rb
     app/controllers/auth/app/sign/up/check/apple/confirmations_controller.rb
@@ -46,9 +45,7 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/up/telephones_controller.rb
     app/controllers/auth/app/verification/emails_controller.rb
     app/controllers/auth/app/verification/redeliveries_controller.rb
-    app/controllers/auth/org/sign/in/guards_controller.rb
     app/controllers/auth/org/sign/in/passkeys_controller.rb
-    app/controllers/auth/org/sign/up/invitations_controller.rb
     app/controllers/base/app/jwks_controller.rb
     app/controllers/base/org/jwks_controller.rb
     app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb
@@ -75,13 +72,12 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
   # Scans all controller source files and returns paths (relative to Rails.root)
   # whose class declaration inherits from a non-approved base.
   # Approved bases: ApplicationController, BareController, ActionController::Base,
-  # RedirectOnlyController, PreAccessController, FullAccessController,
+  # PreAccessController, FullAccessController,
   # PreferencesBaseController, and any class defined in PERMITTED_LOCAL_BASES.
   APPROVED_BASE_PATTERN = /
     ApplicationController
     | BareController
     | ActionController
-    | RedirectOnlyController
     | PreAccessController
     | FullAccessController
     | PreferencesBaseController

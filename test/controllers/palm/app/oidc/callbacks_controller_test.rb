@@ -8,7 +8,6 @@ module Palm
     module Oidc
       class CallbacksControllerTest < ActionDispatch::IntegrationTest
         HOST = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
-        BASE_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
 
         setup do
           host! HOST
@@ -40,144 +39,6 @@ module Palm
           assert_raises(ActionController::RoutingError) do
             Rails.application.routes.recognize_path("https://#{HOST}/oauth/callback/android", method: :get)
           end
-        end
-
-        test "valid Palm browser callback verifies the real identity and opens its protected page" do
-          identity = ClientIdentity.create!(
-            issuer: OidcIssuer.for_resource_type("client"),
-            subject: OidcSubject.for(@user, resource_type: "client"),
-            audience: "base-app-ww",
-            source_record_id: @user.id,
-            status_id: ClientIdentityState::ACTIVE,
-          )
-          state, flow, authorization_params = start_palm_browser_flow
-          client = OidcClientRegistry.find!("palm-app-jp")
-          authentication_event_at = 1.minute.ago
-          root_token = ClientToken.create!(
-            authentication_epoch: 0, user: @user,
-            authentication_event_at: authentication_event_at,
-          )
-          authorization_code = OidcAuthorizationCodeIssuer.call(
-            client: client,
-            params: authorization_params.symbolize_keys,
-            resource: @user,
-            session_token: root_token,
-            authentication_event_at: authentication_event_at,
-          )
-          expected_token_url = OidcIssuer.token_endpoint("client")
-          exchange_result =
-            OidcClientRegistry.stub(
-              :authenticate_assertion,
-              ->(client_id, assertion, token_url:) {
-                client_id == "palm-app-jp" && assertion.present? && token_url == expected_token_url
-              },
-            ) do
-              OidcTokenExchangeCoordinator.call(
-                grant_type: "authorization_code",
-                code: authorization_code.code,
-                redirect_uri: authorization_code.redirect_uri,
-                client_id: "palm-app-jp",
-                client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-                client_assertion: "palm-browser-callback-test-assertion",
-                token_endpoint_uri: expected_token_url,
-                code_verifier: flow.fetch("code_verifier"),
-                expected_resource_type: "client",
-              )
-            end
-
-          assert_predicate exchange_result, :success?
-
-          token_response = exchange_result.token_response
-          id_token_payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
-          candidate_session = OpAppGrant.find_by!(public_id: id_token_payload.fetch("sid"))
-
-          assert_predicate(
-            OidcIdTokenVerifier.call(
-              id_token: token_response.fetch(:id_token),
-              client_id: "palm-app-jp",
-              resource_type: "client",
-              expected_nonce: flow.fetch("nonce"),
-              issuer: OidcIssuer.for_resource_type("client"),
-              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
-            ),
-            :success?,
-          )
-          assert_predicate(
-            OidcAccessTokenAuthenticator.call(
-              access_token: token_response.fetch(:access_token),
-              resource_type: "client",
-              host: BASE_HOST,
-              authorization_scheme: "Bearer",
-            ),
-            :success?,
-          )
-          token_result = OidcOpTokenClient::Result.new(
-            outcome: :success,
-            token_response: token_response,
-            error: nil,
-          )
-          userinfo_result = OidcOpUserInfoClient::Result.new(
-            success: true,
-            claims: { "sub" => OidcSubject.for(@user, resource_type: "client") },
-            error: nil,
-            dependency_failure: false,
-          )
-
-          OidcOpTokenClient.stub(
-            :authorization_code,
-            ->(**arguments) {
-              assert_equal "palm-app-jp", arguments.fetch(:client_id)
-              assert_equal authorization_code.redirect_uri, arguments.fetch(:redirect_uri)
-              assert_equal flow.fetch("code_verifier"), arguments.fetch(:code_verifier)
-              token_result
-            },
-          ) do
-            OidcOpUserInfoClient.stub(:call, userinfo_result) do
-              get palm_app_oidc_callback_url,
-                  params: {
-                    code: authorization_code.code,
-                    state: state,
-                    iss: OidcIssuer.for_resource_type("client"),
-                    client_id: "app-ios-rp",
-                    redirect_uri: "umaxica://oidc/callback",
-                  }
-            end
-          end
-
-          assert_response :redirect
-          assert_equal "/dashboard", URI.parse(response.location).path
-          assert_equal token_response.fetch(:access_token), cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
-          assert_equal token_response.fetch(:refresh_token), cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE]
-          assert_predicate candidate_session.reload, :active?
-          assert_predicate root_token.reload, :currently_usable?
-          binding = ClientOidcIdentityBinding.find_by!(
-            issuer: OidcIssuer.for_resource_type("client"),
-            subject: OidcSubject.for(@user, resource_type: "client"),
-            audience: "palm-app-jp",
-          )
-
-          assert_equal identity.id, binding.client_identity_id
-
-          get palm_app_dashboard_path(ri: "jp")
-
-          assert_response :success
-          assert_equal "palm/app/dashboards/show", inertia_component
-          persisted_session = OpAppGrant.find_by!(public_id: candidate_session.public_id)
-
-          assert_equal @user.id,
-                       ClientToken.find(persisted_session.client_token_id).user_id
-
-          OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("consumed callback must not exchange again") }) do
-            get palm_app_oidc_callback_url, params: {
-              code: authorization_code.code, state: state, iss: OidcIssuer.for_resource_type("client"),
-            }
-          end
-
-          assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
-          assert_equal token_response.fetch(:access_token), cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
-          assert_equal token_response.fetch(:refresh_token), cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE]
-          assert_predicate candidate_session.reload, :active?
-          assert_predicate root_token.reload, :currently_usable?
         end
 
         # R5-WU17: as the rp-palm-app-jp cell process the callback commits the verified identity into
@@ -255,7 +116,15 @@ module Palm
           )
           token_url = OidcIssuer.token_endpoint("client")
           result =
-            OidcClientRegistry.stub(:authenticate_assertion, ->(*, **) { true }) do
+            OidcClientRegistry.stub(
+              :verify_client_assertion,
+              ->(client_id, *, **) {
+                OidcClientRegistry::AssertionAuthenticationResult.new(
+                  authenticated: true, client: OidcClientRegistry.find(client_id),
+                  step_up_claims_state: :none, step_up_expectation: nil,
+                )
+              },
+            ) do
               OidcTokenExchangeCoordinator.call(
                 grant_type: "authorization_code", code: code.code, redirect_uri: code.redirect_uri,
                 client_id: "palm-app-jp", client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,

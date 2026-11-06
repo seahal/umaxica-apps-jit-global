@@ -122,8 +122,6 @@ module JitSecurityJwtRegistry
 
   def auth = issuer("auth")
 
-  def preference = issuer("preference")
-
   def issuers
     # rubocop:disable ThreadSafety/ClassInstanceVariable
     @issuers ||= configure!
@@ -172,16 +170,6 @@ module JitSecurityJwtRegistry
       issuer: source.fetch("AUTH_JWT_ISSUER", nil),
       audiences: auth_audiences.freeze,
       revoked_kids: source.csv("AUTH_JWT_REVOKED_KIDS"),
-    )
-    records["preference"] = build_keyset_issuer(
-      source: source,
-      id: "preference",
-      private_keyset_name: :PREFERENCE_JWT_PRIVATE_KEYSET,
-      public_keyset_name: :PREFERENCE_JWT_PUBLIC_KEYSET,
-      active_kid: source.fetch("PREFERENCE_JWT_ACTIVE_KID", nil),
-      issuer: source.fetch("PREFERENCE_JWT_ISSUER", nil),
-      audiences: preference_hosts_from_boot_config,
-      revoked_kids: source.csv("PREFERENCE_JWT_REVOKED_KIDS"),
     )
     com_active_kid = source.value("PREFERENCE_COM_JWT_ACTIVE_KID")
     raise ConfigurationError, "com preference active kid is missing" if com_active_kid.blank?
@@ -317,7 +305,6 @@ module JitSecurityJwtRegistry
     kind, namespace = record_id.to_s.split(":", 2)
     case kind
     when "auth" then "AUTH_JWT_PRIVATE_KEYSET"
-    when "preference" then "PREFERENCE_JWT_PRIVATE_KEYSET"
     when "preference_com" then "PREFERENCE_COM_JWT_PRIVATE_KEYSET"
     when "preference_app" then "PREFERENCE_APP_JWT_PRIVATE_KEYSET"
     when "preference_org" then "PREFERENCE_ORG_JWT_PRIVATE_KEYSET"
@@ -339,27 +326,6 @@ module JitSecurityJwtRegistry
     Rails.configuration.x.boot_config.fetch(:jump).audience
   end
 
-  # An empty list is left for `validate_record_metadata!` to reject, so a
-  # preference keyring without configured surface hosts fails at boot instead
-  # of signing tokens for a guessed audience.
-  def preference_hosts_from_boot_config
-    boot_config =
-      begin
-        Rails.configuration.x.boot_config
-      rescue NoMethodError
-        nil
-      end
-    hosts = boot_config&.fetch(:hosts, nil)
-    return [] unless hosts
-
-    values =
-      %i(base_service base_corporate base_staff).filter_map do |key|
-        host = hosts.public_send(key)
-        host&.to_s
-      end
-    values.freeze
-  end
-
   def validate!(records = issuers)
     records.each_value { |record| validate_record!(record) }
     validate_global_kid_uniqueness!(records)
@@ -369,7 +335,7 @@ module JitSecurityJwtRegistry
   end
 
   def validate_preference_realm_key_separation!(records)
-    preference_ids = %w(preference preference_app preference_com preference_org)
+    preference_ids = %w(preference_app preference_com preference_org)
     preference_ids.each do |id|
       current = records.fetch(id)
       current_keys = current.keys.values.map { |key| key.public_key.public_to_der }
@@ -558,8 +524,7 @@ module JitSecurityJwtRegistry
   end
 
   private_class_method :build_issuers, :build_oidc_client_issuer, :require_oidc_client_key_material!,
-                       :jump_gateway_audience,
-                       :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
+                       :jump_gateway_audience, :validate_record_metadata!, :validate_active_key!,
                        :private_key_required?, :private_env_name_for, :required_oidc_client_namespaces,
                        :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
                        :validate_preference_realm_key_separation!,

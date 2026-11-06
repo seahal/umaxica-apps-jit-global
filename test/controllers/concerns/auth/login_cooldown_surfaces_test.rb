@@ -192,7 +192,7 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
       assert_equal "no-store", controller.response.headers["Cache-Control"]
       assert_includes controller.response.body, "/sign"
       assert_no_match(/\d+\s*(秒|seconds?)/, controller.response.body)
-      assert_not_includes controller.response.body, "サインインが完了"
+      assert_not_includes controller.response.body, "ログインが完了"
     end
   end
 

@@ -61,15 +61,25 @@ shared behavior.
 ## Owner-approved migration: Base ORG settings (2026-10-31, WU-X1)
 
 The owner approved a one-route exception to the generic `/configurator` path for the existing Base
-ORG management entry: it moves from `/configuration` to `/settings` on the Base ORG host. This
-route is distinct from Auth APP and ORG `/settings`, which remain surface-local identity settings
-on their Auth hosts. Matching path text does not share controllers, sessions, authorization, or
-state across those hosts.
+ORG management entry: it moves from `/configuration` to `/settings` on the Base ORG host. This route
+is distinct from Auth APP and ORG `/settings`, which remain surface-local identity settings on their
+Auth hosts. Matching path text does not share controllers, sessions, authorization, or state across
+those hosts.
 
-The Auth ORG `/configuration` transfer endpoint is removed. No `/configuration` alias or redirect
-is retained. The Base ORG endpoint remains closed until it has an authoritative settings data
-source. This migration is specific to Base ORG; `/configurator` remains the generic path for new
+The Auth ORG `/configuration` transfer endpoint is removed. No `/configuration` alias or redirect is
+retained. The Base ORG endpoint remains closed until it has an authoritative settings data source.
+This migration is specific to Base ORG; `/configurator` remains the generic path for new
 operator-managed configuration routes.
+
+## Owner-approved Auth identity migration (2026-11-04, Step-Up revision 13 O-11)
+
+The accepted O-11 surface contract supersedes the earlier statement that Auth APP and ORG
+`/settings` remain identity self-service endpoints. Auth ORG `/settings` and `/settings/entra` are
+retired without aliases. Entra sign-in remains an Auth ceremony using administrator-provisioned
+identities; Base ORG `/identity/social_identities` owns only the read-only Entra status display. APP
+TOTP management and APP social status/unlink move to Base APP identity. Auth APP social link starts
+require the Visa-mediated O-9 admission, whose implementation remains disconnected pending review.
+This migration does not create a self-service ORG Entra link or unlink path.
 
 ## Related
 

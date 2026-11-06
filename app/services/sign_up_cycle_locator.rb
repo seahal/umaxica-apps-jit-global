@@ -66,8 +66,48 @@ class SignUpCycleLocator
     binding_class = BINDING_CLASSES.fetch(surface)
     binding_class.connection_owner.connected_to(role: :writing) do
       binding = admitted_owner!(binding_class, admission_binding, ceremony_session)
-      cycle_class.current.where(auth_admission_binding_id: binding.id).any? { |cycle| unreleased?(cycle) }
+      owned = cycle_class.current.where(auth_admission_binding_id: binding.id)
+      return true if owned.any? { |cycle| unreleased?(cycle) }
+
+      payload = current_payload
+      return false unless payload
+
+      earlier = cycle_class.find_by(public_id: payload["public_id"])
+      earlier.present? && earlier.nonce_matches?(payload["nonce"]) && unreleased?(earlier)
     end
+  end
+
+  def create_for_admission!(admission_binding:, ceremony_session:, entry_method:, social_provider:, return_to:,
+                            reject_prior_flow:, &)
+    binding_class = BINDING_CLASSES.fetch(surface)
+    nonce = SecureRandom.urlsafe_base64(NONCE_BYTES)
+    cycle =
+      binding_class.connection_owner.connected_to(role: :writing) do
+        admission_binding.with_lock do
+          binding = admitted_owner!(binding_class, admission_binding, ceremony_session)
+          prior_flows = cycle_class.where(auth_admission_binding_id: binding.id).to_a
+          if prior_flows.any? { |flow| unreleased?(flow) } || (reject_prior_flow && prior_flows.any?)
+            raise OwnershipMismatch, "sign-up admission already owns a Flow"
+          end
+
+          issued_at = cycle_class.database_now
+          flow = cycle_class.create!(
+            auth_admission_binding: binding,
+            principal_id: nil,
+            status_id: cycle_class::STATUS_MODEL::STARTED,
+            step: "start",
+            nonce_digest: cycle_class.digest_nonce(nonce),
+            issued_at: issued_at,
+            expires_at: issued_at + cycle_class.default_ttl,
+            entry_method: entry_method,
+            social_provider: social_provider,
+            return_to: return_to,
+          )
+          yield flow if block_given?
+          flow
+        end
+      end
+    issue!(cycle, nonce:)
   end
 
   def issue!(cycle, nonce: new_nonce)
@@ -115,7 +155,7 @@ class SignUpCycleLocator
   end
 
   def matching_authorization_parent?(parent, ceremony, binding_class)
-    parent && parent.surface == surface.to_s && parent.status == "pending" &&
+    parent && parent.surface == surface.to_s && parent.pending? &&
       parent.expires_at > binding_class.database_now &&
       ceremony.authorization_transaction_ref == parent.transaction_id
   end

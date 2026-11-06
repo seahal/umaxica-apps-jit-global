@@ -14,14 +14,14 @@ class ClientSecretPresentationIssuer
   class << self
     public
 
-    def prepare!(actor_context:, token:, issuance:)
-      with_authorization(actor_context, token, issuance) do |owned, context, now|
+    def prepare!(actor_context:, token:, issuance:, step_up_evidence:)
+      with_authorization(actor_context, token, issuance, step_up_evidence:) do |owned, context, now|
         prepare_candidates!(owned, context, now)
       end
     end
 
-    def call!(actor_context:, token:, issuance:)
-      with_authorization(actor_context, token, issuance) do |owned, context, now|
+    def call!(actor_context:, token:, issuance:, step_up_evidence:)
+      with_authorization(actor_context, token, issuance, step_up_evidence:) do |owned, context, now|
         present_candidates!(owned, context, now)
       end
     rescue ActiveSupport::MessageEncryptor::InvalidMessage
@@ -107,7 +107,7 @@ class ClientSecretPresentationIssuer
       ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm", serializer: JSON)
     end
 
-    def with_authorization(context, token, issuance)
+    def with_authorization(context, token, issuance, step_up_evidence:)
       validate_presentation_context!(context, token, issuance)
 
       AppZenithRecord.connected_to(role: :writing) do
@@ -133,7 +133,7 @@ class ClientSecretPresentationIssuer
                   client_id: context.subject.id,
                 )
                 now = Client.database_now
-                validate_owned_presentation!(context, current, owned, now)
+                validate_owned_presentation!(context, current, owned, now, step_up_evidence)
                 yield owned, context, now
               end
             end
@@ -150,30 +150,17 @@ class ClientSecretPresentationIssuer
       raise Denied, "Secret presentation requires its Base Client and browser"
     end
 
-    def validate_owned_presentation!(context, current, owned, now)
+    def validate_owned_presentation!(context, current, owned, now, step_up_evidence)
       unless current && owned && owned.browser_session_ref == current.public_id &&
           owned.sign_up_flow_ref.nil? && context.subject.login_allowed?
         raise Denied, "Secret presentation context mismatch"
       end
 
-      requirement = presentation_step_up_requirement(context, current, owned)
       unless current.active_status?(ClientToken.database_now) &&
-          StepUpResolver.call(token: current, requirement: requirement, now: ClientToken.database_now).satisfied? &&
+          StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: context.subject, token: current) &&
           owned.expires_at && owned.expires_at > now && owned.canceled_at.nil?
         raise Denied, "Secret presentation requires current scoped Step-Up and issuance"
       end
-    end
-
-    def presentation_step_up_requirement(context, current, owned)
-      scope = (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
-      StepUpRequirement.new(
-        scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: current.public_id, token_binding: current.public_id,
-        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: context.subject.public_id, resource_ref: owned.public_id, tenant_ref: nil,
-      )
     end
   end
 end

@@ -34,17 +34,29 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
         )
       else
         token = ClientToken.create!(authentication_epoch: 0, user: actor)
-        token.update!(
-          last_step_up_at: Client.database_now, last_step_up_scope: "settings_passkey",
-          last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-          last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-          last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-          last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+        now = OpBaseAppRecord.database_now
+        token.device_session_record!
+        token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+        token.rotate_refresh_token!(now:)
+        oidc_client = OidcClientRegistry.find!("base-app-ww")
+        grant = OpAppGrant.create!(
+          authentication_epoch: token.authentication_epoch, client_token: token,
+          oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+          oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+          refresh_token_expires_at: now + 1.hour,
+        )
+        grant.issue_refresh_token!(now:)
+        step_up_evidence = StepUpEvidenceValue.new(
+          acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+          sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+          aud: [oidc_client.aud], jti: grant.oidc_jti,
         )
         context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
         passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
         issuance = ClientSecretPasskeyReservationIssuer.call!(
           actor_context: context, token: token, passkey: passkey, expires_after: 0.000001.seconds,
+          step_up_evidence: step_up_evidence,
         )
       end
       ClientSecretIssuanceExpiryInvalidator.call!(
@@ -64,6 +76,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
             else
               ClientSecretPasskeyReservationIssuer.call!(
                 actor_context: context, token: token, passkey: passkey, expires_after: 1.minute,
+                step_up_evidence: step_up_evidence,
               )
             end
           end
@@ -198,12 +211,23 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
   test "a revoked device cannot reserve Secrets for a Passkey registration" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    now = OpBaseAppRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "existing-public-key")
@@ -213,6 +237,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       assert_raises(ClientSecretPasskeyReservationIssuer::Denied) do
         ClientSecretPasskeyReservationIssuer.call!(
           actor_context: context, token: token, passkey: passkey, expires_after: 1.minute,
+          step_up_evidence: step_up_evidence,
         )
       end
     end
@@ -221,16 +246,26 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
   test "a superseded device token cannot reserve Secrets for a Passkey registration" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    now = OpBaseAppRecord.database_now
+    device = token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "existing-public-key")
-    device = token.device_session_record!
     replacement = ClientToken.create!(authentication_epoch: 0, user: actor, device_session: device)
     device.update!(current_refresh_token_id: replacement.id)
 
@@ -238,6 +273,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       assert_raises(ClientSecretPasskeyReservationIssuer::Denied) do
         ClientSecretPasskeyReservationIssuer.call!(
           actor_context: context, token: token, passkey: passkey, expires_after: 1.minute,
+          step_up_evidence: step_up_evidence,
         )
       end
     end
@@ -247,13 +283,23 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     (0..20).each do |active_count|
       actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(authentication_epoch: 0, user: actor)
-      now = Client.database_now
-      token.update!(
-        last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
-        last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-        last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
-        last_step_up_user_verified: true, last_step_up_credential_ref: "test-step-up",
-        last_step_up_full_reauthentication: false,
+      now = OpBaseAppRecord.database_now
+      token.device_session_record!
+      token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now:)
+      oidc_client = OidcClientRegistry.find!("base-app-ww")
+      grant = OpAppGrant.create!(
+        authentication_epoch: token.authentication_epoch, client_token: token,
+        oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+        oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+        refresh_token_expires_at: now + 1.hour,
+      )
+      grant.issue_refresh_token!(now:)
+      step_up_evidence = StepUpEvidenceValue.new(
+        acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+        sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+        aud: [oidc_client.aud], jti: grant.oidc_jti,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       active_count.times do
@@ -274,6 +320,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       assert_no_difference("ClientSecretCredential.count") do
         issuance = ClientSecretPasskeyReservationIssuer.call!(
           actor_context: context, token: token, passkey: passkey, expires_after: 1.minute,
+          step_up_evidence: step_up_evidence,
         )
       end
       expected = [2, 20 - active_count].min
@@ -287,6 +334,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       assert_no_difference("ClientSecretIssuance.count") do
         retry_issuance = ClientSecretPasskeyReservationIssuer.call!(
           actor_context: context, token: token, passkey: passkey, expires_after: 2.minutes,
+          step_up_evidence: step_up_evidence,
         )
 
         assert_equal issuance.attributes, retry_issuance.attributes
@@ -313,7 +361,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
 
     issuance = ClientSecretPasskeyReservationIssuer.call!(
-      actor_context: context, token: token, passkey: passkey, expires_after: 1.minute,
+      actor_context: context, token: token, passkey: passkey, expires_after: 1.minute, step_up_evidence: nil,
     )
 
     assert_equal 2, issuance.planned_count

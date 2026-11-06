@@ -4,9 +4,8 @@
 require "test_helper"
 
 # Browser-condition CSRF for the org administrative mutations. The requests are authenticated by the
-# access cookie alone (no bearer header), synthetic verified evidence is finalized through
-# the public Base committer, and forgery protection is on. This isolates mutation CSRF; the
-# administrative ceremony integration test exercises the HTTP completion and real signatures. The
+# Browser RP cookies (no bearer header), and forgery protection is on. A valid CSRF token lets a
+# request reach the independent Step-Up gate; it does not supply Step-Up evidence. The
 # expected results follow Rails' `:header_or_legacy_token` Origin and Fetch Metadata checks plus the
 # Base/Auth legacy-token requirement on every unsafe request:
 #
@@ -86,12 +85,24 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
                              resource_type: "operator",
                            ), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(@operator, resource_type: "operator"), sid: rp_session.public_id,
+                absolute_expires_at: rp_session.refresh_token_expires_at,
+              )
+              unless rp_enrollment.success?
+                raise ArgumentError, "RP-local session setup failed: #{rp_enrollment.outcome}"
+              end
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+              ]
             end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             [
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ]
           else
             []
@@ -138,41 +149,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "each mutation follows the Fetch Metadata and token contract" do
-    @mutations.each do |name, (scope, url, params, count)|
-      return_to =
-        case scope
-        when "support_session_revoke" then "/support/clients/#{@client.public_id}/revocations/new"
-        when "operator_capability" then "/iam/grants/new"
-        when "enforcement_case_apply" then "/support/app/enforcement_cases/new"
-        end
-      requirement = StepUpRequirement.new(
-        step_up_required: true, phishing_resistant_required: false,
-        user_verification_required: false, full_reauthentication_required: false,
-        ttl: VerificationBase::STEP_UP_TTL, actor_ref: @operator.public_id,
-        resource_ref: nil, tenant_ref: nil,
-        scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
-        session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-      )
-      transaction = BaseStepUpAdmissionIssuer.call!(
-        actor: @operator, token: @token, requirement: requirement,
-        return_to: return_to, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-      ).transaction
-      transaction.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
-        verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
-      )
-      ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
-        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-      )
-      result = BaseAuthAdmissionCoordinator.issue_result!(
-        transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-      )
-      IdentityStepUpCeremonyFreshnessCommitter.call!(
-        actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
-      )
-
-      assert_equal scope, @token.reload.last_step_up_scope, "#{name}: canonical Base authority is established"
-
+    @mutations.each do |name, (_scope, url, params, count)|
       rejected = [
         { "Sec-Fetch-Site" => "cross-site", "Origin" => "https://attacker.example" },
         { "Sec-Fetch-Site" => nil },
@@ -222,35 +199,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "a request without Fetch Metadata but with the page's CSRF token is accepted" do
-    scope = "support_session_revoke"
-    requirement = StepUpRequirement.new(
-      step_up_required: true, phishing_resistant_required: false,
-      user_verification_required: false, full_reauthentication_required: false,
-      ttl: VerificationBase::STEP_UP_TTL, actor_ref: @operator.public_id,
-      resource_ref: nil, tenant_ref: nil,
-      scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-    )
-    transaction = BaseStepUpAdmissionIssuer.call!(
-      actor: @operator, token: @token, requirement: requirement,
-      return_to: "/support/clients/#{@client.public_id}/revocations/new",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-    ).transaction
-    transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
-      verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
-    )
-    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-    )
-    result = BaseAuthAdmissionCoordinator.issue_result!(
-      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-    )
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
-    )
-
+  test "a valid CSRF token reaches Step-Up without performing the protected mutation" do
     original = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
 
@@ -258,13 +207,15 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
       get(base_org_support_index_url(ri: "jp", host: @host), headers: @session_headers)
       csrf_token = css_select("meta[name='csrf-token']").first["content"]
 
-      assert_difference(-> { Chronicle.where(action: "support.session.revoked").count }, 1) do
+      assert_no_difference(-> { Chronicle.where(action: "support.session.revoked").count }) do
         post(
           base_org_support_client_revocations_url(@client.public_id, host: @host),
           params: { reason_code: "security_incident", operation_id: SecureRandom.uuid },
           headers: @session_headers.merge("Sec-Fetch-Site" => nil, "X-CSRF-Token" => csrf_token),
         )
       end
+
+      assert_response :unauthorized
     ensure
       ActionController::Base.allow_forgery_protection = original
     end

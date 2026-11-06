@@ -15,7 +15,7 @@ module Base
 
       def index
         response.headers["Cache-Control"] = "private, no-store"
-        return render_session_boundary_not_found if logged_in?
+        return render_authenticated_home_forbidden if logged_in?
 
         render inertia: true, props: root_landing_props,
                clear_history: session[:inertia_clear_history] == true
@@ -79,6 +79,7 @@ module Base
           surface: "app",
           access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
           persona: Actor.selection.account_public_id,
+          selection: Actor.selection,
         ).dashboard_identity
         raise ActiveRecord::RecordNotFound, "selected app Persona is not available to this principal" if
           result.status == :not_found

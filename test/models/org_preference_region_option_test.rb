@@ -24,7 +24,10 @@ class OrgPreferenceRegionOptionTest < ActiveSupport::TestCase
 
   test "has many org_preference_regions" do
     option = OrgPreferenceRegionOption.create!(id: 99)
-    preference = OrgPreference.create!
+    preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     region = OrgPreferenceRegion.create!(preference: preference, option: option)
 
     assert_includes option.org_preference_regions, region
@@ -32,7 +35,10 @@ class OrgPreferenceRegionOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = OrgPreferenceRegionOption.create!(id: 99)
-    preference = OrgPreference.create!
+    preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     OrgPreferenceRegion.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

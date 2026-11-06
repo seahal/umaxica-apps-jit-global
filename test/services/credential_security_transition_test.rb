@@ -4,6 +4,8 @@
 require "test_helper"
 
 class CredentialSecurityTransitionTest < ActiveSupport::TestCase
+  self.fixture_table_names = %w(clients client_statuses operators)
+
   test "credential changes end only owned unfinished sign-in flows without revoking retained root sessions" do
     %i(app org).each do |surface|
       [true, false].each_with_index do |revoke_step_up, index|
@@ -401,8 +403,8 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       step_up_required: true,
       phishing_resistant_required: false,
       user_verification_required: false,
-      full_reauthentication_required: false,
-      scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+      full_reauthentication_required: true,
+      scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "reauthentication",
       ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true,
@@ -523,6 +525,51 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     assert_equal 2, audit.context.fetch("revoked_step_up_count")
     assert_not_includes audit.context.to_s, current_token.public_id
     assert_not_includes audit.context.to_s, other_token.public_id
+  end
+
+  test "a retained root with an OP step-up commit is not reported as having revoked Step-Up" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    now = OpBaseAppRecord.database_now
+    token = ClientToken.create!(
+      authentication_epoch: actor.authentication_epoch,
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      discard_at: now + 1.hour,
+    )
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch,
+      client_token: token,
+      oidc_client_id: "base-app-ww",
+      oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now,
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    ClientStepUpCommit.create!(
+      grant: grant,
+      root_token: token,
+      context_ref: PublicId.generate,
+      verified_method: "passkey",
+      committed_at: now,
+    )
+
+    result = CredentialSecurityTransition.call(
+      actor: actor,
+      current_session: token,
+      reason: :mfa_disabled,
+      affected_surface: "app",
+      revoke_current: false,
+      revoke_other_sessions: false,
+    )
+
+    assert_equal 0, result.revoked_step_up_count
+    assert_predicate token.reload, :currently_usable?
+    assert_nil grant.reload.revoked_at
   end
 
   test "rejects unknown transition reason fail closed" do

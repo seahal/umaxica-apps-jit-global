@@ -89,47 +89,14 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
       ClientSecretCredential.create!(
         client: owner, issuance: issuance, name: "Fixture Secret", password: raw,
         confirmed_at: (state == :pending) ? nil : now,
+        # The lookup classifies persisted claim facts; claim issuance has its own transaction tests.
+        claimed_at: (state == :claimed) ? now : nil,
+        claim_operation_id: (state == :claimed) ? SecureRandom.uuid : nil,
+        claim_sign_in_flow_ref: (state == :claimed) ? PublicId.generate : nil,
+        claim_ceremony_session_id: (state == :claimed) ? 1 : nil,
         revoked_at: (state == :revoked) ? now : nil,
         discard_at: (state == :discarded) ? now : Float::INFINITY,
       )
-      if state == :claimed
-        admission = OidcTestEntry.issue!(
-          surface: "app",
-          intent: "sign_in",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: nil,
-        )
-        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-        _auth_session, raw_sid =
-          begin
-            admission_binding = binding
-            admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-            admission_binding.attach_auth_session!(
-              auth_session: admission_session,
-              confirmation_ref: SecureRandom.uuid,
-            )
-            admission_binding.confirm_base!(
-              base_token: nil,
-              browser_digest: AuthAdmissionBinding.browser_digest(
-                surface: admission_binding.class.auth_admission_surface_name,
-                entry_ref: admission_binding.entry_ref,
-                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-              ),
-            )
-            [admission_session, admission_raw_sid]
-          end
-        BaseAuthAdmissionCoordinator.consume_entry_reference!(
-          reference: admission.reference, surface: "app", expected_intent: "sign_in",
-          binding:, raw_auth_sid: raw_sid,
-        )
-        ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-          admission_purpose: "authentication_handoff",
-          authorization_transaction_ref: admission.transaction.transaction_id,
-        )
-        transaction = admission.transaction
-
-        assert ClientSecretClaimCommitter.call_for_oidc!(client: owner, secret: raw, transaction:, ceremony:)
-      end
 
       assert_nil ClientSecretLookupQuery.call(client: owner, secret: raw)
     end

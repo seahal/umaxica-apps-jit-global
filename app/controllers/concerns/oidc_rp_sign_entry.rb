@@ -30,8 +30,9 @@ module OidcRpSignEntry
     true
   end
 
+  # An authenticated browser is refused both the neutral page and the start; a signed-in session has
+  # no Sign to display (adr/sign-neutral-entry-and-logout-target-authorization.md, 2026-11-03).
   def reject_authenticated_rp_start!
-    return unless request.post?
     return unless logged_in?
 
     response.set_header("Cache-Control", "no-store")

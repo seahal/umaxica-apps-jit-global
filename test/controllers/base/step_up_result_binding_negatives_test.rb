@@ -36,8 +36,9 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
              actor.operator_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
           end
         requirement = StepUpRequirement.new(
-          scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-          phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
+          scope: "settings_passkey", purpose: "reauthentication", step_up_required: true,
+          allowed_methods: [:passkey],
+          phishing_resistant_required: true, user_verification_required: true, full_reauthentication_required: true,
           audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
           require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id,
           resource_ref: "original-resource", tenant_ref: "original-tenant",
@@ -53,10 +54,10 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
         binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
         binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
         BaseAuthAdmissionCoordinator.consume_entry_reference!(
-          reference: admission.reference, surface:, expected_intent: "step_up", binding:, raw_auth_sid: sid,
+          reference: admission.reference, surface:, expected_intent: "reauthentication", binding:, raw_auth_sid: sid,
         )
         ceremony, = ceremony_model.rotate_and_admit!(
-          admission_purpose: "step_up_handoff", previous_raw_sid: sid,
+          admission_purpose: "reauthentication_handoff", previous_raw_sid: sid,
           step_up_ceremony_transaction_ref: transaction.transaction_id,
         )
         binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
@@ -69,12 +70,19 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
         before = transaction.reload.attributes
         token_before = token.reload.attributes
         ceremony_before = ceremony.reload.attributes
+        changed_attributes = requirement.to_h.merge(field => replacement)
+        if %i(purpose allowed_methods).include?(field)
+          changed_attributes.merge!(
+            purpose: "step_up", phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false,
+          )
+        end
         changed = StepUpRequirement.new(
           step_up_required: true,
-          phishing_resistant_required: false,
-          user_verification_required: false,
-          full_reauthentication_required: false,
-          **requirement.to_h.merge(field => replacement),
+          phishing_resistant_required: requirement.phishing_resistant_required?,
+          user_verification_required: requirement.user_verification_required?,
+          full_reauthentication_required: requirement.full_reauthentication_required?,
+          **changed_attributes,
         )
 
         assert_raises(IdentityStepUpCeremonyContract::Error) do
@@ -91,9 +99,11 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
         IdentityStepUpCeremonyFreshnessCommitter.call!(
           actor:, token:, transaction:, requirement:, result_reference: result.reference,
         )
+        replacement_token_id = token.device_session_record!.reload.current_refresh_token_id
+        replacement_token = token.class.find(replacement_token_id)
 
         assert_equal "consumed", transaction.reload.status
-        assert_equal transaction.verified_at, token.reload.last_step_up_at
+        assert_equal transaction.verified_at, replacement_token.last_step_up_at
         assert_predicate ceremony.reload, :completed?
       end
     end

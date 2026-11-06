@@ -25,6 +25,7 @@ module Base
       include ::Session
       include ::PreferenceGlobal
       include ::ComAnonymousActorContext
+      include ::BasePreferenceActorProjection
 
       include ::SignErrorResponses
       include ::Finisher
@@ -53,6 +54,7 @@ module Base
       before_action :set_preferences_cookie
       before_action :hydrate_anonymous_preferences
       before_action :repair_anonymous_display_cookies
+      before_action :hydrate_base_preference_actor_state
       before_action :resolve_param_context
       before_action :set_region
       before_action :apply_localization_preferences
@@ -130,9 +132,9 @@ module Base
             next unless @preferences.issuance_active_at?(now: now)
             next unless now < expires_at
 
-            snapshot = build_anonymous_com_preferences_payload(@preferences)
+            snapshot = build_preferences_payload(@preferences)
             raise PreferenceBase::ResolutionError, "invalid display preference snapshot" unless
-              SecurityJwtPreferenceTokenCodec.valid_anonymous_display_snapshot?(snapshot)
+              SecurityJwtPreferenceTokenCodec.valid_display_snapshot?(snapshot)
           end
         end
         return unless snapshot
@@ -148,7 +150,7 @@ module Base
 
       def log_invalid_display_cookies(language, experience, signed)
         invalid_language = language.present? &&
-          !SecurityJwtPreferenceTokenCodec.valid_anonymous_display_snapshot?(signed.merge("language" => language))
+          !SecurityJwtPreferenceTokenCodec.valid_display_snapshot?(signed.merge("language" => language))
         invalid_experience = experience.present? &&
           !valid_anonymous_experience_shape?(experience, signed.fetch("language"))
         return unless invalid_language || invalid_experience
@@ -158,12 +160,12 @@ module Base
 
       def valid_anonymous_experience_shape?(value, language)
         return false unless value.is_a?(String)
-        return false if value.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+        return false if value.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
 
         parsed = JSON.parse(value, allow_duplicate_key: false)
         return false unless parsed.is_a?(Hash) && !parsed.key?("language")
 
-        SecurityJwtPreferenceTokenCodec.valid_anonymous_display_snapshot?(parsed.merge("language" => language))
+        SecurityJwtPreferenceTokenCodec.valid_display_snapshot?(parsed.merge("language" => language))
       rescue JSON::ParserError
         false
       end

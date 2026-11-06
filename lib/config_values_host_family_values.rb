@@ -107,142 +107,58 @@ class << ConfigValues::HostFamilyValues
     )
   end
 
-  def development_host(production, host)
-    production ? nil : host
-  end
-
   def host_family_primary_origins(env:, production:)
     {
-      acme_service: origin(
-        env, "BASE_SERVICE_URL", development_host(production, "base.app.localhost"),
-        production: production,
-      ),
-      acme_corporate: origin(
-        env, "BASE_CORPORATE_URL", development_host(production, "base.com.localhost"), production: production,
-      ),
-      acme_staff: origin(
-        env, "BASE_STAFF_URL", development_host(production, "base.org.localhost"),
-        production: production,
-      ),
-      sign_service: origin(
-        env, auth_key(env, "SERVICE"), development_host(production, "sign.app.localhost"), production: production,
-      ),
-      sign_corporate: origin(
-        env, auth_key(env, "CORPORATE"), development_host(production, "sign.com.localhost"), production: production,
-      ),
-      sign_staff: origin(
-        env, auth_key(env, "STAFF"), development_host(production, "sign.org.localhost"), production: production,
-      ),
-      core_service: origin(
-        env, core_key(env, "SERVICE"), development_host(production, "jp.umaxica.app"), production: production,
-      ),
-      core_corporate: origin(
-        env, core_key(env, "CORPORATE"), development_host(production, "jp.umaxica.com"), production: production,
-      ),
-      core_staff: origin(
-        env, core_key(env, "STAFF"), development_host(production, "jp.umaxica.org"),
-        production: production,
-      ),
-      base_service: origin(
-        env, base_key(env, "SERVICE"), development_host(production, "www.umaxica.app"), production: production,
-      ),
-      base_corporate: origin(
-        env, base_key(env, "CORPORATE"), development_host(production, "www.umaxica.com"), production: production,
-      ),
-      base_staff: origin(
-        env, base_key(env, "STAFF"), development_host(production, "www.umaxica.org"), production: production,
-      ),
-      visa_service: origin(
-        env, visa_key(env, "SERVICE"), development_host(production, "visa.app.localhost"),
-        production: production,
-      ),
-      visa_corporate: origin(
-        env, visa_key(env, "CORPORATE"), development_host(production, "visa.com.localhost"),
-        production: production,
-      ),
-      visa_staff: origin(
-        env, visa_key(env, "STAFF"), development_host(production, "visa.org.localhost"),
-        production: production,
-      ),
+      acme_service: origin(env, acme_key(env, "SERVICE"), production: production),
+      acme_corporate: origin(env, acme_key(env, "CORPORATE"), production: production),
+      acme_staff: origin(env, acme_key(env, "STAFF"), production: production),
+      sign_service: origin(env, auth_key(env, "SERVICE"), production: production),
+      sign_corporate: origin(env, auth_key(env, "CORPORATE"), production: production),
+      sign_staff: origin(env, auth_key(env, "STAFF"), production: production),
+      core_service: origin(env, core_key(env, "SERVICE"), production: production),
+      core_corporate: origin(env, core_key(env, "CORPORATE"), production: production),
+      core_staff: origin(env, core_key(env, "STAFF"), production: production),
+      base_service: origin(env, base_key(env, "SERVICE"), production: production),
+      base_corporate: origin(env, base_key(env, "CORPORATE"), production: production),
+      base_staff: origin(env, base_key(env, "STAFF"), production: production),
+      visa_service: origin(env, visa_key(env, "SERVICE"), production: production),
+      visa_corporate: origin(env, visa_key(env, "CORPORATE"), production: production),
+      visa_staff: origin(env, visa_key(env, "STAFF"), production: production),
     }
   end
 
   def host_family_secondary_origins(env:, production:)
     {
-      warp_service: origin(
-        env, warp_key(env, "SERVICE"), development_host(production, "www-jp.umaxica.app"), production: production,
-      ),
-      warp_corporate: origin(
-        env, warp_key(env, "CORPORATE"), development_host(production, "www-jp.umaxica.com"), production: production,
-      ),
-      warp_staff: origin(
-        env, warp_key(env, "STAFF"), development_host(production, "www-jp.umaxica.org"), production: production,
-      ),
-      palm_service: origin(
-        env, "PALM_SERVICE_URL", development_host(production, "palm-jp.umaxica.app"), production: production,
-      ),
+      warp_service: origin(env, warp_key(env, "SERVICE"), production: production),
+      warp_corporate: origin(env, warp_key(env, "CORPORATE"), production: production),
+      warp_staff: origin(env, warp_key(env, "STAFF"), production: production),
+      palm_service: origin(env, palm_key(env), production: production),
       tech_staff: required_origin(env, "PUBLIC_TECH_STAFF_URL", production: production),
-      help_service: origin(
-        env, "HELP_SERVICE_URL", development_host(production, "help.app.localhost"), production: production,
-      ),
-      help_corporate: origin(
-        env, "HELP_CORPORATE_URL", development_host(production, "help.com.localhost"), production: production,
-      ),
-      help_staff: origin(
-        env, "HELP_STAFF_URL", development_host(production, "help.org.localhost"),
-        production: production,
-      ),
-      info_service: origin(
-        env, "INFO_SERVICE_URL", development_host(production, "info.app.localhost"), production: production,
-      ),
-      info_corporate: origin(
-        env, "INFO_CORPORATE_URL", development_host(production, "info.com.localhost"), production: production,
-      ),
-      info_staff: origin(
-        env, "INFO_STAFF_URL", development_host(production, "info.org.localhost"),
-        production: production,
-      ),
+      help_service: origin(env, help_key(env, "SERVICE"), production: production),
+      help_corporate: origin(env, help_key(env, "CORPORATE"), production: production),
+      help_staff: origin(env, help_key(env, "STAFF"), production: production),
+      info_service: origin(env, info_key(env, "SERVICE"), production: production),
+      info_corporate: origin(env, info_key(env, "CORPORATE"), production: production),
+      info_staff: origin(env, info_key(env, "STAFF"), production: production),
     }.merge(host_family_content_origins(env: env, production: production))
       .merge(host_family_utility_origins(env: env, production: production))
   end
 
   def host_family_content_origins(env:, production:)
     {
-      docs_service: origin(
-        env, "PRIVATE_DOCS_SERVICE_URL", development_host(production, "docs.app.localhost"),
-        production: production,
-      ),
-      docs_corporate: origin(
-        env, "PRIVATE_DOCS_CORPORATE_URL", development_host(production, "docs.com.localhost"),
-        production: production,
-      ),
-      docs_staff: origin(
-        env, "PRIVATE_DOCS_STAFF_URL", development_host(production, "docs.org.localhost"),
-        production: production,
-      ),
-      news_service: origin(
-        env, "PRIVATE_NEWS_SERVICE_URL", development_host(production, "news.app.localhost"),
-        production: production,
-      ),
-      news_corporate: origin(
-        env, "PRIVATE_NEWS_CORPORATE_URL", development_host(production, "news.com.localhost"),
-        production: production,
-      ),
-      news_staff: origin(
-        env, "PRIVATE_NEWS_STAFF_URL", development_host(production, "news.org.localhost"),
-        production: production,
-      ),
+      docs_service: origin(env, "PRIVATE_DOCS_SERVICE_URL", production: production),
+      docs_corporate: origin(env, "PRIVATE_DOCS_CORPORATE_URL", production: production),
+      docs_staff: origin(env, "PRIVATE_DOCS_STAFF_URL", production: production),
+      news_service: origin(env, "PRIVATE_NEWS_SERVICE_URL", production: production),
+      news_corporate: origin(env, "PRIVATE_NEWS_CORPORATE_URL", production: production),
+      news_staff: origin(env, "PRIVATE_NEWS_STAFF_URL", production: production),
     }
   end
 
   def host_family_utility_origins(env:, production:)
     {
-      guid_service: origin(
-        env, guid_key(env), development_host(production, "guid.net.localhost"), production: production,
-      ),
-      edit_staff: origin(
-        env, edit_key(env), development_host(production, "edit.org.localhost"), production: production,
-      ),
+      guid_service: origin(env, guid_key(env), production: production),
+      edit_staff: origin(env, edit_key(env), production: production),
     }
   end
 
@@ -253,6 +169,32 @@ class << ConfigValues::HostFamilyValues
     else
       "PUBLIC_BASE_#{surface}_URL"
     end
+  end
+
+  # ACME is the internal Base back-channel origin. Prefer its explicit private
+  # host; retain the existing surface key for deployments that still provide it.
+  def acme_key(env, surface)
+    private_key = "PRIVATE_BASE_#{surface}_URL"
+    env.key?(private_key) ? private_key : "BASE_#{surface}_URL"
+  end
+
+  # Palm is a browser-facing RP. Prefer its public host; retain the existing
+  # service key for deployments that still provide it.
+  def palm_key(env)
+    public_key = "PUBLIC_PALM_SERVICE_URL"
+    env.key?(public_key) ? public_key : "PALM_SERVICE_URL"
+  end
+
+  # Help and Info origins use the private ingress in development. The old
+  # unprefixed keys remain accepted when they are the configured input.
+  def help_key(env, surface)
+    private_key = "PRIVATE_HELP_#{surface}_URL"
+    env.key?(private_key) ? private_key : "HELP_#{surface}_URL"
+  end
+
+  def info_key(env, surface)
+    private_key = "PRIVATE_INFO_#{surface}_URL"
+    env.key?(private_key) ? private_key : "INFO_#{surface}_URL"
   end
 
   # Resolves the Visa OP origin for a realm. Deployments may use the private
@@ -273,11 +215,9 @@ class << ConfigValues::HostFamilyValues
 
   # Resolves the ENV key for an auth surface (service/corporate/staff).
   #
-  # Deployments publish this family as PUBLIC_AUTH_*_URL. Without this fallback the
-  # sign origins kept their development localhost defaults outside
-  # RAILS_ENV=production, so the CSP form-action allowlist advertised
-  # sign.app.localhost instead of the real Auth origin and blocked the social
-  # ceremony handoff back to Auth.
+  # Deployments publish this family as PUBLIC_AUTH_*_URL. Selecting that key when
+  # the legacy AUTH_*_URL input is absent keeps the CSP form-action allowlist aligned
+  # with the deployed Auth origin, including outside RAILS_ENV=production.
   def auth_key(env, surface)
     if env.key?("AUTH_#{surface}_URL")
       "AUTH_#{surface}_URL"
@@ -311,8 +251,8 @@ class << ConfigValues::HostFamilyValues
     env.key?("EDIT_STAFF_URL") ? "EDIT_STAFF_URL" : "PUBLIC_EDIT_STAFF_URL"
   end
 
-  def origin(env, key, fallback, production:)
-    raw = production ? env.fetch(key) : env.fetch(key, fallback)
+  def origin(env, key, production:)
+    raw = env.fetch(key)
     allow_localhost = !production
     uri = raw.to_s.match?(%r{\Ahttps?://}) ? raw : "https://#{raw}"
     ConfigValues.build(uri, allow_localhost: allow_localhost)
@@ -320,7 +260,7 @@ class << ConfigValues::HostFamilyValues
     raise KeyError, "Missing required ENV key: #{key}"
   end
 
-  # Tech's host has no development-only fallback; its value belongs in each environment.
+  # Tech's host is required in every environment.
   def required_origin(env, key, production:)
     raw = env.fetch(key)
     allow_localhost = !production
@@ -331,6 +271,6 @@ class << ConfigValues::HostFamilyValues
   end
 
   private :host_family_origins, :host_family_primary_origins, :host_family_secondary_origins,
-          :host_family_content_origins, :host_family_utility_origins, :guid_key, :edit_key,
-          :required_origin, :visa_key
+          :host_family_content_origins, :host_family_utility_origins, :acme_key, :guid_key, :edit_key,
+          :help_key, :info_key, :palm_key, :required_origin, :visa_key
 end

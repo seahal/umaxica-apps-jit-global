@@ -143,6 +143,8 @@ class OmniauthAppleStrategyContractTest < ActiveSupport::TestCase
       "",
       authorized_client_ids: ["contract-client"],
       pkce: true,
+      # The client secret is a JWT signed with this key; OpenSSL 3 refuses an empty key.
+      team_id: "CONTRACTTEAM", key_id: "CONTRACTKEY", pem: OpenSSL::PKey::EC.generate("prime256v1").to_pem,
     )
     env = Rack::MockRequest.env_for("/social/apple")
     env["rack.session"] = {}

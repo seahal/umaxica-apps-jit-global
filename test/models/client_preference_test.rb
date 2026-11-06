@@ -7,7 +7,7 @@ class ClientPreferenceTest < ActiveSupport::TestCase
   test "belongs to the owning client and retains one child for each display field" do
     preference = client_preferences(:one)
 
-    assert_same clients(:one), preference.client
+    assert_equal clients(:one), preference.client
     assert_predicate preference.client_preference_language, :present?
     assert_predicate preference.client_preference_timezone, :present?
     assert_predicate preference.client_preference_region, :present?
@@ -40,12 +40,12 @@ class ClientPreferenceTest < ActiveSupport::TestCase
 
   test "explicit display snapshot reads marked child values and excludes region itself" do
     preference = client_preferences(:one)
-    preference.update!(explicit_fields: %w(language theme region adult_content_gate))
+    preference.update!(explicit_fields: %w(language theme region))
     preference.client_preference_language.update!(option_id: ClientPreferenceLanguageOption::EN)
     preference.client_preference_theme.update!(option_id: ClientPreferenceThemeOption::DARK)
 
-    assert_equal({ "language" => "en", "theme" => "dark" }, preference.explicit_display_snapshot)
-    assert_equal %w(language theme region adult_content_gate), preference.reload.explicit_fields
+    assert_equal({ "language" => "en", "theme" => "dark" }, preference.explicit_values)
+    assert_equal %w(language theme region), preference.reload.explicit_fields
   end
 
   test "explicit display snapshot fails when a marked child is missing" do
@@ -54,16 +54,16 @@ class ClientPreferenceTest < ActiveSupport::TestCase
     preference.client_preference_language.destroy!
     preference.reload
 
-    assert_raises(ActiveRecord::RecordNotFound) { preference.explicit_display_snapshot }
+    assert_raises(ActiveRecord::RecordNotFound) { preference.explicit_values }
   end
 
   test "client exposes its current actor preference" do
     client = clients(:one)
 
-    assert_same client_preferences(:one), client.client_preference
+    assert_equal client_preferences(:one), client.client_preference
   end
 
   test "public_id is a fixed 21-character NanoID" do
-    assert_public_id_fixed_length(ClientPreference)
+    assert_public_id_fixed_length(::ClientPreference)
   end
 end

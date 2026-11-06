@@ -32,8 +32,15 @@ module Auth
 
                 begin
                   result = issue_otp_ceremony!
-                rescue ActiveJob::EnqueueError
+                rescue ActiveJob::EnqueueError, EmailSignUpOtpDeliveryIssuer::DeliveryUnavailable
                   return render_signup_email_delivery_unavailable
+                end
+                if result.status == :registered_destination
+                  return redirect_to(
+                    auth_app_sign_up_check_email_otp_path(
+                      **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param,
+                    ),
+                  )
                 end
                 return render_otp_ceremony_result(result) unless result.success?
 

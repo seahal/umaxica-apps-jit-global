@@ -51,7 +51,8 @@ module Sign
       end
 
       test "#{surface} ceremony replacement preserves Source failures and uses bounded explicit database time" do
-        telephone_model, flow_model, transaction_model = [ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction]
+        telephone_model, flow_model, transaction_model = [ClientTelephone, ClientSignUpFlow,
+ClientTelephoneCeremonyTransaction,]
         candidate = telephone_model.new(raw_number: "+12025550165", confirm_policy: true, confirm_using_mfa: true)
         TelephoneSignUpCandidateCreator.call(telephone: candidate)
         owner = candidate.user

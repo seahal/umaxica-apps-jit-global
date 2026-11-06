@@ -87,7 +87,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "authenticated regional Home returns 404 without redirect" do
+  test "authenticated regional Home returns 403 without redirect" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     http_headers_4 =
       begin
@@ -136,6 +136,32 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            if rp_client.client_id == RpBaseAppSession::CLIENT_ID && rp_token.selected_actor_context?
+              RpBaseAppRecord.connected_to(role: :writing) do
+                RpBaseAppSessionSelection.create!(
+                  rp_session_id: rp_local_session.id,
+                  account_public_id: rp_token.selected_account_public_id,
+                  organization_public_id: rp_token.selected_collective_public_id,
+                  organization_unit_public_id: rp_token.selected_collective_unit_public_id,
+                  avatar_public_id: rp_token.selected_avatar_public_id,
+                  selected_at: rp_now,
+                )
+              end
+            end
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -144,6 +170,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -152,11 +179,11 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
       end
     get base_app_root_url(ri: "jp"), headers: http_headers_4
 
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil response.location
   end
 
-  test "authenticated Home without region returns 404 after region canonicalization" do
+  test "authenticated Home without region returns 403 after region canonicalization" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     http_headers_3 =
       begin
@@ -205,6 +232,32 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            if rp_client.client_id == RpBaseAppSession::CLIENT_ID && rp_token.selected_actor_context?
+              RpBaseAppRecord.connected_to(role: :writing) do
+                RpBaseAppSessionSelection.create!(
+                  rp_session_id: rp_local_session.id,
+                  account_public_id: rp_token.selected_account_public_id,
+                  organization_public_id: rp_token.selected_collective_public_id,
+                  organization_unit_public_id: rp_token.selected_collective_unit_public_id,
+                  avatar_public_id: rp_token.selected_avatar_public_id,
+                  selected_at: rp_now,
+                )
+              end
+            end
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -213,6 +266,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -225,10 +279,10 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to base_app_root_url(ri: "jp")
     follow_redirect!(headers: http_headers_3)
 
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil response.location
   end
-  test "authenticated Home answers 404 as a rendered response, not a raised exception" do
+  test "authenticated Home answers 403 as a rendered response, not a raised exception" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     controller_exception =
@@ -281,6 +335,32 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
                                            resource_type: "client",
                                          ), client_id: rp_client.client_id,
                 )
+                rp_local_enrollment = RpCallbackCommitter.call(
+                  cell: RpCellBinding.for_client(rp_client.client_id),
+                  issuer: OidcIssuer.for_client(rp_client),
+                  subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+                  sid: rp_session.public_id,
+                  absolute_expires_at: rp_now + 10.minutes,
+                )
+                unless rp_local_enrollment.success?
+                  raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+                end
+
+                rp_local_session = rp_local_enrollment.session
+                if rp_client.client_id == RpBaseAppSession::CLIENT_ID && rp_token.selected_actor_context?
+                  RpBaseAppRecord.connected_to(role: :writing) do
+                    RpBaseAppSessionSelection.create!(
+                      rp_session_id: rp_local_session.id,
+                      account_public_id: rp_token.selected_account_public_id,
+                      organization_public_id: rp_token.selected_collective_public_id,
+                      organization_unit_public_id: rp_token.selected_collective_unit_public_id,
+                      avatar_public_id: rp_token.selected_avatar_public_id,
+                      selected_at: rp_now,
+                    )
+                  end
+                end
+                @base_browser_rp_session_public_ids ||= {}
+                @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
                 @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
               end
               if @base_browser_rp_credentials[rp_key]
@@ -289,6 +369,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
                   rp_headers.fetch("Cookie"),
                   "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                   "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                  "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
                 ].join("; ")
                 rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
               end
@@ -300,13 +381,13 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
         )
       end
 
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil controller_exception
     assert_nil response.location
     assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "authenticated Home answers a JSON request with the public JSON 404 document" do
+  test "authenticated Home answers a JSON request with the JSON 403 document" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
@@ -357,6 +438,32 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            if rp_client.client_id == RpBaseAppSession::CLIENT_ID && rp_token.selected_actor_context?
+              RpBaseAppRecord.connected_to(role: :writing) do
+                RpBaseAppSessionSelection.create!(
+                  rp_session_id: rp_local_session.id,
+                  account_public_id: rp_token.selected_account_public_id,
+                  organization_public_id: rp_token.selected_collective_public_id,
+                  organization_unit_public_id: rp_token.selected_collective_unit_public_id,
+                  avatar_public_id: rp_token.selected_avatar_public_id,
+                  selected_at: rp_now,
+                )
+              end
+            end
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -365,6 +472,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -373,12 +481,12 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
       end
     get base_app_root_url(ri: "jp", format: :json), headers: http_headers_1
 
-    assert_response :not_found
-    assert_equal({ "status" => 404, "error" => "Not Found" }, response.parsed_body)
+    assert_response :forbidden
+    assert_equal({ "status" => 403, "error" => "Forbidden" }, response.parsed_body)
     assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "authenticated Home answers an HTML request with the public 404 page" do
+  test "authenticated Home answers an HTML request with the plain 403 text" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
@@ -429,6 +537,32 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            if rp_client.client_id == RpBaseAppSession::CLIENT_ID && rp_token.selected_actor_context?
+              RpBaseAppRecord.connected_to(role: :writing) do
+                RpBaseAppSessionSelection.create!(
+                  rp_session_id: rp_local_session.id,
+                  account_public_id: rp_token.selected_account_public_id,
+                  organization_public_id: rp_token.selected_collective_public_id,
+                  organization_unit_public_id: rp_token.selected_collective_unit_public_id,
+                  avatar_public_id: rp_token.selected_avatar_public_id,
+                  selected_at: rp_now,
+                )
+              end
+            end
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -437,6 +571,7 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -445,9 +580,9 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
       end
     get base_app_root_url(ri: "jp"), headers: http_headers_0
 
-    assert_response :not_found
-    assert_equal "text/html", response.media_type
-    assert_equal Rails.public_path.join("404.html").read, response.body
+    assert_response :forbidden
+    assert_equal "text/plain", response.media_type
+    assert_equal I18n.t("errors.messages.not_authorized"), response.body
   end
 
   # The anonymous Dashboard contract supersedes the former rendered 404.
@@ -487,7 +622,6 @@ class Base::App::RootsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -514,24 +648,6 @@ class Base::App::RootsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

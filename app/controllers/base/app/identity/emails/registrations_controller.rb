@@ -16,6 +16,7 @@ module Base
           include VerificationClient
           include StepUpCeremonyLogging
           include BaseStepUpTransactionMarker
+          include EmailOtpResponseTiming
 
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
@@ -24,6 +25,7 @@ module Base
           before_action :authorize_email_registration!, only: %i(new create edit update)
           step_up only: %i(new create edit update), bootstrap: true
           before_action :require_email_bootstrap_when_unconfigured!, only: %i(new create edit update)
+          around_action :with_otp_issue_response_timing, only: %i(create resend)
 
           def new = super
 
@@ -31,7 +33,11 @@ module Base
 
           def create = super
 
-          def update = super
+          def update
+            super
+          rescue EmailCredentialRegistrationOtpFinalizer::DependencyFailure
+            head :service_unavailable
+          end
 
           def resend = super
 
@@ -51,9 +57,11 @@ module Base
             bootstrap_transaction = open_email_bootstrap_transaction
             issued = EmailCredentialRegistrationOtpIssuer.call(
               actor: current_client, token: current_session_token, email: @user_email,
-              browser_nonce: bootstrap_transaction ? require_base_admission_browser_nonce! : ensure_base_admission_browser_nonce!,
+              browser_nonce: bootstrap_transaction ?
+                require_base_admission_browser_nonce! : ensure_base_admission_browser_nonce!,
               bootstrap_transaction: bootstrap_transaction,
             )
+            return true if issued.status == :registered_destination
             return false unless issued.success?
 
             session[:email_registration_transaction_ref] = issued.transaction.transaction_id
@@ -76,6 +84,7 @@ module Base
               transaction: registration_email_otp_transaction,
               browser_nonce: base_admission_browser_nonce, code: code,
               requirement: step_up_requirement(scope: verification_scope),
+              step_up_evidence: bootstrap ? nil : current_step_up_evidence,
               bootstrap_transaction: bootstrap,
             )
             unless status == :finalized
@@ -107,7 +116,7 @@ module Base
             flow = registration_email_otp_transaction
             return false unless @user_email && bootstrap && flow
 
-            EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_recoverable?(
               actor: current_client, actor_context: current_actor.with(surface: :base),
               token: current_session_token, email: @user_email, transaction: flow,
               browser_nonce: base_admission_browser_nonce,

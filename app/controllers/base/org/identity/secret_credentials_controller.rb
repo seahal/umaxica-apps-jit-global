@@ -17,6 +17,8 @@ module Base
 
         AUTHENTICATION_MODE = :private
 
+        before_action :refuse_root_token_feature_in_rp_cell!
+
         step_up only: %i(new create), bootstrap: true
         step_up only: %i(edit update destroy)
         before_action :set_no_store_for_secret_credential_pages
@@ -102,7 +104,7 @@ module Base
             secret_credential: @secret_credential,
             params: secret_credential_params,
             step_up_token: current_session_token,
-            step_up_requirement: step_up_requirement(scope: "settings_secret_credential"),
+            step_up_evidence: current_step_up_evidence,
             request: request,
           )
           redirect_to(
@@ -125,7 +127,7 @@ module Base
           OperatorSecretCredentialsDestroy.call(
             actor: current_operator, secret_credential: @secret_credential,
             step_up_token: current_session_token,
-            step_up_requirement: step_up_requirement(scope: "settings_secret_credential"),
+            step_up_evidence: current_step_up_evidence,
             request: request,
           )
           redirect_to(base_org_identity_secrets_path(ri: params[:ri]), status: :see_other)

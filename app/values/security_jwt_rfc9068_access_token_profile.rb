@@ -2,10 +2,9 @@
 # frozen_string_literal: true
 
 # Shared RFC 9068 access-token header and claim-type policy for first-party
-# auth_access and preference_access tokens (and OIDC access tokens that share
-# the auth codec).
+# auth_access tokens and OIDC access tokens that share the auth codec.
 #
-# UMAXICA follows RFC 9068 token structure, claims, semantics, and validation
+# UMAXICA Auth access tokens follow RFC 9068 token structure, claims, semantics, and validation
 # with one documented interoperability deviation: ES384 is the only supported
 # signing algorithm, and RS256 is intentionally not implemented.
 module SecurityJwtRfc9068AccessTokenProfile

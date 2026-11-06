@@ -26,26 +26,25 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
     )
     @auth_headers = as_staff_headers(@staff, host: @auth_host, session_public_id: @token.public_id)
     @base_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @token.public_id)
-    client = OidcClientRegistry.find!("base-org-ww")
+    @rp_client = OidcClientRegistry.find!("base-org-ww")
     rp = OpOrgGrant.create!(
       authentication_epoch: 0,
-      operator_token: @token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
+      operator_token: @token, oidc_client_id: @rp_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,
     )
+    @rp = rp
+    @rp_refresh = rp.issue_refresh_token!
     access = AuthenticationTokenService.encode(
       @staff, host: @base_host, resource_type: "operator", session_public_id: @token.public_id,
               base_session_public_id: @token.public_id, oidc_sid: rp.public_id, oidc_jti: rp.oidc_jti,
-              expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
-              audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-              subject: OidcSubject.for(@staff, resource_type: "operator"), client_id: client.client_id,
+              expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(@rp_client),
+              audiences: [@rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@rp_client),
+              subject: OidcSubject.for(@staff, resource_type: "operator"), client_id: @rp_client.client_id,
     )
     cookie = [@base_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(
-                rp
-                                .issue_refresh_token!,
-              )}",].join("; ")
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(@rp_refresh)}",].join("; ")
     @base_headers = @base_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
   end
 
@@ -129,33 +128,42 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
 
   test "a real public passkey ceremony authorizes Base only after result consumption" do
     @token.rotate_refresh_token! unless @token.device_session.current_refresh_token_id
-    requirement = StepUpRequirement.new(
-      step_up_required: true, scope: "operator_lifecycle", allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      ttl: 15.minutes, purpose: "step_up", audience: "step_up:org", session_binding: @token.public_id,
-      token_binding: @token.public_id, require_session_binding: true, actor_ref: @staff.public_id,
-      resource_ref: nil, tenant_ref: nil,
+    oidc_params = {
+      response_type: "code",
+      client_id: @rp_client.client_id,
+      redirect_uri: @rp_client.redirect_uris_by_realm.fetch("operator").first,
+      scope: @rp.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("org-withdrawal-step-up"), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(
+      params: oidc_params, resource: @staff, resource_type: "operator",
     )
-    nonce = SecureRandom.urlsafe_base64(32)
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: @staff, token: @token, requirement: requirement, return_to: "/identity/withdrawal",
-      base_browser_nonce: nonce, base_token: @token,
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor: @staff, token: @token, client: @rp_client, params: oidc_params, validated_request:,
     )
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: issuance.reference)
+    ticket = issuance.ticket
+    context = issuance.context
+    authorization_transaction = issuance.authorization_transaction
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: issuance.entry_ref)
     attached, raw_sid = OperatorAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(
       base_token: @token, browser_digest: AuthAdmissionBinding.browser_digest(
-        surface: "org", entry_ref: issuance.reference, nonce: nonce,
+        surface: "org", entry_ref: issuance.entry_ref, nonce: authorization_transaction.login_challenge,
       ),
     )
     BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "org", expected_intent: "step_up", binding: binding,
+      reference: issuance.entry_ref, surface: "org", expected_intent: "step_up", binding: binding,
       raw_auth_sid: raw_sid,
     )
     admitted, admitted_sid = OperatorAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
-      step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+      step_up_ceremony_transaction_ref: ticket.transaction_id,
     )
     binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -197,23 +205,40 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
     post(form["action"], params: fields, headers: @auth_headers)
 
     assert_response :see_other
-    reference = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("result_ref")
-    BaseAuthAdmissionCoordinator.validate_result_browser_binding!(
-      transaction: issuance.transaction, surface: "org", base_browser_nonce: nonce, base_token: @token,
+    result_reference = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("result_ref")
+    result_payload = BaseAuthAdmissionCoordinator.read_result_reference!(
+      reference: result_reference, surface: "org", transaction_ref: ticket.transaction_id,
+      expected_intent: "step_up",
     )
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: @staff, token: @token, transaction: issuance.transaction.reload,
-      requirement: requirement, result_reference: reference,
+    outcome = OidcStepUpAuthorizationCompletionCommitter.call!(
+      surface: "org", actor: @staff, token: @token, context:, ticket: ticket.reload,
+      authorization_transaction: authorization_transaction.reload, admission_binding: binding.reload,
+      result_payload:,
     )
 
-    assert_not_nil @token.reload.last_step_up_at
-    assert_predicate issuance.transaction.reload, :consumed?
+    assert_equal :completed, outcome
+    assert_nil @token.reload.last_step_up_at
+    assert_predicate ticket.reload, :consumed?
     assert_predicate admitted.reload, :completed?
-    decision = StepUpResolver.call(token: @token, requirement: requirement)
-
-    assert_predicate decision, :satisfied?
-    # Operators are ADVANCED: the 5 minute maximum caps the requirement TTL.
-    assert_equal @token.last_step_up_at + StepUpResolver::ADVANCED_MAXIMUM_TTL, decision.expires_at
+    assert_predicate authorization_transaction.reload, :authenticated?
+    @rp.update!(
+      oidc_auth_time: ticket.verified_at, oidc_acr: OidcAuthorizeRequestResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), oidc_jti: SecureRandom.uuid,
+    )
+    access = AuthenticationTokenService.encode(
+      @staff, host: @base_host, resource_type: "operator", session_public_id: @token.public_id,
+              base_session_public_id: @token.public_id, oidc_sid: @rp.public_id, oidc_jti: @rp.oidc_jti,
+              expires_at: OpOrgGrant.database_now + 10.minutes, scopes: %w(openid profile), acr: @rp.oidc_acr,
+              amr: ["passkey"], auth_time: @rp.oidc_auth_time, issuer: OidcIssuer.for_client(@rp_client),
+              audiences: [@rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@rp_client),
+              subject: OidcSubject.for(@staff, resource_type: "operator"), client_id: @rp_client.client_id,
+    )
+    base_cookie =
+      @base_headers.fetch("Cookie").split(/;\s*/).reject do |pair|
+        pair.start_with?("#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=")
+      end
+    base_cookie << "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}"
+    @base_headers = @base_headers.merge("Cookie" => base_cookie.join("; "), "HTTP_COOKIE" => base_cookie.join("; "))
     get(base_org_identity_withdrawal_url(ri: "jp", host: @base_host), headers: @base_headers)
 
     assert_response :success

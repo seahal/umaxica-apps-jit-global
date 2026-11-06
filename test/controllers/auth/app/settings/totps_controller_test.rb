@@ -6,6 +6,9 @@ require "test_helper"
 require "minitest/mock"
 
 class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
+  # An admission reference is accepted only on a top-level document navigation.
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
   fixtures :clients,
            :client_statuses,
            :client_token_statuses,
@@ -176,7 +179,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     https!
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -268,7 +271,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     https!
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -367,15 +370,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -383,7 +385,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
     first_ref = candidate.ref
     first_secret_digest = Digest::SHA256.hexdigest(candidate.private_key)
-    delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+    delete auth_app_settings_totps_enrollment_path(ri: "jp")
 
     assert_response :see_other
     gateway = URI.parse(response.location)
@@ -396,7 +398,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil session[:private_key]
     assert_nil token.reload.last_step_up_at
     assert_no_difference("IdentityTotpCeremonyCandidate.count") do
-      post auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+      post auth_app_settings_totps_enrollment_path(ri: "jp")
 
       assert_response :bad_request
     end
@@ -439,13 +441,10 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"),
-         params: { entry_ref: replacement.reference, authenticity_token: csrf }
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference), headers: NAVIGATION_HEADERS
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
     follow_redirect!
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
     next_candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
@@ -513,15 +512,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -529,7 +527,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
     stale_ref = candidate.ref
     stale_code = ROTP::TOTP.new(candidate.private_key).now
-    delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+    delete auth_app_settings_totps_enrollment_path(ri: "jp")
 
     assert_response :see_other
     gateway = URI.parse(response.location)
@@ -580,19 +578,16 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"),
-         params: { entry_ref: replacement.reference, authenticity_token: csrf }
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference), headers: NAVIGATION_HEADERS
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
     follow_redirect!
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
     current_ref = props.fetch("form").fetch("enrollment_id")
     assert_no_difference("ClientTotpCredential.count") do
       post auth_app_settings_totps_path(ri: "jp"), params: {
-        authenticity_token: csrf, user_totp_credential: { enrollment_id: stale_ref, first_token: stale_code },
+        user_totp_credential: { enrollment_id: stale_ref, first_token: stale_code },
       }
     end
 
@@ -658,15 +653,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -674,7 +668,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
     code = ROTP::TOTP.new(candidate.private_key).now
     candidate_ref = candidate.ref
-    delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+    delete auth_app_settings_totps_enrollment_path(ri: "jp")
 
     assert_response :see_other
     gateway = URI.parse(response.location)
@@ -688,7 +682,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_no_difference("ClientTotpCredential.count") do
       post auth_app_settings_totps_path(ri: "jp"), params: {
-        authenticity_token: csrf, user_totp_credential: { enrollment_id: candidate_ref, first_token: code },
+        user_totp_credential: { enrollment_id: candidate_ref, first_token: code },
       }
     end
 
@@ -771,15 +765,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -854,9 +847,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -945,9 +937,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -966,7 +957,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       )
     end
     assert_no_difference("IdentityTotpCeremonyCandidate.count") do
-      post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+      post props.fetch("start").fetch("action")
 
       assert_response :unprocessable_content
     end
@@ -1030,15 +1021,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1107,15 +1097,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1129,7 +1118,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          :authenticity_token => csrf,
           :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
           "cf-turnstile-response" => "test-only",
         }
@@ -1141,7 +1129,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
-    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_app_settings_totps_handoff_path(ri: "jp")
     raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
@@ -1215,7 +1203,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         admission_issuance
       end
     https!
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -1317,15 +1305,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1338,7 +1325,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          :authenticity_token => csrf,
           :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
           "cf-turnstile-response" => "test-only",
         }
@@ -1350,7 +1336,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
-    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_app_settings_totps_handoff_path(ri: "jp")
     raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
@@ -1430,15 +1416,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1452,7 +1437,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          :authenticity_token => csrf,
           :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
           "cf-turnstile-response" => "test-only",
         }
@@ -1464,7 +1448,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
-    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_app_settings_totps_handoff_path(ri: "jp")
     raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
@@ -1536,15 +1520,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1558,7 +1541,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          authenticity_token: csrf,
           user_totp_credential: { enrollment_id: candidate.ref, first_token: incorrect },
         }
       end
@@ -1629,15 +1611,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1647,7 +1628,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.response = { "success" => true }
     assert_no_difference("ClientTotpCredential.count") do
       post props.fetch("form").fetch("action"), params: {
-        authenticity_token: csrf,
         user_totp_credential: { enrollment_id: candidate.ref, first_token: "", title: "" },
       }
     end
@@ -1718,15 +1698,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1741,7 +1720,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          :authenticity_token => csrf,
           :user_totp_credential => { enrollment_id: candidate.ref, first_token: code },
           "cf-turnstile-response" => "test-only",
         }
@@ -1815,15 +1793,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
-    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+    https!
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     get new_auth_app_settings_totp_path(ri: "jp")
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    post props.fetch("start").fetch("action")
 
     assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
@@ -1836,7 +1813,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       ClientStepUpCeremonyTransaction.stub(:database_now, now) do
         post props.fetch("form").fetch("action"), params: {
-          :authenticity_token => csrf,
           :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
           "cf-turnstile-response" => "test-only",
         }
@@ -1848,7 +1824,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
-    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    post auth_app_settings_totps_handoff_path(ri: "jp")
     raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do

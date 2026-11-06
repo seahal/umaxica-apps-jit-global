@@ -3,9 +3,8 @@
 
 require "test_helper"
 
-# Negative verification cases for the RFC 9068 access-token profile shared by
-# auth_access and preference access tokens. Each case re-signs an otherwise
-# valid token with one defect and asserts the verifier fails closed.
+# Negative verification cases for RFC 9068 auth access tokens. Each case
+# re-signs an otherwise valid token with one defect and asserts fail-closed behavior.
 class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
   AUTH_HOST = "example.com"
 
@@ -27,7 +26,9 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
                      jwt_issuer_id: "surface:AUTH_APP",
     )
     payload, header = auth_parts
-    preference_signed = JWT.encode(payload, PreferenceJwtConfiguration.private_key_for_active, "ES384", header)
+    preference_signed = JWT.encode(
+      payload, JitSecurityJwtRegistry.private_key_for("preference_app"), "ES384", header,
+    )
 
     assert_nil decode_auth(surface_token)
     assert_nil decode_auth(preference_signed)
@@ -89,44 +90,9 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
     assert_nil decode_auth(legacy)
   end
 
-  # --- preference access -----------------------------------------------------
-
-  test "preference access rejects every algorithm other than ES384" do
-    payload, header = preference_parts
-
-    foreign_keys.each do |alg, key|
-      token = JWT.encode(payload, key, alg, header.merge("alg" => alg))
-
-      assert_nil decode_preference(token), "#{alg} must be rejected"
-    end
-  end
-
-  test "preference access rejects expired, numeric-sub, and mismatched-sub tokens" do
-    assert_nil decode_preference(resign_preference { |p| p.merge("exp" => 1.hour.ago.to_i) })
-    assert_nil decode_preference(resign_preference { |p| p.merge("sub" => 42) })
-    assert_nil decode_preference(resign_preference { |p| p.merge("sub" => "someone-else") })
-    assert_nil decode_preference(resign_preference { |p| p.merge("scope" => "authenticated") })
-    assert_nil decode_preference(resign_preference { |p| p.merge("typ" => "preference-access-token") })
-  end
-
-  test "preference access rejects a sibling host and an audience that omits the host scope" do
-    token = resign_preference { |p| p }
-
-    assert_nil decode_preference(token, host: "evil.#{preference_host}.example")
-    assert_nil decode_preference(resign_preference { |p| p.merge("aud" => ["unrelated.localhost"]) })
-  end
-
-  test "preference extract_public_id does not fall back to sub" do
-    assert_nil PreferenceToken.extract_public_id({ "sub" => "pref-1" })
-  end
-
-  # --- environment isolation -------------------------------------------------
-
   test "local issuers are environment specific" do
     assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer
-    assert_equal "urn:umaxica:test:preference", PreferenceJwtConfiguration.issuer
     assert_nil decode_auth(resign_auth { |p| p.merge("iss" => "urn:umaxica:development:auth") })
-    assert_nil decode_preference(resign_preference { |p| p.merge("iss" => "urn:umaxica:development:preference") })
   end
 
   test "production boot validation rejects development and test issuers" do
@@ -135,26 +101,12 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
 
       assert_match(/AUTH_JWT_ISSUER must not include non-production identifiers/, error.message)
     end
-
-    with_env("AUTH_JWT_ISSUER" => "https://sign.umaxica.app") do
-      with_production do
-        error = assert_raises(ArgumentError) { PreferenceJwtConfiguration.validate! }
-
-        assert_match(/PREFERENCE_JWT_ISSUER must not include non-production identifiers/, error.message)
-      end
-    end
   end
 
   test "production boot validation accepts production identifiers" do
-    with_env(
-      "AUTH_JWT_ISSUER" => "https://sign.umaxica.app",
-      "PREFERENCE_JWT_ISSUER" => "https://sign.umaxica.app/preference",
-    ) do
+    with_env("AUTH_JWT_ISSUER" => "https://sign.umaxica.app") do
       with_production do
         assert AuthenticationJwtConfiguration.validate!
-        PreferenceJwtConfiguration.stub(:audiences_from_boot_config, %w(www.umaxica.app)) do
-          assert PreferenceJwtConfiguration.validate!
-        end
       end
     end
   end
@@ -209,27 +161,6 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
 
   def decode_auth(token)
     AuthenticationToken.decode(token, host: AUTH_HOST, resource_type: "client")
-  end
-
-  def preference_host
-    Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
-  end
-
-  def preference_parts
-    token = PreferenceToken.encode(
-      { "lx" => "ja" }, host: preference_host, preference_type: "AppPreference",
-                        public_id: "pref-public-id", jti: "pref-jti",
-    )
-    JWT.decode(token, nil, false)
-  end
-
-  def resign_preference
-    payload, header = preference_parts
-    JWT.encode(yield(payload), PreferenceJwtConfiguration.private_key_for_active, "ES384", header)
-  end
-
-  def decode_preference(token, host: preference_host)
-    PreferenceToken.decode(token, host: host)
   end
 
   def with_production(&)

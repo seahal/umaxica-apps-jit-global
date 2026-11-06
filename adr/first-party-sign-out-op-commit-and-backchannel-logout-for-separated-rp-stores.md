@@ -3,13 +3,13 @@
 ## Status
 
 Accepted (2026-10-16); **amended 2026-10-24 and implemented locally 2026-10-25; amended again
-2026-10-26 and implemented locally 2026-10-26/27** (see the last sections). Where the 2026-10-26 amendment and an
-earlier section disagree, the 2026-10-26 amendment wins. The 2026-10-22 owner decisions
-are recorded here as the current WU-39 documentation contract. It takes effect only for a
-first-party relying party that has been activated with its own session store under the OP/RP
-persistence separation (release R5). Until a client is so activated, and for every client during
-releases R1 to R4, `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` remains
-fully in force.
+2026-10-26 and implemented locally 2026-10-26/27; amended 2026-11-01 for D-59 RP-local logout** (see
+the last sections). The latest amendment governs where it disagrees with an earlier section. The
+2026-10-22 owner decisions are recorded here as the current WU-39 documentation contract. It takes
+effect only for a first-party relying party that has been activated with its own session store under
+the OP/RP persistence separation (release R5). Until a client is so activated, and for every client
+during releases R1 to R4, `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`
+remains fully in force.
 
 The direction is already a user decision: OP/RP persistence separation, and sign-out that succeeds
 when the OP revocation and its outbox commit, independent of any RP acknowledgement or cookie purge
@@ -124,8 +124,8 @@ shared-database ADR no longer holds for those cells.
   every RP page to OP availability and adds a call to every request. Rejected for ordinary
   authentication; narrow current-authority checks remain where a domain contract requires them.
 - **Synchronous BCL from the sign-out request.** Rejected for the reasons the earlier ADR gives:
-  sign-out would wait on the network and need partial-delivery states. *Superseded in part by the
-  2026-10-26 amendment:* a bounded first attempt is made from the request after COMMIT; the sign-out
+  sign-out would wait on the network and need partial-delivery states. _Superseded in part by the
+  2026-10-26 amendment:_ a bounded first attempt is made from the request after COMMIT; the sign-out
   result still never depends on it, and the durable outbox still owns every retry.
 - **Front-channel logout or redirect chains across RPs.** Rejected for the same reasons as in the
   earlier ADR; they depend on the browser completing the chain.
@@ -162,8 +162,8 @@ cause/scope authority-stop record, target and epoch children, one BCL participan
 and the optional browser receipt in the same transaction as revocation. The one committer covers the
 nine accepted causes and is the only root/grant revocation writer. Solid Queue enqueue occurs after
 commit; the durable participant is dispatched by a recurring sweep if enqueue is lost. Each of the
-twelve first-party RP cells exposes `POST /oidc/closures`; its receiver verifies the fixed issuer and
-audience, then commits the replay receipt, absorbing `sid` tombstone and matching local-session
+twelve first-party RP cells exposes `POST /oidc/closures`; its receiver verifies the fixed issuer
+and audience, then commits the replay receipt, absorbing `sid` tombstone and matching local-session
 revocation before 200. The sender uses HTTPS, pins a validated public DNS answer, applies bounded
 timeouts and never follows redirects.
 
@@ -184,23 +184,24 @@ external-RP delivery or OIDC conformance. Current verification is recorded in
 
 Owner decisions of 2026-10-26 (sign-out suite redesign; audit in the cycle working document
 `ten.md`). Implemented locally 2026-10-26/27 (SO-1 … SO-5 and the quality fixes;
-`evidence/2026-10-26-sign-out-so5-acceptance-G5P8.md`, `evidence/2026-10-27-sign-out-quality-fixes-H8M2.md`,
+`evidence/2026-10-26-sign-out-so5-acceptance-G5P8.md`,
+`evidence/2026-10-27-sign-out-quality-fixes-H8M2.md`,
 `evidence/2026-10-27-acceptance-partials-V8M2.md`).
 
-- **Every first-party RP is a standard RP this cycle** (held later the same day: the owner judges the
-  open WU-18 questions after the sign-out implementation; until then sign-out is built on the OP-chain
-  path every first-party client runs today). The OP-chain path and the runtime-role
-  switch are removed in this cycle (WU-18c … 18e brought back; supersedes the deferral D-175 for
-  them). Each first-party RP keeps its own local session in its `rp_*` database and ends it on
-  Back-Channel Logout. Item 6 ("one path per client") and the 2026-10-24 "Scope" bullet then hold
-  for every client.
+- **Every first-party RP is a standard RP this cycle** (held later the same day: the owner judges
+  the open WU-18 questions after the sign-out implementation; until then sign-out is built on the
+  OP-chain path every first-party client runs today). The OP-chain path and the runtime-role switch
+  are removed in this cycle (WU-18c … 18e brought back; supersedes the deferral D-175 for them).
+  Each first-party RP keeps its own local session in its `rp_*` database and ends it on Back-Channel
+  Logout. Item 6 ("one path per client") and the 2026-10-24 "Scope" bullet then hold for every
+  client.
 - **RP clears itself first (unchanged, D-33 (2)).** The originating RP ends its own local session
   and cookies before it redirects to `end_session_endpoint`. The return to the RP changes no
   authority and deletes nothing, so a delayed return cannot end a newer login. Cancel at the OP
   means signed out of that RP only.
-- **Bounded first delivery attempt from the request** (deferred the same day to WU-18; see the
-  last bullet). After the OP COMMIT and before the
-  post-logout redirect, the request makes one delivery attempt to each participant of that stop:
+- **Bounded first delivery attempt from the request** (deferred the same day to WU-18; see the last
+  bullet). After the OP COMMIT and before the post-logout redirect, the request makes one delivery
+  attempt to each participant of that stop:
   - the attempt claims each participant's lease in a short OP transaction, exactly as
     `OpOutboxDispatchJob` does, so the job and the request never both send one attempt;
   - Logout Tokens are signed before any network call; the HTTP calls run in parallel with no
@@ -211,15 +212,15 @@ Owner decisions of 2026-10-26 (sign-out suite redesign; audit in the cycle worki
     same classification and backoff as the job; a participant without an outcome when the deadline
     passes keeps its lease until expiry and is then retried by the job;
   - the redirect follows when every call has answered or the deadline has passed. The sign-out
-    result and the redirect never depend on an acknowledgement.
-  Rationale: RP-Initiated Logout 1.0 §2 and §3 describe notifying the RPs before the post-logout
-  redirection (descriptive text, no requirement keyword); open-source certified OPs send from the
-  logout request and do not let a failure block the redirect (node-oidc-provider
-  `lib/actions/end_session.js`, Keycloak `AuthenticationManager.browserLogoutAllClients`, read
-  2026-10-26). Back-Channel Logout 1.0 sets no timing.
+    result and the redirect never depend on an acknowledgement. Rationale: RP-Initiated Logout 1.0
+    §2 and §3 describe notifying the RPs before the post-logout redirection (descriptive text, no
+    requirement keyword); open-source certified OPs send from the logout request and do not let a
+    failure block the redirect (node-oidc-provider `lib/actions/end_session.js`, Keycloak
+    `AuthenticationManager.browserLogoutAllClients`, read 2026-10-26). Back-Channel Logout 1.0 sets
+    no timing.
 - **HTTP 204 is an acknowledgement** of a Logout Token, like 200 (Back-Channel Logout 1.0 §2.8).
-- **The one-time browser receipt is removed.** Decision 1's "one-time browser receipt" and
-  Decision 8's Base completion are replaced: the completion page belongs to the originating RP
+- **The one-time browser receipt is removed.** Decision 1's "one-time browser receipt" and Decision
+  8's Base completion are replaced: the completion page belongs to the originating RP
   (`GET /sign/out/completion`, shown once). The OP's `/sign/bye`, its session key and the
   `*_authority_stop_browser_logouts` tables are removed by a new migration. The authority-stop
   record, its targets and participants remain the authority and the audit trail.
@@ -233,9 +234,9 @@ Owner decisions of 2026-10-26 (sign-out suite redesign; audit in the cycle worki
   be confirmed, the OP reports that and does not redirect as if signed out.
 - **The RP discards its own tokens; it neither writes OP authority nor calls the revocation endpoint
   during sign-out.** The OP stops the root and its grants on confirmation (RFC 9700 §4.14.2 places
-  revocation on logout with the authorization server; RP-Initiated Logout 1.0 sets no RP revocation).
-  A cancel at the OP leaves that RP's grant alive until it expires; accepted for now and revisited
-  with WU-18.
+  revocation on logout with the authorization server; RP-Initiated Logout 1.0 sets no RP
+  revocation). A cancel at the OP leaves that RP's grant alive until it expires; accepted for now
+  and revisited with WU-18.
 - **Discovery advertises Back-Channel Logout** (`backchannel_logout_supported`,
   `backchannel_logout_session_supported`), since every first-party client has a receiver; item 7
   holds. The ID Token `sid` is the `sid` of the Logout Token; no random substitute is issued.
@@ -247,3 +248,31 @@ Owner decisions of 2026-10-26 (sign-out suite redesign; audit in the cycle worki
   process-wide bounded executor, a DNS timeout and a deadline covering token preparation and outcome
   recording before it can be bounded at all. Until then delivery is the after-commit job, as in
   Decisions 2 and 3, and the "Do not" bullet holds without the exception.
+
+## Amendment (2026-11-01): RP-local sign-out and Refresh Token revocation
+
+Owner decision D-59 (one.md OQ-16) changes the RP-initiated sign-out boundary. For each separated
+first-party RP cell, the RP commits its own local session revocation before clearing its local
+credentials. It then makes one bounded request to the registered Visa RFC 7009 endpoint for only the
+Refresh Token bound to that local session. The request uses the registered client authentication
+method, sends the token only in the form body, has a two-second total budget and retries one
+transient network failure at most once. It does not retry an HTTP response. Failure never restores
+the local session, does not extend the parent grant's absolute expiry and is not represented as
+success. The RP does not write OP authority directly, enqueue a compensating job or stop another
+RP's grant.
+
+The RP then starts the independent Visa OP-wide confirmation without an `id_token_hint`. It sends
+the registered `client_id`, exact registered return URI and OIDC `state`. Visa validates the return
+against that client's realm registration. If there is no usable Visa device session, Visa changes no
+authority and returns through Jump to the validated RP completion. If a usable Visa session exists,
+the user can confirm the OP-wide stop; that stop remains independent of the completed RP-local sign-
+out. A cancel or failed return cannot revive the RP session. The RP's one-use completion notice and
+state remain the only authority for its return page.
+
+This amendment supersedes the 2026-10-26 bullet stating that the RP neither calls the revocation
+endpoint nor sends a no-hint return request. The 2026-10-26 OP-chain, root-stop and Back-Channel
+Logout decisions remain in force for the OP-wide confirmation. No ID Token hint is persisted in an
+RP cell for sign-out. The current RP logout controllers use the local-session-first launcher and do
+not read or send a stored ID Token hint. A separate shared-role branch in `BrowserRpAuthentication`
+still reads the OP grant chain for ordinary request authentication and refresh. WU-A8 remains open
+until that branch and its end-to-end acceptance surface are reconciled.

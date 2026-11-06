@@ -24,7 +24,8 @@ class Base::App::Identity::PasskeysController < Base::App::Identity::BaseControl
 
     description = params.expect(passkey: [:description]).fetch(:description)
     IdentityPasskeyNameCommitter.call!(
-      actor: current_client, token: current_session_token, passkey: @passkey, description: description.to_s.strip,
+      actor: current_client, token: current_session_token, passkey: @passkey,
+      description: description.to_s.strip, step_up_evidence: current_step_up_evidence,
     )
     redirect_to(passkeys_path, status: :see_other)
   rescue IdentityPasskeyNameCommitter::Denied
@@ -42,7 +43,8 @@ class Base::App::Identity::PasskeysController < Base::App::Identity::BaseControl
     return if require_step_up!(scope: "settings_passkey") == false
 
     removed = IdentityCredentialRemovalCommitter.call!(
-      actor: current_client, credential: @passkey, current_session: current_session_token, request: request,
+      actor: current_client, credential: @passkey, current_session: current_session_token,
+      step_up_evidence: current_step_up_evidence, request: request,
     )
     unless removed
       return render inertia: passkey_show_component,
@@ -50,6 +52,9 @@ class Base::App::Identity::PasskeysController < Base::App::Identity::BaseControl
                     status: :unprocessable_content
     end
     redirect_to(passkeys_path, status: :see_other)
+  rescue IdentityCredentialRemovalCommitter::TransactionConflict,
+         IdentityCredentialRemovalCommitter::DependencyFailure
+    head :service_unavailable
   rescue ArgumentError, ActiveRecord::RecordInvalid
     render inertia: passkey_show_component,
            props: passkey_show_props(error: I18n.t("errors.messages.invalid_request")),

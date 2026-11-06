@@ -10,8 +10,6 @@ require "test_helper"
 # The paths come from PreferenceBrowserControlsRegistry, the same source the page chrome hands the
 # browser, so this contract follows the endpoint the controls actually call.
 class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
-
   SURFACE_HOST_KEYS = { "app" => "SERVICE", "com" => "CORPORATE", "org" => "STAFF" }.freeze
   PREFERENCE_CLASSES = { "app" => AppPreference, "com" => ComPreference, "org" => OrgPreference }.freeze
 
@@ -155,10 +153,46 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
         assert_equal({ "theme" => code }, response.parsed_body, "#{endpoint.fetch(:label)} #{requested}")
         assert_equal "no-store", response.headers["Cache-Control"]
         set_cookie = response.headers["Set-Cookie"].to_s
+
         assert_includes set_cookie, "#{PreferenceCookieName.anonymous_jwt}="
         assert_includes set_cookie, "language="
         assert_includes set_cookie, "#{PreferenceCookieName.anonymous_experience}="
         assert_not_includes set_cookie, "ct="
+      end
+    end
+  end
+
+  test "Base realm theme writes issue 400-day preference and shared-cookie expiries" do
+    https!
+    ENDPOINTS.select { |endpoint| endpoint.fetch(:label).start_with?("base/") }.each do |endpoint|
+      host! endpoint.fetch(:host)
+      preference_class = PREFERENCE_CLASSES.fetch(endpoint.fetch(:surface))
+      issued_at = 1.hour.ago.change(usec: 0)
+
+      preference_class.stub(:database_now, issued_at) do
+        patch endpoint.fetch(:theme), params: { theme: "dark" }.to_json, headers: JSON_HEADERS
+      end
+
+      assert_response :ok, endpoint.fetch(:label)
+      claims, = JWT.decode(cookies[PreferenceCookieName.anonymous_jwt], nil, false)
+      expected_exp = issued_at.to_i + 400.days.to_i
+
+      assert_equal issued_at.to_i, claims.fetch("iat"), endpoint.fetch(:label)
+      assert_equal expected_exp, claims.fetch("exp"), endpoint.fetch(:label)
+
+      preference = preference_class.find_by!(public_id: claims.fetch("sub"))
+
+      assert_equal issued_at, preference.last_issued_at, endpoint.fetch(:label)
+      assert_equal Time.at(expected_exp).utc, preference.last_issued_expires_at, endpoint.fetch(:label)
+
+      cookie_headers = Array(response.headers["Set-Cookie"]).flat_map { |header| header.split("\n") }
+      [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
+       PreferenceCookieName.anonymous_experience,].each do |name|
+        header = cookie_headers.find { |entry| entry.start_with?("#{name}=") }
+
+        assert_not_nil header, "#{endpoint.fetch(:label)} #{name}"
+        assert_equal Time.at(expected_exp).utc, Time.httpdate(header.match(/expires=([^;]+)/i)[1]),
+                     "#{endpoint.fetch(:label)} #{name}"
       end
     end
   end
@@ -178,20 +212,15 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "PATCH cookie records each accepted decision with the surface response" do
+  test "PATCH cookie returns the recorded decision for every Base realm" do
     ENDPOINTS.each do |endpoint|
       host! endpoint.fetch(:host)
 
       ACCEPTED_CONSENT_BODIES.each do |name, body|
         patch endpoint.fetch(:cookie), params: body.to_json, headers: JSON_HEADERS
 
-        if endpoint.fetch(:label) == "base/com"
-          assert_response :ok, "#{endpoint.fetch(:label)} #{name}"
-          assert_kind_of Hash, response.parsed_body.fetch("cookie")
-        else
-          assert_response :no_content, "#{endpoint.fetch(:label)} #{name}"
-          assert_empty response.body
-        end
+        assert_response :ok, "#{endpoint.fetch(:label)} #{name}"
+        assert_kind_of Hash, response.parsed_body.fetch("cookie"), "#{endpoint.fetch(:label)} #{name}"
 
         assert_equal "no-store", response.headers["Cache-Control"]
       end
@@ -301,27 +330,44 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "a presented Preference JWT minted for another host is a 401 problem" do
+  test "an invalid foreign-host Preference JWT is never used to seed a Base write" do
+    https!
     ENDPOINTS.each do |endpoint|
-      # Section 4.2: the anonymous com token names the realm, not a host, so a sibling com host is
-      # the same audience. The com acceptance case is covered by the next test.
+      # Section 4.2: realm is the token audience. A valid token from the other realm must not
+      # become an input source for this realm's write.
       next if endpoint.fetch(:surface) == "com"
 
       host = endpoint.fetch(:host)
       host! host
+      foreign_surface = (endpoint.fetch(:surface) == "app") ? "org" : "app"
+      foreign_endpoint =
+        ENDPOINTS.find do |candidate|
+          candidate.fetch(:label) == "base/#{foreign_surface}"
+        end
       foreign = preference_token_for(
-        host: "#{endpoint.fetch(:surface)}.foreign.example",
-        surface: endpoint.fetch(:surface),
+        host: foreign_endpoint.fetch(:host),
+        surface: foreign_surface,
       )
+      foreign_subject = JWT.decode(foreign, nil, false).first.fetch("sub")
+      preference_class = PREFERENCE_CLASSES.fetch(endpoint.fetch(:surface))
+
+      assert_nil preference_class.find_by(public_id: foreign_subject), endpoint.fetch(:label)
       # Sent as a header: the integration cookie jar would scope a cookie to the previous host.
       headers = JSON_HEADERS.merge("Cookie" => "#{PreferenceCookieName.anonymous_jwt}=#{foreign}")
 
-      with_preference_jwt_keys(host: host) do
+      with_preference_realm_issuers do
         patch endpoint.fetch(:theme), params: { theme: "dark" }.to_json, headers: headers
-      end
 
-      assert_response :unauthorized, endpoint.fetch(:label)
-      assert_problem("authentication-required", 401)
+        assert_response :ok, endpoint.fetch(:label)
+        issued_cookie = cookies[PreferenceCookieName.anonymous_jwt]
+
+        assert_predicate issued_cookie, :present?, endpoint.fetch(:label)
+        issued, = JWT.decode(issued_cookie, nil, false)
+
+        assert_not_equal foreign_subject, issued.fetch("sub"), endpoint.fetch(:label)
+        assert_equal "dark", issued.fetch("preferences").fetch("theme"), endpoint.fetch(:label)
+      end
+      assert_nil preference_class.find_by(public_id: foreign_subject), endpoint.fetch(:label)
     end
   end
 
@@ -371,9 +417,8 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
 
       patch endpoint.fetch(:cookie), params: { cookie: { consented: true } }.to_json, headers: JSON_HEADERS
 
-      expected = (endpoint.fetch(:label) == "base/com") ? :ok : :no_content
-
-      assert_response expected, endpoint.fetch(:label)
+      assert_response :ok, endpoint.fetch(:label)
+      assert_kind_of Hash, response.parsed_body.fetch("cookie"), endpoint.fetch(:label)
     end
   end
 
@@ -414,6 +459,7 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
 
   def assert_no_preference_state_cookies
     set_cookie = response.headers["Set-Cookie"].to_s
+
     [PreferenceCookieName.anonymous_jwt, PreferenceCookieName.anonymous_experience,
      PreferenceCookieName.binding, PreferenceIoKeys::Cookies::LANGUAGE,].each do |name|
       assert_not_includes set_cookie, "#{name}=", name
@@ -446,33 +492,28 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
 
   def preference_token_for(host:, surface:)
     token = nil
-    preferences = (surface == "com") ? { "theme" => "dark" } : { "ct" => "sy" }
-    with_preference_jwt_keys(host: host) do
+    preferences = {
+      "theme" => "system",
+      "language" => "ja",
+      "timezone" => "Asia/Tokyo",
+      "currency" => "jpy",
+      "date_format" => "iso",
+      "time_format" => "24",
+      "motion" => "standard",
+      "density" => "standard",
+      "page_size" => "infinity",
+    }
+    with_preference_realm_issuers do
       token = PreferenceToken.encode(
         preferences,
         host: host,
         preference_type: PREFERENCE_CLASSES.fetch(surface).name,
+        jwt_issuer_id: "preference_#{surface}",
         public_id: "foreign-#{SecureRandom.hex(4)}",
         jti: "test-jti-#{SecureRandom.uuid}",
+        issued_at: Time.current,
       )
     end
     token
-  end
-
-  def with_preference_jwt_keys(host:, &)
-    pub_key_for_stub = ->(_kid, **_options) { PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, [host], &)
-              end
-            end
-          end
-        end
-      end
-    end
   end
 end

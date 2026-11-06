@@ -3,6 +3,8 @@
 require "test_helper"
 
 class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
@@ -69,12 +71,25 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                        subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(actor, resource_type: "client"), sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+
+              unless rp_enrollment.success?
+                raise ArgumentError, "RP-local session setup failed: #{rp_enrollment.outcome}"
+              end
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+              ]
             end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             [
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ]
           else
             []
@@ -185,14 +200,27 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
             )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            rp_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+              sid: rp_session.public_id, absolute_expires_at: rp_now + 10.minutes,
+            )
+
+            unless rp_enrollment.success?
+              raise ArgumentError, "RP-local session setup failed: #{rp_enrollment.outcome}"
+            end
+
+            @base_browser_rp_credentials[rp_key] = [
+              rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+            ]
           end
           if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -256,12 +284,25 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                        subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(actor, resource_type: "client"), sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+
+              unless rp_enrollment.success?
+                raise ArgumentError, "RP-local session setup failed: #{rp_enrollment.outcome}"
+              end
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+              ]
             end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             [
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ]
           else
             []
@@ -350,12 +391,25 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                        subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(actor, resource_type: "client"), sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+
+              unless rp_enrollment.success?
+                raise ArgumentError, "RP-local session setup failed: #{rp_enrollment.outcome}"
+              end
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+              ]
             end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             [
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ]
           else
             []
@@ -436,12 +490,25 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                        subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
               )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              rp_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id), issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(actor, resource_type: "client"), sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+
+              unless rp_enrollment.success?
+                raise ArgumentError, "RP-local session setup failed: #{rp_enrollment.outcome}"
+              end
+
+              @base_browser_rp_credentials[rp_key] = [
+                rp_access, rp_session.issue_refresh_token!, rp_enrollment.session.public_id,
+              ]
             end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_access, rp_refresh, rp_local_session_id = @base_browser_rp_credentials.fetch(rp_key)
             [
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(rp_local_session_id)}",
             ]
           else
             []

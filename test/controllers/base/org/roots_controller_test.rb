@@ -66,7 +66,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "authenticated Home returns 404 without redirect" do
+  test "authenticated Home returns 403 without redirect" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     staff = operators(:one)
 
@@ -117,6 +117,20 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -125,6 +139,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -136,10 +151,10 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
 
     assert_not_equal 301, response.status
     assert_not_equal "https://jp.umaxica.org/", response.location
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil response.location
   end
-  test "authenticated Home answers 404 as a rendered response, not a raised exception" do
+  test "authenticated Home answers 403 as a rendered response, not a raised exception" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
     controller_exception =
@@ -192,6 +207,20 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
                                            resource_type: "operator",
                                          ), client_id: rp_client.client_id,
                 )
+                rp_local_enrollment = RpCallbackCommitter.call(
+                  cell: RpCellBinding.for_client(rp_client.client_id),
+                  issuer: OidcIssuer.for_client(rp_client),
+                  subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                  sid: rp_session.public_id,
+                  absolute_expires_at: rp_now + 10.minutes,
+                )
+                unless rp_local_enrollment.success?
+                  raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+                end
+
+                rp_local_session = rp_local_enrollment.session
+                @base_browser_rp_session_public_ids ||= {}
+                @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
                 @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
               end
               if @base_browser_rp_credentials[rp_key]
@@ -200,6 +229,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
                   rp_headers.fetch("Cookie"),
                   "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                   "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                  "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
                 ].join("; ")
                 rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
               end
@@ -211,7 +241,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
         )
       end
 
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil controller_exception
     assert_nil response.location
     assert_equal "private, no-store", response.headers["Cache-Control"]
@@ -328,5 +358,4 @@ class Base::Org::RootsControllerTest
     OperatorTokenBindingMethod.find_or_create_by!(id: OperatorTokenBindingMethod::LEGACY)
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
-
 end

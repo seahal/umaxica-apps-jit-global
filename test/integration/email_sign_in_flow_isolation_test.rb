@@ -4,6 +4,17 @@ require "test_helper"
 
 # Boolean comparisons keep OTP secrets and challenge digests out of assertion failure output.
 class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
+  include SignInFlowCleanup
+
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
+  setup do
+    @chronicle_watermark = Chronicle.maximum(:id) || 0
+  end
+
   %w(app).each do |surface|
     test "#{surface} issuance and resend stay on their admitted flow without rotating Contact OTP" do
       # Only rate-counter expiry follows the travelled request clock. All limits
@@ -14,6 +25,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         TurnstileVerifierStub.challenge_enabled = true
         TurnstileVerifierStub.challenge_response = { "success" => true }
         address = "flow-isolation-#{SecureRandom.hex(10)}@example.test"
+        occurrence_body = OccurrenceHmac.digest(kind: :email, body: IdentifierBlindIndex.normalize_email(address))
         actor, contact =
           if surface == "app"
             actor = Client.create!(
@@ -28,61 +40,49 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           "otp_private_key", "otp_counter", "otp_expires_at", "otp_last_sent_at",
         )
         browsers = [open_session, open_session]
-        admissions =
-          browsers.map do |browser|
-            browser.https!
-            begin
-              admission_browser = browser
-              admission_surface = surface
-              admission_intent = "sign_in"
-              admission_host = {
-                "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-              }.fetch(admission_surface)
-              admission_browser.host!(admission_host)
-              admission_issuance = OidcTestEntry.issue!(
-                surface: admission_surface, intent: admission_intent,
-                base_browser_nonce: SecureRandom.hex(32), base_token: nil,
-              )
-              admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
-              admission_browser.get(
-                admission_path,
-                params: { entry_ref: admission_issuance.reference, ri: "jp" },
-              )
-              admission_csrf =
-                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-              admission_browser.post(
-                "/ceremony_bindings",
-                params: { entry_ref: admission_issuance.reference,
-                          authenticity_token: admission_csrf,
-                          ri: "jp", },
-              )
+        admissions = []
+        browsers.each do |browser|
+          browser.https!
+          begin
+            admission_browser = browser
+            admission_surface = surface
+            admission_intent = "sign_in"
+            admission_host = {
+              "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+              "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+            }.fetch(admission_surface)
+            admission_browser.host!(admission_host)
+            admission_issuance = OidcTestEntry.issue!(
+              surface: admission_surface, intent: admission_intent,
+              base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+            )
+            admissions << admission_issuance
+            admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+            admission_browser.get(
+              admission_path,
+              params: { entry_ref: admission_issuance.reference, ri: "jp" },
+              headers: NAVIGATION_HEADERS,
+            )
 
-              assert_equal 303, admission_browser.response.status
-              admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-                surface: admission_surface, reference: admission_issuance.reference,
-              )
-              admission_binding.reload.confirm_base!(
-                base_token: nil,
-                browser_digest: admission_binding.base_browser_digest,
-              )
-              admission_browser.get(
-                admission_path,
-                params: { entry_ref: admission_issuance.reference, ri: "jp" },
-              )
-              admission_csrf =
-                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-              admission_browser.post(
-                admission_path,
-                params: { entry_ref: admission_issuance.reference,
-                          authenticity_token: admission_csrf,
-                          ri: "jp", },
-              )
+            assert_equal 303, admission_browser.response.status
+            admission_browser.get(admission_browser.response.location, headers: NAVIGATION_HEADERS)
+            admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+              surface: admission_surface, reference: admission_issuance.reference,
+            )
+            admission_binding.reload.confirm_base!(
+              base_token: nil,
+              browser_digest: admission_binding.base_browser_digest,
+            )
+            admission_browser.get(
+              admission_path,
+              params: { entry_ref: admission_issuance.reference, ri: "jp" },
+              headers: NAVIGATION_HEADERS,
+            )
 
-              assert_equal 303, admission_browser.response.status
-              admission_issuance
-            end
+            assert_equal 303, admission_browser.response.status
+            admission_browser.get(admission_browser.response.location, headers: NAVIGATION_HEADERS)
           end
+        end
         ceremonies =
           admissions.map do |admission|
             binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: admission.reference)
@@ -100,7 +100,9 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         original_time = Time.current
         browsers.each_with_index do |browser, index|
           travel_to(original_time + (index * (EmailOtpPolicy::SEND_COOLDOWN + 1.second)))
-          browser.get("/sign/in/email/new", params: { ri: "jp", fb: flow_bindings.fetch(index) })
+          browser.get(
+            "/sign/in/email/new", params: { ri: "jp", fb: flow_bindings.fetch(index) }, headers: NAVIGATION_HEADERS,
+          )
 
           assert_equal 200, browser.response.status
           csrf_meta = browser.response.parsed_body.at_css('meta[name="csrf-token"]')
@@ -137,6 +139,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           browser.get(
             URI.parse(browser.response.location).request_uri,
             params: { ri: "jp", fb: flow_bindings.fetch(index) },
+            headers: NAVIGATION_HEADERS,
           )
 
           assert_equal 200, browser.response.status
@@ -151,7 +154,9 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
             assert_withheld("issuance must persist a Ticket challenge") { @first_context.present? }
             # B is genuinely throttled before the identifier window expires;
             # swapping the clock-aware store does not bypass the existing limit.
-            browsers.last.get("/sign/in/email/new", params: { ri: "jp", fb: flow_bindings.fetch(1) })
+            browsers.last.get(
+              "/sign/in/email/new", params: { ri: "jp", fb: flow_bindings.fetch(1) }, headers: NAVIGATION_HEADERS,
+            )
             cooldown_csrf = browsers.last.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
             browsers.last.post(
               "/sign/in/email", params: {
@@ -241,6 +246,23 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         ActionController::Base.allow_forgery_protection = previous_forgery_protection
         TurnstileVerifierStub.challenge_enabled = false
         TurnstileVerifierStub.challenge_response = nil
+        EmailOccurrence.where(body: occurrence_body).delete_all if occurrence_body
+        admissions&.each do |admission|
+          bindings = ClientAuthAdmissionBinding.where(authorization_transaction_id: admission.transaction.id)
+          session_ids = bindings.pluck(
+            :auth_ceremony_session_id,
+            :admitted_auth_ceremony_session_id,
+          ).flatten.compact.uniq
+          bindings.delete_all
+          ClientAuthCeremonySession.where(id: session_ids).delete_all
+          admission.transaction.delete
+        end
+        delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: actor.id)) if actor
+        Chronicle.where(id: (@chronicle_watermark + 1)..).delete_all
+        contact&.delete
+        # The journey bumps the client's lock_version, so the in-memory record no longer
+        # matches the row and `delete` would silently affect no rows.
+        Client.where(id: actor.id).delete_all if actor
       end
     end
   end

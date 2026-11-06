@@ -131,12 +131,12 @@ concerns scoped.
 
 - `Top::*::RootsController` redirects to `EDGE_*` hostnames with `allow_other_host: true`.
 - Preference controllers normalize request context such as `lx` (language), `ri` (region), and `tz`
-  (timezone), persist preference state in DB rows, and project it into the `preference_access` /
-  `__Host-preference_access` credential cookie.
+  (timezone), persist preference state in realm setting databases, and issue the realm Preference
+  JWT (`__Secure-preference`) with the `language` and `__Secure-experience` display cookies.
 - `Preference::ThemeController` leverages the `Theme` concern to restrict themes to
   `system/dark/light`, map shorthand codes, and update preference cookies.
-- `Preference::CookieController` (`Cookie` concern) captures ePrivacy choices, storing
-  `accept_*_cookies` flags as signed, permanent cookies.
+- `Preference::CookieController` (`Cookie` concern) captures ePrivacy choices as a browser-bound
+  consent receipt; consent state is not stored in a signed display cookie.
 - Views can hydrate React micro front-ends defined in `src/pages/**`.
 
 ### 4.2 Sign (identity & security)

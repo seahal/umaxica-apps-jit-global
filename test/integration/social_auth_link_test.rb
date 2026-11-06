@@ -1853,49 +1853,22 @@ class SocialAuthLinkTest
 
   def mark_token_step_up_satisfied_for_test(token, scope:)
     actor = token.actor_record
-    token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
     credential = actor.client_totp_credentials.find_by(
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     ) || ClientTotpCredential.create_for_user!(
       user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    requirement = StepUpRequirement.new(
-      step_up_required: true, scope: scope, allowed_methods: [:totp],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      ttl: 15.minutes, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
-      resource_ref: nil, tenant_ref: nil,
+    # This suite isolates Social authorization from issuance. The OIDC step-up transaction and
+    # callback are covered by their dedicated integration tests.
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: scope, last_step_up_method: "totp",
+      last_step_up_credential_ref: credential.public_id, last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false, last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: nil, last_step_up_tenant_ref: nil, last_step_up_purpose: "step_up",
+      last_step_up_audience: step_up_test_audience_for_token(token),
+      last_step_up_session_public_id: token.public_id,
     )
-    nonce = SecureRandom.urlsafe_base64(32)
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: actor, token: token, requirement: requirement,
-      return_to: (scope == "settings_email") ? "/identity/emails" : "/settings/google",
-      base_browser_nonce: nonce, base_token: token,
-    )
-    transaction = issuance.transaction
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    attached, raw_sid = ClientAuthCeremonySession.issue!
-    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
-    digest = AuthAdmissionBinding.browser_digest(surface: "app", entry_ref: issuance.reference, nonce: nonce)
-    binding.confirm_base!(base_token: token, browser_digest: digest)
-    BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
-      raw_auth_sid: raw_sid,
-    )
-    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
-      step_up_ceremony_transaction_ref: transaction.transaction_id,
-    )
-    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
-    # This fixture exercises Social authorization; TOTP code verification has its own public-boundary tests.
-    transaction.record_verification!(
-      method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: transaction.class.database_now, verified_credential_ref: credential.public_id,
-    )
-    proof = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction, ceremony_session_ref: admitted.id.to_s)
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: actor, token: token, transaction: transaction, requirement: requirement, result_reference: proof.reference,
-    )
+    token.reload
   end
 
   def step_up_test_audience_for_token(token)
@@ -2042,7 +2015,6 @@ class SocialAuthLinkTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -2065,24 +2037,6 @@ class SocialAuthLinkTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

@@ -18,13 +18,13 @@ credential gateway versus Base identity owner unless a current ADR says otherwis
 - Compatibility shims are rejected for this migration. Retired Auth settings URLs must become
   unroutable instead of redirecting to Base or returning compatibility responses.
 
-Auth settings may keep only these credential ceremony-backed settings:
+The accepted revision-13 O-11 target allows only these Auth settings entry points:
 
-| Surface | Auth settings routes that may remain |
-| ------- | ------------------------------------ |
-| `app`   | passkeys, TOTP, Google, Apple        |
-| `com`   | passkeys                             |
-| `org`   | passkeys, Entra                      |
+| Surface | Auth settings routes that may remain                                                                 |
+| ------- | ---------------------------------------------------------------------------------------------------- |
+| `app`   | ordinary passkey registration; POST-only Google/Apple link starts through the reviewed O-9 admission |
+| `com`   | passkeys                                                                                             |
+| `org`   | none; Entra sign-in is a separate Auth sign-in ceremony                                              |
 
 Base identity owns these non-ceremony settings:
 
@@ -36,6 +36,13 @@ Base identity owns these non-ceremony settings:
 - revocations where they are still needed as session/account-management resources;
 - activities;
 - withdrawal.
+- APP TOTP enrollment and management;
+- APP social-provider status and unlink;
+- ORG's read-only Entra identity status.
+
+The O-11 move is staged. Auth ORG `/settings` and Entra settings routes have been removed; Base ORG
+`/identity/social_identities` displays the administrator-provisioned status. APP route removal and
+write migration remain incomplete pending the O-9 handoff review and the O-10 write-boundary work.
 
 Do not add Base identity routes named after operation-style Auth settings paths when CRUD resource
 shape can express the action. Avoid new `/identity/.../removal`, `/identity/.../revocation`,

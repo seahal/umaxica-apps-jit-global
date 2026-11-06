@@ -3,6 +3,9 @@
 require "test_helper"
 
 class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
+  # These cases reference only the Client and Secret-credential fixtures; keep other realms out.
+  self.fixture_table_names = %w(clients client_secret_credentials)
+
   setup do
     @security_policy = ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
@@ -11,23 +14,37 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   test "payload failure reaches Chronicle before real jobs delete the candidate and allocation" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
     candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
     reference = candidate.public_id
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
       actor_context: context, token: token, issuance: issuance, purge_after: 0.000001.seconds,
+      step_up_evidence: evidence,
     )
     previous = ENV.to_h.slice(
       "APP_SECRET_PURGE_DELAY_SECONDS", "APP_SECRET_OUTBOX_RETENTION_SECONDS", "APP_SECRET_PROOF_RETENTION_SECONDS",
@@ -342,6 +359,71 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     assert_equal 1, Chronicle.where(event_uuid: event.event_id).count
   end
 
+  test "source events reach Chronicle once and can be rescanned without queue enqueue" do
+    # Source outboxes outlive fixture replacement; deliver earlier durable work first.
+    while ClientSecretAuditOutbox.exists?(delivered_at: nil)
+      ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
+    end
+    client = clients(:one)
+    context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
+    event = nil
+    ClientSecretAuditOutbox.transaction do
+      event = ClientSecretAuditOutbox.record!(
+        actor_context: context, client_ref: client.public_id, credential_ref: client_secret_credentials(:one).public_id,
+        operation_ref: SecureRandom.uuid, occurred_at: Client.database_now, event_name: "secret.renamed",
+      )
+    end
+    assert_difference("Chronicle.count", 1) do
+      ClientSecretAuditDeliveryJob.perform_now(batch_size: 1, retention_seconds: 60)
+    end
+    assert event.reload.delivered_at
+    persisted = Chronicle.find_by!(event_uuid: event.event_id)
+
+    assert_equal "secret.renamed", persisted.action
+    assert_equal event.client_ref, persisted.metadata.fetch("client_ref")
+    assert_equal event.credential_ref, persisted.metadata.fetch("credential_ref")
+    assert_equal event.operation_ref, persisted.request_id
+    assert_no_difference("Chronicle.count") {
+      ClientSecretAuditDeliveryJob.perform_now(batch_size: 1, retention_seconds: 60)
+    }
+    assert_nil persisted.metadata["name"]
+    assert_nil persisted.metadata["password_digest"]
+  end
+end
+
+class ClientSecretAuditCommittedLifecycleTest < ActiveSupport::TestCase
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
+  setup do
+    @security_policy = ChronicleRetentionPolicy.find_by(code: "security") ||
+      ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
+  end
+
+  teardown do
+    if @client_id
+      actor = Client.find(@client_id)
+      event_ids = ClientSecretAuditOutbox.where(client_ref: actor.public_id).pluck(:event_id)
+      passkey_event_ids = ClientPasskeyAuditOutbox.where(actor_ref: actor.public_id).pluck(:event_uuid)
+      Chronicle.where(event_uuid: event_ids).delete_all
+      Chronicle.where(event_uuid: passkey_event_ids).delete_all
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).delete_all
+      ClientPasskeyAuditOutbox.where(actor_ref: actor.public_id).delete_all
+      ClientSecretCredential.where(client_id: actor.id).delete_all
+      ClientSecretIssuance.where(client_id: actor.id).delete_all
+      ClientPasskey.where(user_id: actor.id).delete_all
+      OpAppGrant.where(client_token_id: ClientToken.where(user_id: actor.id).select(:id)).delete_all
+      ClientDeviceSession.where(user_id: actor.id).update_all(current_refresh_token_id: nil)
+      ClientToken.where(user_id: actor.id).delete_all
+      ClientDeviceSession.where(user_id: actor.id).delete_all
+      ClientAuthorityLock.where(client_id: actor.id).delete_all
+      ClientPreference.where(client_id: actor.id).destroy_all
+      actor.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
+      actor.strict_loading!(false)
+      actor.destroy!
+    end
+  end
+
   test "real lifecycle delivery precedes credential deletion and preserves its purged event for retry" do
     config_keys = %w(
       APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
@@ -351,37 +433,50 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @client_id = actor.id
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Client.database_now,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
-    raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
-    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
+    raw = ClientSecretPresentationIssuer.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    ).first
+    ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
     credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
     reference = credential.public_id
-    token.reload.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-      last_step_up_resource_ref: credential.public_id,
-    )
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
+      step_up_evidence: evidence,
     )
 
     assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
@@ -389,7 +484,8 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
                  ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "before-delivery")
     assert ClientSecretCredential.exists?(credential.id)
     assert_no_difference -> { ClientSecretAuditOutbox.where(event_name: "secret.purged").count } do
-      assert_equal :undelivered, ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "retry")
+      assert_equal :undelivered,
+                   ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "retry")
     end
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
     ClientSecretCredential.transaction(requires_new: true) do
@@ -423,36 +519,5 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     end
   ensure
     config_keys.each { |key| ENV[key] = original_config[key] }
-  end
-
-  test "source events reach Chronicle once and can be rescanned without queue enqueue" do
-    # Source outboxes outlive fixture replacement; deliver earlier durable work first.
-    while ClientSecretAuditOutbox.exists?(delivered_at: nil)
-      ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
-    end
-    client = clients(:one)
-    context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
-    event = nil
-    ClientSecretAuditOutbox.transaction do
-      event = ClientSecretAuditOutbox.record!(
-        actor_context: context, client_ref: client.public_id, credential_ref: client_secret_credentials(:one).public_id,
-        operation_ref: SecureRandom.uuid, occurred_at: Client.database_now, event_name: "secret.renamed",
-      )
-    end
-    assert_difference("Chronicle.count", 1) do
-      ClientSecretAuditDeliveryJob.perform_now(batch_size: 1, retention_seconds: 60)
-    end
-    assert event.reload.delivered_at
-    persisted = Chronicle.find_by!(event_uuid: event.event_id)
-
-    assert_equal "secret.renamed", persisted.action
-    assert_equal event.client_ref, persisted.metadata.fetch("client_ref")
-    assert_equal event.credential_ref, persisted.metadata.fetch("credential_ref")
-    assert_equal event.operation_ref, persisted.request_id
-    assert_no_difference("Chronicle.count") {
-      ClientSecretAuditDeliveryJob.perform_now(batch_size: 1, retention_seconds: 60)
-    }
-    assert_nil persisted.metadata["name"]
-    assert_nil persisted.metadata["password_digest"]
   end
 end

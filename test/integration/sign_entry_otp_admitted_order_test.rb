@@ -63,9 +63,87 @@ class SignEntryOtpAdmittedOrderTest < ActionDispatch::IntegrationTest
     assert_nil response.location
     assert_predicate ceremony.reload.email_otp_context, :present?
     assert_not_predicate ceremony, :cancelled?
-    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status_id
     assert_equal sid, cookies[sid_name]
     assert_not_includes response.headers["Set-Cookie"].to_s, "#{sid_name}="
+  ensure
+    if feature
+      enabled ? Flipper.enable(feature) : Flipper.disable(feature)
+    end
+  end
+
+  test "going Back from a flowless Email OTP attempt is refused without mutation" do
+    feature = FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name
+    enabled = Flipper.enabled?(feature)
+    Flipper.enable(feature)
+    host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+    https!
+    client = OidcClientRegistry.find!("core-app-jp")
+    parent = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "authentication",
+      params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+        code_challenge: SecureRandom.urlsafe_base64(32),
+        code_challenge_method: "S256",
+        scope: "openid profile",
+        state: SecureRandom.urlsafe_base64(24),
+        nonce: SecureRandom.urlsafe_base64(24),
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: parent, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+    get(response.location, headers: NAVIGATION_HEADERS)
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
+    assert_response :see_other
+    follow_redirect!
+
+    assert_response :success
+    sid_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    sid = cookies[sid_name]
+    ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(sid)
+    ceremony.issue_email_otp!(contact: nil, destination: "unknown-#{SecureRandom.hex(8)}@example.test")
+
+    assert_nil parent.reload.secret_sign_in_flow_id, "OTP progress exists before a SignInFlow is created"
+    before = [parent.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    session_before = session.to_hash
+
+    get(new_auth_app_sign_in_email_path(ri: "jp"), headers: NAVIGATION_HEADERS)
+
+    assert_response :conflict
+    assert_equal I18n.t("errors.messages.phase_violation_refused"), response.body
+    assert_equal before, [parent.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    assert_equal session_before, session.to_hash
+    assert_equal sid, cookies[sid_name]
+    forbidden_names = (AuthPhaseRefusalResponseBoundary::COOKIE_NAMES + AuthPhaseRefusalResponseBoundary::DBSC_HEADERS)
+      .map(&:downcase)
+    cookie_lines = Array(response.headers["Set-Cookie"]).flat_map { |header| header.to_s.split("\n") }
+    cookie_names = cookie_lines.map { |header| header.split("=", 2).first.downcase }
+    response_names = cookie_names + response.headers.to_h.keys.map(&:downcase)
+
+    assert_empty forbidden_names & response_names
+
+    get(auth_app_sign_in_path(ri: "jp"), headers: NAVIGATION_HEADERS)
+
+    assert_equal [409, nil, I18n.t("errors.messages.phase_violation_refused"), "private, no-store"], [
+      response.status, response.location, response.body, response.headers["Cache-Control"],
+    ]
+    assert_equal before, [parent.reload.attributes, binding.reload.attributes, ceremony.reload.attributes]
+    assert_equal session_before, session.to_hash
+    assert_equal sid, cookies[sid_name]
+    forbidden_names = (AuthPhaseRefusalResponseBoundary::COOKIE_NAMES + AuthPhaseRefusalResponseBoundary::DBSC_HEADERS)
+      .map(&:downcase)
+    cookie_lines = Array(response.headers["Set-Cookie"]).flat_map { |header| header.to_s.split("\n") }
+    cookie_names = cookie_lines.map { |header| header.split("=", 2).first.downcase }
+    response_names = cookie_names + response.headers.to_h.keys.map(&:downcase)
+
+    assert_empty forbidden_names & response_names
   ensure
     if feature
       enabled ? Flipper.enable(feature) : Flipper.disable(feature)
@@ -118,7 +196,7 @@ class SignEntryOtpAdmittedOrderTest < ActionDispatch::IntegrationTest
     assert_response :conflict
     assert handoff_attempted
     assert_not_predicate ceremony.reload, :cancelled?
-    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status_id
     assert_equal sid, cookies[sid_name]
     assert_not_includes response.headers["Set-Cookie"].to_s, "#{sid_name}="
 
@@ -126,7 +204,7 @@ class SignEntryOtpAdmittedOrderTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_predicate ceremony.reload, :cancelled?
-    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status_id
   ensure
     if feature
       enabled ? Flipper.enable(feature) : Flipper.disable(feature)
@@ -378,7 +456,7 @@ class SignEntryOtpAdmittedOrderTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "back after delivery failure cancels the email challenge and leaves the parent pending" do
+  test "Cancel after delivery failure ends only the email challenge and leaves the parent pending" do
     feature = FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name
     enabled = Flipper.enabled?(feature)
     Flipper.enable(feature)
@@ -431,12 +509,16 @@ class SignEntryOtpAdmittedOrderTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :service_unavailable
+    assert_equal I18n.t("actions.cancel"), response.parsed_body.fetch("props").fetch("cancel_button").fetch("label")
+    cancel_button_props = response.parsed_body.fetch("props").fetch("cancel_button")
+
+    assert_equal "/sign/cancellation?ri=jp", cancel_button_props.fetch("parent_action")
     delete(auth_app_sign_in_email_path(ri: "jp"))
 
     assert_response :see_other
     assert_predicate ceremony.reload.email_otp_context.fetch("cancelled_at"), :present?
     assert_not ceremony.verify_email_otp!(code: code).success?
-    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status_id
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     sid = cookies[sid_name]
     post(auth_app_sign_switch_path(ri: "jp"), params: { to: "sign_up" })
@@ -444,7 +526,7 @@ class SignEntryOtpAdmittedOrderTest < ActionDispatch::IntegrationTest
     assert_response :conflict
     assert_equal sid, cookies[sid_name]
     assert_not_includes response.headers["Set-Cookie"].to_s, "#{sid_name}="
-    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, parent.reload.status_id
     assert_not_predicate ceremony.reload, :cancelled?
   ensure
     TurnstileVerifierStub.challenge_enabled = false

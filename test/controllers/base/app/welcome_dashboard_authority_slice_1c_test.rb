@@ -90,7 +90,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f0_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f0_client.client_id,
+                                       authentication_context: f0_token.strict_authentication_context_value.to_s,
               )
+              f0_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f0_client.client_id),
+                issuer: OidcIssuer.for_client(f0_client),
+                subject: OidcSubject.for(f0_token.actor_record, resource_type: "client"),
+                sid: f0_session.public_id,
+                absolute_expires_at: f0_now + 10.minutes,
+              )
+              unless f0_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f0_local_enrollment.outcome}"
+              end
+
+              f0_local_session = f0_local_enrollment.session
+              if f0_client.client_id == RpBaseAppSession::CLIENT_ID && f0_token.selected_actor_context?
+                f0_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f0_token.actor_record,
+                  session: f0_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f0_local_session.id,
+                    account_public_id: f0_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f0_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f0_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f0_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f0_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f0_key] = f0_local_session.public_id
               @base_browser_rp_credentials[f0_key] = [f0_access, f0_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f0_key]
@@ -99,6 +131,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f0_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f0_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f0_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f0_key)}",
               ].join("; ")
               f0_headers = f0_headers.merge(
                 "Cookie" => f0_cookie,
@@ -130,7 +163,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_equal(
       { "display_name" => "Selected App Persona",
-        "avatar_image" => { "src" => base_app_dashboard_avatar_image_path(v: "default") }, },
+        "avatar_image" => { "src" => base_app_dashboard_avatar_image_path(ri: "jp", v: "default") }, },
       sections.first.fetch("current_identity"),
     )
     primary_links = sections.second.fetch("items")
@@ -171,7 +204,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
       dashboard_label(:oidc_discovery), dashboard_label(:jwks), dashboard_label(:userinfo),
     ]
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
-    assert_no_match(/サインイン済み|Signed in/i, response.body)
+    assert_no_match(/ログイン済み|Signed in/i, response.body)
   end
 
   test "dashboard_identity_uses_the_selected_app_persona_not_request_parameters" do
@@ -233,7 +266,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f1_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f1_client.client_id,
+                                       authentication_context: f1_token.strict_authentication_context_value.to_s,
               )
+              f1_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f1_client.client_id),
+                issuer: OidcIssuer.for_client(f1_client),
+                subject: OidcSubject.for(f1_token.actor_record, resource_type: "client"),
+                sid: f1_session.public_id,
+                absolute_expires_at: f1_now + 10.minutes,
+              )
+              unless f1_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f1_local_enrollment.outcome}"
+              end
+
+              f1_local_session = f1_local_enrollment.session
+              if f1_client.client_id == RpBaseAppSession::CLIENT_ID && f1_token.selected_actor_context?
+                f1_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f1_token.actor_record,
+                  session: f1_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f1_local_session.id,
+                    account_public_id: f1_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f1_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f1_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f1_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f1_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f1_key] = f1_local_session.public_id
               @base_browser_rp_credentials[f1_key] = [f1_access, f1_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f1_key]
@@ -242,6 +307,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f1_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f1_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f1_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f1_key)}",
               ].join("; ")
               f1_headers = f1_headers.merge(
                 "Cookie" => f1_cookie,
@@ -322,7 +388,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f2_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f2_client.client_id,
+                                       authentication_context: f2_token.strict_authentication_context_value.to_s,
               )
+              f2_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f2_client.client_id),
+                issuer: OidcIssuer.for_client(f2_client),
+                subject: OidcSubject.for(f2_token.actor_record, resource_type: "client"),
+                sid: f2_session.public_id,
+                absolute_expires_at: f2_now + 10.minutes,
+              )
+              unless f2_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f2_local_enrollment.outcome}"
+              end
+
+              f2_local_session = f2_local_enrollment.session
+              if f2_client.client_id == RpBaseAppSession::CLIENT_ID && f2_token.selected_actor_context?
+                f2_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f2_token.actor_record,
+                  session: f2_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f2_local_session.id,
+                    account_public_id: f2_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f2_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f2_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f2_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f2_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f2_key] = f2_local_session.public_id
               @base_browser_rp_credentials[f2_key] = [f2_access, f2_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f2_key]
@@ -331,6 +429,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f2_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f2_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f2_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f2_key)}",
               ].join("; ")
               f2_headers = f2_headers.merge(
                 "Cookie" => f2_cookie,
@@ -351,7 +450,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_match "selected app Persona has no display name", error.message
   end
 
-  test "authenticated direct root request returns 404 without redirect" do
+  test "authenticated direct root request is forbidden without redirect" do
     token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
 
@@ -406,7 +505,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f3_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f3_client.client_id,
+                                       authentication_context: f3_token.strict_authentication_context_value.to_s,
               )
+              f3_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f3_client.client_id),
+                issuer: OidcIssuer.for_client(f3_client),
+                subject: OidcSubject.for(f3_token.actor_record, resource_type: "client"),
+                sid: f3_session.public_id,
+                absolute_expires_at: f3_now + 10.minutes,
+              )
+              unless f3_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f3_local_enrollment.outcome}"
+              end
+
+              f3_local_session = f3_local_enrollment.session
+              if f3_client.client_id == RpBaseAppSession::CLIENT_ID && f3_token.selected_actor_context?
+                f3_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f3_token.actor_record,
+                  session: f3_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f3_local_session.id,
+                    account_public_id: f3_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f3_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f3_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f3_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f3_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f3_key] = f3_local_session.public_id
               @base_browser_rp_credentials[f3_key] = [f3_access, f3_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f3_key]
@@ -415,6 +546,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f3_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f3_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f3_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f3_key)}",
               ].join("; ")
               f3_headers = f3_headers.merge(
                 "Cookie" => f3_cookie,
@@ -425,15 +557,15 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f3_headers
         end
       end
-    get "/", headers: http_headers_7
+    get "/?ri=jp", headers: http_headers_7
 
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil response.location
     assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
   test "anonymous direct root request renders Home" do
-    get "/", headers: host_headers(@host)
+    get "/?ri=jp", headers: host_headers(@host)
 
     assert_response :success
     assert_equal "base/app/roots/index", inertia_component
@@ -496,7 +628,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f4_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f4_client.client_id,
+                                       authentication_context: f4_token.strict_authentication_context_value.to_s,
               )
+              f4_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f4_client.client_id),
+                issuer: OidcIssuer.for_client(f4_client),
+                subject: OidcSubject.for(f4_token.actor_record, resource_type: "client"),
+                sid: f4_session.public_id,
+                absolute_expires_at: f4_now + 10.minutes,
+              )
+              unless f4_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f4_local_enrollment.outcome}"
+              end
+
+              f4_local_session = f4_local_enrollment.session
+              if f4_client.client_id == RpBaseAppSession::CLIENT_ID && f4_token.selected_actor_context?
+                f4_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f4_token.actor_record,
+                  session: f4_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f4_local_session.id,
+                    account_public_id: f4_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f4_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f4_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f4_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f4_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f4_key] = f4_local_session.public_id
               @base_browser_rp_credentials[f4_key] = [f4_access, f4_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f4_key]
@@ -505,6 +669,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f4_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f4_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f4_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f4_key)}",
               ].join("; ")
               f4_headers = f4_headers.merge(
                 "Cookie" => f4_cookie,
@@ -515,7 +680,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f4_headers
         end
       end
-    get "/dashboard", headers: http_headers_6
+    get "/dashboard?ri=jp", headers: http_headers_6
 
     assert_response :success
     assert_equal "base/app/dashboards/show", inertia_component
@@ -525,7 +690,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   # The accepted Base guidance contract supersedes anonymous Dashboard's old 404.
   # Authenticated Home remains a rendered 404 in its separate test above.
   test "anonymous direct dashboard request reaches the same Base passive Sign entry" do
-    get "/dashboard", headers: { "Host" => @host }
+    get "/dashboard?ri=jp", headers: { "Host" => @host }
 
     assert_response :redirect
     destination = URI.parse(response.location)
@@ -593,7 +758,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f5_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f5_client.client_id,
+                                       authentication_context: f5_token.strict_authentication_context_value.to_s,
               )
+              f5_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f5_client.client_id),
+                issuer: OidcIssuer.for_client(f5_client),
+                subject: OidcSubject.for(f5_token.actor_record, resource_type: "client"),
+                sid: f5_session.public_id,
+                absolute_expires_at: f5_now + 10.minutes,
+              )
+              unless f5_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f5_local_enrollment.outcome}"
+              end
+
+              f5_local_session = f5_local_enrollment.session
+              if f5_client.client_id == RpBaseAppSession::CLIENT_ID && f5_token.selected_actor_context?
+                f5_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f5_token.actor_record,
+                  session: f5_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f5_local_session.id,
+                    account_public_id: f5_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f5_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f5_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f5_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f5_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f5_key] = f5_local_session.public_id
               @base_browser_rp_credentials[f5_key] = [f5_access, f5_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f5_key]
@@ -602,6 +799,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f5_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f5_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f5_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f5_key)}",
               ].join("; ")
               f5_headers = f5_headers.merge(
                 "Cookie" => f5_cookie,
@@ -618,9 +816,9 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  # The RP credential is checked against its live RP Session on every request, so a credential
-  # whose RP Session row is gone is refused although the root cookie beside it is still valid.
-  test "root_with_a_credential_whose_app_rp_session_record_is_gone_renders_the_home" do
+  # The RP session remains authenticated even after its OP grant row disappears; authenticated Home
+  # is still forbidden, and does not fall back to treating the browser as anonymous.
+  test "authenticated root stays forbidden when the OP grant row is gone" do
     headers =
       begin
         rp_headers = as_user_headers(@user, host: @host)
@@ -667,7 +865,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                        rp_token.actor_record,
                                        resource_type: "client",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            if rp_client.client_id == RpBaseAppSession::CLIENT_ID && rp_token.selected_actor_context?
+              rp_selected_candidate = BaseSelectorAuthority.new(
+                surface: :app,
+                principal: rp_token.actor_record,
+                session: rp_local_session,
+              ).selectable_candidates.fetch(0).fetch(:public)
+              RpBaseAppRecord.connected_to(role: :writing) do
+                RpBaseAppSessionSelection.create!(
+                  rp_session_id: rp_local_session.id,
+                  account_public_id: rp_selected_candidate.fetch(:account_public_id),
+                  organization_public_id: rp_selected_candidate.fetch(:organization_public_id),
+                  organization_unit_public_id: rp_selected_candidate.fetch(:organization_unit_public_id),
+                  avatar_public_id: rp_selected_candidate.fetch(:avatar_public_id),
+                  selected_at: rp_now,
+                )
+              end
+            end
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -676,6 +906,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -686,8 +917,9 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     get base_app_root_url(ri: "jp"), headers: headers
 
-    assert_response :success
-    assert_equal "base/app/roots/index", inertia_component
+    assert_response :forbidden
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
   test "root_with_a_malformed_app_bearer_renders_the_home" do
@@ -762,7 +994,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                            f6_token.actor_record,
                                            resource_type: "client",
                                          ), client_id: f6_client.client_id,
+                                         authentication_context: f6_token.strict_authentication_context_value.to_s,
                 )
+                f6_local_enrollment = RpCallbackCommitter.call(
+                  cell: RpCellBinding.for_client(f6_client.client_id),
+                  issuer: OidcIssuer.for_client(f6_client),
+                  subject: OidcSubject.for(f6_token.actor_record, resource_type: "client"),
+                  sid: f6_session.public_id,
+                  absolute_expires_at: f6_now + 10.minutes,
+                )
+                unless f6_local_enrollment.success?
+                  raise ArgumentError, "RP session enrollment failed: #{f6_local_enrollment.outcome}"
+                end
+
+                f6_local_session = f6_local_enrollment.session
+                if f6_client.client_id == RpBaseAppSession::CLIENT_ID && f6_token.selected_actor_context?
+                  f6_selected_candidate = BaseSelectorAuthority.new(
+                    surface: :app,
+                    principal: f6_token.actor_record,
+                    session: f6_local_session,
+                  ).selectable_candidates.fetch(0).fetch(:public)
+                  RpBaseAppRecord.connected_to(role: :writing) do
+                    RpBaseAppSessionSelection.create!(
+                      rp_session_id: f6_local_session.id,
+                      account_public_id: f6_selected_candidate.fetch(:account_public_id),
+                      organization_public_id: f6_selected_candidate.fetch(:organization_public_id),
+                      organization_unit_public_id: f6_selected_candidate.fetch(:organization_unit_public_id),
+                      avatar_public_id: f6_selected_candidate.fetch(:avatar_public_id),
+                      selected_at: f6_now,
+                    )
+                  end
+                end
+                @base_browser_rp_session_public_ids ||= {}
+                @base_browser_rp_session_public_ids[f6_key] = f6_local_session.public_id
                 @base_browser_rp_credentials[f6_key] = [f6_access, f6_session.issue_refresh_token!]
               end
               if @base_browser_rp_credentials[f6_key]
@@ -771,6 +1035,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                   f6_headers.fetch("Cookie"),
                   "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f6_access)}",
                   "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f6_refresh)}",
+                  "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f6_key)}",
                 ].join("; ")
                 f6_headers = f6_headers.merge(
                   "Cookie" => f6_cookie,
@@ -844,7 +1109,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f7_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f7_client.client_id,
+                                       authentication_context: f7_token.strict_authentication_context_value.to_s,
               )
+              f7_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f7_client.client_id),
+                issuer: OidcIssuer.for_client(f7_client),
+                subject: OidcSubject.for(f7_token.actor_record, resource_type: "client"),
+                sid: f7_session.public_id,
+                absolute_expires_at: f7_now + 10.minutes,
+              )
+              unless f7_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f7_local_enrollment.outcome}"
+              end
+
+              f7_local_session = f7_local_enrollment.session
+              if f7_client.client_id == RpBaseAppSession::CLIENT_ID && f7_token.selected_actor_context?
+                f7_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f7_token.actor_record,
+                  session: f7_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f7_local_session.id,
+                    account_public_id: f7_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f7_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f7_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f7_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f7_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f7_key] = f7_local_session.public_id
               @base_browser_rp_credentials[f7_key] = [f7_access, f7_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f7_key]
@@ -853,6 +1150,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f7_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f7_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f7_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f7_key)}",
               ].join("; ")
               f7_headers = f7_headers.merge(
                 "Cookie" => f7_cookie,
@@ -929,7 +1227,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f8_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f8_client.client_id,
+                                       authentication_context: f8_token.strict_authentication_context_value.to_s,
               )
+              f8_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f8_client.client_id),
+                issuer: OidcIssuer.for_client(f8_client),
+                subject: OidcSubject.for(f8_token.actor_record, resource_type: "client"),
+                sid: f8_session.public_id,
+                absolute_expires_at: f8_now + 10.minutes,
+              )
+              unless f8_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f8_local_enrollment.outcome}"
+              end
+
+              f8_local_session = f8_local_enrollment.session
+              if f8_client.client_id == RpBaseAppSession::CLIENT_ID && f8_token.selected_actor_context?
+                f8_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f8_token.actor_record,
+                  session: f8_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f8_local_session.id,
+                    account_public_id: f8_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f8_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f8_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f8_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f8_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f8_key] = f8_local_session.public_id
               @base_browser_rp_credentials[f8_key] =
                 [f8_access, f8_session.issue_refresh_token!]
             end
@@ -939,6 +1269,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f8_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f8_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f8_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f8_key)}",
               ].join("; ")
               f8_headers = f8_headers.merge(
                 "Cookie" => f8_cookie,
@@ -1018,7 +1349,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                          f9_token.actor_record,
                                          resource_type: "client",
                                        ), client_id: f9_client.client_id,
+                                       authentication_context: f9_token.strict_authentication_context_value.to_s,
               )
+              f9_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f9_client.client_id),
+                issuer: OidcIssuer.for_client(f9_client),
+                subject: OidcSubject.for(f9_token.actor_record, resource_type: "client"),
+                sid: f9_session.public_id,
+                absolute_expires_at: f9_now + 10.minutes,
+              )
+              unless f9_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f9_local_enrollment.outcome}"
+              end
+
+              f9_local_session = f9_local_enrollment.session
+              if f9_client.client_id == RpBaseAppSession::CLIENT_ID && f9_token.selected_actor_context?
+                f9_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f9_token.actor_record,
+                  session: f9_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f9_local_session.id,
+                    account_public_id: f9_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f9_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f9_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f9_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f9_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f9_key] = f9_local_session.public_id
               @base_browser_rp_credentials[f9_key] = [f9_access, f9_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f9_key]
@@ -1027,6 +1390,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f9_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f9_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f9_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f9_key)}",
               ].join("; ")
               f9_headers = f9_headers.merge(
                 "Cookie" => f9_cookie,
@@ -1100,7 +1464,39 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                                           f10_token.actor_record,
                                           resource_type: "client",
                                         ), client_id: f10_client.client_id,
+                                        authentication_context: f10_token.strict_authentication_context_value.to_s,
               )
+              f10_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(f10_client.client_id),
+                issuer: OidcIssuer.for_client(f10_client),
+                subject: OidcSubject.for(f10_token.actor_record, resource_type: "client"),
+                sid: f10_session.public_id,
+                absolute_expires_at: f10_now + 10.minutes,
+              )
+              unless f10_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{f10_local_enrollment.outcome}"
+              end
+
+              f10_local_session = f10_local_enrollment.session
+              if f10_client.client_id == RpBaseAppSession::CLIENT_ID && f10_token.selected_actor_context?
+                f10_selected_candidate = BaseSelectorAuthority.new(
+                  surface: :app,
+                  principal: f10_token.actor_record,
+                  session: f10_local_session,
+                ).selectable_candidates.fetch(0).fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: f10_local_session.id,
+                    account_public_id: f10_selected_candidate.fetch(:account_public_id),
+                    organization_public_id: f10_selected_candidate.fetch(:organization_public_id),
+                    organization_unit_public_id: f10_selected_candidate.fetch(:organization_unit_public_id),
+                    avatar_public_id: f10_selected_candidate.fetch(:avatar_public_id),
+                    selected_at: f10_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[f10_key] = f10_local_session.public_id
               @base_browser_rp_credentials[f10_key] = [f10_access, f10_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[f10_key]
@@ -1109,6 +1505,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f10_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f10_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f10_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(f10_key)}",
               ].join("; ")
               f10_headers = f10_headers.merge(
                 "Cookie" => f10_cookie,
@@ -1185,14 +1582,14 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     credentials.each do |label, credential|
       cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
-      get "/", headers: { "Host" => @host }
+      get "/?ri=jp", headers: { "Host" => @host }
 
       assert_response :success, label
       assert_nil response.location, label
       assert_equal "base/app/roots/index", inertia_component, label
 
       cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
-      get "/dashboard", headers: { "Host" => @host }
+      get "/dashboard?ri=jp", headers: { "Host" => @host }
 
       assert_response :redirect, label
       destination = URI.parse(response.location)
@@ -1271,7 +1668,6 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1298,24 +1694,6 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

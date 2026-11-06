@@ -70,8 +70,9 @@ module Auth
                   },
                   submit_label: page_t("#{scope}.submit"),
                 },
+                parent_cancel: auth_parent_cancellation_form,
                 back_link: {
-                  label: t("sign.org.authentication.new.back"),
+                  label: t("actions.back"),
                   href: auth_org_sign_in_path(pt: pt, ri: region),
                 },
               }

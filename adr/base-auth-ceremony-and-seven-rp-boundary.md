@@ -305,9 +305,11 @@ the retained redeemed admission before result lookup or finalization. Admission 
 erase that correlation. Successful OIDC root issuance rotates the Rails session against fixation and
 retains only the already-proven nonce for exact finalized-result retries.
 
-Redeemed OIDC cancel-and-start remains unimplemented in this cycle by explicit user direction: the
-current OIDC parent has no cancellation transition. Its pending/authenticated/consumed lifecycle
-remains unchanged; no existing completed login is canceled or reopened.
+Redeemed OIDC cancel-and-start remains unimplemented in this cycle by explicit user direction for
+the Step-Up and credential-registration restart workflow described below. The separate OIDC parent
+Cancel contract was later approved in `two.md` §3.6 and clarified by one.md R-AU-52: an unfinalized
+parent may transition from `pending` or `authenticated` to `canceled`, while a consumed/finalized
+parent cannot be canceled or reopened. App and Org use realm-local status references for this axis.
 
 Step-Up and credential-registration restart forms are rendered only on their owning Base surface
 after checking the original browser nonce/root and the exact persisted intent. GET remains read-only

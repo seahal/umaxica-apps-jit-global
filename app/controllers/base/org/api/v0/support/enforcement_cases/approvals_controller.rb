@@ -40,10 +40,10 @@ module Base
               before_action :set_current_actor
               before_action :apply_browser_context
               rescue_from ActionPolicy::Unauthorized, with: :render_forbidden
+              rescue_from EnforcementCaseAuthorizationRejected, with: :render_forbidden
+              rescue_from TokenStatusManagement::StepUpEvidenceUnavailable, with: :render_forbidden
               rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
               rescue_from ActionController::BadRequest, with: :render_bad_request
-
-              class ApprovalConflictError < StandardError; end
 
               before_action :no_store
               before_action :set_enforcement_case
@@ -62,20 +62,24 @@ module Base
                 authorize!(@enforcement_case, with: EnforcementCasePolicy, to: :approve?)
                 return unless require_enforcement_step_up!
 
-                with_owner_step_up(STEP_UP_SCOPE) do |requirement|
-                  claim_approval!
-                  begin
-                    attach_requested_effects!(@enforcement_case)
-                    EnforcementCaseApplyOperation.call(
-                      enforcement_case: @enforcement_case, actor_operator_public_id: current_operator.public_id,
-                      step_up_token: avatar_root, step_up_requirement: requirement,
-                    )
-                  rescue StandardError
-                    # Any failure: release_unapplied_claim! decides from the committed state whether the
-                    # claim can be withdrawn, and the original error is re-raised either way.
-                    release_unapplied_claim!
-                    raise
-                  end
+                step_up_evidence = current_step_up_evidence
+                EnforcementCaseApprovalOperation.claim!(
+                  enforcement_case: @enforcement_case, actor: current_operator, token: avatar_root,
+                  evidence: step_up_evidence,
+                )
+                begin
+                  attach_requested_effects!(@enforcement_case)
+                  EnforcementCaseApplyOperation.call(
+                    enforcement_case: @enforcement_case, actor_operator_public_id: current_operator.public_id,
+                    step_up_token: avatar_root, step_up_actor: current_operator,
+                    step_up_evidence: step_up_evidence,
+                    authorization_rule: :approve,
+                  )
+                rescue StandardError
+                  # Any failure: release_unapplied_claim! decides from the committed state whether the
+                  # claim can be withdrawn, and the original error is re-raised either way.
+                  release_unapplied_claim!
+                  raise
                 end
                 return if performed?
 
@@ -85,7 +89,7 @@ module Base
                   end
                   format.html { redirect_to(enforcement_case_path_for(@enforcement_case), status: :see_other) }
                 end
-              rescue ApprovalConflictError
+              rescue EnforcementCaseApprovalOperation::ClaimConflictError
                 render_conflict
               rescue ActiveRecord::RecordInvalid, ArgumentError, EnforcementCaseApplicable::ApprovalRequiredError,
                      EnforcementCaseApplicable::InvalidStateTransitionError => e
@@ -120,15 +124,6 @@ module Base
 
               def authorize_approval!
                 authorize!(@enforcement_case, with: EnforcementCasePolicy, to: :approve?)
-              end
-
-              def claim_approval!
-                @enforcement_case.with_lock do
-                  pending = @enforcement_case.state == "pending_approval"
-                  raise ApprovalConflictError unless pending && @enforcement_case.approved_by_operator_public_id.nil?
-
-                  @enforcement_case.update!(approved_by_operator_public_id: current_operator.public_id)
-                end
               end
 
               # Withdraws the claim only when nothing observable has happened. EnforcementCaseApplyOperation

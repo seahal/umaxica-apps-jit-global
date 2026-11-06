@@ -13,7 +13,8 @@ class PreferenceApiRouteContractTest < ActionDispatch::IntegrationTest
 
   test "Base, Auth, and Core serve the preference API route shape with GET and PATCH only" do
     # two.md WU-3: corporate Auth/Core own no Preference API; Base com keeps its anonymous one.
-    [%w(base app), %w(base com), %w(base org), %w(auth app), %w(auth org), %w(core app), %w(core org)].each do |family, surface|
+    [%w(base app), %w(base com), %w(base org), %w(auth app), %w(auth org), %w(core app),
+     %w(core org),].each do |family, surface|
       host = ENV.fetch("PUBLIC_#{family.upcase}_#{SURFACE_HOST_KEYS.fetch(surface)}_URL")
 
       RESOURCES.each do |resource, controller|

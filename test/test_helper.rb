@@ -63,6 +63,9 @@ Minitest.load(:test_prof)
 require "test_prof/recipes/minitest/sample"
 require_relative "support/parallel_test_database_cloner"
 require_relative "support/authority_stop_cleanup"
+require_relative "support/sign_in_flow_cleanup"
+require_relative "support/sign_up_journey_cleanup"
+require_relative "support/database_selector_primary"
 require_relative "support/external_identity_test_helper"
 require_relative "support/publishing_content_helper"
 require_relative "support/oidc_state_test_support"
@@ -92,12 +95,15 @@ require_relative "support/auth_ceremony_entry_helper"
 require_relative "support/auth_email_mfa_helper"
 require_relative "support/strict_loading_association_preloader"
 require_relative "support/public_id_fixed_length_assertions"
+require_relative "support/rp_cell_session_helper"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
 Rails.application.config.x.turnstile.verifier = "TurnstileVerifierStub"
 
 module AuthenticationHarness
+  include RpCellSessionHelper
+
   TEST_BROWSER_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " \
                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -108,7 +114,13 @@ module AuthenticationHarness
     headers
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
+  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil, select_available_app_persona: true)
+    rp_client_id = base_rp_client_id_for(host || request_host_for_test, "client")
+    return base_rp_authenticated_headers(
+      user, host:, headers:, session_public_id:, client_id: rp_client_id,
+            session_header: "X-TEST-CURRENT-USER", select_available_app_persona:,
+    ) if rp_client_id
+
     authenticated_resource_headers(
       user,
       host: host,
@@ -120,6 +132,12 @@ module AuthenticationHarness
   end
 
   def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
+    rp_client_id = base_rp_client_id_for(host || request_host_for_test, "operator")
+    return base_rp_authenticated_headers(
+      staff, host:, headers:, session_public_id:, client_id: rp_client_id,
+             session_header: "X-TEST-CURRENT-STAFF", select_available_app_persona: false,
+    ) if rp_client_id
+
     authenticated_resource_headers(
       staff,
       host: host,
@@ -143,6 +161,20 @@ module AuthenticationHarness
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
+  end
+
+  def with_preference_realm_issuers
+    %w(app com org).each { |realm| JitSecurityJwtRegistry.issuer("preference_#{realm}") }
+    yield
+  end
+
+  def assert_no_preference_state_cookies
+    set_cookie = response.headers["Set-Cookie"].to_s
+
+    [PreferenceCookieName.anonymous_jwt, PreferenceCookieName.anonymous_experience,
+     PreferenceCookieName.binding, PreferenceIoKeys::Cookies::LANGUAGE,].each do |name|
+      assert_not_includes set_cookie, "#{name}=", name
+    end
   end
 
   # A protected Base page is not a Sign entry: it points the browser at Base's own passive GET /sign
@@ -297,6 +329,206 @@ module AuthenticationHarness
         "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
         "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
       )
+  end
+
+  def base_rp_client_id_for(host, resource_type)
+    return if host.blank?
+
+    normalized_host = URI.parse(host.to_s.include?("://") ? host.to_s : "https://#{host}").host
+    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+    return "base-app-ww" if resource_type == "client" && normalized_host == hosts.base_service.host
+    return "base-org-ww" if resource_type == "operator" && normalized_host == hosts.base_staff.host
+
+    nil
+  rescue URI::InvalidURIError
+    nil
+  end
+
+  def request_host_for_test
+    request.host if respond_to?(:request, true) && request
+  end
+
+  def base_rp_authenticated_headers(resource, host:, headers:, session_public_id:, client_id:, session_header:,
+                                    select_available_app_persona:)
+    unless resource.is_a?(Client) || resource.is_a?(Operator)
+      raise ArgumentError, "Base RP authentication requires a resource"
+    end
+
+    root_token = authentication_harness_session_token(resource, session_public_id:)
+    cache_key = [client_id, root_token.public_id]
+    @authentication_harness_rp_sessions ||= {}
+    bundle = @authentication_harness_rp_sessions[cache_key] ||= create_base_rp_test_session(
+      client_id:, resource:, root_token:,
+    )
+
+    @base_browser_rp_session_public_ids ||= {}
+    @base_browser_rp_session_public_ids[cache_key] = bundle.fetch(:session).public_id
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[cache_key] ||= [bundle.fetch(:access_token), bundle.fetch(:refresh_token)]
+
+    if select_available_app_persona && client_id == "base-app-ww"
+      select_available_app_persona_for_test!(resource, bundle.fetch(:session), root_token:)
+    end
+
+    access_token = bundle.fetch(:access_token)
+    cookies =
+      headers.fetch("Cookie", "").split("; ").reject do |pair|
+        cookie_name = pair.split("=", 2).first
+        [OidcRpBrowserCredentialContract::ACCESS_COOKIE, OidcRpBrowserCredentialContract::REFRESH_COOKIE,
+         OidcRpBrowserCredentialContract::SESSION_COOKIE, AuthenticationBase::ACCESS_COOKIE_KEY,].include?(cookie_name)
+      end
+    cookies.concat(
+      [
+        "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
+        "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(bundle.fetch(:refresh_token))}",
+        "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(bundle.fetch(:session).public_id)}",
+      ],
+    )
+    cookie_header = cookies.join("; ")
+
+    host_headers(host).merge(headers).merge(
+      session_header => resource.id.to_s,
+      "X-TEST-SESSION-PUBLIC-ID" => root_token.public_id,
+      "Authorization" => "Bearer #{access_token}",
+      "Cookie" => cookie_header,
+      "HTTP_COOKIE" => cookie_header,
+    )
+  end
+
+  def create_base_rp_test_session(client_id:, resource:, root_token:)
+    client = OidcClientRegistry.find!(client_id)
+    device_session = root_token.device_session_record!
+    root_token.rotate_refresh_token! unless device_session.current_refresh_token_id == root_token.id
+    grant_class, owner_column =
+      case root_token
+      when ClientToken then [OpAppGrant, :client_token_id]
+      when OperatorToken then [OpOrgGrant, :operator_token_id]
+      else raise ArgumentError, "unsupported Base RP root token"
+      end
+    grant = grant_class.currently_usable_at
+      .where(owner_column => root_token.id, :oidc_client_id => client_id)
+      .order(created_at: :desc, id: :desc)
+      .first
+
+    if grant
+      now = grant.class.database_now
+      access_token = base_rp_access_token_for_grant(client:, resource:, root_token:, grant:, now:)
+      refresh_token = grant.issue_refresh_token!(now:)
+      issuer = OidcIssuer.for_client(client)
+      subject = OidcSubject.for(resource, resource_type: OidcIssuer.resource_type_for_client(client))
+      sid = grant.public_id
+      absolute_expires_at = grant.refresh_token_expires_at
+    else
+      token_response = rp_cell_test_token_response(client_id, actor: resource, root_token:)
+      id_token_payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
+      access_token = token_response.fetch(:access_token)
+      refresh_token = token_response.fetch(:refresh_token)
+      issuer = id_token_payload.fetch("iss")
+      subject = id_token_payload.fetch("sub")
+      sid = id_token_payload.fetch("sid")
+      absolute_expires_at = 1.hour.from_now
+    end
+
+    cell = RpCellBinding.for_client(client_id)
+    session = existing_base_rp_session(cell:, issuer:, subject:, sid:)
+    unless session
+      enrollment = RpCallbackCommitter.call(
+        cell:, issuer:, subject:, sid:, absolute_expires_at:,
+      )
+      raise ArgumentError, "Base RP test enrollment failed: #{enrollment.outcome}" unless enrollment.success?
+
+      session = enrollment.session
+    end
+
+    {
+      access_token:,
+      refresh_token:,
+      session:,
+      client:,
+    }
+  end
+
+  def existing_base_rp_session(cell:, issuer:, subject:, sid:)
+    record_class = "#{cell.record_prefix}Record".constantize
+    binding_class = "#{cell.record_prefix}OpSessionBinding".constantize
+    session_class = "#{cell.record_prefix}Session".constantize
+    anchor = binding_class.includes(:identity_binding)
+      .find_by(issuer:, realm: cell.realm, client_id: cell.client_id, sid:)
+    return unless anchor && anchor.revoked_at.nil?
+
+    identity = anchor.identity_binding
+    return unless identity && [identity.issuer, identity.realm, identity.client_id, identity.subject] ==
+      [issuer, cell.realm, cell.client_id, subject]
+
+    session = session_class.find_by(op_session_binding_id: anchor.id, revoked_at: nil)
+    return unless session && session.absolute_expires_at > record_class.database_now
+
+    session
+  end
+
+  def base_rp_access_token_for_grant(client:, resource:, root_token:, grant:, now:)
+    expires_at = [now + 10.minutes, grant.refresh_token_expires_at].compact.min
+    amr = grant.oidc_amr.present? ? JSON.parse(grant.oidc_amr) : []
+    raise ArgumentError, "Base RP test grant has malformed AMR" unless
+      amr.is_a?(Array) && amr.all? { |method| method.is_a?(String) }
+
+    AuthenticationTokenService.encode(
+      resource,
+      host: URI.parse(client.redirect_uris.first).host,
+      resource_type: OidcIssuer.resource_type_for_client(client),
+      session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
+      oidc_sid: grant.public_id,
+      oidc_jti: grant.oidc_jti,
+      expires_at:,
+      scopes: grant.oidc_scope.to_s.split,
+      acr: grant.oidc_acr,
+      amr:,
+      auth_time: grant.oidc_auth_time&.to_i || root_token.created_at.to_i,
+      authentication_context: root_token.strict_authentication_context_value.to_s,
+      issuer: OidcIssuer.for_client(client),
+      audiences: [client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+      subject: OidcSubject.for(resource, resource_type: OidcIssuer.resource_type_for_client(client)),
+      client_id: client.client_id,
+    )
+  rescue JSON::ParserError
+    raise ArgumentError, "Base RP test grant has malformed AMR"
+  end
+
+  def select_available_app_persona_for_test!(principal, rp_session, root_token:)
+    return if rp_session.selected_actor_context?
+
+    selection = BaseSelectorAuthority.prepare(surface: :app, principal:, session: rp_session)
+    if Array(selection[:accounts]).empty? && principal.status_id == ClientStatus::ACTIVE &&
+        principal.login_allowed? && principal.access_enabled?
+      BaseSelectorBootstrapAuthority.call(surface: :app, principal:)
+      selection = BaseSelectorAuthority.prepare(surface: :app, principal:, session: rp_session)
+    end
+    candidates = Array(selection[:accounts])
+    candidate =
+      if root_token.selected_actor_context?
+        candidates.find do |available|
+          available.fetch(:public_id) == root_token.selected_account_public_id &&
+            available.dig(:organization, :public_id) == root_token.selected_collective_public_id &&
+            available.dig(:organization, :unit_public_id) == root_token.selected_collective_unit_public_id &&
+            available.dig(:avatar, :public_id) == root_token.selected_avatar_public_id
+        end
+      end
+    candidate ||= candidates.first
+    return unless candidate
+
+    # Fixture setup may name an existing OP choice, but the browser's authoritative selection is
+    # always written to this RP session. Selector-specific examples opt out and begin unselected.
+    BaseSelectorAuthority.select(
+      surface: :app, principal:, session: rp_session,
+      params: {
+        account_public_id: candidate.fetch(:public_id),
+        organization_public_id: candidate.dig(:organization, :public_id),
+        organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+        avatar_public_id: candidate.dig(:avatar, :public_id),
+      },
+    )
   end
 
   def authentication_harness_session_token(resource, session_public_id:)

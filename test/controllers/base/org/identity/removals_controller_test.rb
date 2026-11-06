@@ -4,6 +4,8 @@
 require "test_helper"
 
 class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     https!
     @host = configured_host(:base_staff)
@@ -581,89 +583,103 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
   end
 
-  test "an Emergency session cannot remove a credential" do
+  test "a Standby session cannot update a credential" do
     target = create_active_secret_credential(@operator)
     create_active_secret_credential(@operator)
-    emergency_token = OperatorToken.create!(
-      authentication_epoch: 0,
-      staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      authentication_context: AuthenticationContextValue::STANDBY_KEY,
-    )
-
-    http_headers_0 =
-      begin
-        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: emergency_token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpOrgGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpOrgGrant.create!(
-              authentication_epoch: 0,
-              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "operator",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "operator",
-                                     ), client_id: rp_client.client_id,
-            )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
-    post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
-         headers: http_headers_0
+    emergency_token = create_standby_session(@operator)
+    headers = standby_headers_for(@operator, emergency_token)
+    step_up_transactions_before = OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
+    get edit_base_org_identity_secret_url(target.public_id, ri: "jp", host: @host), headers: headers
 
     assert_equal 403, response.status
+
+    patch base_org_identity_secret_url(target.public_id, ri: "jp", host: @host),
+          params: { staff_secret_credential: { name: "Standby changed", enabled: "1" } },
+          headers: headers
+
+    assert_equal 403, response.status
+    assert_equal target.name, target.reload.name
+    assert_equal OperatorSecretCredentialStatus::ACTIVE, target.staff_secret_status_id
+    assert_equal AuthenticationContextValue::STANDBY_KEY, emergency_token.reload.authentication_context
+    assert_nil emergency_token.last_step_up_at
+    assert_equal step_up_transactions_before,
+                 OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
+  end
+
+  test "a Standby session cannot remove a credential" do
+    target = create_active_secret_credential(@operator)
+    create_active_secret_credential(@operator)
+    emergency_token = create_standby_session(@operator)
+    headers = standby_headers_for(@operator, emergency_token)
+    step_up_transactions_before = OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
+
+    post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host), headers: headers
+
+    assert_equal 403, response.status, "expected Standby refusal, got redirect to #{response.location.inspect}"
     assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
     assert_equal AuthenticationContextValue::STANDBY_KEY, emergency_token.reload.authentication_context
     assert_nil emergency_token.last_step_up_at
+    assert_equal step_up_transactions_before,
+                 OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
   end
 
   private
+
+  def create_standby_session(operator)
+    token = OperatorToken.create!(
+      authentication_epoch: 0,
+      staff: operator,
+      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE,
+      discard_at: 30.days.from_now,
+      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
+      root_login_established_at: Time.current,
+      established_authentication_method: "passkey",
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    )
+    BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    token
+  end
+
+  def standby_headers_for(operator, token)
+    root_headers = as_staff_headers(operator, host: @host, session_public_id: token.public_id)
+    client = OidcClientRegistry.find!("base-org-ww")
+    now = Time.current
+    rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
+      operator_token: token,
+      oidc_client_id: client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now,
+      refresh_token_expires_at: now + 10.minutes,
+    )
+    access_token = AuthenticationTokenService.encode(
+      operator,
+      host: @host,
+      resource_type: "operator",
+      session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: now + 10.minutes,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(client),
+      audiences: [client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+      subject: OidcSubject.for(operator, resource_type: "operator"),
+      client_id: client.client_id,
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    )
+    cookie = [
+      root_headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
+    ].join("; ")
+    root_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+  end
 
   def create_active_secret_credential(operator)
     OperatorSecretCredential.create!(

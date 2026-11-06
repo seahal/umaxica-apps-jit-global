@@ -175,5 +175,4 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
   end
-
 end

@@ -3,7 +3,7 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
-  %w(app).each do |surface|
+  %w(app).each do |_surface|
     test "app Email registration resend preserves the original deadline failures and browser" do
       owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       root_token = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)

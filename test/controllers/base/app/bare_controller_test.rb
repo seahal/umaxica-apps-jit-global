@@ -30,7 +30,6 @@ module Visa
         Visa::App::WellKnown::JwksController
         Visa::App::RevisionsController
         Visa::App::RobotsController
-        Visa::App::RootsController
       ).freeze
       OPTIONAL_TEST_DESCENDANTS = %w(
         Base::App::TestCsrfController

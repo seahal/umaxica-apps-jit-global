@@ -134,15 +134,11 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "auth org settings keeps only the Entra ceremony" do
+  test "auth org has no settings helpers and Base owns Entra status" do
     helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
 
-    %w(
-      auth_org_settings
-      auth_org_settings_entra
-    ).each do |prefix|
-      assert helper_names.any? { |name| name.start_with?(prefix) }, "#{prefix} must remain"
-    end
+    assert helper_names.none? { |name| name.start_with?("auth_org_settings") }
+    assert helper_names.any? { |name| name.start_with?("base_org_identity_social_identities") }
 
     %w(
       auth_org_settings_passkey

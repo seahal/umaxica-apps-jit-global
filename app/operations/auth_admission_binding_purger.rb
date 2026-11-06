@@ -40,7 +40,9 @@ class AuthAdmissionBindingPurger
             next unless eligible?(binding)
             next unless purge_sign_up_flows!(binding)
 
+            auth_session_ids = auth_session_ids_for(binding)
             binding_model.where(id: binding.id).delete_all
+            purge_unreferenced_auth_sessions!(auth_session_ids:)
           end
           !bindings_for_parent.exists?
         end
@@ -57,7 +59,7 @@ class AuthAdmissionBindingPurger
   end
 
   def retire_expired_unredeemed!(binding)
-    return unless binding.redeemed_at.nil? && binding.retired_at.nil?
+    return unless binding.active?
     return unless binding.expires_at <= now
 
     binding.retire!
@@ -67,16 +69,32 @@ class AuthAdmissionBindingPurger
     cutoff = now - retention_period
     return false unless parent.expires_at <= cutoff
 
-    terminal_at = binding.redeemed_at || binding.retired_at
-    return false unless terminal_at && terminal_at <= cutoff
+    return false unless binding_retention_elapsed?(binding, cutoff:)
     return false unless binding.expires_at <= cutoff
 
     auth_sessions_eligible?(binding, cutoff: cutoff)
   end
 
+  def binding_retention_elapsed?(binding, cutoff:)
+    case binding.status_id
+    when AuthAdmissionBinding::ISSUED_STATUS_ID,
+         AuthAdmissionBinding::ATTACHED_STATUS_ID,
+         AuthAdmissionBinding::BASE_CONFIRMED_STATUS_ID
+      false
+    when AuthAdmissionBinding::REDEEMED_STATUS_ID
+      binding.redeemed_at <= cutoff
+    when AuthAdmissionBinding::RETIRED_STATUS_ID
+      binding.retired_at <= cutoff
+    when AuthAdmissionBinding::SWITCHED_STATUS_ID
+      binding.updated_at <= cutoff
+    else
+      raise AuthAdmissionBinding::InvalidTransition,
+            "unsupported admission binding status for retention: #{binding.status_id.inspect}"
+    end
+  end
+
   def auth_sessions_eligible?(binding, cutoff:)
-    session_ids = [binding.auth_ceremony_session_id, binding.admitted_auth_ceremony_session_id].compact
-    session_ids.uniq!
+    session_ids = auth_session_ids_for(binding)
     return true if session_ids.empty?
 
     session_model = binding.class.auth_admission_session_class
@@ -86,10 +104,45 @@ class AuthAdmissionBindingPurger
     end
 
     sessions.all? do |session|
-      session.expires_at <= cutoff &&
-        [session.revoked_at, session.completed_at, session.cancelled_at].all? do |timestamp|
-          timestamp.nil? || timestamp <= cutoff
-        end
+      session.expires_at <= cutoff && auth_session_retention_elapsed?(session, cutoff:)
+    end
+  end
+
+  def auth_session_retention_elapsed?(session, cutoff:)
+    case session.status_id
+    when AuthCeremonySession::STATUS_ISSUED,
+         AuthCeremonySession::STATUS_ADMITTED,
+         AuthCeremonySession::STATUS_EVIDENCE_RECORDED
+      true
+    when AuthCeremonySession::STATUS_REPLACED, AuthCeremonySession::STATUS_REVOKED
+      session.revoked_at <= cutoff
+    when AuthCeremonySession::STATUS_COMPLETED
+      session.completed_at <= cutoff
+    when AuthCeremonySession::STATUS_CANCELLED_BEFORE_PROGRESS,
+         AuthCeremonySession::STATUS_CANCELLED_AFTER_PROGRESS
+      session.cancelled_at <= cutoff
+    else
+      raise AuthCeremonySession::InvalidTransition,
+            "unsupported Auth ceremony session status for retention: #{session.status_id.inspect}"
+    end
+  end
+
+  def auth_session_ids_for(binding)
+    session_ids = [binding.auth_ceremony_session_id, binding.admitted_auth_ceremony_session_id]
+    session_ids.compact!
+    session_ids.uniq!
+    session_ids.sort!
+    session_ids
+  end
+
+  def purge_unreferenced_auth_sessions!(auth_session_ids:)
+    session_model = binding_model.auth_admission_session_class
+    auth_session_ids.each do |session_id|
+      binding_references_session = binding_model.where(auth_ceremony_session_id: session_id)
+        .or(binding_model.where(admitted_auth_ceremony_session_id: session_id))
+      next if binding_references_session.exists?
+
+      session_model.where(id: session_id).delete_all
     end
   end
 

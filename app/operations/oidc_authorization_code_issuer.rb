@@ -74,7 +74,8 @@ class OidcAuthorizationCodeIssuer < ApplicationService
     binding_model.connection_owner.connected_to(role: :writing) do
       binding = binding_model.where(
         authorization_transaction_id: transaction.id, purpose: "authentication_handoff",
-      ).where.not(redeemed_at: nil).order(redeemed_at: :desc, id: :desc).first
+        status_id: AuthAdmissionBinding::REDEEMED_STATUS_ID,
+      ).order(redeemed_at: :desc, id: :desc).first
       return default_ttl unless binding
 
       now = binding_model.database_now

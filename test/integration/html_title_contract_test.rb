@@ -129,37 +129,17 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
             fv5080 = fv5120
             fv5074 = fv5084.merge(fv5119 => fv5118)
             fv5068.get(fv5075, params: fv5074, headers: fv5077)
-            fv5112 =
-              begin
-                fv5117 = fv5068.response.body
-                fv5116 = true
-                fv5115 = Nokogiri::HTML(fv5117).at_css("form")
-                if fv5115.nil? && fv5116
-                  nil
-                else
-                  raise RuntimeError, "Auth continuation form is missing" unless fv5115
-
-                  fv5114 = fv5115.at_css("input[name='authenticity_token']")&.[]("value")
-                  raise RuntimeError,
-                        "Auth continuation is missing its CSRF token" if fv5114.blank?
-
-                  fv5113 = fv5115.css("input[type='hidden']").to_h do |input|
-                    [input["name"], input["value"]]
-                  end.except("authenticity_token")
-                  [fv5115["action"], fv5114, fv5113]
-                end
-              end
+            # An entry reference is accepted only on a top-level document navigation, and a live
+            # reference never renders a page: it answers 303 to the ceremony binding action, which
+            # points at the Base/Visa continuation for this binding.
+            fv5068.assert_response :see_other
+            fv5112 = fv5068.response.location
             if fv5112
-
-              fv5111, fv5109, fv5110 = fv5112
 
               fv5068.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
                 "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-              fv5068.post(
-                fv5111,
-                params: fv5110.merge(authenticity_token: fv5109),
-                headers: fv5077,
-              )
+              fv5068.get(fv5112, headers: fv5077)
+              fv5068.assert_response :see_other
               fv5108 = fv5068.response.location
               if fv5108.present?
 
@@ -281,31 +261,6 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
                   fv5064 = fv5077.merge("Host" => fv5076)
                   fv5068.get(fv5075, params: fv5074, headers: fv5064)
                 end
-                fv5067, fv5065, fv5066 =
-                  begin
-                    fv5073 = fv5068.response.body
-                    fv5072 = false
-                    fv5071 = Nokogiri::HTML(fv5073).at_css("form")
-                    if fv5071.nil? && fv5072
-                      nil
-                    else
-                      raise RuntimeError, "Auth continuation form is missing" unless fv5071
-
-                      fv5070 = fv5071.at_css("input[name='authenticity_token']")&.[]("value")
-                      raise RuntimeError,
-                            "Auth continuation is missing its CSRF token" if fv5070.blank?
-
-                      fv5069 = fv5071.css("input[type='hidden']").to_h do |input|
-                        [input["name"], input["value"]]
-                      end.except("authenticity_token")
-                      [fv5071["action"], fv5070, fv5069]
-                    end
-                  end
-                fv5068.post(
-                  fv5067,
-                  params: fv5066.merge(authenticity_token: fv5065),
-                  headers: fv5064,
-                )
               end
             end
           end
@@ -374,37 +329,17 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
             fv5016 = fv5056
             fv5010 = fv5020.merge(fv5055 => fv5054)
             fv5004.get(fv5011, params: fv5010, headers: fv5013)
-            fv5048 =
-              begin
-                fv5053 = fv5004.response.body
-                fv5052 = true
-                fv5051 = Nokogiri::HTML(fv5053).at_css("form")
-                if fv5051.nil? && fv5052
-                  nil
-                else
-                  raise RuntimeError, "Auth continuation form is missing" unless fv5051
-
-                  fv5050 = fv5051.at_css("input[name='authenticity_token']")&.[]("value")
-                  raise RuntimeError,
-                        "Auth continuation is missing its CSRF token" if fv5050.blank?
-
-                  fv5049 = fv5051.css("input[type='hidden']").to_h do |input|
-                    [input["name"], input["value"]]
-                  end.except("authenticity_token")
-                  [fv5051["action"], fv5050, fv5049]
-                end
-              end
+            # An entry reference is accepted only on a top-level document navigation, and a live
+            # reference never renders a page: it answers 303 to the ceremony binding action, which
+            # points at the Base/Visa continuation for this binding.
+            fv5004.assert_response :see_other
+            fv5048 = fv5004.response.location
             if fv5048
-
-              fv5047, fv5045, fv5046 = fv5048
 
               fv5004.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
                 "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-              fv5004.post(
-                fv5047,
-                params: fv5046.merge(authenticity_token: fv5045),
-                headers: fv5013,
-              )
+              fv5004.get(fv5048, headers: fv5013)
+              fv5004.assert_response :see_other
               fv5044 = fv5004.response.location
               if fv5044.present?
 
@@ -526,31 +461,6 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
                   fv5000 = fv5013.merge("Host" => fv5012)
                   fv5004.get(fv5011, params: fv5010, headers: fv5000)
                 end
-                fv5003, fv5001, fv5002 =
-                  begin
-                    fv5009 = fv5004.response.body
-                    fv5008 = false
-                    fv5007 = Nokogiri::HTML(fv5009).at_css("form")
-                    if fv5007.nil? && fv5008
-                      nil
-                    else
-                      raise RuntimeError, "Auth continuation form is missing" unless fv5007
-
-                      fv5006 = fv5007.at_css("input[name='authenticity_token']")&.[]("value")
-                      raise RuntimeError,
-                            "Auth continuation is missing its CSRF token" if fv5006.blank?
-
-                      fv5005 = fv5007.css("input[type='hidden']").to_h do |input|
-                        [input["name"], input["value"]]
-                      end.except("authenticity_token")
-                      [fv5007["action"], fv5006, fv5005]
-                    end
-                  end
-                fv5004.post(
-                  fv5003,
-                  params: fv5002.merge(authenticity_token: fv5001),
-                  headers: fv5000,
-                )
               end
             end
           end

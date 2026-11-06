@@ -48,6 +48,12 @@ begin
   abort("Test databases are in use by another test process") unless database_lock.flock(File::LOCK_EX | File::LOCK_NB)
 
   Rails.application.initialize!
+  # The browser journey uses a local deterministic Turnstile verifier; no challenge provider call
+  # leaves the test browser or reaches the application server.
+  require_relative "../../test/support/turnstile_verifier_stub"
+  Rails.application.config.x.turnstile.verifier = "TurnstileVerifierStub"
+  TurnstileVerifierStub.challenge_enabled = true
+  TurnstileVerifierStub.challenge_response = { "success" => true }
   Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
   configurations = ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
   test_databases = configurations.map(&:database)
@@ -72,6 +78,13 @@ begin
   availability_adapter = Flipper::Adapters::Memory.new
   Flipper.configure { |configuration| configuration.adapter { availability_adapter } }
   Flipper.new(availability_adapter).enable(FqdnAvailabilityRegistry.flag_name_for(:auth_service))
+  # Browser journeys cross Auth and Base hosts, so expose each Base slot in this isolated adapter.
+  %i(base_service base_corporate base_staff).each do |slot|
+    Flipper.new(availability_adapter).enable(FqdnAvailabilityRegistry.flag_name_for(slot))
+  end
+  %i(sign_in_available_app sign_up_available_app).each do |feature|
+    Flipper.new(availability_adapter).enable(feature)
+  end
 
   valkey = Umaxica::Valkey::Settings.current
   [valkey.rate_limit, valkey.auth_state].each do |setting|

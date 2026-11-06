@@ -263,7 +263,7 @@ module AuthEmailOtpChallenge
   def email_otp_parent_pending?(parent, now)
     return false if parent.expires_at <= now
 
-    admission_purpose == "authentication_handoff" && parent.status == "pending" &&
+    admission_purpose == "authentication_handoff" && parent.pending? &&
       !parent.login_challenge_expired?(now: now)
   end
 

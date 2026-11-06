@@ -7,14 +7,81 @@ require "test_helper"
 # rubocop:disable Minitest/MultipleAssertions
 class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
+  include SignInFlowCleanup
+
+  self.fixture_table_names = []
+  self.use_transactional_tests = false
 
   setup do
+    # The test lock serializes these HTTP journeys; retain pre-existing rows for scoped cleanup.
+    @initial_client_ids = Client.pluck(:id)
+    @initial_signup_ids = ClientSignUpFlow.pluck(:id)
+    @initial_binding_ids = ClientAuthAdmissionBinding.pluck(:id)
+    @initial_ceremony_ids = ClientAuthCeremonySession.pluck(:id)
+    @initial_parent_ids = ClientOidcAuthorizationTransaction.pluck(:id)
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
+  teardown do
+    # Delivery runs after real commits, so rollback fixtures cannot clean up this journey.
+    owners = Client.where.not(id: @initial_client_ids).to_a
+    owner_ids = owners.map(&:id)
+    # Completed signup also commits the actor's bootstrap identity and collective graph.
+    owners.each do |owner|
+      identity_ids = ClientIdentity.where(source_record_id: owner.id).pluck(:id)
+      persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+      enterprise_ids =
+        (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
+          EnterpriseOwnership.where(client_id: owner.id).pluck(:enterprise_id)).uniq
+      unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+      PersonaMembership.where(persona_id: persona_ids)
+        .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+      PersonaAssignment.where(persona_id: persona_ids).delete_all
+      ClientOidcIdentityBinding.where(client_identity_id: identity_ids).delete_all
+      AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+      ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+      ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+      ClientPersona.where(id: persona_ids).delete_all
+      ClientIdentity.where(id: identity_ids).delete_all
+      EnterpriseUnitClosure.where(ancestor_id: unit_ids)
+        .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
+      EnterpriseUnit.where(id: unit_ids).delete_all
+      EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+      Enterprise.where(id: enterprise_ids).delete_all
+    end
+    flows = ClientSignUpFlow.where.not(id: @initial_signup_ids).to_a
+    session_refs =
+      flows.map do |flow|
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      end
+    ClientEmailCeremonyTransaction.where(session_ref: session_refs).delete_all
+    ClientSignUpFlow.where(id: flows.map(&:id)).delete_all
+    ClientAuthAdmissionBinding.where.not(id: @initial_binding_ids).delete_all
+    ClientAuthCeremonySession.where.not(id: @initial_ceremony_ids).delete_all
+    ClientOidcAuthorizationTransaction.where.not(id: @initial_parent_ids).delete_all
+    delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: owner_ids))
+    token_ids = ClientToken.where(user_id: owner_ids).select(:id)
+    OpAppGrant.where(client_token_id: token_ids).delete_all
+    ClientDeviceSession.where(user_id: owner_ids).update_all(current_refresh_token_id: nil)
+    ClientToken.where(user_id: owner_ids).delete_all
+    ClientDeviceSession.where(user_id: owner_ids).delete_all
+    ClientContactAuditOutbox.where(owner_ref: owners.map(&:public_id)).delete_all
+    ClientEmail.where(user_id: owner_ids).delete_all
+    ClientAccount.where(user_id: owner_ids).delete_all
+    ClientOidcConnection.where(user_id: owner_ids).delete_all
+    ClientRegistrationCompletion.where(client_id: owner_ids).delete_all
+    ClientAuthorityLock.where(client_id: owner_ids).delete_all
+    Client.where(id: owner_ids).delete_all
+  end
+
   %w(app).each do |surface|
-    test "#{surface} email signup binds its original OIDC browser and Base commits exactly one root" do
+    test "#{surface} email signup binds its original OIDC browser and Visa commits exactly one root" do
       previous_protection = ActionController::Base.allow_forgery_protection
       previous_turnstile = [TurnstileVerifierStub.enabled, TurnstileVerifierStub.response]
       previous_challenge = [TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response]
@@ -30,6 +97,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
           [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
            "BASE_APP", ClientSignUpFlow, ClientEmail, Client, ClientToken, :user_id, :client_email,]
         end
+      visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
       owner = open_session
       owner.host!(base_host)
       owner.https!
@@ -45,72 +113,91 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
 
       assert_equal 303, owner.response.status
 
-      cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
       issuer = JitSecurityJwtRegistry.surface(issuer_name)
-      parameters = nil
-      entry_reference = nil
-      2.times do |index|
-        target = URI.parse(owner.response.location)
-        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-        unless target.host == base_host
-          rt = Rack::Utils.parse_query(target.query).fetch("rt")
-          payload, = JWT.decode(
-            rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-            algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-          )
-          target = URI.parse(payload.fetch("url"))
-        end
+      # Visa is the OP: Base's /sign POST hands off to Visa, whose authorize GET starts the
+      # ceremony and Jump-hands the browser to Auth's admission entry.
+      target = URI.parse(owner.response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless target.host == base_host
+        rt = Rack::Utils.parse_query(target.query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        target = URI.parse(payload.fetch("url"))
+      end
 
-        # A registration journey explicitly requests create; a neutral admission no longer
-        # authorizes signup merely because a later browser request visits that page (D-72).
-        if index.zero?
-          target.query = URI.encode_www_form(URI.decode_www_form(target.query) + [["prompt", "create"]])
-        end
+      # A registration journey explicitly requests create; a neutral admission no longer
+      # authorizes signup merely because a later browser request visits that page (D-72).
+      target.query = URI.encode_www_form(URI.decode_www_form(target.query) + [["prompt", "create"]])
 
-        assert_equal "https", target.scheme
-        assert_equal(index.zero? ? base_host : auth_host, target.host)
-        owner.host!(target.host)
-        owner.get(target.request_uri, params: { ri: "jp" })
-        if index == 1
-          entry_reference = Rack::Utils.parse_query(target.query).fetch("entry_ref")
-          next
-        end
+      assert_equal "https", target.scheme
+      assert_equal visa_host, target.host
+      owner.host!(target.host)
+      owner.get(target.request_uri, params: { ri: "jp" })
 
-        form = owner.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        parameters = fields.except("authenticity_token", "ceremony_action")
-        owner.post(form["action"], params: fields, headers: base_headers)
+      assert_equal 303, owner.response.status
+      # Visa signs its own Jump to the Auth admission entry.
+      entry_target = URI.parse(owner.response.location)
+      entry_rt = Rack::Utils.parse_query(entry_target.query).fetch("rt")
+      visa_issuer = JitSecurityJwtRegistry.surface("VISA_APP")
+      entry_payload, = JWT.decode(
+        entry_rt, JitSecurityJwtRegistry.public_key_for(visa_issuer.id, visa_issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{visa_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      entry_target = URI.parse(entry_payload.fetch("url"))
+      entry_reference = Rack::Utils.parse_query(entry_target.query).fetch("entry_ref")
+      navigation_headers = {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+      }
+      owner.host!(entry_target.host)
+      owner.get(entry_target.request_uri, headers: navigation_headers)
+
+      assert_equal 303, owner.response.status
+      # Auth's admission entry walks sentry -> sign-up entry -> /ceremony_bindings as document
+      # navigations until it hands the browser to the Visa confirmation.
+      2.times do
+        hop = URI.parse(owner.response.location)
+
+        assert_equal "https", hop.scheme
+        owner.host!(hop.host)
+        owner.get(hop.request_uri, headers: navigation_headers)
 
         assert_equal 303, owner.response.status
       end
+      # A GET outside a document navigation renders the non-consuming confirmation
+      # representation; the browser's own navigation records base_confirmed_at and returns
+      # it to Auth, where the reference is redeemed.
+      confirmation = URI.parse(owner.response.location)
+
+      assert_equal "https", confirmation.scheme
+      assert_equal visa_host, confirmation.host
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: entry_reference)
       parent = authorization_transaction_for_test(binding)
       original_parent_id = parent.id
       original_binding_id = binding.id
-      3.times do |index|
-        form = owner.response.parsed_body.at_css("form")
+      owner.host!(confirmation.host)
+      owner.get(confirmation.request_uri)
 
-        assert_not_nil form, "Admission step #{index} must render a real continuation form"
-        assert_nil binding.reload.base_confirmed_at if index == 1
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        owner.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{owner.host}", "Sec-Fetch-Site" => nil,
-          },
-        )
+      assert_equal 200, owner.response.status
+      form = owner.response.parsed_body.at_css("form")
 
-        assert_equal 303, owner.response.status
-        assert_withheld { binding.reload.base_confirmed_at.present? } if index == 1
-        next if index == 2
+      assert_not_nil form, "the ceremony binding confirmation must render its form"
+      assert_nil binding.reload.base_confirmed_at
+      owner.get(confirmation.request_uri, headers: navigation_headers)
 
-        target = URI.parse(owner.response.location)
+      assert_equal 303, owner.response.status
+      assert_withheld { binding.reload.base_confirmed_at.present? }
+      entry_return = URI.parse(owner.response.location)
 
-        assert_equal "https", target.scheme
-        assert_equal(index.zero? ? base_host : auth_host, target.host)
-        owner.host!(target.host)
-        owner.get(target.request_uri, params: { ri: "jp" })
-      end
+      assert_equal "https", entry_return.scheme
+      owner.host!(entry_return.host)
+      owner.get(entry_return.request_uri, headers: navigation_headers)
+
+      assert_equal 303, owner.response.status
+      assert_withheld { binding.reload.redeemed? }
       auth = owner
 
       assert_equal 303, auth.response.status
@@ -219,17 +306,16 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       assert_equal "/sign/oidc/handoff", handoff_uri.path
       auth.get(handoff_uri.request_uri)
 
-      assert_equal 200, auth.response.status
-      form = auth.response.parsed_body.at_css("form")
-      csrf = form.at_css('input[name="authenticity_token"]')["value"]
-      auth.post(form["action"], params: { authenticity_token: csrf }, headers: auth_headers)
+      assert_equal 400, auth.response.status
+      assert_nil parent.reload.base_finalized_at
+      auth.get(handoff_uri.request_uri, headers: navigation_headers)
 
       assert_equal 303, auth.response.status
       completion = URI.parse(auth.response.location)
 
       assert_equal "https", completion.scheme
-      assert_equal base_host, completion.host
-      assert_equal "/oauth/authorize", completion.path
+      assert_equal visa_host, completion.host
+      assert_equal "/oidc/result", completion.path
       submission = Rack::Utils.parse_query(completion.query)
 
       assert_withheld("Result must name the original OIDC parent") {
@@ -237,87 +323,60 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       }
       assert_withheld("Result must bind the original Contact owner") { parent.reload.actor_ref == actor.public_id }
       assert_equal "email_otp", parent.auth_method
-      assert_nil parent.base_finalized_at
-      assert_equal 0, token_model.where(owner_key => actor.id).count
       before_parent = parent.reload.attributes
       before_contact = contact.reload.attributes
+      foreign = open_session
+      foreign.host!(visa_host)
+      foreign.https!
+      foreign.get(completion.request_uri, headers: navigation_headers)
 
-      owner.host!(base_host)
-      owner.post("/oauth/authorize", params: submission, headers: base_headers)
+      assert_equal 400, foreign.response.status
+      assert_withheld("Another browser must not consume the owner's proof") {
+        before_parent == parent.reload.attributes
+      }
+      assert_equal 0, token_model.where(owner_key => actor.id).count
+
+      owner.host!(visa_host)
+      owner.get(completion.request_uri, headers: navigation_headers)
+
+      assert_equal 200, owner.response.status
+      assert_withheld("Visa GET must not finalize the parent") { before_parent == parent.reload.attributes }
+      assert_equal 0, token_model.where(owner_key => actor.id).count
+      form = owner.response.parsed_body.at_css("form")
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      visa_headers = { "Origin" => "https://#{visa_host}", "Sec-Fetch-Site" => "same-origin" }
+      owner.post(form["action"], params: fields.except("authenticity_token"), headers: visa_headers)
 
       assert_equal 422, owner.response.status
       assert_withheld("CSRF refusal must preserve the OIDC parent") { before_parent == parent.reload.attributes }
       assert_equal 0, token_model.where(owner_key => actor.id).count
-      foreign = open_session
-      foreign.host!(base_host)
-      foreign.https!
-      foreign.get("/oauth/authorize", params: parameters)
+      foreign.post(form["action"], params: fields, headers: visa_headers)
 
-      assert_equal 200, foreign.response.status
-      csrf = foreign.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      foreign.get(completion.request_uri)
+      assert_equal 422, foreign.response.status
+      assert_withheld { before_parent == parent.reload.attributes }
+      owner.post(form["action"], params: fields, headers: visa_headers)
 
-      assert_equal 400, foreign.response.status
-      foreign.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
+      assert_equal 303, owner.response.status
+      assert_withheld { parent.reload.base_finalized_at.present? }
+      root = token_model.where(owner_key => actor.id).sole
 
-      assert_equal 400, foreign.response.status
-      assert_withheld("Another browser must not consume the original owner's proof") {
-        before_parent == parent.reload.attributes
+      assert_equal root.public_id, parent.browser_session_ref
+      assert_equal original_parent_id, parent.id
+      assert_equal original_binding_id, binding.reload.id
+      assert_equal original_parent_id, binding.authorization_transaction_id
+      assert_withheld("Completion must preserve the finalized Contact") { before_contact == contact.reload.attributes }
+      finalized_parent = parent.attributes
+      owner.get(completion.request_uri, headers: navigation_headers)
+
+      assert_equal 400, owner.response.status
+      owner.post(form["action"], params: fields, headers: visa_headers)
+
+      assert_equal 422, owner.response.status
+      assert_equal 1, token_model.where(owner_key => actor.id).count
+      assert_withheld("Replay must preserve the committed parent and Root") {
+        parent.reload.attributes == finalized_parent &&
+          token_model.find_by!(public_id: parent.browser_session_ref).id == root.id
       }
-      assert_withheld("Refusals must preserve the finalized Contact") { before_contact == contact.reload.attributes }
-      assert_equal 0, token_model.where(owner_key => actor.id).count
-
-      root_reference = nil
-      2.times do |attempt|
-        owner.get(completion.request_uri)
-
-        if attempt.positive?
-          # WU-27/D-104: finalization rotates the Base session. The old result
-          # continuation is terminal before a second authorization POST can be built.
-          assert_equal 400, owner.response.status
-          assert_withheld { parent.reload.base_finalized_at.present? }
-          assert_equal 1, token_model.where(owner_key => actor.id).count
-          assert_equal root_reference, parent.reload.browser_session_ref
-          next
-        end
-
-        assert_equal 200, owner.response.status
-        csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
-
-        assert_equal 303, owner.response.status
-        assert_withheld { parent.reload.base_finalized_at.present? }
-        root_reference ||= parent.browser_session_ref
-
-        assert_withheld("Proof replay must retain the first root") { root_reference == parent.browser_session_ref }
-        assert_equal 1, token_model.where(owner_key => actor.id).count
-        root = token_model.find_by!(public_id: root_reference)
-
-        assert_equal actor.id, root[owner_key]
-        assert_equal original_parent_id, parent.id
-        assert_equal original_binding_id, binding.reload.id
-        assert_equal original_parent_id, binding.authorization_transaction_id
-        assert_withheld("Base completion must preserve the original binding facts") {
-          before_contact == contact.reload.attributes
-        }
-
-        cookie_value = owner.response.cookies[cookie_name]
-        if cookie_value.nil?
-          raw = owner.response.headers["Set-Cookie"] || owner.response.headers["set-cookie"]
-          lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
-          line =
-            lines.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-              entry.split(";", 2).first.to_s.start_with?("#{cookie_name}=")
-            end
-
-          assert_withheld("Successful completion must emit the rotated Base browser session") { line.present? }
-          cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
-        end
-        owner.cookies.delete(cookie_name)
-        _received_cookie = owner.cookies.merge(
-          "#{cookie_name}=#{Rack::Utils.escape(cookie_value)}", URI.parse("https://#{base_host}/"),
-        )
-      end
     ensure
       ActionController::Base.allow_forgery_protection = previous_protection
       TurnstileVerifierStub.enabled, TurnstileVerifierStub.response = previous_turnstile

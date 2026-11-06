@@ -19,7 +19,6 @@ module Security
         Auth::Org::ApplicationController,
         Auth::App::BareController,
         Auth::Org::BareController,
-        Auth::RedirectOnlyController,
         Base::App::ApplicationController,
         Base::Com::ApplicationController,
         Base::Org::ApplicationController,
@@ -125,8 +124,6 @@ module Security
         assert_empty violations, violations.join("\n")
       end
 
-      # Auth::RedirectOnlyController's hierarchy has no availability gate; there only the first
-      # position is required.
       test "every controller beneath a policy root runs no-store first and the availability gate second" do
         violations =
           POLICY_ROOTS.flat_map do |root|

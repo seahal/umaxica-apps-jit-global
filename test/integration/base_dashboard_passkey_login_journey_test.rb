@@ -191,7 +191,24 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
           },
         )
 
-        assert_equal 303, visa_browser.response.status, visa_browser.response.body
+        result_status = visa_browser.response.status
+        continuation_form = visa_browser.response.parsed_body.at_css("form#visa-authorization-continuation-form")
+        continuation_fields =
+          continuation_form.css("input[name]").to_h do |input|
+            [input["name"], input["value"]]
+          end
+        visa_browser.post(
+          continuation_form["action"], params: continuation_fields, headers: {
+            "Origin" => "https://#{visa_host}",
+            "Sec-Fetch-Site" => "same-origin",
+            "Sec-Fetch-Mode" => "navigate",
+            "Sec-Fetch-Dest" => "document",
+          },
+        )
+
+        assert_equal [200, true, 303], [result_status, continuation_form.present?, visa_browser.response.status],
+                     "Visa result GET must render and accept its same-origin POST continuation: " \
+                     "#{visa_browser.response.body}"
       end
       automatic_relay_responses << ["GET", result_uri.path, visa_browser.response.status]
       token = token_model.find_by!(public_id: flow.reload.browser_session_ref)
@@ -211,9 +228,11 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       protocol_browser.https!
       # Substitute network transport only: the token and UserInfo requests still run
       # through their real public controllers, including PKCE and client authentication.
+      token_requests = 0
       transport =
         Faraday::Adapter::Test::Stubs.new do |stub|
           stub.post(/.*/) do |env|
+            token_requests += 1
             # The nested Rack executor must not complete the in-flight callback.
             outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
             outer_actor = Actor.context
@@ -244,9 +263,11 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
             begin
               protocol_browser.host!(env.url.authority)
               protocol_browser.https!(env.url.scheme == "https")
+              headers = { "Accept" => "application/json" }
+              headers["Authorization"] = env.request_headers["Authorization"] if
+                env.request_headers["Authorization"].present?
               protocol_browser.get(
-                env.url.request_uri, headers: { "Authorization" => env.request_headers.fetch("Authorization"),
-                                                "Accept" => "application/json", },
+                env.url.request_uri, headers:,
               )
             ensure
               ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
@@ -266,7 +287,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
         end
       OutboundHttp::Connection.stub(
         :build, ->(**args) {
-          assert_equal visa_host, args.fetch(:url).host
+          assert_equal visa_host, URI(args.fetch(:url).to_s).host
           connection
         },
       ) do
@@ -279,7 +300,9 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       assert_response :redirect
       assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s, :present?
       assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
-      transport.verify_stubbed_calls
+      # The OP JWKS GET is optional inside one process: an earlier test may have warmed the
+      # client cache, so the token exchange is proven by its own request instead.
+      assert_equal 1, token_requests
 
       assert_equal [
         ["POST", "/sign", 303],

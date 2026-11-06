@@ -5,6 +5,7 @@ require "test_helper"
 class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
   uses_transaction "test_app_real_and_dummy_receipt_and_wrong_OTP_expose_the_same_controls_and_feedback"
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
 
   setup do
     TurnstileVerifierStub.challenge_enabled = true
@@ -47,15 +48,19 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         issuance = OidcTestEntry.issue!(
           surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
-        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
         assert_equal 303, browser.response.status
-        browser.get(browser.response.location)
+        browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
+
         assert_equal 303, browser.response.status
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
         binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+        browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
         assert_equal 303, browser.response.status
-        browser.get(browser.response.location)
+        browser.get(browser.response.location, headers: NAVIGATION_HEADERS)
+
         assert_equal 200, browser.response.status
         phase_binding = nil
         browser.post(
@@ -71,7 +76,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         deadline = Time.iso8601(original.fetch("expires_at"))
         [-1, 0, 1].each do |microseconds|
           model.stub(:database_now, deadline + Rational(microseconds, 1_000_000)) do
-            browser.get(entry, params: { ri: "jp" })
+            browser.get(entry, params: { ri: "jp" }, headers: NAVIGATION_HEADERS)
           end
 
           assert_equal microseconds.negative? ? 200 : 302, browser.response.status
@@ -114,15 +119,19 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       issuances << issuance
-      real.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      real.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
       assert_equal 303, real.response.status
-      real.get(real.response.location)
+      real.get(real.response.location, headers: NAVIGATION_HEADERS)
+
       assert_equal 303, real.response.status
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
       binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      real.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      real.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
       assert_equal 303, real.response.status
-      real.get(real.response.location)
+      real.get(real.response.location, headers: NAVIGATION_HEADERS)
+
       assert_equal 200, real.response.status
       real_phase_binding = nil
       dummy.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
@@ -131,15 +140,19 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       issuances << issuance
-      dummy.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      dummy.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
       assert_equal 303, dummy.response.status
-      dummy.get(dummy.response.location)
+      dummy.get(dummy.response.location, headers: NAVIGATION_HEADERS)
+
       assert_equal 303, dummy.response.status
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
       binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
-      dummy.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      dummy.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS)
+
       assert_equal 303, dummy.response.status
-      dummy.get(dummy.response.location)
+      dummy.get(dummy.response.location, headers: NAVIGATION_HEADERS)
+
       assert_equal 200, dummy.response.status
       dummy_phase_binding = nil
       paths = []
@@ -157,7 +170,9 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         assert_equal 302, browser.response.status
         assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.1
         paths << URI.parse(browser.response.location).path
-        browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
+        browser.get(
+          URI.parse(browser.response.location).request_uri, params: { ri: "jp" }, headers: NAVIGATION_HEADERS,
+        )
 
         assert_equal 200, browser.response.status
       end
@@ -288,6 +303,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         browser.get(
           "/sign/in/email/edit",
           params: { ri: "jp", fb: ((browser == real) ? real_phase_binding : dummy_phase_binding) },
+          headers: NAVIGATION_HEADERS,
         )
 
         assert_equal 302, browser.response.status

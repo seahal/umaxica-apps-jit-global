@@ -122,6 +122,81 @@ class AcceptanceWu29SignEntrySentryBlockedTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "blocked sign in refuses admitted attempts before curfew cancellation at each boundary" do
+    REALMS.each do |realm|
+      surface = realm.fetch(:surface)
+      feature = FeatureFlags::REGISTRY.fetch(:"sign_in_available_#{surface}").name
+      auth_host = ENV.fetch(realm.fetch(:auth_host_env))
+      client = OidcClientRegistry.find!(realm.fetch(:client_id))
+      Flipper.enable(feature)
+      transaction = OidcAuthorizationTransactionCoordinator.issue!(
+        surface:, intent: "sign_in",
+        params: {
+          response_type: "code",
+          client_id: client.client_id,
+          redirect_uri: client.redirect_uris_by_realm.fetch(client.resource_type).first,
+          code_challenge: SecureRandom.urlsafe_base64(32),
+          code_challenge_method: "S256",
+          scope: "openid profile",
+          state: SecureRandom.urlsafe_base64(24),
+          nonce: SecureRandom.urlsafe_base64(24),
+        },
+      ).transaction
+      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction:, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      binding = realm.fetch(:binding_class).find_by!(entry_ref: issuance.reference)
+      browser = open_session
+      browser.host!(auth_host)
+      browser.https!
+      browser.get(
+        "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS,
+      )
+
+      assert_equal 303, browser.response.status
+      binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      browser.get(
+        "/sign/in", params: { entry_ref: issuance.reference, ri: "jp" }, headers: NAVIGATION_HEADERS,
+      )
+
+      assert_equal 303, browser.response.status
+      ceremony = realm.fetch(:ceremony_class).find(binding.reload.admitted_auth_ceremony_session_id)
+
+      assert_predicate ceremony, :admitted?
+
+      [-1, 0, 1].each do |offset|
+        decision_time = realm.fetch(:binding_class).database_now
+        binding.update_columns(curfew_at: decision_time + offset.seconds)
+        Flipper.disable(feature)
+        before = [
+          binding.reload.attributes,
+          ceremony.reload.attributes,
+          transaction.reload.attributes,
+          realm.fetch(:sign_in_flow_class).order(:id).map(&:attributes),
+          realm.fetch(:sign_up_flow_class).order(:id).map(&:attributes),
+          browser.cookies.to_hash,
+        ]
+
+        realm.fetch(:binding_class).stub(:database_now, decision_time) do
+          browser.get("/sign/in", params: { ri: "jp" }, headers: NAVIGATION_HEADERS)
+        end
+
+        assert_equal 503, browser.response.status, "#{surface} at curfew offset #{offset} seconds"
+        assert_equal "no-store", browser.response.headers["Cache-Control"]
+        after = [
+          binding.reload.attributes,
+          ceremony.reload.attributes,
+          transaction.reload.attributes,
+          realm.fetch(:sign_in_flow_class).order(:id).map(&:attributes),
+          realm.fetch(:sign_up_flow_class).order(:id).map(&:attributes),
+          browser.cookies.to_hash,
+        ]
+
+        assert_equal before, after, "#{surface} blocked attempt changed state at offset #{offset} seconds"
+      end
+    end
+  end
+
   test "A29-4: BLOCKED refuses admitted entries and each available sign-in continuation without allocating state" do
     observed = []
     changed_state = []

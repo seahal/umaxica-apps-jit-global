@@ -7,55 +7,56 @@ require "test_helper"
 class Auth::VerificationCancellationsControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :operators, :client_tokens, :operator_tokens, :client_statuses, :operator_passkeys
 
-  test "app cancellation closes the admitted ceremony and returns to the Base dashboard" do
+  NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
+
+  test "app cancellation sends the exact cancellation handoff to the OP authorize endpoint" do
     actor = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor, token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp totp passkey),
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ), return_to: base_app_identity_emails_path(ri: "jp"),
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
+    email = actor.client_emails.create!(
+      address: "cancellation-step-up-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
+    )
+    entry_ref = oidc_issuance.entry_ref
+    transaction = oidc_issuance.ticket
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     https!
-    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    binding = attach_auth_ceremony_entry!(
+      auth_app_verification_path, reference: entry_ref, params: { ri: "jp" },
+    )
+    binding.confirm_base!(
+      base_token: token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+      ),
+    )
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
+    get auth_app_verification_path(ri: "jp", entry_ref: entry_ref), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
 
@@ -65,70 +66,67 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     destination = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(destination.query)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), destination.host
-    assert_equal base_app_verification_cancellation_path, destination.path
-    assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
-    assert_predicate query.fetch("cancellation_ref"), :present?
+    expected_endpoint = URI.parse(OidcIssuer.authorization_endpoint("client"))
+
+    assert_equal expected_endpoint.host, destination.host
+    assert_equal expected_endpoint.path, destination.path
+    assert_equal transaction.transaction_id, query.fetch("step_up_ticket_ref")
+    assert_equal oidc_issuance.context.public_id, query.fetch("step_up_context_ref")
+    assert_predicate query.fetch("step_up_cancellation_ref"), :present?
     assert_not query.key?("cancellation_handoff")
     assert_not_includes response.location, "jump.umaxica.net"
     assert_not_includes response.location, "/sign"
-    assert_equal "pending", issuance.transaction.reload.status
-    assert_nil issuance.transaction.canceled_at
+    assert_equal "pending", transaction.reload.status
+    assert_nil transaction.canceled_at
     assert_nil token.reload.last_step_up_at
     assert_predicate token, :currently_usable?
     assert_equal 1,
                  ClientStepUpCeremonyTransaction.where(session_ref: token.public_id, status: %w(pending verified)).count
   end
 
-  test "org cancellation closes the admitted ceremony and returns to the Base dashboard" do
+  test "org cancellation sends the exact cancellation handoff to the OP authorize endpoint" do
     actor = operators(:one)
-    token = operator_tokens(:one)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor, token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ), return_to: base_org_identity_emails_path(ri: "jp"),
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
+    client = OidcClientRegistry.find!("core-org-jp")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: token.authentication_epoch, operator_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "operator")
+    oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor:, token:, client:, params:, validated_request:,
+    )
+    entry_ref = oidc_issuance.entry_ref
+    transaction = oidc_issuance.ticket
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     https!
-    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    binding = attach_auth_ceremony_entry!(
+      auth_org_verification_path, reference: entry_ref, params: { ri: "jp" },
+    )
+    binding.confirm_base!(
+      base_token: token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "org", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+      ),
+    )
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    https!
+    get auth_org_verification_path(ri: "jp", entry_ref: entry_ref), headers: NAVIGATION_HEADERS
 
     assert_response :see_other
 
@@ -138,15 +136,18 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     destination = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(destination.query)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), destination.host
-    assert_equal base_org_verification_cancellation_path, destination.path
-    assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
-    assert_predicate query.fetch("cancellation_ref"), :present?
+    expected_endpoint = URI.parse(OidcIssuer.authorization_endpoint("operator"))
+
+    assert_equal expected_endpoint.host, destination.host
+    assert_equal expected_endpoint.path, destination.path
+    assert_equal transaction.transaction_id, query.fetch("step_up_ticket_ref")
+    assert_equal oidc_issuance.context.public_id, query.fetch("step_up_context_ref")
+    assert_predicate query.fetch("step_up_cancellation_ref"), :present?
     assert_not query.key?("cancellation_handoff")
     assert_not_includes response.location, "jump.umaxica.net"
     assert_not_includes response.location, "/sign"
-    assert_equal "pending", issuance.transaction.reload.status
-    assert_nil issuance.transaction.canceled_at
+    assert_equal "pending", transaction.reload.status
+    assert_nil transaction.canceled_at
     assert_nil token.reload.last_step_up_at
     assert_predicate token, :currently_usable?
     assert_equal 1,
@@ -166,52 +167,51 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     ].each do |posted_return_to|
       actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(authentication_epoch: 0, user: actor)
-      issuance =
-        begin
-          admission_issuance = BaseStepUpAdmissionIssuer.call!(
-            actor: actor, token: token,
-            requirement: StepUpRequirement.new(
-              step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp totp passkey),
-              phishing_resistant_required: false, user_verification_required: false,
-              full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-              resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-              audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-              require_session_binding: true,
-            ), return_to: base_app_identity_emails_path(ri: "jp"),
-            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
-          )
-          admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-            surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-          )
-          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-          admission_binding.attach_auth_session!(
-            auth_session: admission_session,
-            confirmation_ref: SecureRandom.uuid,
-          )
-          admission_binding.confirm_base!(
-            base_token: token,
-            browser_digest: AuthAdmissionBinding.browser_digest(
-              surface: admission_issuance.transaction.surface,
-              entry_ref: admission_issuance.reference,
-              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-            ),
-          )
-          admission_auth_host = {
-            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-          }.fetch(admission_issuance.transaction.surface)
-          admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-          # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-          store_raw_cookies(
-            cookies,
-            "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-            URI.parse("https://#{admission_auth_host}/"),
-          )
-          admission_issuance
-        end
+      email = actor.client_emails.create!(
+        address: "cancellation-step-up-#{SecureRandom.hex(4)}@example.com",
+        user_email_status_id: ClientEmailStatus::VERIFIED,
+      )
+      email.finalize_binding!
+      client = OidcClientRegistry.find!("core-app-jp")
+      now = OpBaseAppRecord.database_now
+      grant = OpAppGrant.create!(
+        authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+        oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+      )
+      grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+      params = {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+        scope: grant.oidc_scope,
+        state: SecureRandom.urlsafe_base64(32),
+        nonce: SecureRandom.urlsafe_base64(32),
+        code_challenge: "a" * 43,
+        code_challenge_method: "S256",
+        prompt: "login",
+        claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+      }
+      validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+      oidc_issuance = OidcStepUpAuthorizationIssuer.call!(
+        surface: "app", actor:, token:, client:, params:, validated_request:,
+      )
+      entry_ref = oidc_issuance.entry_ref
+      transaction = oidc_issuance.ticket
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       https!
-      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+      binding = attach_auth_ceremony_entry!(
+        auth_app_verification_path, reference: entry_ref, params: { ri: "jp" },
+      )
+      binding.confirm_base!(
+        base_token: token,
+        browser_digest: AuthAdmissionBinding.browser_digest(
+          surface: "app", entry_ref:, nonce: oidc_issuance.authorization_transaction.login_challenge,
+        ),
+      )
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      https!
+      get auth_app_verification_path(ri: "jp", entry_ref: entry_ref), headers: NAVIGATION_HEADERS
 
       assert_response :see_other
       post auth_app_verification_cancellation_path(ri: "jp"),
@@ -222,10 +222,13 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
       destination = URI.parse(response.location)
       query = Rack::Utils.parse_nested_query(destination.query)
 
-      assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), destination.host, posted_return_to
-      assert_equal base_app_verification_cancellation_path, destination.path, posted_return_to
-      assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref"), posted_return_to
-      assert_predicate query.fetch("cancellation_ref"), :present?, posted_return_to
+      expected_endpoint = URI.parse(OidcIssuer.authorization_endpoint("client"))
+
+      assert_equal expected_endpoint.host, destination.host, posted_return_to
+      assert_equal expected_endpoint.path, destination.path, posted_return_to
+      assert_equal transaction.transaction_id, query.fetch("step_up_ticket_ref"), posted_return_to
+      assert_equal oidc_issuance.context.public_id, query.fetch("step_up_context_ref"), posted_return_to
+      assert_predicate query.fetch("step_up_cancellation_ref"), :present?, posted_return_to
       assert_not query.key?("cancellation_handoff"), posted_return_to
       assert_not_includes response.location, "jump.umaxica.net", posted_return_to
       assert_not_includes response.location, "/sign", posted_return_to
@@ -500,7 +503,6 @@ class Auth::VerificationCancellationsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -523,24 +525,6 @@ class Auth::VerificationCancellationsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

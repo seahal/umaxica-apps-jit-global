@@ -140,10 +140,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/dashboard", method: :get)
     end
 
-    assert_recognizes(
-      { controller: "auth/app/billings", action: "index" },
-      { path: "http://#{SIGN_APP_HOST}/billings", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/billings", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/oidc/callback", method: :get)
@@ -235,11 +234,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
         Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}#{bad_path}", method: :get)
       end
     end
-
-    assert_recognizes(
-      { controller: "auth/app/sign/in/guards", action: "show" },
-      { path: "http://#{SIGN_APP_HOST}/sign/in/guard", method: :get },
-    )
 
     assert_recognizes(
       { controller: "auth/app/sign/in/checks", action: "show" },
@@ -588,26 +582,11 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{SIGN_ORG_HOST}/sign/in", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "auth/org/sign/up/invitations", action: "new" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/up/invitations/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/sign/up/invitations", action: "create" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/up/invitations", method: :post },
-    )
-
     ["/sign/up/entrance", "/sign/in/entrance"].each do |bad_path|
       assert_raises(ActionController::RoutingError) do
         Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}#{bad_path}", method: :get)
       end
     end
-
-    assert_recognizes(
-      { controller: "auth/org/sign/in/guards", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/in/guard", method: :get },
-    )
 
     assert_recognizes(
       { controller: "auth/org/sign/in/checks", action: "show" },
@@ -660,10 +639,13 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
   end
 
   test "auth org route contract (continued)" do
-    assert_recognizes(
-      { controller: "auth/org/settings", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/settings", method: :get },
-    )
+    %w(/settings /settings/entra /settings/entra/edit).each do |path|
+      %i(get post put patch delete).each do |method|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}#{path}", method: method)
+        end
+      end
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
@@ -682,35 +664,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/configuration", method: :get)
     end
 
-    assert_recognizes(
-      { controller: "auth/org/accounts", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/accounts", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/iam", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/iam", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/system", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/system", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/audit", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/audit", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/support", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/support", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/billing", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/billing", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/billing", method: :get)
+    end
   end
 
   test "app device placeholder route is fully retired" do

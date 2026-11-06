@@ -68,6 +68,78 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "reloading OIDC sign-up entry after a Flow starts is refused without mutation" do
+    client = OidcClientRegistry.find!("core-app-jp")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_up", params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+        prompt: "create",
+      },
+    ).transaction
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    headers = {
+      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+    https!
+    get auth_app_sign_up_path(format: :html), params: { ri: "jp", entry_ref: issuance.reference }, headers: headers
+
+    assert_response :see_other
+    get response.location, headers: headers
+
+    assert_response :see_other
+    binding.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_up_path(format: :html), params: { ri: "jp", entry_ref: issuance.reference }, headers: headers
+
+    assert_response :see_other
+    follow_redirect!
+
+    assert_response :success
+    sid_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    sid = cookies[sid_name]
+    ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(sid)
+    flow = ClientSignUpFlow.create!(
+      auth_admission_binding: binding.reload,
+      status_id: ClientSignUpFlowStatus::STARTED,
+      step: "start",
+      entry_method: "email",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: Time.current,
+      expires_at: ClientSignUpFlow.default_ttl.from_now,
+    )
+    records = [transaction, binding, ceremony, flow]
+    before = records.map { |record| record.reload.attributes }
+    session_before = session.to_hash
+
+    get auth_app_sign_up_path(format: :html, ri: "jp"), headers: headers
+
+    assert_equal [409, nil, I18n.t("errors.messages.phase_violation_refused"), "private, no-store"], [
+      response.status, response.location, response.body, response.headers["Cache-Control"],
+    ]
+    assert_equal before, records.map { |record| record.reload.attributes }
+    assert_equal session_before, session.to_hash
+    assert_equal sid, cookies[sid_name]
+    forbidden_names = (AuthPhaseRefusalResponseBoundary::COOKIE_NAMES + AuthPhaseRefusalResponseBoundary::DBSC_HEADERS)
+      .map(&:downcase)
+    cookie_lines = Array(response.headers["Set-Cookie"]).flat_map { |header| header.to_s.split("\n") }
+    cookie_names = cookie_lines.map { |header| header.split("=", 2).first.downcase }
+    response_names = cookie_names + response.headers.to_h.keys.map(&:downcase)
+
+    assert_empty forbidden_names & response_names
+  end
+
   test "sets lang attribute on html element" do
     client = OidcClientRegistry.find!("core-app-jp")
     transaction = OidcAuthorizationTransactionCoordinator.issue!(
@@ -487,7 +559,6 @@ class Auth::App::SignUpsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -514,24 +585,6 @@ class Auth::App::SignUpsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

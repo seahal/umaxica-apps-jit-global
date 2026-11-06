@@ -2,8 +2,10 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "timeout"
 
 class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
   self.use_transactional_tests = false
 
   setup do
@@ -91,21 +93,26 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
         assert_equal microseconds >= 0, transaction.expired?(now: decision_time)
         assert_equal microseconds >= 0, transaction.login_challenge_expired?(now: decision_time)
         if microseconds.negative?
-          transaction = transaction.register_authentication!(
-            actor_ref: "expiry-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
-            authentication_event_at: deadline - 1.minute, now: decision_time,
-          )
+          transaction =
+            model.stub(:database_now, decision_time) do
+              transaction.register_authentication!(
+                actor_ref: "expiry-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
+                authentication_event_at: deadline - 1.minute,
+              )
+            end
 
           assert_predicate transaction, :authenticated?
           assert_equal deadline - 1.minute, transaction.authenticated_at
         else
-          assert_raises(ArgumentError) do
-            transaction.register_authentication!(
-              actor_ref: "expiry-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
-              authentication_event_at: deadline - 1.minute, now: decision_time,
-            )
+          model.stub(:database_now, decision_time) do
+            assert_raises(ArgumentError) do
+              transaction.register_authentication!(
+                actor_ref: "expiry-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
+                authentication_event_at: deadline - 1.minute,
+              )
+            end
           end
-          assert_equal "pending", transaction.reload.status
+          assert_equal "pending", transaction.reload.status_name
           assert_nil transaction.authenticated_at
         end
       end
@@ -126,14 +133,18 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
         code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-result-#{surface}",
         login_challenge_expires_at: now + 20.seconds, expires_at: now + 30.seconds, now: now,
       )
-      transaction = transaction.register_authentication!(
-        actor_ref: "result-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
-        authentication_event_at: now, now: now + 1.second,
-      )
+      transaction =
+        model.stub(:database_now, now + 1.second) do
+          transaction.register_authentication!(
+            actor_ref: "result-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
+            authentication_event_at: now,
+          )
+        end
       digest = SecureRandom.hex(32)
-      transaction, generation = transaction.prepare_result_delivery!(
-        result_digest: digest, ttl: 1.minute, now: now + 1.second,
-      )
+      transaction, generation =
+        model.stub(:database_now, now + 1.second) do
+        transaction.prepare_result_delivery!(result_digest: digest, ttl: 1.minute)
+      end
 
       assert_equal transaction.login_challenge_expires_at, transaction.result_expires_at
       assert transaction.result_delivery_matches?(
@@ -175,7 +186,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
 
     assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
-    assert_equal "pending", transaction.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, transaction.status_id
     assert_equal(
       {
         response_type: "code",
@@ -235,8 +246,9 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 6, 19, 14, 0, 0)
     authentication_event_at = now - 5.minutes
     transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
+    transaction.update!(expires_at: now + 5.minutes, login_challenge_expires_at: now + 5.minutes)
 
-    travel_to now do
+    ClientOidcAuthorizationTransaction.stub(:database_now, now) do
       transaction = transaction.register_authentication!(
         actor_ref: "client-1",
         session_ref: "session-1",
@@ -250,7 +262,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       assert_equal "client-1", transaction.actor_ref
       assert_equal authentication_event_at, transaction.authenticated_at
 
-      transaction = transaction.consume!(now: now)
+      transaction = transaction.consume!
 
       assert_predicate transaction, :consumed?
       assert_equal now, transaction.consumed_at
@@ -361,6 +373,140 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_includes %w(client-0 client-1), transaction.actor_ref
   end
 
+  test "authentication registration and Cancel serialize without reviving the parent" do
+    worker = nil
+
+    begin
+      [
+        [ClientOidcAuthorizationTransaction, "app"],
+        [OperatorOidcAuthorizationTransaction, "org"],
+      ].each do |transaction_class, surface|
+        [
+          [:cancel, :register, false],
+          [:authentication, :cancel, false],
+          [:cancel, :finalize, true],
+          [:finalize, :cancel, true],
+        ].each do |first_transition, competing_transition, initially_authenticated|
+          transaction = create_transaction(
+            transaction_class,
+            surface:,
+            unique: "cancel-transition-#{surface}-#{first_transition}-#{competing_transition}",
+          )
+          digest = SecureRandom.hex(32)
+          transaction.prepare_cancellation_handoff!(
+            reference: SecureRandom.uuid, ciphertext: SecureRandom.urlsafe_base64(48),
+          )
+          actor_ref = "actor-#{surface}"
+          if initially_authenticated
+            transaction.register_authentication!(
+              actor_ref:, session_ref: "session-#{surface}",
+              auth_method: "passkey", acr: "aal1", authentication_event_at: transaction_class.database_now,
+            )
+          end
+          ready = Queue.new
+          outcomes = Queue.new
+          ActiveRecord::Base.connection_handler.clear_active_connections!
+
+          transaction.with_lock do
+            holder_pid = transaction_class.lease_connection.select_value("SELECT pg_backend_pid()").to_i
+            worker =
+              Thread.new do
+                transaction_class.connection_pool.with_connection do |connection|
+                  ready << connection.select_value("SELECT pg_backend_pid()").to_i
+                  outcome =
+                    case competing_transition
+                    when :register
+                      transaction_class.find(transaction.id).register_authentication!(
+                        actor_ref:, session_ref: "session-#{surface}",
+                        auth_method: "passkey", acr: "aal1", authentication_event_at: transaction_class.database_now,
+                      )
+                      :registered
+                    when :cancel
+                      transaction_class.find(transaction.id).cancel!(cancellation_handoff_digest: digest)
+                      :canceled
+                    when :finalize
+                      transaction_class.find(transaction.id).finalize_base! do |_locked, _now|
+                        { status: :success, browser_session_ref: "browser-#{surface}" }
+                      end
+                      :finalized
+                    end
+                  outcomes << outcome
+                rescue ArgumentError => e
+                  outcomes << e.message
+                rescue StandardError => e
+                  outcomes << e
+                end
+              ensure
+                ActiveRecord::Base.connection_handler.clear_active_connections!
+              end
+            worker_pid = Timeout.timeout(10) { ready.pop }
+            Timeout.timeout(10) do
+              loop do
+                blocked =
+                  transaction_class.uncached do
+                    transaction_class.lease_connection.select_value(
+                      "SELECT #{Integer(holder_pid)} = ANY(pg_blocking_pids(#{Integer(worker_pid)}))",
+                    )
+                  end
+                break if blocked
+
+                raise RuntimeError, "competing OIDC transition finished before it blocked" unless worker.alive?
+
+                Thread.pass
+              end
+            end
+
+            case first_transition
+            when :cancel
+              transaction.cancel!(cancellation_handoff_digest: digest)
+            when :authentication
+              transaction.register_authentication!(
+                actor_ref:, session_ref: "session-#{surface}",
+                auth_method: "passkey", acr: "aal1", authentication_event_at: transaction_class.database_now,
+              )
+            when :finalize
+              transaction.finalize_base! do |_locked, _now|
+                { status: :success, browser_session_ref: "browser-#{surface}" }
+              end
+            end
+          end
+
+          outcome = Timeout.timeout(10) { outcomes.pop }
+          worker.join
+          worker = nil
+          expected_outcome, expected_status, expected_actor_ref, expected_finalized =
+            case [first_transition, competing_transition]
+            when [:cancel, :register]
+              ["authorization transaction is not pending", "canceled", nil, false]
+            when [:authentication, :cancel]
+              [:canceled, "canceled", actor_ref, false]
+            when [:cancel, :finalize]
+              ["authorization transaction is not authenticated", "canceled", actor_ref, false]
+            when [:finalize, :cancel]
+              ["authorization transaction is not cancellable", "consumed", actor_ref, true]
+            end
+
+          assert_equal expected_outcome, outcome, surface
+          assert_equal expected_status, transaction.reload.status_name, surface
+          if expected_actor_ref.nil?
+            assert_nil transaction.actor_ref, surface
+          else
+            assert_equal expected_actor_ref, transaction.actor_ref, surface
+          end
+
+          assert_equal expected_finalized, transaction.base_finalized_at.present?, surface
+          if expected_finalized
+            assert_equal "browser-#{surface}", transaction.browser_session_ref, surface
+          else
+            assert_nil transaction.browser_session_ref, surface
+          end
+        end
+      end
+    ensure
+      worker&.join(10)
+    end
+  end
+
   test "concurrent authorization grant redemption has exactly one winner" do
     transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
     transaction.register_authentication!(
@@ -393,6 +539,48 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_equal 1, outcomes.count(true), outcomes.inspect
     assert_equal 1, outcomes.count(false), outcomes.inspect
     assert_predicate transaction.reload.authorization_grant_redeemed_at, :present?
+  end
+
+  test "authenticated parents can be canceled before finalization but never after it" do
+    [
+      [ClientOidcAuthorizationTransaction, "app"],
+      [OperatorOidcAuthorizationTransaction, "org"],
+    ].each do |transaction_class, surface|
+      transaction = create_transaction(transaction_class, surface:, unique: "cancel-#{surface}")
+      transaction.register_authentication!(
+        actor_ref: "actor-#{surface}", session_ref: "session-#{surface}", auth_method: "passkey", acr: "aal1",
+        authentication_event_at: transaction_class.database_now,
+      )
+      transaction.prepare_cancellation_handoff!(reference: SecureRandom.uuid, ciphertext: "bound-#{surface}")
+
+      transaction.cancel!(cancellation_handoff_digest: "a" * 64)
+
+      assert_predicate transaction.reload, :canceled?
+      assert_equal OidcAuthorizationTransactionable::STATUS_CANCELED, transaction.status_id
+      assert_equal "canceled", transaction.status_name
+      assert_raises(ArgumentError) do
+        transaction.register_authentication!(
+          actor_ref: "late-#{surface}", session_ref: "late-session-#{surface}", auth_method: "passkey", acr: "aal1",
+          authentication_event_at: transaction_class.database_now,
+        )
+      end
+      assert_raises(ArgumentError) do
+        transaction.finalize_base! { |_locked, _now| { status: :success, browser_session_ref: "late-browser" } }
+      end
+
+      finalized = create_transaction(transaction_class, surface:, unique: "finalized-#{surface}")
+      finalized.register_authentication!(
+        actor_ref: "finalized-#{surface}", session_ref: "finalized-session-#{surface}",
+        auth_method: "passkey", acr: "aal1", authentication_event_at: transaction_class.database_now,
+      )
+      finalized.prepare_cancellation_handoff!(reference: SecureRandom.uuid, ciphertext: "finalized-#{surface}")
+      finalized.finalize_base! do |_locked, _now|
+        { status: :success, browser_session_ref: "finalized-browser-#{surface}" }
+      end
+
+      assert_raises(ArgumentError) { finalized.cancel!(cancellation_handoff_digest: "b" * 64) }
+      assert_predicate finalized.reload, :consumed?
+    end
   end
 
   test "transaction surface must match the owning class" do

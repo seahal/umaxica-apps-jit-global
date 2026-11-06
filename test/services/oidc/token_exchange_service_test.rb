@@ -65,9 +65,11 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
+        :verify_client_assertion,
         ->(client_id, assertion, token_url:) {
-          client_id == @client.client_id && assertion.present? && token_url.present?
+          verified_assertion_for(
+            client_id:, assertion:, token_url:, expected_client_id: @client.client_id,
+          )
         },
       ) do
         OidcTokenExchangeCoordinator.call(
@@ -108,9 +110,11 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     )
     initial_result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
+        :verify_client_assertion,
         ->(client_id, assertion, token_url:) {
-          client_id == @client.client_id && assertion.present? && token_url.present?
+          verified_assertion_for(
+            client_id:, assertion:, token_url:, expected_client_id: @client.client_id,
+          )
         },
       ) do
         OidcTokenExchangeCoordinator.call(
@@ -134,9 +138,11 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
+        :verify_client_assertion,
         ->(client_id, assertion, token_url:) {
-          client_id == @client.client_id && assertion.present? && token_url.present?
+          verified_assertion_for(
+            client_id:, assertion:, token_url:, expected_client_id: @client.client_id,
+          )
         },
       ) do
         OidcTokenExchangeCoordinator.call(
@@ -203,6 +209,533 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not second_result.success?
     assert_equal "invalid_grant", second_result.error
     assert_equal 1, OpAppGrant.where(client_token_id: @user_session_token.id).count
+  end
+
+  test "step-up exchange updates the existing APP grant and commits attribution atomically" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    initial_grant_id = grant.public_id
+    initial_generation = grant.refresh_generation
+    initial_refresh_digest = grant.refresh_token_digest
+    initial_scope = grant.oidc_scope
+    initial_root_attributes = @user_session_token.reload.attributes.slice(
+      "refresh_token_digest", "discard_at", "authentication_event_at",
+    )
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+
+    result = exchange_step_up_code(
+      step_up.fetch(:code),
+      client_id: @client.client_id,
+      resource_type: "client",
+      grant:,
+      subject: step_up.fetch(:context).bound_subject,
+    )
+
+    assert_predicate result, :success?
+    assert_equal initial_grant_id, grant.reload.public_id
+    assert_equal initial_generation + 1, grant.refresh_generation
+    assert_not_equal initial_refresh_digest, grant.refresh_token_digest
+    assert_equal initial_scope, grant.oidc_scope
+    assert_equal now.to_i, grant.oidc_auth_time.to_i
+    assert_equal OidcAuthorizeRequestResolver::STEP_UP_ACR, grant.oidc_acr
+    assert_equal ["passkey"], JSON.parse(grant.oidc_amr)
+    assert_equal initial_root_attributes, @user_session_token.reload.attributes.slice(
+      "refresh_token_digest", "discard_at", "authentication_event_at",
+    )
+
+    access_payload = AuthenticationTokenService.decode(
+      result.token_response.fetch(:access_token),
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [@client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@client),
+    )
+    id_payload = JWT.decode(result.token_response.fetch(:id_token), nil, false).first
+
+    assert_equal initial_grant_id, access_payload.fetch("sid")
+    assert_equal initial_grant_id, id_payload.fetch("sid")
+    assert_equal OidcAuthorizeRequestResolver::STEP_UP_ACR, access_payload.fetch("acr")
+    assert_equal OidcAuthorizeRequestResolver::STEP_UP_ACR, id_payload.fetch("acr")
+    assert_equal now.to_i, access_payload.fetch("auth_time")
+    assert_equal now.to_i, id_payload.fetch("auth_time")
+    assert_equal ClientStepUpContextState::COMMITTED, step_up.fetch(:context).reload.state_id
+    assert_predicate step_up.fetch(:authorization_transaction).reload.authorization_grant_redeemed_at, :present?
+    assert_equal 1, ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id).count
+    outbox = ClientStepUpAuditOutbox.find_by!(context_ref: step_up.fetch(:context).public_id)
+
+    assert_equal "step_up.committed", outbox.event_type
+    assert_equal initial_grant_id, outbox.payload.fetch("grant_ref")
+    assert_equal "passkey", outbox.payload.fetch("verified_method")
+    assert_equal now.to_i, outbox.payload.fetch("auth_time")
+    assert_equal "consumed", authorization_code_store.read(step_up.fetch(:code).code).fetch("state")
+  end
+
+  test "ordinary authorization code rejects signed step-up claims without consuming the code" do
+    code = issue_code!(scope: "openid profile")
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: PublicId.generate, subject: OidcSubject.for(@user, resource_type: "client"),
+    )
+
+    result = exchange_step_up_or_initial_code(
+      code, client_id: @client.client_id, redirect_uri: @redirect_uri, resource_type: "client",
+            expected_resource_type: "client", step_up_claims_state: :valid, step_up_expectation: expectation,
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_request", result.error
+    assert_equal "issued", authorization_code_store.read(code.code).fetch("state")
+    assert_nil OpAppGrant.find_by(client_token: @user_session_token, oidc_client_id: @client.client_id)
+  end
+
+  test "step-up expectation mismatch fails the context without changing the grant" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    initial_digest = grant.refresh_token_digest
+    initial_generation = grant.refresh_generation
+    initial_authentication = grant.attributes.slice("oidc_auth_time", "oidc_acr", "oidc_amr")
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: OidcSubject.for(clients(:two), resource_type: "client"),
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::FAILED, step_up.fetch(:context).reload.state_id
+    transition = ClientStepUpContextTransition.find_by!(owner_id: step_up.fetch(:context).id)
+
+    assert_equal "expectation_mismatch", transition.reason_code
+    assert_equal initial_digest, grant.reload.refresh_token_digest
+    assert_equal initial_generation, grant.refresh_generation
+    assert_equal initial_authentication, grant.attributes.slice("oidc_auth_time", "oidc_acr", "oidc_amr")
+    assert_nil step_up.fetch(:authorization_transaction).reload.authorization_grant_redeemed_at
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+    assert_equal "step_up.failed",
+                 ClientStepUpAuditOutbox.find_by!(context_ref: step_up.fetch(:context).public_id).event_type
+    assert_equal "issued", authorization_code_store.read(step_up.fetch(:code).code).fetch("state")
+  end
+
+  test "bad client authentication leaves the step-up context, code, and grant unchanged" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    grant_before = grant.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr")
+    token_url = OidcIssuer.token_endpoint("client")
+
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: "not-a-client-assertion", token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_client", result.error
+    assert_equal ClientStepUpContextState::PENDING, step_up.fetch(:context).reload.state_id
+    assert_nil step_up.fetch(:authorization_transaction).reload.authorization_grant_redeemed_at
+    assert_equal grant_before, grant.reload.attributes.slice(*grant_before.keys)
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+    assert_empty ClientStepUpAuditOutbox.where(context_ref: step_up.fetch(:context).public_id)
+    assert_equal "issued", authorization_code_store.read(step_up.fetch(:code).code).fetch("state")
+  end
+
+  test "PKCE mismatch leaves the step-up context, code, and grant unchanged" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    grant_before = grant.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr")
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: SecureRandom.urlsafe_base64(32), expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::PENDING, step_up.fetch(:context).reload.state_id
+    assert_nil step_up.fetch(:authorization_transaction).reload.authorization_grant_redeemed_at
+    assert_equal grant_before, grant.reload.attributes.slice(*grant_before.keys)
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+    assert_empty ClientStepUpAuditOutbox.where(context_ref: step_up.fetch(:context).public_id)
+    assert_equal "issued", authorization_code_store.read(step_up.fetch(:code).code).fetch("state")
+  end
+
+  test "a signed grant expectation mismatch does not change either grant's freshness or rotation" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    other_root = ClientToken.create!(authentication_epoch: 0, user: @user)
+    other_grant_time = OpBaseAppRecord.database_now
+    other_grant = OpAppGrant.create!(
+      authentication_epoch: other_root.authentication_epoch, client_token: other_root,
+      oidc_client_id: @client.client_id, oidc_scope: grant.oidc_scope, oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: other_grant_time - 1.hour,
+      refresh_token_expires_at: other_grant_time + 1.hour,
+    )
+    other_grant.issue_refresh_token!(expires_at: other_grant_time + 1.hour, now: other_grant_time)
+    initial_grants =
+      [grant, other_grant].map do |record|
+        record.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr", "oidc_amr")
+      end
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: other_grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::FAILED, step_up.fetch(:context).reload.state_id
+    assert_equal "expectation_mismatch", ClientStepUpContextTransition.find_by!(
+      owner_id: step_up.fetch(:context).id,
+    ).reason_code
+    [grant, other_grant].zip(initial_grants).each do |record, snapshot|
+      assert_equal snapshot, record.reload.attributes.slice(*snapshot.keys)
+    end
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+    assert_equal "step_up.failed", ClientStepUpAuditOutbox.find_by!(
+      context_ref: step_up.fetch(:context).public_id,
+    ).event_type
+  end
+
+  test "a replaced root cannot redeem an earlier step-up code" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    grant_before = grant.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr")
+    now = OpBaseAppRecord.database_now
+    replacement_root = ClientToken.create!(
+      authentication_epoch: @user_session_token.authentication_epoch,
+      user: @user, device_session: @user_session_token.device_session_record!,
+    )
+    @user_session_token.device_session_record!.update!(current_refresh_token_id: replacement_root.id)
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::FAILED, step_up.fetch(:context).reload.state_id
+    assert_equal grant_before, grant.reload.attributes.slice(*grant_before.keys)
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+  end
+
+  test "another same-client session cannot redeem a code bound to the first session's grant" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    grant_before = grant.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr")
+    other_root = ClientToken.create!(authentication_epoch: @user_session_token.authentication_epoch, user: @user)
+    other_grant_time = OpBaseAppRecord.database_now
+    other_grant = OpAppGrant.create!(
+      authentication_epoch: other_root.authentication_epoch, client_token: other_root,
+      oidc_client_id: @client.client_id, oidc_scope: grant.oidc_scope, oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: other_grant_time - 1.hour,
+      refresh_token_expires_at: other_grant_time + 1.hour,
+    )
+    other_grant.issue_refresh_token!(expires_at: other_grant_time + 1.hour, now: other_grant_time)
+    other_grant_before = other_grant.attributes.slice(
+      "refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr",
+    )
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    other_session_code = OidcAuthorizationCodeIssuer.call(
+      client: @client,
+      params: {
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        nonce: "other-session-step-up",
+        scope: grant.oidc_scope,
+      },
+      resource: @user,
+      session_token: other_root,
+      auth_method: "passkey",
+      acr: OidcAuthorizeRequestResolver::STEP_UP_ACR,
+      authentication_event_at: now,
+      authorization_transaction_ref: step_up.fetch(:authorization_transaction).transaction_id,
+    )
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: other_session_code.code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::FAILED, step_up.fetch(:context).reload.state_id
+    assert_equal grant_before, grant.reload.attributes.slice(*grant_before.keys)
+    assert_equal other_grant_before, other_grant.reload.attributes.slice(*other_grant_before.keys)
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+  end
+
+  test "a code for a switched OP Identity cannot change either Identity's grant" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    grant_before = grant.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr")
+    other_actor = clients(:two)
+    other_root = ClientToken.create!(authentication_epoch: 0, user: other_actor)
+    other_grant_time = OpBaseAppRecord.database_now
+    other_grant = OpAppGrant.create!(
+      authentication_epoch: other_root.authentication_epoch, client_token: other_root,
+      oidc_client_id: @client.client_id, oidc_scope: grant.oidc_scope, oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: other_grant_time - 1.hour,
+      refresh_token_expires_at: other_grant_time + 1.hour,
+    )
+    other_grant.issue_refresh_token!(expires_at: other_grant_time + 1.hour, now: other_grant_time)
+    other_grant_before = other_grant.attributes.slice(
+      "refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr",
+    )
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    switched_identity_code = OidcAuthorizationCodeIssuer.call(
+      client: @client,
+      params: {
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        nonce: "switched-identity-step-up",
+        scope: grant.oidc_scope,
+      },
+      resource: other_actor,
+      session_token: other_root,
+      auth_method: "passkey",
+      acr: OidcAuthorizeRequestResolver::STEP_UP_ACR,
+      authentication_event_at: now,
+      authorization_transaction_ref: step_up.fetch(:authorization_transaction).transaction_id,
+    )
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: switched_identity_code.code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::FAILED, step_up.fetch(:context).reload.state_id
+    [grant, other_grant].zip([grant_before, other_grant_before]).each do |record, snapshot|
+      assert_equal snapshot, record.reload.attributes.slice(*snapshot.keys)
+    end
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+  end
+
+  test "a token signing failure rolls back the code, grant rotation, event, and outbox" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    grant_before = grant.attributes.slice("refresh_token_digest", "refresh_generation", "oidc_auth_time", "oidc_acr")
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+    result = nil
+
+    SecurityJwtAuthAccessTokenCodec.stub(:encode, nil) do
+      result = OidcTokenExchangeCoordinator.call(
+        grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+        client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+        client_assertion: assertion, token_endpoint_uri: token_url,
+        code_verifier: @code_verifier, expected_resource_type: "client",
+      )
+    end
+
+    assert_not_predicate result, :success?
+    assert_equal "server_error", result.error
+    assert_equal ClientStepUpContextState::PENDING, step_up.fetch(:context).reload.state_id
+    assert_equal grant_before, grant.reload.attributes.slice(*grant_before.keys)
+    assert_nil step_up.fetch(:authorization_transaction).reload.authorization_grant_redeemed_at
+    assert_empty ClientStepUpCommit.where(context_ref: step_up.fetch(:context).public_id)
+    assert_empty ClientStepUpAuditOutbox.where(context_ref: step_up.fetch(:context).public_id)
+    assert_equal "issued", authorization_code_store.read(step_up.fetch(:code).code).fetch("state")
+  end
+
+  test "DPoP-bound step-up grant is refused before changing grant or context" do
+    initial_result = exchange_issued_code(issue_code!(scope: "openid profile"))
+
+    assert_predicate initial_result, :success?
+
+    grant = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    grant.update!(dpop_jkt: SecureRandom.urlsafe_base64(32, padding: false))
+    initial_digest = grant.refresh_token_digest
+    initial_generation = grant.refresh_generation
+    now = OpBaseAppRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "app", actor: @user, root_token: @user_session_token, client: @client, grant:, now:,
+    )
+
+    expectation = OidcClientAssertionStepUpExpectationValue.new(
+      grant: grant.public_id, subject: step_up.fetch(:context).bound_subject,
+    )
+    token_url = OidcIssuer.token_endpoint("client")
+    assertion = OidcClientAssertionJwt.issue(
+      client_id: @client.client_id, token_url:, step_up_expectation: expectation,
+    )
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code", code: step_up.fetch(:code).code, redirect_uri: @redirect_uri,
+      client_id: @client.client_id, client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: assertion, token_endpoint_uri: token_url,
+      code_verifier: @code_verifier, expected_resource_type: "client",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "invalid_grant", result.error
+    assert_equal ClientStepUpContextState::PENDING, step_up.fetch(:context).reload.state_id
+    assert_equal initial_digest, grant.reload.refresh_token_digest
+    assert_equal initial_generation, grant.refresh_generation
+    assert_nil step_up.fetch(:authorization_transaction).reload.authorization_grant_redeemed_at
+    assert_empty ClientStepUpAuditOutbox.where(context_ref: step_up.fetch(:context).public_id)
+  end
+
+  test "step-up exchange updates the existing ORG grant" do
+    operator = operators(:one)
+    root_token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
+    client = OidcClientRegistry.find!("core-org-jp")
+    redirect_uri = client.redirect_uris_by_realm.fetch("operator").first
+    code = OidcAuthorizationCodeIssuer.call(
+      client:, params: {
+        client_id: client.client_id,
+        redirect_uri:,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        nonce: "org-step-up-initial",
+        scope: "openid profile",
+      }, resource: operator, session_token: root_token, authentication_event_at: 1.minute.ago,
+    )
+    initial = exchange_step_up_or_initial_code(
+      code, client_id: client.client_id, redirect_uri:, resource_type: "operator", expected_resource_type: "operator",
+    )
+
+    assert_predicate initial, :success?
+
+    grant = OpOrgGrant.find_by!(operator_token: root_token, oidc_client_id: client.client_id)
+    now = OpBaseOrgRecord.database_now
+    step_up = issue_step_up_context_and_code(
+      surface: "org", actor: operator, root_token:, client:, grant:, now:,
+    )
+    result = exchange_step_up_code(
+      step_up.fetch(:code), client_id: client.client_id, resource_type: "operator", grant:,
+                            subject: step_up.fetch(:context).bound_subject,
+    )
+
+    assert_predicate result, :success?
+    assert_equal grant.public_id, grant.reload.public_id
+    assert_equal OidcAuthorizeRequestResolver::STEP_UP_ACR, grant.oidc_acr
+    assert_equal OperatorStepUpContextState::COMMITTED, step_up.fetch(:context).reload.state_id
+    assert_equal 1, OperatorStepUpCommit.where(context_ref: step_up.fetch(:context).public_id).count
+    assert_equal "ORG", OperatorStepUpAuditOutbox.find_by!(context_ref: step_up.fetch(:context).public_id).realm
   end
 
   test "an admitted transaction authorization code expires at the sign-in path curfew" do
@@ -491,6 +1024,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     )
     sibling_refresh = sibling.issue_refresh_token!
     unknown_id = PublicId.generate
+
     assert_not OpAppGrant.exists?(public_id: unknown_id)
     unknown = ClientToken.build_refresh_token(unknown_id, SecureRandom.urlsafe_base64(32))
 
@@ -525,7 +1059,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     refresh_token = initial_result.token_response.fetch(:refresh_token)
 
     OidcClientRegistry.stub(
-      :authenticate_assertion, ->(_client_id, assertion, token_url:) { assertion.present? && token_url.present? },
+      :verify_client_assertion,
+      ->(client_id, assertion, token_url:) {
+        verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id: "warp-app-jp")
+      },
     ) do
       result = OidcTokenExchangeCoordinator.call(
         grant_type: "refresh_token",
@@ -1803,8 +2340,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     replay_result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(cid, assertion, token_url:) { cid == "warp-app-jp" && assertion.present? && token_url.present? },
+        :verify_client_assertion,
+        ->(cid, assertion, token_url:) {
+          verified_assertion_for(client_id: cid, assertion:, token_url:, expected_client_id: "warp-app-jp")
+        },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
@@ -2345,8 +2884,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     initial_result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-org-jp" && assertion.present? && token_url.present? },
+        :verify_client_assertion,
+        ->(client_id, assertion, token_url:) {
+          verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id: "core-org-jp")
+        },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
@@ -2363,8 +2904,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     refreshed_result =
       OidcClientRegistry.stub(
-        :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-org-jp" && assertion.present? && token_url.present? },
+        :verify_client_assertion,
+        ->(client_id, assertion, token_url:) {
+          verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id: "core-org-jp")
+        },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
@@ -2450,10 +2993,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "core-org-jp", usage.oidc_client_id
     assert_equal "openid profile email", usage.oidc_scope
   end
-
-
-
-
 
   # --- DPoP token exchange tests ---
 
@@ -2972,6 +3511,95 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     )
   end
 
+  def exchange_step_up_or_initial_code(code, client_id:, redirect_uri:, resource_type:, expected_resource_type:,
+                                       step_up_claims_state: :none, step_up_expectation: nil)
+    endpoint_url = OidcIssuer.token_endpoint(expected_resource_type)
+    OidcClientRegistry.stub(
+      :verify_client_assertion,
+      ->(asserted_client_id, assertion, token_url:) {
+        verified_assertion_for(
+          client_id: asserted_client_id, assertion:, token_url:, expected_client_id: client_id,
+          step_up_claims_state:, step_up_expectation:,
+        )
+      },
+    ) do
+      OidcTokenExchangeCoordinator.call(
+        grant_type: "authorization_code", code: code.code, redirect_uri:, client_id:,
+        client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+        client_assertion: "test-step-up-client-assertion", token_endpoint_uri: endpoint_url,
+        code_verifier: @code_verifier, expected_resource_type:,
+      )
+    end
+  end
+
+  def exchange_step_up_code(code, client_id:, resource_type:, grant:, subject:)
+    expectation = OidcClientAssertionStepUpExpectationValue.new(grant: grant.public_id, subject:)
+    exchange_step_up_or_initial_code(
+      code, client_id:, redirect_uri: code.redirect_uri, resource_type:, expected_resource_type: resource_type,
+            step_up_claims_state: :valid, step_up_expectation: expectation,
+    )
+  end
+
+  def issue_step_up_context_and_code(surface:, actor:, root_token:, client:, grant:, now:)
+    resource_type = { "app" => "client", "org" => "operator" }.fetch(surface)
+    redirect_uri = step_up_redirect_uri(surface:, client:)
+    params = step_up_authorization_params(client:, grant:, redirect_uri:)
+    transaction = issue_completed_step_up_authorization(surface:, actor:, root_token:, params:, now:)
+    context_model, state_model = step_up_context_models(surface:)
+    subject = OidcSubject.for(actor, resource_type:)
+    context = context_model.create!(
+      public_id: PublicId.generate, oidc_authorization_transaction: transaction, grant:, bound_subject: subject,
+      requested_acr: OidcAuthorizeRequestResolver::STEP_UP_ACR, state_id: state_model::PENDING,
+      expires_at: transaction.expires_at, created_at: now, updated_at: now,
+    )
+    code = OidcAuthorizationCodeIssuer.call(
+      client:, params:, resource: actor, session_token: root_token, auth_method: "passkey",
+      acr: OidcAuthorizeRequestResolver::STEP_UP_ACR, authentication_event_at: now,
+      authorization_transaction_ref: transaction.transaction_id,
+    )
+    { authorization_transaction: transaction, context:, code: }
+  end
+
+  def step_up_redirect_uri(surface:, client:)
+    realm = { "app" => "client", "org" => "operator" }.fetch(surface)
+    client.redirect_uris_by_realm.fetch(realm).first
+  end
+
+  def step_up_authorization_params(client:, grant:, redirect_uri:)
+    {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri:,
+      scope: grant.oidc_scope,
+      state: SecureRandom.hex(16),
+      nonce: SecureRandom.hex(16),
+      code_challenge: @code_challenge,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+  end
+
+  def issue_completed_step_up_authorization(surface:, actor:, root_token:, params:, now:)
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(surface:, intent: "step_up", params:, now:).transaction
+    transaction = OidcAuthorizationTransactionCoordinator.register_result!(
+      surface:, login_challenge: transaction.login_challenge, actor:, session_ref: root_token.public_id,
+      auth_method: "passkey", acr: OidcAuthorizeRequestResolver::STEP_UP_ACR, authentication_event_at: now,
+    ).transaction
+    transaction.finalize_base! do |_locked, _decision_time|
+      { status: :success, browser_session_ref: root_token.public_id }
+    end
+    transaction
+  end
+
+  def step_up_context_models(surface:)
+    case surface
+    when "app" then [ClientStepUpContext, ClientStepUpContextState]
+    when "org" then [OperatorStepUpContext, OperatorStepUpContextState]
+    else raise ArgumentError, "unsupported test step-up surface"
+    end
+  end
+
   def authorization_code_store
     Valkey::AuthState::AuthorizationCodeStore.new
   end
@@ -3054,9 +3682,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   def with_authenticated_client(&block)
     OidcClientRegistry.stub(
-      :authenticate_assertion, ->(cid, assertion, token_url:) {
-                                 cid == "core-app-jp" && assertion.present? && token_url.present?
-                               },
+      :verify_client_assertion,
+      ->(cid, assertion, token_url:) {
+        verified_assertion_for(client_id: cid, assertion:, token_url:, expected_client_id: "core-app-jp")
+      },
     ) do
       block.call
     end
@@ -3064,12 +3693,23 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   def with_authenticated_org_client(_secret_credential, client_id: "core-org-jp", &block)
     OidcClientRegistry.stub(
-      :authenticate_assertion, ->(cid, assertion, token_url:) {
-                                 cid == client_id && assertion.present? && token_url.present?
-                               },
+      :verify_client_assertion,
+      ->(cid, assertion, token_url:) {
+        verified_assertion_for(client_id: cid, assertion:, token_url:, expected_client_id: client_id)
+      },
     ) do
       block.call
     end
+  end
+
+  def verified_assertion_for(client_id:, assertion:, token_url:, expected_client_id:, step_up_claims_state: :none,
+                             step_up_expectation: nil)
+    authenticated = client_id == expected_client_id && assertion.present? && token_url.present?
+    OidcClientRegistry::AssertionAuthenticationResult.new(
+      authenticated:, client: authenticated ? OidcClientRegistry.find(client_id) : nil,
+      step_up_claims_state: authenticated ? step_up_claims_state : :none,
+      step_up_expectation: authenticated ? step_up_expectation : nil,
+    )
   end
 
   def with_oidc_client_secret_credentials(overrides)

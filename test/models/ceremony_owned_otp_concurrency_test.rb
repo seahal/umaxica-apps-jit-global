@@ -52,7 +52,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction, OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} concurrent verification succeeds exactly once" do
       transaction = model.create_transaction!(
         actor_ref: "concurrent-actor", session_ref: "concurrent-browser",

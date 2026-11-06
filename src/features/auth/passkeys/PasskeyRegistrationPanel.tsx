@@ -11,6 +11,7 @@ import TextField from "@/components/ui/TextField";
 import { normalizeCreationOptions } from "@/controllers/webauthn_utils";
 import { csrfToken } from "@/lib/csrf";
 import { readNonEmptyString, readObject, readString } from "@/lib/payload";
+import { handleStepUpChallenge } from "@/lib/step_up_challenge";
 
 import { solveInvisibleTurnstile } from "./invisibleTurnstile";
 import { PASSKEY_MESSAGES, TURNSTILE_DEFAULT_ERROR, registrationErrorMessage } from "./messages";
@@ -58,6 +59,10 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 }
 
 async function readFailure(response: Response, fallback: string): Promise<Error | null> {
+  if (handleStepUpChallenge(response)) {
+    return null;
+  }
+
   /* v8 ignore next -- fetch always supplies a Headers object */
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {

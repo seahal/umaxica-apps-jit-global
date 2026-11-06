@@ -5,7 +5,7 @@ require "test_helper"
 # Verification evidence here is synthetic; signature verification is exercised by the Passkey
 # committer tests. This boundary verifies atomic Base finalization and transport replay.
 class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
-  fixtures :clients, :client_statuses
+  self.fixture_table_names = %w(clients client_statuses)
 
   setup do
     @actor = clients(:one)
@@ -13,8 +13,8 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
     @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
+      phishing_resistant_required: true, user_verification_required: true,
+      full_reauthentication_required: true, ttl: 15.minutes, purpose: "reauthentication",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true, actor_ref: @actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
@@ -28,7 +28,7 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: @credential.public_id,
     )
     @ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: @transaction.transaction_id,
+      admission_purpose: "reauthentication_handoff", step_up_ceremony_transaction_ref: @transaction.transaction_id,
     )
     @issuance = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: @transaction, ceremony_session_ref: @ceremony.id.to_s,
@@ -37,16 +37,23 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
 
   test "Base atomically consumes the exact ticket and retains the original event on replay" do
     event = @transaction.verified_at
+    root_token = @token
+    requirement = @requirement
     2.times do
       IdentityStepUpCeremonyFreshnessCommitter.call!(
-        actor: @actor, token: @token, transaction: @transaction, requirement: @requirement,
+        actor: @actor, token: root_token, transaction: @transaction, requirement:,
         raw_result: @issuance.code,
       )
 
       assert_equal "consumed", @transaction.reload.status
-      assert_equal event, @token.reload.last_step_up_at
-      assert_equal "settings_birthdate", @token.last_step_up_scope
+      assert_equal event, current_root_token.last_step_up_at
+      assert_equal "settings_birthdate", current_root_token.last_step_up_scope
       assert_predicate @ceremony.reload, :completed?
+
+      root_token = current_root_token
+      requirement = StepUpRequirement.new(
+        **@requirement.to_h.merge(session_binding: root_token.public_id, token_binding: root_token.public_id),
+      )
     end
   end
 
@@ -193,13 +200,17 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
         actor: @actor, token: @token, transaction: @transaction, requirement: @requirement,
         raw_result: @issuance.code,
       )
+      token = current_root_token
+      requirement = StepUpRequirement.new(
+        **@requirement.to_h.merge(session_binding: token.public_id, token_binding: token.public_id),
+      )
       application_now = ClientStepUpCeremonyTransaction.database_now
       deadline = application_now + 1.second
-      @token.update!(discard_at: deadline)
+      token.update!(discard_at: deadline)
 
       travel_to(application_now) do
         result = StepUpResolver.call(
-          token: @token, requirement: @requirement,
+          token:, requirement:,
           now: deadline + Rational(microseconds, 1_000_000),
         )
 
@@ -225,8 +236,8 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
   test "a strengthened current resource policy cannot reuse the admitted transaction" do
     changed_requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
+      phishing_resistant_required: true, user_verification_required: true,
+      full_reauthentication_required: true, ttl: 15.minutes, purpose: "reauthentication",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true, actor_ref: @actor.public_id, resource_ref: "different-resource",
       tenant_ref: nil,
@@ -264,8 +275,8 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
     IdentityStepUpCeremonyCancellationCommitter.call!(actor: @actor, token: @token, transaction: @transaction)
     requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: true,
-      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
+      phishing_resistant_required: true, user_verification_required: true,
+      full_reauthentication_required: true, ttl: 15.minutes, purpose: "reauthentication",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true, actor_ref: @actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
@@ -281,7 +292,7 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       )
     end
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      admission_purpose: "reauthentication_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
     )
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction, ceremony_session_ref: ceremony.id.to_s)
@@ -318,15 +329,16 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       actor: @actor, token: @token, transaction: @transaction, requirement: @requirement,
       raw_result: @issuance.code,
     )
-    original_event = @token.reload.last_step_up_at
+    root_token = current_root_token
+    original_event = root_token.last_step_up_at
     consumed_at = @transaction.reload.consumed_at
 
-    assert_not IdentityStepUpCeremonyCancellationCommitter.call!(
-      actor: @actor, token: @token, transaction: @transaction,
-    )
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyCancellationCommitter.call!(actor: @actor, token: @token, transaction: @transaction)
+    end
 
-    assert_predicate @token.reload, :currently_usable?
-    assert_equal original_event, @token.last_step_up_at
+    assert_predicate root_token.reload, :currently_usable?
+    assert_equal original_event, root_token.last_step_up_at
     assert_equal consumed_at, @transaction.reload.consumed_at
     assert_equal "consumed", @transaction.status
     assert_nil @transaction.canceled_at
@@ -340,8 +352,10 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       raw_result: @issuance.code,
     )
 
-    assert_equal @transaction.verified_at, @token.reload.last_step_up_at
-    @token.revoke!
+    root_token = current_root_token
+
+    assert_equal @transaction.verified_at, root_token.last_step_up_at
+    root_token.revoke!
 
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       IdentityStepUpCeremonyFreshnessCommitter.call!(
@@ -350,11 +364,11 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       )
     end
 
-    assert_predicate @token.reload, :revoked?
-    assert_nil @token.last_step_up_at
+    assert_predicate root_token.reload, :revoked?
+    assert_nil root_token.last_step_up_at
     assert_equal "consumed", @transaction.reload.status
     assert_predicate @ceremony.reload, :completed?
-    assert_not StepUpResolver.call(token: @token, requirement: @requirement).satisfied?
+    assert_not StepUpResolver.call(token: root_token, requirement: @requirement).satisfied?
   end
 
   %w(client_tokens client_step_up_ceremony_transactions client_auth_ceremony_sessions).each do |table|
@@ -390,9 +404,16 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
         raw_result: @issuance.code,
       )
 
-      assert_equal event, @token.reload.last_step_up_at
+      assert_equal event, current_root_token.last_step_up_at
       assert_equal "consumed", @transaction.reload.status
       assert_predicate @ceremony.reload, :completed?
     end
+  end
+
+  private
+
+  def current_root_token
+    token_id = @token.device_session_record!.reload.current_refresh_token_id
+    @token.class.find(token_id)
   end
 end

@@ -92,7 +92,6 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     assert_equal "rp_session_revoked", audit.context.deep_stringify_keys.fetch("result")
   end
 
-
   test "unknown staff refresh credentials do not revoke either RP grant" do
     operator = operators(:one)
     token = OperatorToken.create!(
@@ -112,6 +111,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     public_id, = OperatorToken.parse_refresh_token(current)
     forged = OperatorToken.build_refresh_token(public_id, SecureRandom.urlsafe_base64(32))
     unknown_id = PublicId.generate
+
     assert_not OpOrgGrant.exists?(public_id: unknown_id)
     unknown = OperatorToken.build_refresh_token(unknown_id, SecureRandom.urlsafe_base64(32))
 
@@ -161,7 +161,6 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     assert_equal refresh_digest, usage.reload.refresh_token_digest
     assert_equal refresh_generation, usage.refresh_generation
   end
-
 
   test "refresh rotation locks the browser session before its RP session" do
     operator = operators(:one)

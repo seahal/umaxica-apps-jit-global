@@ -145,7 +145,7 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    organization = Enterprise.create!(name: "Moniker race owner", title: "MonOwner")
+    @organization = Enterprise.create!(name: "Moniker race owner", title: "MonOwner")
     AvatarRecord.transaction do
       @avatar = AvatarTestFactory.create!(
         create_concrete_owner: false,
@@ -155,13 +155,19 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
       )
       AvatarEnterpriseOwnershipPeriod.create!(
         avatar: @avatar,
-        enterprise_public_id: organization.public_id,
+        enterprise_public_id: @organization.public_id,
         valid_from: @avatar.created_at,
       )
     end
   end
 
-  # Committed histories remain intact until the ordinary test database is reset.
+  # Committed histories remain intact until the ordinary test database is reset: the Avatar, its
+  # handle and the append-only ownership period rows cannot be removed. The enterprise row is not
+  # part of that history - the period stores only its public id in another database - so it is
+  # removed here rather than left for the next fixture load to delete underneath it.
+  teardown do
+    Enterprise.where(id: @organization.id).delete_all if @organization
+  end
 
   test "independent connections serialize concurrent renames without duplicate current rows" do
     assert_equal 1, @avatar.enterprise_ownership_periods.current.count

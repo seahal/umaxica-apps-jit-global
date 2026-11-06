@@ -9,16 +9,16 @@ class WelcomeAndActivitySeamsTest < ActionController::TestCase
   test "org authenticated welcome offers its own next step and spends the presentation gate once" do
     surface = :org
     actor = operators(:one)
-    token = OperatorToken.create!(:authentication_epoch => 0, :staff => actor)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     token.rotate_refresh_token!
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: actor)
     client = OidcClientRegistry.find!("base-#{surface}-ww")
     now = OpOrgGrant.database_now
     rp = OpOrgGrant.create!(
-      :authentication_epoch => 0,
-      :operator_token => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
-      :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => now,
-      :refresh_token_expires_at => now + 10.minutes,
+      authentication_epoch: 0,
+      operator_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
+      refresh_token_expires_at: now + 10.minutes,
     )
     access = AuthenticationTokenService.encode(
       actor, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), resource_type: "operator", session_public_id: token.public_id,

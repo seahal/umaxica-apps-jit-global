@@ -15,24 +15,18 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       scope: "base.app.preferences",
       preference_model: AppPreference,
-      audit_class: AppPreferenceChronicle,
-      audit_event_class: AppPreferenceChronicleEvent,
     },
     {
       name: "org",
       host: ENV.fetch("PRIVATE_BASE_STAFF_URL"),
       scope: "base.org.preferences",
       preference_model: OrgPreference,
-      audit_class: OrgPreferenceChronicle,
-      audit_event_class: OrgPreferenceChronicleEvent,
     },
     {
       name: "com",
       host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
       scope: "base.com.preferences",
       preference_model: ComPreference,
-      audit_class: ComPreferenceChronicle,
-      audit_event_class: ComPreferenceChronicleEvent,
     },
   ].freeze
 
@@ -228,7 +222,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
                cookies[preference_jwt_cookie_name(domain)]
       payload = PreferenceToken.decode(access_token, host: domain[:host])
 
-      assert_equal "usd", payload.dig("preferences", anonymous_com?(domain) ? "currency" : "cu")
+      assert_equal "usd", payload.dig("preferences", "currency")
 
       get public_send("edit_base_#{domain[:name]}_preference_currency_url", ri: "us")
 
@@ -396,10 +390,10 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       assert_equal 2, preference_child_for_test(domain, pref, :language).option_id
     end
 
-    # two.md WU-3: the corporate domain is anonymous, so it no longer applies a persisted
-    # preference locale. The WU-7 com preference redesign owns that behaviour.
+    # APP and ORG store language in the shared Preference projection; request region remains a
+    # request-local locale overlay and is covered independently for each domain.
     if domain[:name] != "com"
-      test "#{domain[:name]} domain applies language setting to locale" do
+      test "#{domain[:name]} domain region context controls locale over saved language" do
         host!(domain[:host])
 
         assert_preference_created(domain)
@@ -409,44 +403,43 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
         patch public_send("base_#{domain[:name]}_preference_language_url", state),
               params: { preference_language: { option_id: "EN" } }
 
-        # Visit a page without language param to verify DB preference is applied
+        # A request region is an overlay and takes precedence over the saved language.
         get public_send("base_#{domain[:name]}_preference_url", ri: "jp")
 
         assert_response :success
 
-        # Check that the locale was set to English
-        assert_equal :en, I18n.locale
-        # Verify the page content is in English
+        # The Japanese region controls locale while the language preference remains English.
+        assert_equal :ja, I18n.locale
+        # Verify the page content is in Japanese.
         translation_key = "acme.#{domain[:name]}.preferences.title"
-        english_title = I18n.t(translation_key, locale: :en)
+        japanese_title = I18n.t(translation_key, locale: :ja)
 
         # The preference index renders through Inertia, so its heading travels in the page object
         # props rather than in server rendered markup.
-        assert_equal english_title, inertia_page_title
+        assert_equal japanese_title, inertia_page_title
 
         # Update language to Japanese
         state = default_state.merge(lx: "ja")
         patch public_send("base_#{domain[:name]}_preference_language_url", state),
               params: { preference_language: { option_id: "JA" } }
 
-        # Visit a page without language param to verify DB preference is applied
-        get public_send("base_#{domain[:name]}_preference_url", ri: "jp")
+        # A US region request overlays the saved Japanese language for this response.
+        get public_send("base_#{domain[:name]}_preference_url", ri: "us")
 
         assert_response :success
 
-        # Check that the locale was set to Japanese
-        assert_equal :ja, I18n.locale
-        # Verify the page content is in Japanese
-        japanese_title = I18n.t(translation_key, locale: :ja)
+        assert_equal :en, I18n.locale
+        # Verify the page content is in English.
+        english_title = I18n.t(translation_key, locale: :en)
 
-        assert_equal japanese_title, inertia_page_title
+        assert_equal english_title, inertia_page_title
 
         # Verify the translations are actually different
         assert_not_equal english_title, japanese_title
       end
     end
 
-    test "#{domain[:name]} domain language edit ignores lx overlay so page matches the selected option" do
+    test "#{domain[:name]} domain applies lx overlay while retaining the saved language selection" do
       host!(domain[:host])
 
       assert_preference_created(domain)
@@ -455,14 +448,13 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       assert_response :redirect
 
-      # Explicitly save Japanese. Open the language settings screen with
-      # a transient ?lx=en overlay. The page must render in the *saved* language so
-      # the displayed language matches the option pre-selected in the form, instead
-      # of showing an English page with the Japanese option selected.
+      # Explicitly save Japanese. Open the language settings screen with a transient
+      # ?lx=en overlay. The request renders in English while the form remains selected
+      # on the saved Japanese option.
       get public_send("edit_base_#{domain[:name]}_preference_language_url", default_state.merge(lx: "en"))
 
       assert_response :success
-      assert_equal :ja, I18n.locale
+      assert_equal :en, I18n.locale
 
       # The selector's selected option is the saved language option (JA = 1).
       option_class = PreferenceClassRegistry.option_class(domain[:name].camelize, :language)
@@ -480,7 +472,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       assert_equal :ja, I18n.locale
     end
 
-    test "#{domain[:name]} domain applies the stored timezone setting to the request" do
+    test "#{domain[:name]} domain applies the stored timezone from the preference JWT" do
       host!(domain[:host])
 
       assert_preference_created(domain)
@@ -490,18 +482,12 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       patch public_send("base_#{domain[:name]}_preference_timezone_url", state),
             params: { preference_timezone: { option_id: "Etc/UTC" } }
 
-      # Revisit the screen to verify the DB preference is applied to the request.
-      # Time.zone is restored when the request ends. Com stores the display value in its JWT;
-      # app and org continue to write the individual timezone cookie.
+      # Revisit the screen and verify the shared Preference JWT carries the saved value.
       get public_send("edit_base_#{domain[:name]}_preference_timezone_url", default_state)
 
       assert_response :success
-      timezone =
-        if anonymous_com?(domain)
-          anonymous_com_payload(domain).dig("preferences", "timezone")
-        else
-          cookies["tz"]
-        end
+      timezone = PreferenceToken.decode(cookies[PreferenceCookieName.anonymous_jwt], host: domain[:host])
+        .dig("preferences", "timezone")
 
       assert_equal "Etc/UTC", TimezoneIdentifier.normalize(timezone)
 
@@ -513,12 +499,8 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       get public_send("edit_base_#{domain[:name]}_preference_timezone_url", default_state)
 
       assert_response :success
-      timezone =
-        if anonymous_com?(domain)
-          anonymous_com_payload(domain).dig("preferences", "timezone")
-        else
-          cookies["tz"]
-        end
+      timezone = PreferenceToken.decode(cookies[PreferenceCookieName.anonymous_jwt], host: domain[:host])
+        .dig("preferences", "timezone")
 
       assert_equal "Asia/Tokyo", TimezoneIdentifier.normalize(timezone)
     end
@@ -572,11 +554,11 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       assert_includes inertia_choice_labels, "English"
     end
 
-    test "#{domain[:name]} domain applies regional context to this request without storing it" do
+    test "#{domain[:name]} domain region URL overlay does not change saved language" do
       host!(domain[:host])
       prefix = domain[:name].camelize
 
-      assert_preference_created(domain)
+      pref, = assert_preference_created(domain)
 
       patch public_send("base_#{domain[:name]}_preference_language_url", ri: "jp"),
             params: {
@@ -591,6 +573,9 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_equal :en, I18n.locale
       assert_select "html[lang='en']"
+      option_class = PreferenceClassRegistry.option_class(prefix, :language)
+
+      assert_equal option_class::JA, preference_child_for_test(domain, pref, :language).option_id
     end
 
     test "#{domain[:name]} domain updates theme" do
@@ -767,6 +752,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       else
         assert_redirected_to public_send("edit_base_#{domain[:name]}_preference_timezone_url", state)
       end
+
       assert_nil flash[:alert]
     end
 
@@ -1026,11 +1012,6 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
     test "#{domain[:name]} domain reset destroy resets preference to defaults" do
       host!(domain[:host])
       pref, _token, _cookie_name = assert_preference_created(domain)
-      audit_class = domain[:audit_class]
-
-      # Record initial state
-      initial_audit_count = audit_class.where(subject_id: pref.id).count
-
       # Submit reset form with confirmation
       delete(
         public_send("base_#{domain[:name]}_preference_customization_url", ri: "jp"),
@@ -1042,22 +1023,14 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       # Verify database changes; the old preference is retired and a fresh one is issued.
       pref.reload
-      final_audit_count = audit_class.where(subject_id: pref.id).count
 
       assert_equal preference_retired_status(domain), pref.status_id
-      assert_operator final_audit_count, :>, initial_audit_count,
-                      "Audit log should be created"
-
-      # Verify audit log event
-      event_class = domain[:audit_event_class]
-      reset_audit = audit_class.where(subject_id: pref.id, event_id: event_class::RESET_BY_USER_DECISION)
-
-      assert_predicate reset_audit, :exists?
     end
 
     test "#{domain[:name]} domain reset destroy replaces preference cookies and clears request context" do
       host!(domain[:host])
       _pref, old_token, cookie_name = assert_preference_created(domain)
+      cookies[PreferenceBrowserBinding::COOKIE_NAME] = PreferenceBrowserBinding.mint_value
 
       delete(
         public_send("base_#{domain[:name]}_preference_customization_url", ri: "jp"),
@@ -1102,31 +1075,6 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       # Verify cookie is still present
       assert_not_nil cookies[cookie_name], "anonymous Preference JWT should still exist"
     end
-
-    test "#{domain[:name]} domain reset logs database operations" do
-      host!(domain[:host])
-      _, _token, _cookie_name = assert_preference_created(domain)
-      domain[:audit_class]
-
-      # Capture SQL queries
-      queries = []
-      callback = ->(event) { queries << event.payload[:sql] }
-      ActiveSupport::Notifications.subscribe("sql.active_record", callback)
-
-      begin
-        delete(
-          public_send("base_#{domain[:name]}_preference_customization_url", ri: "jp"),
-          params: { confirm_reset: "1" },
-        )
-      ensure
-        ActiveSupport::Notifications.unsubscribe(callback)
-      end
-
-      # Verify INSERT query was executed on chronicle table (audit log)
-      insert_queries = queries.select { |q| q.include?("INSERT") && q.include?("chronicl") }
-
-      assert_not_empty insert_queries, "Should have INSERT query on chronicle table"
-    end
   end
 
   private
@@ -1143,7 +1091,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
     JSON.parse(element.text).dig("props", "title")
   end
 
-  def preference_jwt_cookie_name(domain)
+  def preference_jwt_cookie_name(_domain)
     PreferenceCookieName.anonymous_jwt
   end
 

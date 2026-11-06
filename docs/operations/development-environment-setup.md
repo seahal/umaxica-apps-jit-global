@@ -19,8 +19,8 @@ are in [container-engine-podman-notes.md](container-engine-podman-notes.md).
 Obtain and place the items listed in
 [development-credential-provisioning.md](development-credential-provisioning.md):
 
-- `config/credentials/development.key` and `config/credentials/test.key`, from the development
-  lead. Never generate them with `bin/rails credentials:edit`.
+- `config/credentials/development.key` and `config/credentials/test.key`, from the development lead.
+  Never generate them with `bin/rails credentials:edit`.
 - The repository-root `.env` with `UID`, `GID`, `CLOUDFLARED_TOKEN`, and `CLOUDFLARED_EDGE_TOKEN`.
 
 ## 3. Cloudflare tunnel
@@ -50,9 +50,10 @@ To be written: when [local-aws-fakecloud.md](local-aws-fakecloud.md) is required
 ## 7. External sign-in providers
 
 All provider credentials are read from Rails encrypted credentials in
-`config/initializers/omniauth.rb`. Store them with `bin/rails credentials:edit --environment
-development` only after the correct `development.key` is in place. Never put a provider secret in a
-tracked file, `.env.container.devcontainer`, a plan, or a note.
+`config/initializers/omniauth.rb`. Store them with
+`bin/rails credentials:edit --environment development` only after the correct `development.key` is
+in place. Never put a provider secret in a tracked file, `.env.container.devcontainer`, a plan, or a
+note.
 
 ### 7.1 Microsoft Entra ID (Org surface)
 
@@ -61,7 +62,7 @@ Credential keys: `OMNI_AUTH_ENTRA_ORG_TENANT_ID`, `OMNI_AUTH_ENTRA_ORG_CLIENT_ID
 
 Callback: `https://<org-auth-host>/social/entra/callback`.
 
-The production-oriented procedure is [entra-org-login-runbook.md](entra-org-login-runbook.md).
+The production-oriented procedure is [entra-org-login.md](../runbooks/entra-org-login.md).
 
 To be written: the development-specific procedure (application registration, development callback
 host, operator provisioning, and how to confirm a successful sign-in locally).
@@ -83,14 +84,14 @@ Credential keys: `OMNI_AUTH_APPLE_CLIENT_ID`, `OMNI_AUTH_APPLE_TEAM_ID`, `OMNI_A
 Callback: `https://<app-auth-host>/social/apple/callback`. It must be HTTPS on a real domain; a
 `localhost` or IP address callback is not accepted, so use the tunnel from step 3.
 
-Portal key management is in [apple-second-key-runbook.md](apple-second-key-runbook.md).
+Portal key management is in [apple-second-key.md](../runbooks/apple-second-key.md).
 
 To be written: Services ID, Return URL, and `.p8` key setup for development.
 
 ## 8. Other external services
 
 To be written: Cloudflare Turnstile ([../security/turnstile.md](../security/turnstile.md)), passkeys
-([passkey-runbook.md](passkey-runbook.md)), and any other service that needs per-environment
+([passkey.md](../runbooks/passkey.md)), and any other service that needs per-environment
 configuration.
 
 ## 9. Verify the environment

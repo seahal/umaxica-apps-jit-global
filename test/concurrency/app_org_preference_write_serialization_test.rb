@@ -13,17 +13,19 @@ class AppOrgPreferenceWriteSerializationTest < ActionDispatch::IntegrationTest
         case realm
         when "app"
           {
-            host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), preference_class: AppPreference,
-            table: "app_preferences", prefix: "App",
+            host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+            preference_class: AppPreference,
+            table: "app_preferences",
+            prefix: "App",
             theme_path: base_app_api_v0_preferences_theme_path,
-            language_path: base_app_api_v0_preferences_language_path,
           }
         when "org"
           {
-            host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), preference_class: OrgPreference,
-            table: "org_preferences", prefix: "Org",
+            host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+            preference_class: OrgPreference,
+            table: "org_preferences",
+            prefix: "Org",
             theme_path: base_org_api_v0_preferences_theme_path,
-            language_path: base_org_api_v0_preferences_language_path,
           }
         else
           raise ArgumentError, "unsupported realm: #{realm.inspect}"
@@ -63,8 +65,8 @@ class AppOrgPreferenceWriteSerializationTest < ActionDispatch::IntegrationTest
 
         results = Queue.new
         [
-          [:theme, config.fetch(:theme_path), { theme: "dark" }],
-          [:language, config.fetch(:language_path), { language: "en" }],
+          [:dark, config.fetch(:theme_path), { theme: "dark" }],
+          [:light, config.fetch(:theme_path), { theme: "light" }],
         ].each do |field, path, submitted|
           threads << Thread.new do
             browser = open_session
@@ -101,29 +103,34 @@ class AppOrgPreferenceWriteSerializationTest < ActionDispatch::IntegrationTest
         outcomes.each { |outcome| raise outcome if outcome.is_a?(Exception) }
         preference_class.connection_pool.with_connection(&:clear_query_cache)
 
-        assert_equal [:language, :theme].sort, outcomes.map(&:first).sort
+        assert_equal [:dark, :light].sort, outcomes.map(&:first).sort
         assert_equal [200, 200], outcomes.map { |outcome| outcome.fetch(1) }.sort
 
         claims = outcomes.map(&:last)
+
         assert_equal 2, claims.map { |payload| payload.fetch("sub") }.uniq.size
         assert_includes claims.map { |payload| payload.fetch("sub") }, original.public_id
         actual_snapshots = claims.map { |payload| payload.fetch("preferences").slice("theme", "language") }
         expected_snapshots = [
           { "theme" => "dark", "language" => "ja" },
-          { "theme" => "system", "language" => "en" },
+          { "theme" => "light", "language" => "ja" },
         ]
+
         assert_equal expected_snapshots.sort_by { |snapshot| snapshot.fetch("theme") },
                      actual_snapshots.sort_by { |snapshot| snapshot.fetch("theme") }
 
         claims.each do |payload|
           row = preference_class.find_by!(public_id: payload.fetch("sub"))
+
           assert_equal preference_class::ACTIVE_STATUS_ID, row.status_id
-          persisted_snapshot = PreferenceWriteBoundary::ANONYMOUS_DISPLAY_TYPES.each_with_object({}) do |type, values|
-            record = PreferenceClassRegistry.record_class(config.fetch(:prefix), type)
-              .find_by!(preference_id: row.id)
-            option = PreferenceClassRegistry.option_class(config.fetch(:prefix), type).find(record.option_id)
-            values[type.to_s] = option.name
-          end
+          persisted_snapshot =
+            PreferenceWriteBoundary::ANONYMOUS_DISPLAY_TYPES.each_with_object({}) do |type, values|
+              record = PreferenceClassRegistry.record_class(config.fetch(:prefix), type)
+                .find_by!(preference_id: row.id)
+              option = PreferenceClassRegistry.option_class(config.fetch(:prefix), type).find(record.option_id)
+              values[type.to_s] = option.name
+            end
+
           assert_equal payload.fetch("preferences"), persisted_snapshot
         end
       ensure
@@ -133,7 +140,8 @@ class AppOrgPreferenceWriteSerializationTest < ActionDispatch::IntegrationTest
         threads.each { |thread| thread.join(8) }
         ids = []
         ids << created_ids.pop(true) while created_ids.present?
-        preference_class.where(id: ids).find_each(&:destroy!) if ids.any?
+        # Cleanup traverses dependent associations outside the public writer under test.
+        preference_class.where(id: ids).strict_loading(false).find_each(&:destroy!) if ids.any?
       end
     end
   end

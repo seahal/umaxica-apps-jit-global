@@ -10,10 +10,9 @@
 
 ## Current OIDC host boundary (2026-10-24)
 
-The current OIDC authority is the Visa surface, with one host per realm: `visa.umaxica.app`,
-`visa.umaxica.com`, and `visa.umaxica.org`. Visa owns discovery, JWKS, authorization, token,
-UserInfo, revocation, end-session logout, sign-out result, and the OP-side sign-in limitation
-routes.
+The current OIDC authority is the Visa surface, with one host per realm: `visa.umaxica.app` and
+`visa.umaxica.org`. Visa owns discovery, JWKS, authorization, token, UserInfo, revocation,
+end-session logout, sign-out result, and the OP-side sign-in limitation routes.
 
 Base remains the browser relying party and identity/session-management surface at `www.umaxica.app`,
 `www.umaxica.com`, and `www.umaxica.org`. Base owns the RP callback, RP cookies, dashboard,
@@ -231,8 +230,8 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 2. `PreferenceRegions#set_edit_variables` normalizes query params, populates `@current_*`.
 3. User submits new locale/timezone.
 4. `#update` calls `apply_updates` → `assign_if_present` / `update_language` / `update_timezone`.
-5. On success, the preference write path persists the DB row and reissues the Preference JWT
-   projection in `preference_access` / `__Host-preference_access`.
+5. On success, the realm preference write path persists the DB row and issues the realm Preference
+   JWT (`__Secure-preference`) with the `language` and `__Secure-experience` display cookies.
 6. Controller redirects to edit URL with normalized query params.
 
 ### 4.2 Email Registration Flow
@@ -283,12 +282,13 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 
 ### 5.2 Cookies & Sessions
 
-- Preference credential cookie: `preference_access` / `__Host-preference_access`, with refresh and
-  DBSC siblings using the same basename pattern. The payload projects DB-backed preference fields
-  such as `lx`, `ri`, `tz`, and `ct`.
+- Preference transport: one realm-scoped `__Secure-preference` JWT plus readable `language` and
+  `__Secure-experience` display cookies. The closed JWT projection contains the realm's display
+  values; it has no refresh or DBSC sibling. Consent and Web Push remain in database records gated
+  by the Base host-only `__Host-preference_binding` cookie.
 - Theme cookie: `root_<scope>_theme`.
-- Consent cookies: `:accept_functional_cookies`, `:accept_performance_cookies`,
-  `:accept_targeting_cookies`.
+- Consent receipt: stored with the realm Preference row and authorized by the browser binding; no
+  consent-value cookie carries the decision.
 - Auth cookies: access + refresh + device cookies (same security options; environment-dependent
   names).
 - HOTP private key: `cookies.encrypted[:htop_private_key]`.

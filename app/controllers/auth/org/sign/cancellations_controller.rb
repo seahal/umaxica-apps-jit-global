@@ -4,8 +4,8 @@
 module Auth
   module Org
     module Sign
-      # D09 Cancel from the first Sign In or Sign Up page. Auth ends its ceremony and hands Base a
-      # single-use cancellation; Base commits it and returns access_denied to the RP.
+      # D09 Cancel from the current admitted Auth ceremony. Auth ends local continuity and hands
+      # Base a single-use cancellation; Base commits it and returns access_denied to the RP.
       class CancellationsController < ::Auth::Org::ApplicationController
         include ::SignEntryExit
 
@@ -16,14 +16,12 @@ module Auth
         public
 
         def create
-          ceremony = sign_entry_first_page_ceremony
-          transaction = sign_entry_parent_transaction
+          ceremony, transaction = sign_entry_parent_cancellation
           return refuse_sign_entry_exit!("not_on_first_page") unless ceremony && transaction
 
-          issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(
-            transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-          )
-          ceremony.cancel!
+          issuance = commit_sign_entry_parent_cancellation!(ceremony:, transaction:)
+          delete_auth_ceremony_sid_cookie!
+          reset_session
           redirect_to_jump_url(
             visa_org_oidc_cancellation_url(
               cancellation_ref: issuance.reference, transaction_ref: transaction.transaction_id, ri: params[:ri],

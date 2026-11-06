@@ -42,6 +42,13 @@ module Base
             ],
           },
           {
+            heading: t("base.shared.identity.sections.external_services"),
+            items: [
+              { label: t("base_social_identities.title"),
+                href: base_org_identity_social_identities_path(ri: params[:ri]), },
+            ],
+          },
+          {
             heading: t("base.shared.identity.sections.account"),
             items: [
               identity_hub_link(:withdrawal, base_org_identity_withdrawal_path(ri: params[:ri])),

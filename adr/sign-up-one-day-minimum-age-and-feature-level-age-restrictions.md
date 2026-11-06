@@ -3,8 +3,8 @@
 ## Status
 
 **Accepted (2026-10-28, owner decision; `one.md` D-48 and R-AU-50 of the 2026-10 COM retirement
-cycle). Implemented (2026-10-30).** `SignUpEligibilityPolicy` now carries the one-day rule only,
-the under-age `HALTED` branch and the `.app` age-restricted copy are removed, and
+cycle). Implemented (2026-10-30).** `SignUpEligibilityPolicy` now carries the one-day rule only, the
+under-age `HALTED` branch and the `.app` age-restricted copy are removed, and
 `docs/policy/signup-eligibility.md` describes the implemented contract.
 
 **Amended (2026-10-28, owner decision):** decision 7 classifies the Preference adult-content gate as
@@ -21,9 +21,9 @@ correct demanded continuous security work, and the recent stream of vulnerabilit
 impossible to maintain sustainably for that purpose alone.
 
 The owner therefore decided to keep authentication and authorization on two surfaces only, `.app`
-and `.org`, and to retire `.com` authentication entirely (the 2026-10 COM retirement cycle,
-`one.md` D-1 and D-4). With `.com` accounts gone and the guest-support capability no longer built on
-this machinery, an age threshold at sign-up no longer serves its original purpose.
+and `.org`, and to retire `.com` authentication entirely (the 2026-10 COM retirement cycle, `one.md`
+D-1 and D-4). With `.com` accounts gone and the guest-support capability no longer built on this
+machinery, an age threshold at sign-up no longer serves its original purpose.
 
 ## Decision
 
@@ -46,41 +46,41 @@ this machinery, an age threshold at sign-up no longer serves its original purpos
 6. **`.com` is out of scope.** Its Visitor sign-up is removed with COM authentication, together with
    the 13-year threshold.
 7. **The adult-content gate is a dormant, browser-scoped setting in the consent class.**
-   - *Dormant.* No controller uses the Preference `adult_content_gate` today, and none is added now:
-     no screen sets it, no request reads it, and the Preference class registry does not list it.
-     The model layer keeps it: the child and option models, their tables and the read accessors on
-     the Preference models stay, because earlier decisions had to account for it and a feature may
-     need it again.
-   - *Kind of setting.* It is set per browser and must be checked on every request that depends on
+   - _Dormant._ No controller uses the Preference `adult_content_gate` today, and none is added now:
+     no screen sets it, no request reads it, and the Preference class registry does not list it. The
+     model layer keeps it: the child and option models, their tables and the read accessors on the
+     Preference models stay, because earlier decisions had to account for it and a feature may need
+     it again.
+   - _Kind of setting._ It is set per browser and must be checked on every request that depends on
      it. It is therefore the same kind of setting as cookie consent, not a display setting such as
      theme or language. It belongs with the values the retired assurance cookie used to carry
      (consent, region, Web Push opt-in): their authority is Base's database row for this browser,
      never the shared display cookie and never a value the browser can supply.
-   - *Consequences of that classification, binding on any future use.* The value is not placed in
+   - _Consequences of that classification, binding on any future use._ The value is not placed in
      the shared display cookie (`__Secure-experience`). It is not copied to or from the account's
-     actor-local preference, at sign-in or on save, because it belongs to the browser and not to
-     the person. A host that cannot read Base's row treats the value as unknown and applies the
+     actor-local preference, at sign-in or on save, because it belongs to the browser and not to the
+     person. A host that cannot read Base's row treats the value as unknown and applies the
      restrictive default, as non-Base hosts treat consent as absent. It is never derived from the
      sign-up birthdate, which no longer filters by age (decision 2).
-   - *Changing this.* Putting the gate back into use, including adding a screen, a reader or a
+   - _Changing this._ Putting the gate back into use, including adding a screen, a reader or a
      registry entry, requires a new owner decision that amends this record. That decision also
      settles how the gate relates to the feature-level age rules of decision 5.
 
 ## Consequences
 
-- `SignUpEligibilityPolicy` no longer carries per-surface age thresholds of 16 and 13.
-  Implemented (2026-10-30): it is the shared one-day rule under `eligible?(birthdate, surface:)`
-  for `.app` and `.org`; an unsupported surface still raises. The `.org` invitation eligibility
-  stays an independent AND-partner of this rule; its own invitation flow remains the place that
-  refuses an invited applicant, and `.org` collects no sign-up birthdate today.
+- `SignUpEligibilityPolicy` no longer carries per-surface age thresholds of 16 and 13. Implemented
+  (2026-10-30): it is the shared one-day rule under `eligible?(birthdate, surface:)` for `.app` and
+  `.org`; an unsupported surface still raises. The `.org` invitation eligibility stays an
+  independent AND-partner of this rule; its own invitation flow remains the place that refuses an
+  invited applicant, and `.org` collects no sign-up birthdate today.
 - The under-age refusal path and its "16th birthday" copy are replaced: the only refusal left is a
   birthdate of today or later.
 - The date boundary must be defined explicitly (service timezone date, as in the current age
   calculation, or another reference) and tested immediately below, at and above it: yesterday
   accepted, today refused, tomorrow refused.
 - A person who was under the former thresholds can now hold an identity. Any feature with an age
-  requirement must enforce it itself before this change ships to production; until such rules
-  exist, no feature may assume that sign-up filtered by age.
+  requirement must enforce it itself before this change ships to production; until such rules exist,
+  no feature may assume that sign-up filtered by age.
 - The Preference `adult_content_gate` sign-in override (`force_underage_r18_stopper!`) is removed in
   the same cycle (`one.md` D-31). Where age-based content restrictions live afterwards is an open
   item (`one.md` BL-9).
@@ -95,12 +95,11 @@ this machinery, an age threshold at sign-up no longer serves its original purpos
 ## Related
 
 - `docs/policy/signup-eligibility.md` — current thresholds, to be updated when implemented.
-- `docs/backlog/2026-10-26-sign-up-minimum-age-removal.md` — the backlog record this decision picks
-  up.
 - `app/policies/sign_up_eligibility_policy.rb`,
   `app/controllers/concerns/sign_up_sequence_controller_support.rb`,
   `app/models/concerns/has_birthdate.rb` — current enforcement points.
-- `app/controllers/concerns/preference_class_registry.rb`, `app/models/*_preference_adult_content_gate*.rb`
-  — the registry entries removed by decision 7 and the models it keeps.
+- `app/controllers/concerns/preference_class_registry.rb`,
+  `app/models/*_preference_adult_content_gate*.rb` — the registry entries removed by decision 7 and
+  the models it keeps.
 - `adr/xper-phase-zero-bootstrap.md` — records the gate's option codes (`0` no choice, `1` approved,
   `2` deny), which remain valid for the retained tables.

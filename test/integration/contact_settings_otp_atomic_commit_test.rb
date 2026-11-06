@@ -121,28 +121,46 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
       target = URI.parse(payload.fetch("url"))
 
       assert_equal auth_host, target.host
+      # The admitted Auth entry does not render: it relays the browser to Base, which holds the
+      # continuation form, and posting that form returns the browser to Auth to redeem the entry.
+      navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
       browser.host!(auth_host)
-      browser.get(target.request_uri)
-      3.times do |step|
-        form = browser.response.parsed_body.at_css("form")
+      browser.get(target.request_uri, headers: navigation)
 
-        assert_not_nil form, "Step-Up admission must render its real continuation form"
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        browser.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
-          },
-        )
+      assert_equal 303, browser.response.status
+      assert_equal auth_host, URI.parse(browser.response.location).host
+      browser.get(browser.response.location, headers: navigation)
 
-        assert_equal 303, browser.response.status
-        next if step == 2
+      assert_equal 303, browser.response.status
+      confirmation = URI.parse(browser.response.location)
 
-        target = URI.parse(browser.response.location)
+      assert_equal base_host, confirmation.host
+      browser.host!(base_host)
+      browser.get(confirmation.request_uri, headers: navigation)
 
-        assert_equal(step.zero? ? base_host : auth_host, target.host)
-        browser.host!(target.host)
-        browser.get(target.request_uri)
-      end
+      assert_equal 200, browser.response.status
+      form = browser.response.parsed_body.at_css("form#base-ceremony-binding-confirmation-form")
+
+      assert_not_nil form, "Step-Up admission must render its real continuation form"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      browser.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
+      assert_equal 303, browser.response.status
+      returned = URI.parse(browser.response.location)
+
+      assert_equal auth_host, returned.host
+      browser.host!(auth_host)
+      browser.get(returned.request_uri, headers: navigation)
+
+      assert_equal 303, browser.response.status
+      browser.get(browser.response.location, headers: navigation)
+
+      assert_equal 200, browser.response.status
+      assert_equal auth_host, browser.request.host
       browser.get("/verification/passkey/new", params: { ri: "jp" })
 
       assert_equal 200, browser.response.status

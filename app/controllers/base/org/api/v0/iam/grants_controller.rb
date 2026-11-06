@@ -58,7 +58,7 @@ module Base
             # Form data for the grant screen; reaching it already needs the grant capability and Step-Up.
             def screen
               authorize!(OperatorCapabilityGrant, to: :grant_screen?, with: OperatorCapabilityGrantPolicy)
-              with_owner_step_up(STEP_UP_SCOPE) do
+              with_owner_step_up_read(STEP_UP_SCOPE, surface: AVATAR_SURFACE) do
                 render json: { grantable_capabilities:,
                                reason_codes: OperatorCapabilityGrant::DELEGATED_GRANT_REASON_CODES,
                                durations: DURATIONS.keys, }
@@ -67,13 +67,15 @@ module Base
 
             def create
               authorize!(OperatorCapabilityGrant, to: :grant_screen?, with: OperatorCapabilityGrantPolicy)
-              with_owner_step_up(STEP_UP_SCOPE) { issue_grant }
+              require_owner_step_up(STEP_UP_SCOPE, AVATAR_SURFACE) { |evidence| issue_grant(evidence) }
             end
 
             def revoke
               grant = find_grant!(:ref)
               authorize!(grant, to: :revoke?, with: OperatorCapabilityGrantPolicy)
-              with_owner_step_up(STEP_UP_SCOPE) { revoke_grant(grant) }
+              require_owner_step_up(STEP_UP_SCOPE, AVATAR_SURFACE) do |evidence|
+                revoke_grant(grant, evidence)
+              end
             end
 
             private
@@ -99,7 +101,7 @@ module Base
                 .select { |capability| avatar_actor.capability?(capability) }
             end
 
-            def issue_grant
+            def issue_grant(evidence)
               input = grant_input
               return render(json: { errors: input }, status: :unprocessable_content) if input.key?(:invalid)
 
@@ -108,31 +110,29 @@ module Base
                 capability: input.fetch(:capability),
               )
               authorize!(grant, to: :create?, with: OperatorCapabilityGrantPolicy)
-              chronicle =
-                audited_administrative_operation(
-                  operation_id: input.fetch(:operation_id), action: "iam.capability.granted",
-                  subject: input.fetch(:operator), reason_code: input.fetch(:reason_code),
-                  metadata: { capability: input.fetch(:capability),
-                              ticket_id: input.fetch(:ticket_id),
-                              subject_public_id: input.fetch(:operator).public_id, },
-                  changeset: {},
-                ) do
-                  issued = OperatorCapabilityGrant.issue!(
-                    operator: input.fetch(:operator), granted_by: avatar_actor, capability: input.fetch(:capability),
-                    reason_code: input.fetch(:reason_code), ticket_id: input.fetch(:ticket_id),
-                    duration: input.fetch(:duration),
-                  )
-                  { grant_public_id: issued.public_id, expires_at: issued.expires_at.iso8601 }
-                end
-              render json: { grant_public_id: chronicle.changeset["grant_public_id"] }, status: :created
-            rescue OrgAdministrativeAudit::OperationConflictError
+              result = OrgIamOwnerMutation.grant(
+                actor: avatar_actor, subject: input.fetch(:operator), token: avatar_root, evidence:,
+                operation_id: input.fetch(:operation_id), capability: input.fetch(:capability),
+                duration_days: input.fetch(:duration_days), reason_code: input.fetch(:reason_code),
+                ticket_id: input.fetch(:ticket_id), request: audit_request,
+              )
+              case result.status
+              when :confirmed
+                render json: { grant_public_id: result.outcome.result.fetch("grant_public_id") }, status: :created
+              when :denied
+                render_owner_denied
+              when :audit_unconfirmed, :indeterminate
+                render_audit_unavailable
+              else
+                raise ArgumentError, "unsupported IAM grant result: #{result.status.inspect}"
+              end
+            rescue OrgIamAuditedCommit::OperationConflict
               render json: { errors: { operation_id: t("base.org.admin.errors.conflict") } }, status: :conflict
             rescue OrgAdministrativeAudit::IntentUnavailableError
-              render json: { errors: { base: t("base.org.admin.errors.audit_unavailable") } },
-                     status: :service_unavailable
+              render_audit_unavailable
             end
 
-            def revoke_grant(grant)
+            def revoke_grant(grant, evidence)
               reason_code = params[:reason_code]
               operation_id = params[:operation_id]
               errors = {}
@@ -144,24 +144,29 @@ module Base
               end
               return render(json: { errors: }, status: :unprocessable_content) if errors.any?
 
-              audited_administrative_operation(
-                operation_id:, action: "iam.capability.revoked", subject: grant.operator, reason_code:,
-                metadata: { capability: grant.capability,
-                            grant_public_id: grant.public_id,
-                            subject_public_id: grant.operator.public_id, },
-                changeset: { before: { revoked: false } },
-              ) do
-                grant.revoke!(by: avatar_actor, reason_code:)
-                { revoked: true }
+              result = OrgIamOwnerMutation.revoke(
+                actor: avatar_actor, token: avatar_root, evidence:, operation_id:, grant:, reason_code:,
+                request: audit_request,
+              )
+              case result.status
+              when :confirmed
+                render json: { grant_public_id: result.outcome.result.fetch("grant_public_id") }
+              when :denied
+                render_owner_denied
+              when :last_capability_holder
+                render json: { errors: { base: t("base.org.admin.errors.last_holder") } },
+                       status: :unprocessable_content
+              when :audit_unconfirmed, :indeterminate
+                render_audit_unavailable
+              else
+                raise ArgumentError, "unsupported IAM revoke result: #{result.status.inspect}"
               end
-              render json: { grant_public_id: grant.public_id }
             rescue OperatorCapabilityGrant::LastCapabilityHolderError
               render json: { errors: { base: t("base.org.admin.errors.last_holder") } }, status: :unprocessable_content
-            rescue OperatorCapabilityGrant::AlreadyRevokedError, OrgAdministrativeAudit::OperationConflictError
+            rescue OperatorCapabilityGrant::AlreadyRevokedError, OrgIamAuditedCommit::OperationConflict
               render json: { errors: { base: t("base.org.admin.errors.conflict") } }, status: :conflict
             rescue OrgAdministrativeAudit::IntentUnavailableError
-              render json: { errors: { base: t("base.org.admin.errors.audit_unavailable") } },
-                     status: :service_unavailable
+              render_audit_unavailable
             end
 
             # Same validation as the former page; an invalid input answers with its field messages.
@@ -197,9 +202,14 @@ module Base
               { operator:,
                 capability:,
                 reason_code:,
-                duration: DURATIONS.fetch(duration_key),
+                duration_days: Integer(duration_key, 10),
                 ticket_id:,
                 operation_id:, }
+            end
+
+            def render_audit_unavailable
+              render json: { errors: { base: t("base.org.admin.errors.audit_unavailable") } },
+                     status: :service_unavailable
             end
 
             def listed(key, allowed, errors, message_key)

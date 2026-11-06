@@ -61,6 +61,8 @@ class ClientSecretLifecycleJobTest < ActiveJob::TestCase
           completed_requirements: [],
         )
       end
+    canceled_actor = Client.find(flows.last.principal_id)
+    registered_actor_facts = canceled_actor.attributes
     allocations =
       flows.map do |flow|
         ClientSecretIssuance.create!(
@@ -82,6 +84,7 @@ class ClientSecretLifecycleJobTest < ActiveJob::TestCase
     assert ClientSecretAuditOutbox.exists?(
       operation_ref: allocations.last.origin_operation_id, event_name: "secret.discarded", reason: "flow_canceled",
     )
+    assert_equal registered_actor_facts, canceled_actor.reload.attributes
     assert ClientSignUpFlow.exists?(flows.first.id)
   ensure
     keys.each { |key| ENV[key] = previous[key] }

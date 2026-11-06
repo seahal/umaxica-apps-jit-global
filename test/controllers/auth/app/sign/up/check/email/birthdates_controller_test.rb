@@ -5,6 +5,9 @@ require "test_helper"
 require_relative "../../../../../../../support/oidc_auth_admission_test_helper"
 
 class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -13,8 +16,15 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   include ActiveJob::TestHelper
   include OidcAuthAdmissionTestHelper
   include ActiveSupport::Testing::TimeHelpers
+  include SignInFlowCleanup
 
   setup do
+    # The test lock serializes these HTTP journeys; retain pre-existing rows for scoped cleanup.
+    @initial_client_ids = Client.pluck(:id)
+    @initial_signup_ids = ClientSignUpFlow.pluck(:id)
+    @initial_binding_ids = ClientAuthAdmissionBinding.pluck(:id)
+    @initial_ceremony_ids = ClientAuthCeremonySession.pluck(:id)
+    @initial_parent_ids = ClientOidcAuthorizationTransaction.pluck(:id)
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
@@ -36,6 +46,59 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   end
 
   teardown do
+    # Delivery runs after real commits, so rollback fixtures cannot clean up this journey.
+    owners = Client.where.not(id: @initial_client_ids).to_a
+    owner_ids = owners.map(&:id)
+    # Completed signup also commits the actor's bootstrap identity and collective graph.
+    owners.each do |owner|
+      identity_ids = ClientIdentity.where(source_record_id: owner.id).pluck(:id)
+      persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+      enterprise_ids =
+        (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
+          EnterpriseOwnership.where(client_id: owner.id).pluck(:enterprise_id)).uniq
+      unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+      PersonaMembership.where(persona_id: persona_ids)
+        .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+      PersonaAssignment.where(persona_id: persona_ids).delete_all
+      ClientOidcIdentityBinding.where(client_identity_id: identity_ids).delete_all
+      AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+      ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+      ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+      ClientPersona.where(id: persona_ids).delete_all
+      ClientIdentity.where(id: identity_ids).delete_all
+      EnterpriseUnitClosure.where(ancestor_id: unit_ids)
+        .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
+      EnterpriseUnit.where(id: unit_ids).delete_all
+      EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+      Enterprise.where(id: enterprise_ids).delete_all
+    end
+    flows = ClientSignUpFlow.where.not(id: @initial_signup_ids).to_a
+    session_refs =
+      flows.map do |flow|
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      end
+    ClientEmailCeremonyTransaction.where(session_ref: session_refs).delete_all
+    ClientSignUpFlow.where(id: flows.map(&:id)).delete_all
+    ClientAuthAdmissionBinding.where.not(id: @initial_binding_ids).delete_all
+    ClientAuthCeremonySession.where.not(id: @initial_ceremony_ids).delete_all
+    ClientOidcAuthorizationTransaction.where.not(id: @initial_parent_ids).delete_all
+    delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: owner_ids))
+    ClientDeviceSession.where(user_id: owner_ids).update_all(current_refresh_token_id: nil)
+    ClientToken.where(user_id: owner_ids).delete_all
+    ClientDeviceSession.where(user_id: owner_ids).delete_all
+    ClientContactAuditOutbox.where(owner_ref: owners.map(&:public_id)).delete_all
+    ClientEmail.where(user_id: owner_ids).delete_all
+    ClientAccount.where(user_id: owner_ids).delete_all
+    ClientOidcConnection.where(user_id: owner_ids).delete_all
+    ClientRegistrationCompletion.where(client_id: owner_ids).delete_all
+    ClientAuthorityLock.where(client_id: owner_ids).delete_all
+    Client.where(id: owner_ids).delete_all
+  ensure
     ActionController::Base.allow_forgery_protection = @previous_forgery_protection
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
@@ -142,8 +205,12 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   # rubocop:enable Minitest/MultipleAssertions
 
   test "update without a sign-up ticket does not raise an unsafe cross-host redirect" do
-    user = clients(:one)
-    token = client_tokens(:one)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    device = ClientDeviceSession.create!(user: user)
+    token = ClientToken.create!(
+      user: user, device_session: device, authentication_epoch: user.authentication_epoch,
+      discard_at: 1.day.from_now, purge_eligible_at: 1.day.from_now,
+    )
     access = AuthenticationToken.encode(
       user, host: @host, session_public_id: token.public_id, resource_type: "client",
             jwt_issuer_id: JitSecurityJwtRegistry.surface("AUTH_APP").id,
@@ -602,7 +669,20 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     end
 
     assert_response :see_other
-    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+    jump = URI.parse(response.location)
+
+    assert_equal URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host, jump.host
+    issuer = JitSecurityJwtRegistry.surface("AUTH_APP")
+    claims, = JWT.decode(
+      Rack::Utils.parse_query(jump.query).fetch("rt"),
+      JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{@host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    cancellation = URI.parse(claims.fetch("url"))
+
+    assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), cancellation.host
+    assert_equal "/oidc/cancellation", cancellation.path
     assert_equal ClientSignUpFlowStatus::CANCELLED, first_flow.reload.status_id
 
     # The cancelled ticket's code no longer advances anything.
@@ -613,7 +693,92 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_not_equal auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding), response.location
     assert_equal ClientSignUpFlowStatus::CANCELLED, first_flow.reload.status_id
 
-    # A new sign-up in the same session proceeds instead of ending in `invalid_transition`.
+    # Cancellation ended this admission. A fresh Base admission is required before signup.
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host!(base_host)
+    https!
+    get("/sign", params: { ri: "jp" })
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    post(
+      form["action"], params: form.css("input[name]").to_h { |input| [input["name"], input["value"]] },
+                      headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+    )
+    20.times do
+      if response.redirect?
+        target = URI.parse(response.location)
+        if target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+          issuer_name = (host == base_host) ? "BASE_APP" : "VISA_APP"
+          issuer = JitSecurityJwtRegistry.surface(issuer_name)
+          claims, = JWT.decode(
+            Rack::Utils.parse_query(target.query).fetch("rt"),
+            JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          target = URI.parse(claims.fetch("url"))
+        end
+        target = URI.join("https://#{host}", target.to_s)
+
+        assert_includes [base_host, @host, ENV.fetch("PUBLIC_VISA_SERVICE_URL")], target.host
+        host!(target.host)
+        get(target.request_uri, headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" })
+        next
+      end
+      continuation = response.parsed_body.at_css("form[id$='continuation-form'], form[id$='confirmation-form']")
+      break unless continuation
+
+      post(
+        continuation["action"],
+        params: continuation.css("input[name]").to_h { |input| [input["name"], input["value"]] },
+        headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+      )
+    end
+
+    assert_response :success
+    assert_equal @host, host
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    switch = props.fetch("switch_form")
+    post(
+      switch.fetch("action"), params: { to: "sign_up", authenticity_token: switch.fetch("authenticity_token") },
+                              headers: { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" },
+    )
+    # Use the ordinary admission transport to finish the explicit switch.
+    20.times do
+      if response.redirect?
+        target = URI.parse(response.location)
+        if target.host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+          issuer = JitSecurityJwtRegistry.surface((host == @host) ? "AUTH_APP" : "VISA_APP")
+          claims, = JWT.decode(
+            Rack::Utils.parse_query(target.query).fetch("rt"),
+            JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          target = URI.parse(claims.fetch("url"))
+        end
+        target = URI.join("https://#{host}", target.to_s)
+
+        assert_includes [base_host, @host, ENV.fetch("PUBLIC_VISA_SERVICE_URL")], target.host
+        host!(target.host)
+        get(target.request_uri, headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" })
+        next
+      end
+      continuation = response.parsed_body.at_css("form[id$='continuation-form'], form[id$='confirmation-form']")
+      break unless continuation
+
+      post(
+        continuation["action"],
+        params: continuation.css("input[name]").to_h { |input| [input["name"], input["value"]] },
+        headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+      )
+    end
+
+    assert_response :success
+    assert_equal "/sign/up", request.path
+    get("/sign/up/email/new", params: { ri: "jp" })
+    @headers["X-CSRF-Token"] = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     clear_enqueued_jobs
     post auth_app_sign_up_email_url(ri: "jp"),
          params: { :client_email => { raw_address: "cancel-b-#{SecureRandom.hex(3)}@example.com",
@@ -721,7 +886,20 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     delete cancel.fetch("action"), headers: @headers
 
     assert_response :see_other
-    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+    jump = URI.parse(response.location)
+
+    assert_equal URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host, jump.host
+    issuer = JitSecurityJwtRegistry.surface("AUTH_APP")
+    claims, = JWT.decode(
+      Rack::Utils.parse_query(jump.query).fetch("rt"),
+      JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{@host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    cancellation = URI.parse(claims.fetch("url"))
+
+    assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), cancellation.host
+    assert_equal "/oidc/cancellation", cancellation.path
   end
 
   # Birthdate rejections map the validation reason to a fixed public message key, so the actor can
@@ -1100,7 +1278,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1127,24 +1304,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

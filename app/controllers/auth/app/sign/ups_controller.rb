@@ -18,6 +18,9 @@ module Auth
         declare_authentication_mode! :open
 
         def show
+          return if params[:entry_ref].blank? &&
+            refuse_progressed_sign_entry_page!(expected_intent: auth_ceremony_entry_intent)
+
           admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_sign_up_entry_page! }
         end
 

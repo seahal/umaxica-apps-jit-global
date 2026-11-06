@@ -47,13 +47,6 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       authority_passkey = actor.client_passkeys.create!(
         webauthn_id: SecureRandom.uuid, public_key: "existing-authority-key", uv_verified_at: Client.database_now,
       )
-      token.update!(
-        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: authority_passkey.public_id, last_step_up_full_reauthentication: false,
-      )
       now = Client.database_now
       active_count.times do
         prior = ClientSecretIssuance.create!(
@@ -77,6 +70,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         fv5340 = base_host
         fv5344 = OidcClientRegistry.find!("base-app-ww")
         fv5346 = OpAppGrant.database_now
+        step_up_auth_time = fv5346.to_i - 1
+        fv5226.rotate_refresh_token!(now: fv5346) unless fv5226.device_session_record&.current_refresh_token_id
+        fv5226.device_session_record!
         fv5341 = OpAppGrant.create!(
           authentication_epoch: 0,
           client_token: fv5226,
@@ -84,9 +80,36 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           oidc_scope: "openid profile",
           oidc_jti: SecureRandom.uuid,
           oidc_nonce: SecureRandom.hex(16),
-          oidc_auth_time: fv5226.root_login_established_at || fv5346,
+          oidc_auth_time: Time.at(step_up_auth_time).utc,
+          oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+          oidc_amr: JSON.generate(["passkey"]),
           refresh_token_expires_at: fv5346 + 30.minutes,
         )
+        ClientStepUpCommit.create!(
+          grant: fv5341, root_token: fv5226, context_ref: PublicId.generate,
+          verified_method: "passkey", committed_at: Time.at(step_up_auth_time).utc,
+        )
+        fv5226.update!(
+          last_step_up_at: Time.at(step_up_auth_time).utc,
+          last_step_up_scope: "settings_passkey",
+          last_step_up_method: "passkey",
+          last_step_up_phishing_resistant: true,
+          last_step_up_user_verified: true,
+          last_step_up_full_reauthentication: false,
+          last_step_up_credential_ref: authority_passkey.public_id,
+          last_step_up_resource_ref: nil,
+          last_step_up_tenant_ref: nil,
+          last_step_up_purpose: "step_up",
+          last_step_up_audience: "step_up:app",
+          last_step_up_session_public_id: fv5226.public_id,
+        )
+        enrollment = RpCallbackCommitter.call(
+          cell: RpCellBinding.for_client(fv5344.client_id), issuer: OidcIssuer.for_client(fv5344),
+          subject: OidcSubject.for(fv5345, resource_type: "client"), sid: fv5341.public_id,
+          absolute_expires_at: fv5346 + 30.minutes,
+        )
+        raise ArgumentError, "RP callback did not commit: #{enrollment.outcome}" unless enrollment.success?
+
         fv5343 = AuthenticationTokenService.encode(
           fv5345,
           host: fv5340,
@@ -97,6 +120,10 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           oidc_jti: fv5341.oidc_jti,
           expires_at: fv5346 + 10.minutes,
           scopes: %w(openid profile),
+          acr: StepUpEvidenceResolver::STEP_UP_ACR,
+          amr: ["passkey"],
+          auth_time: step_up_auth_time,
+          authentication_context: fv5226.strict_authentication_context_value.to_s,
           issuer: OidcIssuer.for_client(fv5344),
           audiences: [fv5344.aud],
           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5344),
@@ -105,8 +132,12 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         )
         fv5342.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
           fv5343
-        fv5342.cookies.merge(
+        fv5342.cookies.merge!(
           "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fv5341.issue_refresh_token!)}",
+          URI.parse("https://#{fv5340}/"),
+        )
+        fv5342.cookies.merge(
+          "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(enrollment.session.public_id)}",
           URI.parse("https://#{fv5340}/"),
         )
       end
@@ -189,6 +220,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       base.post(base_app_identity_passkeys_path(ri: "jp"), params: { authenticity_token: csrf }, headers: base_headers)
 
       assert_equal 303, base.response.status, base.response.body
+      base_browser_nonce = base.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY]
       begin
         fv5334 = base
         fv5336 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
@@ -222,16 +254,41 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           )
         end
       end
-      registration_uri = URI.parse(base.response.location)
+      authorization_uri = URI.parse(base.response.location)
+
+      assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), authorization_uri.host
+      base.host!(authorization_uri.host)
+      base.https!
+      base.get(
+        authorization_uri.request_uri,
+        headers: {
+          "Host" => authorization_uri.host,
+          "Origin" => "https://#{authorization_uri.host}",
+          "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
+      assert_equal 303, base.response.status, base.response.body
+      jump_uri = URI.parse(base.response.location)
+
+      assert_equal "jump.umaxica.net", jump_uri.host
+      jump_token = Rack::Utils.parse_nested_query(jump_uri.query).fetch("rt")
+      jump_claims, = JWT.decode(jump_token, nil, false)
+      registration_uri = URI.parse(jump_claims.fetch("url"))
 
       assert_equal auth_host, registration_uri.host
-      entry_ref = Rack::Utils.parse_query(registration_uri.query).fetch("entry_ref")
-      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+      entry_ref = Rack::Utils.parse_nested_query(registration_uri.query).fetch("entry_ref")
+      BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+      oidc_state = Rack::Utils.parse_nested_query(authorization_uri.query).fetch("state")
+      oidc_transaction = ClientOidcAuthorizationTransaction.find_by!(state: oidc_state)
+      visa_admission = ClientVisaSensitiveAdmission.find_by!(
+        oidc_authorization_transaction_id: oidc_transaction.id,
+      )
 
-      assert_equal admission_binding.base_browser_digest,
+      assert_equal visa_admission.browser_binding_digest,
                    AuthAdmissionBinding.browser_digest(
-                     surface: "app", entry_ref: entry_ref,
-                     nonce: base.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY],
+                     surface: "app", entry_ref: visa_admission.rp_session_ref,
+                     nonce: base_browser_nonce,
                    )
       browser = open_session
       browser.host!(auth_host)
@@ -239,213 +296,54 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       auth_headers = {
         "Host" => auth_host, "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin",
       }
-      begin
-        fv5333 = browser
-        fv5332 = registration_uri.path
-        fv5331 = entry_ref
-        fv5330 = :entry_ref
-        fv5329 = { ri: "jp" }
-        fv5328 = auth_headers
-        fv5327 = true
-        fv5326 = base
-        begin
-          fv5275 = fv5333
-          fv5282 = fv5332
-          fv5324 = fv5331
-          fv5325 = fv5330
-          fv5291 = fv5329
-          fv5284 = fv5328
-          fv5312 = fv5327
-          fv5311 = fv5326
-          fv5287 = nil
-          fv5281 = fv5291.merge(fv5325 => fv5324)
-          fv5275.get(fv5282, params: fv5281, headers: fv5284)
-          fv5318 =
-            begin
-              fv5323 = fv5275.response.body
-              fv5322 = true
-              fv5321 = Nokogiri::HTML(fv5323).at_css("form")
-              if fv5321.nil? && fv5322
-                nil
-              else
-                raise RuntimeError, "Auth continuation form is missing" unless fv5321
-
-                fv5320 = fv5321.at_css("input[name='authenticity_token']")&.[]("value")
-                raise RuntimeError,
-                      "Auth continuation is missing its CSRF token" if fv5320.blank?
-
-                fv5319 = fv5321.css("input[type='hidden']").to_h do |input|
-                  [input["name"], input["value"]]
-                end.except("authenticity_token")
-                [fv5321["action"], fv5320, fv5319]
-              end
-            end
-          if fv5318
-
-            fv5317, fv5315, fv5316 = fv5318
-
-            fv5275.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
-              "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-            fv5275.post(
-              fv5317,
-              params: fv5316.merge(authenticity_token: fv5315),
-              headers: fv5284,
-            )
-            fv5314 = fv5275.response.location
-            if fv5314.present?
-
-              fv5310 = URI.parse(fv5314)
-              fv5309 = fv5310.host
-              fv5286 =
-                begin
-                  fv5313 = fv5309
-                  {
-                    ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
-                    ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
-                    ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
-                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
-                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
-                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
-                  }.fetch(fv5313)
-                end
-              fv5285 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
-                surface: fv5286, reference: fv5310.path.split("/").fetch(-2),
-              )
-
-              if fv5312
-                fv5293 = fv5311 || fv5275
-                fv5293.host!(fv5309)
-                fv5293.https!
-                fv5293.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
-                  "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-                fv5308 = fv5310.request_uri
-                fv5299 = fv5284.merge(
-                  "Host" => fv5309,
-                  "Origin" => "https://#{fv5309}",
-                  "Sec-Fetch-Site" => "same-origin",
-                )
-                fv5293.get(fv5308, headers: fv5299)
-                fv5302, fv5300, fv5301 =
-                  begin
-                    fv5307 = fv5293.response.body
-                    fv5306 = false
-                    fv5305 = Nokogiri::HTML(fv5307).at_css("form")
-                    if fv5305.nil? && fv5306
-                      nil
-                    else
-                      raise RuntimeError, "Auth continuation form is missing" unless fv5305
-
-                      fv5304 = fv5305.at_css("input[name='authenticity_token']")&.[]("value")
-                      raise RuntimeError,
-                            "Auth continuation is missing its CSRF token" if fv5304.blank?
-
-                      fv5303 = fv5305.css("input[type='hidden']").to_h do |input|
-                        [input["name"], input["value"]]
-                      end.except("authenticity_token")
-                      [fv5305["action"], fv5304, fv5303]
-                    end
-                  end
-                fv5293.post(
-                  fv5302,
-                  params: fv5301.merge(authenticity_token: fv5300),
-                  headers: fv5299,
-                )
-                begin
-                  fv5265 = fv5293
-                  fv5295 = "session"
-                  fv5294 = fv5265.response.cookies[fv5295]
-                  if fv5294.nil?
-                    fv5298 = fv5265.response.headers["Set-Cookie"] || fv5265.response.headers["set-cookie"]
-                    fv5297 =
-                      if fv5298.is_a?(String) && fv5298.start_with?("[")
-                        JSON.parse(fv5298)
-                      else
-                        Array(fv5298)
-                      end
-                    fv5296 =
-                      fv5297.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-                        entry.split(";", 2).first.to_s.start_with?("#{fv5295}=")
-                      end
-                    if fv5296
-
-                      _, fv5294 = fv5296.split(";", 2).first.to_s.split("=", 2)
-                      fv5294 = Rack::Utils.unescape(fv5294.to_s)
-                    end
-                  end
-
-                  unless fv5294.nil?
-                    fv5265.cookies.delete(fv5295)
-                    # Rack::Test's []= uses its default host. The current request may target a
-                    # different surface, so install the cookie against the browser's active host.
-                    fv5265.cookies.merge(
-                      "#{fv5295}=#{Rack::Utils.escape(fv5294)}",
-                      URI.parse("https://#{fv5265.host}/"),
-                    )
-                  end
-                end
-                fv5292 = fv5293.response.location
-                raise RuntimeError, "Base confirmation did not return to Auth" if fv5292.blank?
-
-                fv5289 = URI.parse(fv5292)
-                if fv5291[:ri].present?
-                  fv5290 = Rack::Utils.parse_nested_query(fv5289.query.to_s)
-                  fv5290["ri"] ||= fv5291[:ri].to_s
-                  fv5289.query = URI.encode_www_form(fv5290)
-                end
-                fv5275.host!(fv5289.host)
-                fv5275.https!
-                fv5288 = fv5289.request_uri
-                fv5271 = fv5284.merge("Host" => fv5289.host)
-                fv5275.get(fv5288, headers: fv5271)
-              else
-                fv5285.confirm_base!(
-                  base_token: fv5287,
-                  browser_digest: AuthAdmissionBinding.browser_digest(
-                    surface: fv5286,
-                    entry_ref: fv5285.entry_ref,
-                    nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-                  ),
-                )
-                fv5283 = fv5275.host
-                fv5275.host!(fv5283)
-                fv5275.https!
-                fv5271 = fv5284.merge("Host" => fv5283)
-                fv5275.get(fv5282, params: fv5281, headers: fv5271)
-              end
-              fv5274, fv5272, fv5273 =
-                begin
-                  fv5280 = fv5275.response.body
-                  fv5279 = false
-                  fv5278 = Nokogiri::HTML(fv5280).at_css("form")
-                  if fv5278.nil? && fv5279
-                    nil
-                  else
-                    raise RuntimeError, "Auth continuation form is missing" unless fv5278
-
-                    fv5277 = fv5278.at_css("input[name='authenticity_token']")&.[]("value")
-                    raise RuntimeError,
-                          "Auth continuation is missing its CSRF token" if fv5277.blank?
-
-                    fv5276 = fv5278.css("input[type='hidden']").to_h do |input|
-                      [input["name"], input["value"]]
-                    end.except("authenticity_token")
-                    [fv5278["action"], fv5277, fv5276]
-                  end
-                end
-              fv5275.post(
-                fv5274,
-                params: fv5273.merge(authenticity_token: fv5272),
-                headers: fv5271,
-              )
-            end
-          end
-        end
-      end
+      auth_navigation_headers = auth_headers.merge(
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
+      )
+      browser.get(registration_uri.request_uri, headers: auth_navigation_headers)
 
       assert_equal 303, browser.response.status, browser.response.body
-      browser.get(new_auth_app_verification_registration_passkey_path(ri: "jp"), headers: auth_headers)
 
-      assert_equal 200, browser.response.status
+      confirmation_uri = URI.parse(browser.response.location)
+
+      assert_equal base_host, confirmation_uri.host
+      base.host!(base_host)
+      base.https!
+      base_navigation_headers = {
+        "Host" => base_host,
+        "Origin" => "https://#{base_host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      }
+      base.get(confirmation_uri.request_uri, headers: base_navigation_headers)
+
+      assert_equal 200, base.response.status, base.response.body
+      confirmation_csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
+      base.post(
+        confirmation_uri.request_uri,
+        params: { authenticity_token: confirmation_csrf }, headers: base_navigation_headers,
+      )
+
+      assert_equal 303, base.response.status, base.response.body
+
+      auth_return_uri = URI.parse(base.response.location)
+
+      assert_equal auth_host, auth_return_uri.host
+      assert_equal entry_ref, Rack::Utils.parse_nested_query(auth_return_uri.query).fetch("entry_ref")
+      browser.get(auth_return_uri.request_uri, headers: auth_navigation_headers)
+
+      assert_equal 303, browser.response.status, browser.response.body
+
+      passkey_uri = URI.parse(browser.response.location)
+
+      assert_equal auth_host, passkey_uri.host
+      assert_equal new_auth_app_verification_registration_passkey_path, passkey_uri.path
+      browser.get(passkey_uri.request_uri, headers: auth_navigation_headers)
+
+      assert_equal 303, browser.response.status, browser.response.body
+      browser.follow_redirect!(headers: auth_navigation_headers)
+
+      assert_equal 200, browser.response.status, "registration page must render after Base confirmation"
       page = JSON.parse(Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']").text)
       panel = page.fetch("props").fetch("panel")
       csrf = Nokogiri::HTML(browser.response.body).at_css('meta[name="csrf-token"]')["content"]
@@ -483,6 +381,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       base.host!(completion_uri.host)
       base.https!
       base.get(completion_uri.request_uri, headers: base_headers)
+
+      assert_equal 200, base.response.status, "O-9 completion response must render its Base continuation"
       completion_form = Nokogiri::HTML(base.response.body).at_css("form")
       completion_params = completion_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       base.post(completion_form["action"], params: completion_params, headers: base_headers)
@@ -556,63 +456,56 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       )
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
       BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
-      token.update!(
-        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      evidence_time = ClientToken.database_now
+      token.update!(authentication_event_at: evidence_time, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now: evidence_time)
+      token.device_session_record!
+      client = OidcClientRegistry.find!("base-app-ww")
+      grant = OpAppGrant.create!(
+        authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+        oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: Time.at(evidence_time.to_i).utc,
+        oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+        refresh_token_expires_at: evidence_time + 30.minutes,
+      )
+      refresh_token = grant.issue_refresh_token!(now: evidence_time)
+      step_up_evidence = StepUpEvidenceValue.new(
+        acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_time.to_i, sid: grant.public_id,
+        sub: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+        aud: [client.aud], jti: grant.oidc_jti,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       issuance = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+        step_up_evidence: step_up_evidence,
       )
-      token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-      ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+      ClientSecretPresentationIssuer.prepare!(
+        actor_context: context, token: token, issuance: issuance, step_up_evidence: step_up_evidence,
+      )
       issuance.reload.update!(encrypted_payload: payload)
+      enrollment = RpCallbackCommitter.call(
+        cell: RpCellBinding.for_client(client.client_id), issuer: OidcIssuer.for_client(client),
+        subject: OidcSubject.for(actor, resource_type: "client"), sid: grant.public_id,
+        absolute_expires_at: evidence_time + 30.minutes,
+      )
+      raise ArgumentError, "RP callback did not commit: #{enrollment.outcome}" unless enrollment.success?
+
+      access_token = AuthenticationTokenService.encode(
+        actor, host: base_host, resource_type: "client", session_public_id: token.public_id,
+               base_session_public_id: token.public_id, oidc_sid: grant.public_id, oidc_jti: grant.oidc_jti,
+               expires_at: evidence_time + 10.minutes, scopes: %w(openid profile),
+               acr: StepUpEvidenceResolver::STEP_UP_ACR, amr: ["passkey"], auth_time: evidence_time.to_i,
+               authentication_context: token.strict_authentication_context_value.to_s,
+               issuer: OidcIssuer.for_client(client), audiences: [client.aud],
+               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+               subject: OidcSubject.for(actor, resource_type: "client"), client_id: client.client_id,
+      )
       base = open_session
       base.host!(base_host)
       base.https!
-      begin
-        fv5265 = base
-        fv5268 = actor
-        fv5270 = token
-        fv5263 = base_host
-        fv5267 = OidcClientRegistry.find!("base-app-ww")
-        fv5269 = OpAppGrant.database_now
-        fv5264 = OpAppGrant.create!(
-          authentication_epoch: 0,
-          client_token: fv5270,
-          oidc_client_id: fv5267.client_id,
-          oidc_scope: "openid profile",
-          oidc_jti: SecureRandom.uuid,
-          oidc_nonce: SecureRandom.hex(16),
-          oidc_auth_time: fv5270.root_login_established_at || fv5269,
-          refresh_token_expires_at: fv5269 + 30.minutes,
-        )
-        fv5266 = AuthenticationTokenService.encode(
-          fv5268,
-          host: fv5263,
-          resource_type: "client",
-          session_public_id: fv5270.public_id,
-          base_session_public_id: fv5270.public_id,
-          oidc_sid: fv5264.public_id,
-          oidc_jti: fv5264.oidc_jti,
-          expires_at: fv5269 + 10.minutes,
-          scopes: %w(openid profile),
-          issuer: OidcIssuer.for_client(fv5267),
-          audiences: [fv5267.aud],
-          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5267),
-          subject: OidcSubject.for(fv5268, resource_type: "client"),
-          client_id: fv5267.client_id,
-        )
-        fv5265.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
-          fv5266
-        fv5265.cookies.merge(
-          "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fv5264.issue_refresh_token!)}",
-          URI.parse("https://#{fv5263}/"),
-        )
-      end
+      base.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
+      base.cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh_token
+      base.cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE] = enrollment.session.public_id
       headers = {
         "Host" => base_host, "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
       }
@@ -681,38 +574,38 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
-    # This fixture establishes scoped admission; WebAuthn verification has its own journey tests.
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-    )
-
-    assert_predicate StepUpResolver.call(
-      token: token.reload, requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_secret_credential", allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: StepUpRequirement::DEFAULT_TTL,
-        purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
-        token_binding: token.public_id, require_session_binding: true,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ),
-    ), :satisfied?
     base_client = OidcClientRegistry.find!("base-app-ww")
+    evidence_time = OpBaseAppRecord.database_now
+    evidence_auth_time = evidence_time.to_i - 1
+    token.rotate_refresh_token!(now: evidence_time) unless token.device_session_record&.current_refresh_token_id
+    token.device_session_record!
     base_rp_session = OpAppGrant.create!(
-      authentication_epoch: 0,
+      authentication_epoch: token.authentication_epoch,
       client_token: token, oidc_client_id: base_client.client_id, oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: token.root_login_established_at,
-      refresh_token_expires_at: 10.minutes.from_now,
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: evidence_time + 30.minutes,
     )
+    ClientStepUpCommit.create!(
+      grant: base_rp_session, root_token: token, context_ref: PublicId.generate,
+      verified_method: "passkey", committed_at: Time.at(evidence_auth_time).utc,
+    )
+    rp_enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(base_client.client_id), issuer: OidcIssuer.for_client(base_client),
+      subject: OidcSubject.for(actor, resource_type: "client"), sid: base_rp_session.public_id,
+      absolute_expires_at: evidence_time + 30.minutes,
+    )
+    raise ArgumentError, "RP callback did not commit: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
     base_rp_access_token = AuthenticationTokenService.encode(
       actor, host: base_host, resource_type: "client", session_public_id: token.public_id,
              base_session_public_id: token.public_id, oidc_sid: base_rp_session.public_id,
-             oidc_jti: base_rp_session.oidc_jti, expires_at: 10.minutes.from_now,
-             scopes: %w(openid profile), issuer: OidcIssuer.for_client(base_client),
-             audiences: [base_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(base_client),
+             oidc_jti: base_rp_session.oidc_jti, expires_at: evidence_time + 10.minutes,
+             scopes: %w(openid profile), acr: StepUpEvidenceResolver::STEP_UP_ACR, amr: ["passkey"],
+             auth_time: evidence_auth_time, authentication_context: token.strict_authentication_context_value.to_s,
+             issuer: OidcIssuer.for_client(base_client), audiences: [base_client.aud],
+             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(base_client),
              subject: OidcSubject.for(actor, resource_type: "client"), client_id: base_client.client_id,
     )
     base_rp_refresh_token = base_rp_session.issue_refresh_token!
@@ -720,6 +613,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     https!
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = base_rp_access_token
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = base_rp_refresh_token
+    cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE] = rp_enrollment.session.public_id
     rp_payload = OidcRpBrowserCredentialContract.decode_access_token(
       token: base_rp_access_token, host: base_host, resource_type: "client", client_id: "base-app-ww",
     )
@@ -745,7 +639,6 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
 
     assert_equal 1, issuance.planned_count
     assert_nil issuance.confirmed_at
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
     post base_app_secret_issuance_presentation_path(issuance.public_id, ri: "jp"),
          params: { authenticity_token: csrf }, headers: headers
 
@@ -1112,20 +1005,29 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     result_uri = URI.parse(browser.response.location)
     base.host!(result_uri.host)
     base.https!
-    base.get(result_uri.request_uri, headers: { "Host" => result_uri.host })
+    base.get(
+      result_uri.request_uri, headers: {
+        "Host" => result_uri.host,
+        "Sec-Fetch-Site" => "cross-site",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      },
+    )
 
     assert_equal 200, base.response.status
-    result_form = Nokogiri::HTML(base.response.body).at_css("form")
-    result_csrf = result_form.at_css('input[name="authenticity_token"]')["value"]
-    result = result_form.at_css('input[name="result_ref"]')["value"]
-    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+    result_form = Nokogiri::HTML(base.response.body).at_css("form#visa-authorization-continuation-form")
+    continuation_fields = result_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     base_headers = {
-      "Host" => result_uri.host, "Origin" => "https://#{result_uri.host}", "Sec-Fetch-Site" => "same-origin",
+      "Host" => result_uri.host,
+      "Origin" => "https://#{result_uri.host}",
+      "Sec-Fetch-Site" => "same-origin",
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
     }
     assert_difference("ClientToken.count", 1) do
       base.post(
         result_form["action"],
-        params: { result_ref: result, transaction_ref: transaction_ref, authenticity_token: result_csrf },
+        params: continuation_fields,
         headers: base_headers,
       )
     end
@@ -1223,7 +1125,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientToken.count") do
       base.post(
         result_form["action"],
-        params: { result_ref: result, transaction_ref: transaction_ref, authenticity_token: result_csrf },
+        params: continuation_fields,
         headers: base_headers,
       )
     end
@@ -1580,8 +1482,15 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     assert_equal 303, base.response.status,
                  "#{base.response.body} params=#{completion_params.inspect} tx=#{step_up_transaction.reload.status} " \
                  "token_method=#{root.reload.last_step_up_method.inspect} passkey=#{passkey.reload.sign_count}"
-    assert_equal "passkey", root.reload.last_step_up_method
-    assert_equal "settings_secret_credential", root.last_step_up_scope
+    assert_nil root.reload.last_step_up_at
+    completed_access_token = base.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
+    completed_access_payload = OidcRpBrowserCredentialContract.decode_access_token(
+      token: completed_access_token, host: base_host, resource_type: "client", client_id: "base-app-ww",
+    )
+
+    assert_equal StepUpEvidenceResolver::STEP_UP_ACR, completed_access_payload.fetch("acr")
+    assert_equal ["passkey"], completed_access_payload.fetch("amr")
+    assert_kind_of Integer, completed_access_payload.fetch("auth_time")
     assert_equal "secret", root.established_authentication_method
     assert_equal 2, passkey.reload.sign_count
     begin

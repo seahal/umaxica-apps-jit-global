@@ -17,6 +17,18 @@ class RpRequestAuthenticator
       def authenticated? = status == :authenticated
     end
 
+  CELL_STORAGE = {
+    "rp_base_app" => { record: RpBaseAppRecord, session: RpBaseAppSession }.freeze,
+    "rp_core_app" => { record: RpCoreAppRecord, session: RpCoreAppSession }.freeze,
+    "rp_warp_app" => { record: RpWarpAppRecord, session: RpWarpAppSession }.freeze,
+    "rp_palm_app" => { record: RpPalmAppRecord, session: RpPalmAppSession }.freeze,
+    "rp_base_org" => { record: RpBaseOrgRecord, session: RpBaseOrgSession }.freeze,
+    "rp_core_org" => { record: RpCoreOrgRecord, session: RpCoreOrgSession }.freeze,
+    "rp_warp_org" => { record: RpWarpOrgRecord, session: RpWarpOrgSession }.freeze,
+    "rp_edit_org" => { record: RpEditOrgRecord, session: RpEditOrgSession }.freeze,
+    "rp_tech_org" => { record: RpTechOrgRecord, session: RpTechOrgSession }.freeze,
+  }.freeze
+
   # authenticated  - both credentials are valid and bound to each other.
   # missing        - no Access JWT or no local session cookie was presented.
   # invalid        - a credential failed verification or does not match the other one.
@@ -39,7 +51,8 @@ class RpRequestAuthenticator
   public
 
   def call
-    return result(:missing) if access_token.blank? || local_session_id.blank?
+    return result(:missing) if access_token.blank?
+    return result(:invalid) if local_session_id.blank?
 
     verification = OidcOpAccessTokenVerifier.new(
       access_token:, client_id: cell.client_id, realm: cell.realm, issuer:, audience: cell.client_id,
@@ -67,7 +80,7 @@ class RpRequestAuthenticator
 
   def writer_session
     record_class.uncached do
-      model(:Session).includes(op_session_binding: { identity_binding: :principal })
+      session_class.includes(op_session_binding: { identity_binding: :principal })
         .find_by(public_id: local_session_id.to_s)
     end
   end
@@ -76,10 +89,19 @@ class RpRequestAuthenticator
     return false unless session&.active?(now: record_class.database_now)
 
     anchor = session.op_session_binding
+    return false unless anchor && anchor.revoked_at.nil?
+
     identity = anchor.identity_binding
-    return false unless identity && identity.principal.disabled_at.nil?
+    return false unless identity
+    return false unless identity.principal && identity.principal.disabled_at.nil?
+    return false unless secure_equal?(anchor.issuer, issuer)
+    return false unless secure_equal?(anchor.realm, cell.realm)
+    return false unless secure_equal?(anchor.client_id, cell.client_id)
+    return false unless secure_equal?(identity.issuer, issuer)
+    return false unless secure_equal?(identity.realm, cell.realm)
+    return false unless secure_equal?(identity.client_id, cell.client_id)
     return false unless secure_equal?(anchor.sid, payload.fetch("sid"))
-    return false unless anchor.issuer == payload.fetch("iss")
+    return false unless secure_equal?(anchor.issuer, payload.fetch("iss"))
 
     secure_equal?(identity.subject, payload.fetch("sub"))
   end
@@ -90,13 +112,11 @@ class RpRequestAuthenticator
     expected.bytesize == actual.bytesize && ActiveSupport::SecurityUtils.secure_compare(expected, actual)
   end
 
-  def record_class
-    "#{cell.record_prefix}Record".constantize
-  end
+  def record_class = cell_storage.fetch(:record)
 
-  def model(suffix)
-    "#{cell.record_prefix}#{suffix}".constantize
-  end
+  def session_class = cell_storage.fetch(:session)
+
+  def cell_storage = CELL_STORAGE.fetch(cell.connection)
 
   def result(status)
     Result.new(status:, principal: nil, session: nil, payload: nil)

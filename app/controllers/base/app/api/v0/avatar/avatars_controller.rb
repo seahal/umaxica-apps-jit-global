@@ -55,7 +55,7 @@ module Base
               result = AvatarProvisioning::Create.call(
                 actor: avatar_actor, subject_type: :persona, subject: persona_record,
                 avatar_params: permitted.except(:handle), handle_params: permitted.slice(:handle),
-                owner_surface: "app", owner_collective_public_id: avatar_root.try(:selected_collective_public_id),
+                owner_surface: "app", owner_collective_public_id: Actor.selection.collective_public_id,
               )
               return render(
                 json: { avatar: summary(created_avatar(result.avatar)) }, status: :created,

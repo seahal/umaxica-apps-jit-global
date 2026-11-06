@@ -7,8 +7,10 @@ require "test_helper"
 class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
+  self.fixture_table_names = []
+
   setup do
-    @client = clients(:one)
+    @client = Client.create!(security_mode_id: ClientSecurityMode::NORMAL, status_id: ClientStatus::ACTIVE)
     @params = {
       response_type: "code",
       client_id: "core-app-jp",
@@ -25,7 +27,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     issuance = OidcAuthorizationTransactionCoordinator.issue!(surface: "app", intent: "sign_in", params: @params)
 
     assert_predicate issuance.transaction, :persisted?
-    assert_equal "pending", issuance.transaction.status
+    assert_equal OidcAuthorizationTransactionable::STATUS_PENDING, issuance.transaction.status_id
     assert_equal "app", issuance.transaction.surface
     assert_equal "sign_in", issuance.transaction.intent
     assert_not_respond_to issuance, :resume_url
@@ -33,7 +35,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "same-browser exact OIDC initiation retry reuses its parent and fixed admission deadline in every realm" do
-    [%w(app core-app-jp client), %w(org core-org-jp operator),].each do |surface, client_id, realm|
+    [%w(app core-app-jp client), %w(org core-org-jp operator)].each do |surface, client_id, realm|
       parameters = @params.merge(
         client_id: client_id,
         redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
@@ -321,16 +323,19 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
       )
 
     error =
-      assert_raises(ArgumentError) do
-        OidcAuthorizationTransactionCoordinator.register_result!(
-          surface: "app",
-          login_challenge: issuance.transaction.login_challenge,
-          actor: @client,
-          session_ref: "session-1",
-          auth_method: "passkey",
-          authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
-          now: issuance.transaction.login_challenge_expires_at + 1.second,
-        )
+      ClientOidcAuthorizationTransaction.stub(
+        :database_now, issuance.transaction.login_challenge_expires_at + 1.second,
+      ) do
+        assert_raises(ArgumentError) do
+          OidcAuthorizationTransactionCoordinator.register_result!(
+            surface: "app",
+            login_challenge: issuance.transaction.login_challenge,
+            actor: @client,
+            session_ref: "session-1",
+            auth_method: "passkey",
+            authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+          )
+        end
       end
 
     assert_equal "authorization transaction expired", error.message
@@ -376,8 +381,10 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   test "base finalization rejects a result from an older generation" do
     transaction = issue_authenticated_transaction!
     now = Time.current
-    transaction.prepare_result_delivery!(result_digest: "a" * 64, now: now)
-    transaction.prepare_result_delivery!(result_digest: "b" * 64, now: now)
+    ClientOidcAuthorizationTransaction.stub(:database_now, now) do
+      transaction.prepare_result_delivery!(result_digest: "a" * 64)
+      transaction.prepare_result_delivery!(result_digest: "b" * 64)
+    end
 
     error =
       assert_raises(ArgumentError) do

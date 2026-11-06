@@ -1,6 +1,31 @@
 # ADR: Preference Scope and Browser Persistent State Separation
 
-**Status:** Accepted (2026-09-26)
+**Status:** Accepted (2026-09-26); amended 2026-11-04 (reserved cookie name `continuity` replaced by
+`affinity` and narrowed to Affinity)
+
+## Amendment 2026-11-04: the reserved name is `affinity`
+
+The owner decided on 2026-11-04 to name **Affinity** the browser-side memory that comes from the
+user's past operations and choices and only assists guidance on the next visit (for example, which
+sign-in method was selected last time), and to use that one name for the concept, its cookie and its
+server-side records. The cookie name previously reserved here, `continuity`, is withdrawn and is not
+used for any cookie.
+
+The earlier `continuity` reservation covered browser-persistent state in general. On 2026-11-04 the
+owner narrowed the reserved name: `affinity` covers only Affinity as defined above. Other
+browser-persistent state, such as accounts previously used in this browser or persistent
+browser-specific identifiers, is not Affinity; each such use gets its own dedicated cookie and
+server-side state as required by the Decision section. The rules below that applied to `continuity`
+apply to `affinity` unchanged: it is limited to state scoped to the browser alone, it never
+establishes identity, sign-in state, membership or permissions, and normal processing continues when
+it is missing or invalid.
+
+This amendment changes only the reserved name and its scope. It does not decide the cookie's
+attributes, scope, lifetime, signing or storage, which remain requirements of the owning feature.
+The working design (gitignored `five.md`, section C) records the current Affinity direction:
+server-side records in the realm setting databases, a signed browser token, no association with the
+account (zenith) records, use limited to display order and guidance, and retention across sign-out.
+Those points are not part of this ADR until they are accepted in their own record.
 
 ## Context
 
@@ -43,8 +68,8 @@ Merging Preference with other browser-persistent state creates these risks:
 3. The meaning of sign-out, cookie deletion, revocation, and rotation becomes ambiguous.
 4. Data that needs different cookie attributes or retention periods is forced under one security
    policy.
-5. Each new responsibility added to Preference widens the blast radius into existing
-   authentication, tenancy, and browser-continuity handling.
+5. Each new responsibility added to Preference widens the blast radius into existing authentication,
+   tenancy, and browser-continuity handling.
 6. Over time, Preference risks degrading into a de facto general-purpose browser session.
 
 Data meaning, authority, lifecycle, and failure blast radius therefore take precedence over the
@@ -66,17 +91,19 @@ When implementing new browser-persistent state, decide:
   different from Preference?
   - Yes: use an independent mechanism.
 
-An independent mechanism SHOULD use a dedicated cookie name. Where appropriate, the cookie holds only
-an opaque identifier and the actual data is managed server-side.
+An independent mechanism SHOULD use a dedicated cookie name. Where appropriate, the cookie holds
+only an opaque identifier and the actual data is managed server-side.
 
-### Continuity Cookie
+### Affinity Cookie
 
-The cookie name `continuity` is reserved for state that persistently belongs to a single browser.
+The cookie name `affinity` is reserved for Affinity: browser-side memory from past operations and
+choices that only assists guidance on the next visit (renamed from `continuity` and narrowed on
+2026-11-04). Other browser-persistent state uses its own dedicated cookie.
 
 Its responsibility is separate from `auth` and `preference`. Information stored in or associated
-with `continuity` is limited to state scoped to the browser alone.
+with `affinity` is limited to state scoped to the browser alone.
 
-The following MUST NOT be part of the `continuity` responsibility:
+The following MUST NOT be part of the `affinity` responsibility:
 
 - current authentication state or authentication credentials;
 - authorization, roles, or permissions;
@@ -86,13 +113,14 @@ The following MUST NOT be part of the `continuity` responsibility:
 - Organization- or tenant-specific state;
 - state that is expected to synchronize with other browsers or devices.
 
-The presence or content of `continuity` alone MUST NOT be used to establish the user's identity,
+The presence or content of `affinity` alone MUST NOT be used to establish the user's identity,
 sign-in state, membership, or permissions.
 
-When `continuity` is expired, missing, corrupted, or unavailable, normal `auth` and `preference`
+When `affinity` is expired, missing, corrupted, or unavailable, normal `auth` and `preference`
 processing MUST continue unaffected.
 
-The name `continuity` MUST NOT be used for a cookie with any other purpose.
+The name `affinity` MUST NOT be used for a cookie with any other purpose. The withdrawn name
+`continuity` MUST NOT be used for any cookie.
 
 ## Consequences
 

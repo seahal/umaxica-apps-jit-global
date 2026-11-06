@@ -45,17 +45,18 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       assert_equal origin, claims.fetch("iss"), namespace
       assert_equal "ES384", header.fetch("alg"), namespace
       assert_equal "reuse", claims.fetch("rpl"), namespace
-      published = if namespace.end_with?("_COM")
-                    # Same wire shape as the HTTP route: the registry hash uses symbol keys.
-                    JSON.parse(JSON.generate(JitSecurityJwtRegistry.jwks_for("surface:#{namespace}")))
-                  else
-                    host! URI.parse(origin).host
-                    https!
-                    get "/.well-known/jwks.json"
+      published =
+        if namespace.end_with?("_COM")
+          # Same wire shape as the HTTP route: the registry hash uses symbol keys.
+          JSON.parse(JSON.generate(JitSecurityJwtRegistry.jwks_for("surface:#{namespace}")))
+        else
+          host!(URI.parse(origin).host)
+          https!
+          get("/.well-known/jwks.json")
 
-                    assert_response :ok
-                    response.parsed_body
-                  end
+          assert_response :ok
+          response.parsed_body
+        end
       keys = published.fetch("keys")
 
       assert_includes 1..JitSecurityJwtRegistry::MAX_JUMP_PUBLISHED_JWKS_KEYS, keys.size, namespace

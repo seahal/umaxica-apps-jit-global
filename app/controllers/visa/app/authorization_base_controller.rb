@@ -34,7 +34,26 @@ module Visa
 
       def preference_write_context = PREFERENCE_WRITE_CONTEXT
 
+      def authorization_create_path = visa_app_oauth_authorization_path
+
+      def dispatch_o9_sensitive_admission!
+        dispatch = VisaSensitiveAdmissionDispatcher.call!(
+          surface: "app", params: authorize_params, validated_request: @validated_client,
+        )
+        return false unless dispatch
+
+        entry_url = auth_app_ceremony_bindings_url(
+          entry_ref: dispatch.entry_ref,
+          ri: params[:ri],
+          host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          protocol: "https",
+        )
+        redirect_to_jump_url(entry_url, status: :see_other)
+        true
+      end
+
       def authorization_session_sufficient?
+        return false if @validated_client&.step_up_requested
         return false unless logged_in?
 
         prompt = OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt])
@@ -127,6 +146,9 @@ module Visa
           write_preference!(operation: :sign_in, actor: resource, submitted: {})
         rescue StandardError => e
           log_visa_preference_write_failure(:sign_in, e)
+          return render json: {
+            error: "temporarily_unavailable", error_description: "authorization unavailable",
+          }, status: :service_unavailable
         end
 
         if transaction.secret_sign_in_flow_id
@@ -267,7 +289,7 @@ module Visa
         # report those as unpermitted, which they are not - they are simply not ours.
         keys = %i(
           response_type client_id redirect_uri state
-          code_challenge code_challenge_method scope nonce prompt max_age
+          code_challenge code_challenge_method scope nonce prompt max_age claims acr_values
         )
         params.slice(*keys).permit(*keys)
       end

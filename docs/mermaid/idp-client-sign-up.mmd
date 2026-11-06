@@ -1,4 +1,6 @@
 stateDiagram-v2
+    %% APP social provider dispatch stores callback state only; it creates no Flow.
+    %% T003 is invoked only by a verified Google/Apple callback that wins the Binding lock.
     %% Terminal absorption precedes TTL and requested source validation.
     %% Where the lifecycle has expires_at, overdue requests persist EXPIRED first.
     %% The owning transaction returns an expiry refusal; callers unwrap only after commit.
@@ -79,6 +81,16 @@ stateDiagram-v2
     CANCELLED --> [*]
     HALTED --> [*]
     note right of STARTED
+        APP social provider POSTs replace browser state/provider/nonce and create no Flow.
+        Only a verified callback can enter SOCIAL_CALLBACK_PENDING. It locks the Admission
+        Binding then the Auth Ceremony, rechecks the active sign-up admission, and refuses if
+        another Flow or authentication evidence already exists. Back before callback keeps the
+        initial sign-up methods available. A sequential restart consumes the previous state in
+        its current session; concurrent starts from stale signed-cookie generations are not yet
+        serialized by a persisted Admission generation.
+        Email/Telephone/Google/Apple checkpoint Cancel retains the terminal Flow and cleanup, then
+        cancels Auth continuity and hands the parent cancellation to Visa. The RP
+        renders /sign/interruption; the progressed Auth /sign/up entry is not revisited.
         Contact-entry replacement validates Turnstile, identifier and explicit consent first.
         A rejected replacement preserves the current flow and pending artifacts.
         Accepted replacement halts and cleans up the predecessor before new artifacts.
@@ -91,6 +103,9 @@ stateDiagram-v2
         The separate signup OTP proof axis does not authorize an HTTP phase regression.
         Telephone OTP success retains the signed flow binding into the guard checkpoint.
         Durable account completion ends the sign-up flow.
+        A pre-commit registration authorization refusal returns HTTP 422 without Source completion.
+        If the Flow is overdue, the existing expiry writer terminalizes it before HTTP 410.
+        A committed completion receipt keeps its reconciliation path and is never recast as refusal.
         The caller then enters ordinary sign-in admission.
         IDs 70, 80 and 900 are historical tombstones;
         no duplicated handoff edge or from_signup branch exists.

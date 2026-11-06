@@ -52,7 +52,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       assert_nil binding.admitted_auth_ceremony_session_id
       assert_predicate continuity.reload, :active?
       assert_not_predicate continuity, :admitted?
-      assert_equal "pending", issuance.transaction.reload.status
+      assert_equal "pending", issuance.transaction.reload.status_name
     ensure
       2.times { release << true } if release
       workers&.each { |worker| worker.wait(10) }
@@ -116,7 +116,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       assert_not_predicate original.reload, :active?
       assert_equal 1, auth_model.where(previous_sid_digest: original.sid_digest).count
       assert_nil bindings.last.reload.redeemed_at
-      assert_equal "pending", sibling.transaction.reload.status
+      assert_equal "pending", sibling.transaction.reload.status_name
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
         BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: sibling.reference, surface:, expected_intent: "sign_in", binding: bindings.last,

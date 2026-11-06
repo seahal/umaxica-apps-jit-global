@@ -4,9 +4,86 @@ require "test_helper"
 
 class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
+  self.use_transactional_tests = false
 
-  test "unbound Step-Up cannot release a Telephone contact" do
+  setup do
+    @created_clients = []
+    @created_operators = []
+  end
+
+  teardown do
+    client_ids = @created_clients.map(&:id)
+    client_refs = @created_clients.map(&:public_id)
+    operator_ids = @created_operators.map(&:id)
+    operator_refs = @created_operators.map(&:public_id)
+
+    if client_ids.any?
+      OpAppGrant.where(client_token_id: ClientToken.where(user_id: client_ids).select(:id)).delete_all
+      ClientContactAuditOutbox.where(actor_ref: client_refs).delete_all
+      ClientPasskeyAuditOutbox.where(actor_ref: client_refs).delete_all
+      client_tokens = ClientToken.where(user_id: client_ids).select(:id)
+      ClientStepUpSession.where(user_token_id: client_tokens).delete_all
+      client_parents = ClientStepUpCeremonyTransaction.where(actor_ref: client_refs)
+      ClientAuthCeremonySession.where(
+        step_up_ceremony_transaction_ref: client_parents.select(:transaction_id),
+      ).delete_all
+      client_parents.delete_all
+      ClientTotpCredential.where(user_id: client_ids).delete_all
+      ClientEmail.where(user_id: client_ids).delete_all
+      ClientTelephone.where(user_id: client_ids).delete_all
+      ClientPasskey.where(user_id: client_ids).delete_all
+      ClientDeviceSession.where(user_id: client_ids).update_all(current_refresh_token_id: nil)
+      ClientToken.where(user_id: client_ids).delete_all
+      ClientDeviceSession.where(user_id: client_ids).delete_all
+      ClientAuthorityLock.where(client_id: client_ids).delete_all
+      ClientChronicle.where(subject_type: "Client", subject_id: client_ids.map(&:to_s)).delete_all
+      ClientPreference.where(client_id: client_ids).destroy_all
+      Client.where(id: client_ids).delete_all
+    end
+
+    if operator_ids.any?
+      OpOrgGrant.where(operator_token_id: OperatorToken.where(staff_id: operator_ids).select(:id)).delete_all
+      OperatorPasskeyAuditOutbox.where(actor_ref: operator_refs).delete_all
+      operator_tokens = OperatorToken.where(staff_id: operator_ids).select(:id)
+      OperatorStepUpSession.where(staff_token_id: operator_tokens).delete_all
+      operator_parents = OperatorStepUpCeremonyTransaction.where(actor_ref: operator_refs)
+      OperatorAuthCeremonySession.where(
+        step_up_ceremony_transaction_ref: operator_parents.select(:transaction_id),
+      ).delete_all
+      operator_parents.delete_all
+      OperatorPasskey.where(staff_id: operator_ids).delete_all
+      OperatorDeviceSession.where(staff_id: operator_ids).update_all(current_refresh_token_id: nil)
+      OperatorToken.where(staff_id: operator_ids).delete_all
+      OperatorDeviceSession.where(staff_id: operator_ids).delete_all
+      OperatorAuthorityLock.where(operator_id: operator_ids).delete_all
+      OperatorChronicle.where(subject_type: "Operator", subject_id: operator_ids.map(&:to_s)).delete_all
+      Operator.where(id: operator_ids).delete_all
+    end
+  end
+
+  test "a non-joinable outer OP transaction is refused before credential removal" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @created_clients << actor
+    credential = actor.client_totp_credentials.create!(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+
+    OpBaseAppRecord.transaction(joinable: false) do
+      assert_raises(IdentityCredentialRemovalCommitter::TransactionConflict) do
+        IdentityCredentialRemovalCommitter.call!(
+          actor: actor, credential: credential, current_session: token,
+          step_up_evidence: nil,
+        )
+      end
+    end
+
+    assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
+  end
+
+  test "current Step-Up evidence can release a bound Telephone contact" do
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @created_clients << actor
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
     )
@@ -16,25 +93,40 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     )
     telephone.finalize_binding!
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_telephone",
-      last_step_up_method: "passkey",
-      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
-      last_step_up_user_verified: true, last_step_up_credential_ref: "evidence",
-      last_step_up_full_reauthentication: false,
+    now = OpBaseAppRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
 
-    assert_not IdentityCredentialRemovalCommitter.call!(
+    assert IdentityCredentialRemovalCommitter.call!(
       actor: actor, credential: telephone, current_session: token, actor_context: context,
+      step_up_evidence: step_up_evidence,
     )
-    assert_predicate telephone.reload, :binding_effective?
-    assert_predicate token.reload.last_step_up_at, :present?
+    assert_predicate telephone.reload, :binding_released?
+    assert_predicate token.reload, :currently_usable?
+    OpBaseAppRecord.transaction do
+      assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+    end
   end
 
-  test "unbound Step-Up cannot release an Email contact" do
+  test "current Step-Up evidence can release a bound Email contact" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @created_clients << actor
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
     )
@@ -44,24 +136,40 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     )
     email.finalize_binding!
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
-      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
-      last_step_up_user_verified: true, last_step_up_credential_ref: "evidence",
-      last_step_up_full_reauthentication: false,
+    now = OpBaseAppRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
 
-    assert_not IdentityCredentialRemovalCommitter.call!(
+    assert IdentityCredentialRemovalCommitter.call!(
       actor: actor, credential: email, current_session: token, actor_context: context,
+      step_up_evidence: step_up_evidence,
     )
-    assert_predicate email.reload, :binding_effective?
-    assert_predicate token.reload.last_step_up_at, :present?
+    assert_predicate email.reload, :binding_released?
+    assert_predicate token.reload, :currently_usable?
+    OpBaseAppRecord.transaction do
+      assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+    end
   end
 
-  test "a Step-Up bound to another TOTP cannot authorize removal" do
+  test "the same current Step-Up evidence authorizes multiple eligible TOTP removals" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @created_clients << actor
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
     )
@@ -72,50 +180,65 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "passkey",
-      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
-      last_step_up_user_verified: true, last_step_up_credential_ref: "evidence",
-      last_step_up_full_reauthentication: false, last_step_up_resource_ref: first.public_id,
+    now = OpBaseAppRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
 
-    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
-    assert_equal ClientTotpCredentialStatus::ACTIVE, target.reload.user_identity_totp_credential_status_id
-    assert_predicate token.reload.last_step_up_at, :present?
-    token.update!(last_step_up_resource_ref: nil)
-
-    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
-    assert_equal ClientTotpCredentialStatus::ACTIVE, target.reload.user_identity_totp_credential_status_id
-    assert_predicate token.reload.last_step_up_at, :present?
+    assert IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: target, current_session: token, step_up_evidence: step_up_evidence,
+    )
+    assert_equal ClientTotpCredentialStatus::DELETED, target.reload.user_totp_credential_status_id
+    assert IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: first, current_session: token, step_up_evidence: step_up_evidence,
+    )
+    assert_equal ClientTotpCredentialStatus::DELETED, first.reload.user_totp_credential_status_id
+    OpBaseAppRecord.transaction do
+      assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+    end
   end
 
-  test "a login-blocked owner cannot remove a TOTP with earlier Step-Up" do
+  test "a login-blocked owner cannot remove a TOTP" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
-    passkey = actor.client_passkeys.create!(
+    @created_clients << actor
+    actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
     )
     credential = actor.client_totp_credentials.create!(
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_totp", last_step_up_method: "passkey",
-      last_step_up_credential_ref: passkey.public_id, last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_full_reauthentication: false, last_step_up_resource_ref: credential.public_id,
+    session_state = token.attributes.slice(
+      "root_login_established_at", "established_authentication_method",
+      "discard_at",
     )
     actor.reload.update!(status_id: ClientStatus::RESERVED)
-    step_up_at = token.last_step_up_at
 
-    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+    assert_not IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: credential, current_session: token,
+      step_up_evidence: nil,
+    )
     assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
-    assert_equal step_up_at, token.reload.last_step_up_at
+    assert_equal session_state, token.reload.attributes.slice(*session_state.keys)
   end
 
   test "a revoked device cannot authorize TOTP credential removal" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @created_clients << actor
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "remaining-key", uv_verified_at: Time.current,
     )
@@ -125,21 +248,24 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.device_session_record!.revoke!
 
-    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+    assert_not IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: credential, current_session: token,
+      step_up_evidence: nil,
+    )
     assert_equal ClientTotpCredentialStatus::ACTIVE, credential.reload.user_identity_totp_credential_status_id
   end
 
-  test "pending Contacts are refused without releasing ownership or invalidating Root freshness" do
+  test "pending Contacts are refused without releasing ownership or changing the session" do
     [
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app,
        { address: "pending-removal@example.test" },],
       [Client, ClientTelephone, ClientToken, ClientContactAuditOutbox, :user_id, :app, { number: "+819012345687" }],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface, attributes|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
+      @created_clients << owner
       contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
       token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
-      token.update!(last_step_up_at: token_class.database_now, last_step_up_scope: "settings_email")
-      previous = token.attributes.slice("last_step_up_at", "last_step_up_scope", "discard_at")
+      previous = token.attributes.slice("root_login_established_at", "established_authentication_method", "discard_at")
       contact_before = contact.attributes
       context = ActorValuesContext.empty.with(
         subject: owner, actor_type: :client, tld: surface, surface: :base,
@@ -148,6 +274,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       assert_no_difference -> { outbox_class.where(contact_ref: contact.public_id).count } do
         assert_not IdentityCredentialRemovalCommitter.call!(
           actor: owner, credential: contact, current_session: token, actor_context: context,
+          step_up_evidence: nil,
         )
       end
       assert_equal contact_before, contact.reload.attributes
@@ -162,6 +289,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
+      @created_clients << owner
       attributes = { owner_key => owner.id, :address => "rollback-release@example.test", :confirm_policy => "1" }
       if surface == :app
         attributes[:user_email_status_id] = ClientEmailStatus::VERIFIED
@@ -175,13 +303,23 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         )
       end
       token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
-      token.update!(
-        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
-        last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-        last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
-        last_step_up_user_verified: true,
-        last_step_up_credential_ref: ClientPasskey.find_by!(user_id: owner.id).public_id,
-        last_step_up_full_reauthentication: false, last_step_up_resource_ref: contact.public_id,
+      now = OpBaseAppRecord.database_now
+      token.device_session_record!
+      token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now:)
+      oidc_client = OidcClientRegistry.find!("base-app-ww")
+      grant = OpAppGrant.create!(
+        authentication_epoch: token.authentication_epoch, client_token: token,
+        oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+        oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+        refresh_token_expires_at: now + 1.hour,
+      )
+      grant.issue_refresh_token!(now:)
+      step_up_evidence = StepUpEvidenceValue.new(
+        acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+        sub: OidcSubject.for(owner, resource_type: "client"), client_id: oidc_client.client_id,
+        aud: [oidc_client.aud], jti: grant.oidc_jti,
       )
       context = ActorValuesContext.empty.with(
         subject: owner, actor_type: :client, tld: surface, surface: :base,
@@ -189,6 +327,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       contact_class.transaction(requires_new: true) do
         assert IdentityCredentialRemovalCommitter.call!(
           actor: owner, credential: contact, current_session: token, actor_context: context,
+          step_up_evidence: step_up_evidence,
         )
         assert_predicate contact.reload, :binding_released?
         assert outbox_class.exists?(contact_ref: contact.public_id)
@@ -197,19 +336,25 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
 
       assert_predicate contact.reload, :binding_effective?
       assert_not outbox_class.exists?(contact_ref: contact.public_id)
-      assert_nil token.reload.last_step_up_at
       assert_predicate token, :currently_usable?
+      OpBaseAppRecord.transaction do
+        assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: owner, token: token.reload)
+      end
     end
   end
 
   test "Contact removal refuses missing anonymous foreign role and realm contexts before clearing authority" do
     owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    @created_clients << owner
     foreign = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    @created_clients << foreign
     contact = ClientEmail.create!(user_id: owner.id, address: "release-context@example.test", confirm_policy: "1")
     contact.finalize_binding!
     token = ClientToken.create!(authentication_epoch: 0, user: owner)
-    token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_email")
-    freshness = token.last_step_up_at
+    session_state = token.attributes.slice(
+      "root_login_established_at", "established_authentication_method",
+      "discard_at",
+    )
     valid = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
     [nil, ActorValuesContext.empty.with(tld: :app), valid.with(subject: foreign),
      valid.with(actor_type: :operator), valid.with(tld: :org),].each do |context|
@@ -217,12 +362,13 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         assert_raises(ArgumentError) do
           IdentityCredentialRemovalCommitter.call!(
             actor: owner, credential: contact, current_session: token, actor_context: context,
+            step_up_evidence: nil,
           )
         end
       assert_equal "Contact removal requires its authenticated Actor context", error.message
       assert_predicate contact.reload, :binding_effective?
       assert_not ClientContactAuditOutbox.exists?(contact_ref: contact.public_id)
-      assert_equal freshness, token.reload.last_step_up_at
+      assert_equal session_state, token.reload.attributes.slice(*session_state.keys)
     end
   end
 
@@ -232,6 +378,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       [Client, ClientTelephone, ClientToken, ClientContactAuditOutbox, :user_id, "telephone", :app],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, kind, surface|
       owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
+      @created_clients << owner
       attributes = (kind == "email") ? { address: "release@example.test" } : { number: "+819012345686" }
       contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
       case contact
@@ -247,14 +394,23 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         )
       end
       token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
-      token.update!(
-        last_step_up_at: ClientToken.database_now,
-        last_step_up_scope: (kind == "email") ? "settings_email" : "settings_telephone",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: ClientPasskey.find_by!(user_id: owner.id).public_id,
-        last_step_up_full_reauthentication: false, last_step_up_resource_ref: contact.public_id,
+      now = OpBaseAppRecord.database_now
+      token.device_session_record!
+      token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now:)
+      oidc_client = OidcClientRegistry.find!("base-app-ww")
+      grant = OpAppGrant.create!(
+        authentication_epoch: token.authentication_epoch, client_token: token,
+        oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+        oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+        refresh_token_expires_at: now + 1.hour,
+      )
+      grant.issue_refresh_token!(now:)
+      step_up_evidence = StepUpEvidenceValue.new(
+        acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+        sub: OidcSubject.for(owner, resource_type: "client"), client_id: oidc_client.client_id,
+        aud: [oidc_client.aud], jti: grant.oidc_jti,
       )
       context = ActorValuesContext.empty.with(
         subject: owner, actor_type: :client, tld: surface, surface: :base,
@@ -262,6 +418,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       assert_difference -> { outbox_class.where(contact_ref: contact.public_id).count }, 1 do
         assert IdentityCredentialRemovalCommitter.call!(
           actor: owner, credential: contact, current_session: token, actor_context: context,
+          step_up_evidence: step_up_evidence,
         )
       end
       event = outbox_class.find_by!(contact_ref: contact.public_id)
@@ -274,17 +431,19 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       assert_no_difference -> { outbox_class.where(contact_ref: contact.public_id).count } do
         assert_not IdentityCredentialRemovalCommitter.call!(
           actor: owner, credential: contact, current_session: token, actor_context: context,
+          step_up_evidence: step_up_evidence,
         )
       end
       assert_equal event.event_uuid, outbox_class.find_by!(contact_ref: contact.public_id).event_uuid
     end
   end
 
-  test "a temporarily locked Email refuses last Passkey removal without clearing authority" do
+  test "a temporarily locked Email refuses last Passkey removal without changing the session" do
     %i(app).each do |surface|
       actor, token, passkey, email =
         if surface == :app
           actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_111_000_000_000)
+          @created_clients << actor
           email = actor.client_emails.create!(
             address: "locked-app-#{SecureRandom.hex(8)}@example.com",
             user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -296,14 +455,19 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           )
           [actor, ClientToken.create!(authentication_epoch: 0, user: actor), passkey, email]
         end
-      token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
-      event = token.last_step_up_at
+      session_state = token.attributes.slice(
+        "root_login_established_at", "established_authentication_method",
+        "discard_at",
+      )
       status = passkey.status_id
       locked_until = email.step_up_otp_locked_until
 
-      assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: passkey, current_session: token)
+      assert_not IdentityCredentialRemovalCommitter.call!(
+        actor: actor, credential: passkey, current_session: token,
+        step_up_evidence: nil,
+      )
       assert_equal status, passkey.reload.status_id
-      assert_equal event, token.reload.last_step_up_at
+      assert_equal session_state, token.reload.attributes.slice(*session_state.keys)
       assert_equal locked_until, email.reload.step_up_otp_locked_until
       assert_predicate token, :currently_usable?
     end
@@ -315,6 +479,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         actor, token, target, fallback =
           if surface == :app
             actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_109_000_000_000 + index)
+            @created_clients << actor
             target = actor.client_passkeys.create!(
               webauthn_id: SecureRandom.uuid, public_key: "usable-key",
               uv_verified_at: Time.current,
@@ -334,11 +499,16 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             [actor, ClientToken.create!(authentication_epoch: 0, user: actor), target, fallback]
           end
         fallback.update!(discard_at: actor.class.database_now)
-        token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
-        event = token.last_step_up_at
+        session_state = token.attributes.slice(
+          "root_login_established_at", "established_authentication_method",
+          "discard_at",
+        )
 
-        assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: target, current_session: token)
-        assert_equal event, token.reload.last_step_up_at
+        assert_not IdentityCredentialRemovalCommitter.call!(
+          actor: actor, credential: target, current_session: token,
+          step_up_evidence: nil,
+        )
+        assert_equal session_state, token.reload.attributes.slice(*session_state.keys)
         expected_status = ClientPasskeyStatus::ACTIVE
 
         assert_equal expected_status, target.reload.status_id
@@ -356,6 +526,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             security_mode_id: SecurityModeConfigurable::NORMAL,
             id: 9_108_000_000_000 + SecureRandom.random_number(1_000_000_000),
           )
+          @created_clients << actor
 
           assert_equal 0, actor.client_passkeys.count
           actor.client_passkeys.create!(
@@ -375,6 +546,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
            (surface == :totp) ? ClientTotpCredentialStatus::DELETED : ClientPasskeyStatus::DELETED,]
         when :org
           actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          @created_operators << actor
           # D-132: two Passkeys stay after the removal.
           OperatorPasskeyTestSupport.give_two_active_passkeys!(actor)
           actor.staff_passkeys.create!(
@@ -387,23 +559,45 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           )
           [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), credential, OperatorPasskeyStatus::REVOKED]
         end
-      evidence_ref =
-        case credential
-        when ClientPasskey then credential.public_id
-        when OperatorPasskey then credential.external_id
-        when ClientTotpCredential then actor.client_passkeys.active.first!.public_id
-        else raise ArgumentError, "unsupported credential"
-        end
-      evidence_surface = (surface == :totp) ? :app : surface
-      token.update!(
-        last_step_up_at: Time.current, last_step_up_scope: (surface == :totp) ? "settings_totp" : "settings_passkey",
-        last_step_up_method: "passkey",
-        last_step_up_credential_ref: evidence_ref, last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{evidence_surface}",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_full_reauthentication: false,
-        last_step_up_resource_ref: (surface == :totp) ? credential.public_id : evidence_ref,
-      )
+      if actor.is_a?(Client)
+        now = OpBaseAppRecord.database_now
+        token.device_session_record!
+        token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+        token.rotate_refresh_token!(now:)
+        oidc_client = OidcClientRegistry.find!("base-app-ww")
+        grant = OpAppGrant.create!(
+          authentication_epoch: token.authentication_epoch, client_token: token,
+          oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+          oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+          refresh_token_expires_at: now + 1.hour,
+        )
+        grant.issue_refresh_token!(now:)
+        step_up_evidence = StepUpEvidenceValue.new(
+          acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+          sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+          aud: [oidc_client.aud], jti: grant.oidc_jti,
+        )
+      else
+        now = OpBaseOrgRecord.database_now
+        token.device_session_record!
+        token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+        token.rotate_refresh_token!(now:)
+        oidc_client = OidcClientRegistry.find!("base-org-ww")
+        grant = OpOrgGrant.create!(
+          authentication_epoch: token.authentication_epoch, operator_token: token,
+          oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+          oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+          refresh_token_expires_at: now + 1.hour,
+        )
+        grant.issue_refresh_token!(now:)
+        step_up_evidence = StepUpEvidenceValue.new(
+          acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+          sub: OidcSubject.for(actor, resource_type: "operator"), client_id: oidc_client.client_id,
+          aud: [oidc_client.aud], jti: grant.oidc_jti,
+        )
+      end
       transaction_model, ceremony_model =
         case actor
         when Client then [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession]
@@ -420,6 +614,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
 
       removed = IdentityCredentialRemovalCommitter.call!(
         actor: actor, credential: credential, current_session: token,
+        step_up_evidence: step_up_evidence,
       )
 
       assert removed, "surface=#{surface}"
@@ -440,29 +635,43 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         assert_equal removed_id, credential.id
       end
 
-      assert_nil token.reload.last_step_up_at
+      if actor.is_a?(Client)
+        OpBaseAppRecord.transaction do
+          assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+        end
+      else
+        OpBaseOrgRecord.transaction do
+          assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+        end
+      end
+
       assert_equal "revoked", unfinished.reload.status
       assert_not_nil continuity.reload.revoked_at
       assert_predicate token, :currently_usable?
       assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
       if credential.destroyed?
         assert_raises(ArgumentError) do
-          IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+          IdentityCredentialRemovalCommitter.call!(
+            actor: actor, credential: credential, current_session: token,
+            step_up_evidence: step_up_evidence,
+          )
         end
       else
         assert_not IdentityCredentialRemovalCommitter.call!(
           actor: actor, credential: credential,
           current_session: token,
+          step_up_evidence: step_up_evidence,
         )
       end
     end
   end
 
-  test "the last ORG Passkey and a foreign actor credential are refused without changing authority" do
+  test "the last ORG Passkey and a foreign actor credential are refused" do
     actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    @created_operators << actor
     foreign_actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    @created_operators << foreign_actor
     token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
-    token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
     credential = actor.staff_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "last-key",
       uv_verified_at: Time.current,
@@ -471,18 +680,24 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       webauthn_id: SecureRandom.uuid, public_key: "foreign-key",
       uv_verified_at: Time.current,
     )
-    timestamp = token.last_step_up_at
 
-    assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+    assert_not IdentityCredentialRemovalCommitter.call!(
+      actor: actor, credential: credential, current_session: token,
+      step_up_evidence: nil,
+    )
     assert_raises(ArgumentError) do
-      IdentityCredentialRemovalCommitter.call!(actor: actor, credential: foreign, current_session: token)
+      IdentityCredentialRemovalCommitter.call!(
+        actor: actor, credential: foreign, current_session: token,
+        step_up_evidence: nil,
+      )
     end
     assert_equal OperatorPasskeyStatus::ACTIVE, credential.reload.status_id
     assert_equal OperatorPasskeyStatus::ACTIVE, foreign.reload.status_id
-    assert_equal timestamp, token.reload.last_step_up_at
   end
-  test "revoked session and ticket failure leave an owned credential active" do
+
+  test "ticket failure leaves an owned credential active and preserves reusable evidence" do
     actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    @created_operators << actor
     # D-132: two Passkeys stay after the removal.
     OperatorPasskeyTestSupport.give_two_active_passkeys!(actor)
     token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
@@ -494,36 +709,61 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       webauthn_id: SecureRandom.uuid, public_key: "removed-key",
       uv_verified_at: Time.current,
     )
-    token.update!(
-      last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
-      last_step_up_credential_ref: credential.external_id, last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_full_reauthentication: false, last_step_up_resource_ref: credential.external_id,
+    now = OpBaseOrgRecord.database_now
+    token.device_session_record!
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-org-ww")
+    grant = OpOrgGrant.create!(
+      authentication_epoch: token.authentication_epoch, operator_token: token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
     )
-    timestamp = token.last_step_up_at
+    grant.issue_refresh_token!(now:)
+    step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "operator"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
+    )
+    session_state = token.attributes.slice(
+      "root_login_established_at", "established_authentication_method",
+      "discard_at",
+    )
 
     CredentialSecurityTransition.stub(
       :call, ->(**) {
                raise ActiveRecord::ConnectionNotEstablished, "injected ticket outage"
              },
     ) do
-      assert_raises(ActiveRecord::ConnectionNotEstablished) do
-        IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+      assert_raises(IdentityCredentialRemovalCommitter::DependencyFailure) do
+        IdentityCredentialRemovalCommitter.call!(
+          actor: actor, credential: credential, current_session: token,
+          step_up_evidence: step_up_evidence,
+        )
       end
     end
     assert_equal OperatorPasskeyStatus::ACTIVE, credential.reload.status_id
-    assert_equal timestamp, token.reload.last_step_up_at
+    assert_equal session_state, token.reload.attributes.slice(*session_state.keys)
+    OpBaseOrgRecord.transaction do
+      assert StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token.reload)
+    end
     token.revoke!
 
     assert_raises(ArgumentError) do
-      IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+      IdentityCredentialRemovalCommitter.call!(
+        actor: actor, credential: credential, current_session: token,
+        step_up_evidence: nil,
+      )
     end
     assert_equal OperatorPasskeyStatus::ACTIVE, credential.reload.status_id
   end
   test "missing bindings, another session owner and Emergency context cannot remove a credential" do
     actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    @created_operators << actor
     other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    @created_operators << other
     credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "owned-key")
     token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     foreign_token = OperatorToken.create!(authentication_epoch: 0, staff: other)
@@ -532,7 +772,10 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     [[nil, credential, token], [actor, nil, token], [actor, credential, nil],
      [actor, credential, foreign_token], [actor, credential, emergency],].each do |owner, target, session|
       assert_raises(ArgumentError) do
-        IdentityCredentialRemovalCommitter.call!(actor: owner, credential: target, current_session: session)
+        IdentityCredentialRemovalCommitter.call!(
+          actor: owner, credential: target, current_session: session,
+          step_up_evidence: nil,
+        )
       end
       assert_equal OperatorPasskeyStatus::ACTIVE, credential.reload.status_id
     end

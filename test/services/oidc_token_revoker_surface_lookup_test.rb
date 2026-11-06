@@ -41,8 +41,6 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
     assert_predicate usage.reload, :revoked?
   end
 
-
-
   test "an access token sid that names only the parent does not revoke the parent" do
     token = ClientToken.create!(
       authentication_epoch: 0,

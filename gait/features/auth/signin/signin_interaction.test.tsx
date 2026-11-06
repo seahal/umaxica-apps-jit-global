@@ -188,6 +188,7 @@ describe("email sign-in form interaction", () => {
       action: "/sign/in/email",
       method: "post",
       pt: null,
+      authenticity_token: "server-csrf-value",
       address_field: {
         scope: "client_email",
         field: "address",
@@ -200,22 +201,73 @@ describe("email sign-in form interaction", () => {
     turnstile,
     form_errors: [],
     back_link: backLink,
+    cancel: null,
   };
 
-  it("keeps the verb the route expects and sends the address under its Rails wrapper", () => {
+  it("renders the native POST form with the address, server CSRF token and Turnstile token", async () => {
     mount(<EmailSignInForm {...props} />);
+    await flush();
 
     type("input[type=email]", "someone@example.com");
 
-    expect(setData).toHaveBeenCalledWith("client_email", { address: "someone@example.com" });
+    const form = container.querySelector<HTMLFormElement>("form");
+    expect(form?.getAttribute("action")).toBe("/sign/in/email");
+    expect(form?.getAttribute("method")).toBe("post");
+    expect(form?.dataset["turbo"]).toBe("false");
+    expect(form?.querySelector<HTMLInputElement>('input[name="authenticity_token"]')?.value).toBe(
+      "server-csrf-value",
+    );
+    expect(
+      form?.querySelector<HTMLInputElement>('input[name="client_email[address]"]')?.value,
+    ).toBe("someone@example.com");
+    expect(
+      form?.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value,
+    ).toBe("turnstile-token");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("cancels through a separate parent POST without requiring an email or Turnstile", async () => {
+    document.head.innerHTML = '<meta name="csrf-token" content="current-cancel-csrf">';
+    mount(
+      <EmailSignInForm
+        {...props}
+        cancel={{ label: "Cancel", action: "/sign/cancellation?ri=jp", method: "post" }}
+      />,
+    );
+    await flush();
+
+    const form = container.querySelector<HTMLFormElement>(
+      'form[action="/sign/cancellation?ri=jp"]',
+    );
+    expect(form).not.toBeNull();
+    expect(form?.getAttribute("method")).toBe("post");
+    expect(form?.querySelector('input[type="email"]')).toBeNull();
+    expect(form?.querySelector('input[name="cf-turnstile-response"]')).toBeNull();
+    act(() => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    expect(form?.querySelector<HTMLInputElement>('input[name="authenticity_token"]')?.value).toBe(
+      "current-cancel-csrf",
+    );
+    expect(form?.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+  });
+
+  it("disables resubmission after the native form starts submitting", async () => {
+    mount(<EmailSignInForm {...props} />);
+
+    const form = container.querySelector<HTMLFormElement>("form");
+    expect(form).not.toBeNull();
 
     act(() => {
-      container
-        .querySelector("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
+    await flush();
 
-    expect(post).toHaveBeenCalledWith("/sign/in/email");
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
+      true,
+    );
   });
 });
 
@@ -251,7 +303,7 @@ describe("pass code form interaction", () => {
     turnstile,
     form_errors: [],
     delivery_help: "届かない場合",
-    back_link: backLink,
+    cancel_button: { label: "キャンセル", parent_action: null },
   };
 
   it("submits the code with PATCH, the verb the route expects", async () => {
@@ -310,6 +362,16 @@ describe("pass code form interaction", () => {
     expect(container.querySelector<HTMLInputElement>("input[type=text]")?.value).toBe("");
     expect(window.turnstile?.render).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();
+  });
+
+  it("exposes challenge cancellation as a button instead of browser Back", () => {
+    mount(<EmailPassCodeForm {...props} />);
+
+    const cancel = [...container.querySelectorAll<HTMLButtonElement>('button[type="button"]')].find(
+      (button) => button.textContent === "キャンセル",
+    );
+
+    expect(cancel).toBeDefined();
   });
 });
 

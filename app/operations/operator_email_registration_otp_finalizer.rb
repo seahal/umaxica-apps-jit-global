@@ -11,7 +11,8 @@ class OperatorEmailRegistrationOtpFinalizer
 
   public
 
-  def initialize(actor:, actor_context:, token:, email:, transaction:, browser_nonce:, code:, requirement:)
+  def initialize(actor:, actor_context:, token:, email:, transaction:, browser_nonce:, code:, requirement:,
+                 step_up_evidence: nil)
     unless actor.is_a?(Operator) && token.is_a?(OperatorToken) && email.is_a?(OperatorEmail) &&
         transaction.is_a?(OperatorEmailCeremonyTransaction)
       raise ArgumentError, "ORG Email finalization requires its own realm"
@@ -19,6 +20,7 @@ class OperatorEmailRegistrationOtpFinalizer
 
     @actor, @actor_context, @token, @email = actor, actor_context, token, email
     @transaction, @browser_nonce, @code, @requirement = transaction, browser_nonce, code, requirement
+    @step_up_evidence = step_up_evidence
   end
 
   def call!
@@ -42,7 +44,8 @@ class OperatorEmailRegistrationOtpFinalizer
 
   private
 
-  attr_reader :actor, :actor_context, :token, :email, :transaction, :browser_nonce, :code, :requirement
+  attr_reader :actor, :actor_context, :token, :email, :transaction, :browser_nonce, :code, :requirement,
+              :step_up_evidence
 
   def token_device_session
     @token_device_session ||= token.device_session_record!
@@ -58,8 +61,6 @@ class OperatorEmailRegistrationOtpFinalizer
                 next false unless current_authority?(session_ref)
 
                 email.finalize_email_registration!(transaction: transaction, code: code, session_ref: session_ref)
-                # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it.
-                token.consume_step_up_evidence!(requirement: requirement)
                 true
               end
             end
@@ -70,7 +71,8 @@ class OperatorEmailRegistrationOtpFinalizer
   end
 
   def current_authority?(session_ref)
-    context_matches? && current_policy? && source_current? && root_current? && bound_evidence?(session_ref)
+    context_matches? && current_policy? && source_current? && root_current? && bound_evidence?(session_ref) &&
+      StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token)
   end
 
   def source_current?
@@ -86,12 +88,9 @@ class OperatorEmailRegistrationOtpFinalizer
 
   def current_policy?
     policy = OperatorEmailPolicy.new(email, user: actor)
-    current_passkey? &&
-      requirement.is_a?(StepUpRequirement) &&
+    requirement.is_a?(StepUpRequirement) &&
       requirement.to_h == policy.credential_registration_requirement(token: token).to_h &&
-      policy.create? && policy.update? && StepUpResolver.call(
-        token: token, requirement: requirement, now: OperatorEmailCeremonyTransaction.database_now,
-      ).satisfied?
+      policy.create? && policy.update?
   end
 
   def bound_evidence?(session_ref)
@@ -105,11 +104,5 @@ class OperatorEmailRegistrationOtpFinalizer
     actor_context.is_a?(ActorValuesContext) && actor_context.subject == actor &&
       actor_context.actor_type == :operator &&
       actor_context.tld.to_s == "org" && actor_context.surface == :base
-  end
-
-  def current_passkey?
-    token.last_step_up_method == "passkey" && actor.operator_passkeys.active.lock.exists?(
-      external_id: token.last_step_up_credential_ref,
-    )
   end
 end

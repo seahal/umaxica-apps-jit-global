@@ -16,10 +16,12 @@ class ClientSecretPasskeyReservationIssuer
       end
 
       OpBaseAppRecord.connected_to(role: :writing) do
-        ClientSignUpFlow.transaction do
-          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
+        flow.with_cycle_lock do
+          current = flow.reload
           AppZenithRecord.connected_to(role: :writing) do
             Client.find(current.principal_id).with_lock do
+              return complete_sign_up!(flow: current) if current.registration_completion
+
               reason =
                 case ClientSignUpFlow::STATUS_NAMES.fetch(current.status_id)
                 when "CANCELLED" then "flow_canceled"
@@ -39,8 +41,8 @@ class ClientSecretPasskeyReservationIssuer
       raise Denied, "Secret activation requires an app signup flow" unless flow.is_a?(ClientSignUpFlow)
 
       OpBaseAppRecord.connected_to(role: :writing) do
-        ClientSignUpFlow.transaction do
-          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
+        flow.with_cycle_lock do
+          current = flow.reload
           AppZenithRecord.connected_to(role: :writing) do
             actor = current.association(:principal).scope.take!
             actor.with_lock do
@@ -51,8 +53,9 @@ class ClientSecretPasskeyReservationIssuer
               ).order(attempt_number: :desc).first
               return unless owned
               return owned if owned.signup_completed_at
-              unless [ClientStatus::ACTIVE, ClientStatus::VERIFIED_WITH_SIGN_UP].include?(actor.status_id) &&
-                  actor.login_allowed?
+              unless current.registration_completion ||
+                  ([ClientStatus::ACTIVE, ClientStatus::VERIFIED_WITH_SIGN_UP].include?(actor.status_id) &&
+                  actor.login_allowed?)
                 raise Denied, "Secret activation requires committed Client registration"
               end
               unless owned.origin == "passkey_registration" && (owned.planned_count.zero? || owned.confirmed_at)
@@ -83,9 +86,9 @@ class ClientSecretPasskeyReservationIssuer
       actor = Client.find(issuance.client_id)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
-          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
+              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               passkey = actor.client_passkeys.lock.find(current.pending_passkey_registration_id)
               verify_sign_up_registration!(actor, current, passkey, nonce)
               owned = ClientSecretIssuance.lock.find_by!(
@@ -120,9 +123,9 @@ class ClientSecretPasskeyReservationIssuer
       actor = Client.find(flow.principal_id)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
-          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
+              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               registered = actor.client_passkeys.lock.find(current.pending_passkey_registration_id)
               verify_sign_up_registration!(actor, current, registered, nonce)
               reattempt_sign_up!(actor, current, registered, predecessor, expires_after)
@@ -143,9 +146,9 @@ class ClientSecretPasskeyReservationIssuer
       actor = Client.find(flow.principal_id)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
-          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
+              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               registered = actor.client_passkeys.lock.find_by!(id: passkey.id, public_id: passkey.public_id)
               verify_sign_up_registration!(actor, current, registered, nonce)
               reserve_sign_up!(actor, current, registered, expires_after)
@@ -157,7 +160,7 @@ class ClientSecretPasskeyReservationIssuer
       raise Denied, "Secret signup registration is unavailable"
     end
 
-    def call!(actor_context:, token:, passkey:, expires_after:)
+    def call!(actor_context:, token:, passkey:, expires_after:, step_up_evidence:)
       unless actor_context.is_a?(ActorValuesContext) && actor_context.client? && actor_context.tld == :app &&
           actor_context.subject.is_a?(Client) && token.is_a?(ClientToken) && passkey.is_a?(ClientPasskey)
         raise Denied, "Secret delivery requires its app registration and browser"
@@ -177,7 +180,7 @@ class ClientSecretPasskeyReservationIssuer
                   raise Denied, "Secret distribution device is unavailable"
                 end
 
-                reserve!(actor_context, token, passkey, expires_after, device)
+                reserve!(actor_context, token, passkey, expires_after, device, step_up_evidence)
               end
             end
           end
@@ -188,6 +191,8 @@ class ClientSecretPasskeyReservationIssuer
     private
 
     def retire_signup_batch!(flow, reason, delay)
+      return complete_sign_up!(flow: flow) if flow.registration_completion
+
       owned = ClientSecretIssuance.lock.where(
         sign_up_flow_ref: flow.public_id, client_id: flow.principal_id,
       ).order(attempt_number: :desc).first
@@ -323,32 +328,24 @@ class ClientSecretPasskeyReservationIssuer
 
     end
 
-    def authorized_registration!(actor, token, passkey, device)
+    def authorized_registration!(actor, token, passkey, device, step_up_evidence)
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
       unless current && current.device_session_id == device.id && device.current_refresh_token_id == current.id
         raise Denied, "Secret distribution session is unavailable"
       end
 
       registered = ClientPasskey.lock.find_by(id: passkey.id, public_id: passkey.public_id, user_id: actor.id)
-      requirement = StepUpRequirement.new(
-        scope: "settings_passkey", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: current&.public_id, token_binding: current&.public_id,
-        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      )
       ticket_now = ClientToken.database_now
       registration = current && registered && committed_registration_for?(actor, current, registered, ticket_now)
-      step_up_satisfied = current && StepUpResolver.call(
-        token: current, requirement: requirement, now: ticket_now,
-      ).satisfied?
+      step_up_satisfied = current && StepUpEvidenceVerifier.call(
+        evidence: step_up_evidence, actor: actor, token: current,
+      )
       unless actor.login_allowed? && current && registered && registered.status_id == ClientPasskeyStatus::ACTIVE &&
           current.active_status?(ticket_now) && (step_up_satisfied || registration)
         raise Denied, "Secret distribution requires the authorized Passkey registration"
       end
 
-      authorization_at = registration ? registration.consumed_at : current.last_step_up_at
+      authorization_at = registration ? registration.consumed_at : Time.at(step_up_evidence.auth_time).utc
       [current, registered, authorization_at]
     end
 
@@ -369,9 +366,11 @@ class ClientSecretPasskeyReservationIssuer
       transaction
     end
 
-    def reserve!(context, token, passkey, duration, device)
+    def reserve!(context, token, passkey, duration, device, step_up_evidence)
       actor = context.subject
-      current, registered, authorization_at = authorized_registration!(actor, token, passkey, device)
+      current, registered, authorization_at = authorized_registration!(
+        actor, token, passkey, device, step_up_evidence,
+      )
 
       # A server-derived UUID names exactly this persisted registration, including omission retries.
       operation = registration_operation(registered)

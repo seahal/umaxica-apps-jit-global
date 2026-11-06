@@ -14,21 +14,40 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
   setup do
     @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
-    @token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_now = ClientToken.database_now
+    @token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    @token.rotate_refresh_token!(now: evidence_now)
+    @token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: @token.authentication_epoch, client_token: @token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    @step_up_evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(@actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: @actor, actor_type: :client, tld: :app, surface: :base)
     @issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: @token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: @step_up_evidence,
     )
-    @token.reload.update!(last_step_up_resource_ref: @issuance.public_id)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: @token, issuance: @issuance)
-    @raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: @token, issuance: @issuance).first
-    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: @token, issuance: @issuance)
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: @token, issuance: @issuance,
+      step_up_evidence: @step_up_evidence,
+    )
+    @raw = ClientSecretPresentationIssuer.call!(
+      actor_context: context, token: @token, issuance: @issuance,
+      step_up_evidence: @step_up_evidence,
+    ).first
+    ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: @token, issuance: @issuance,
+      step_up_evidence: @step_up_evidence,
+    )
     @browsers =
       Array.new(2) do
         admission = OidcTestEntry.issue!(
@@ -149,6 +168,52 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.day)
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_nil credential.consumed_at
+  end
+
+  %w(joined savepoint).each do |nesting|
+    test "an outer Zenith #{nesting} transaction cannot claim a Secret" do
+      flow, ceremony = @browsers.first
+
+      AppZenithRecord.transaction do
+        AppZenithRecord.transaction(requires_new: nesting == "savepoint") do
+          assert_raises(ClientSecretClaimCommitter::TransactionConflict) do
+            ClientSecretClaimCommitter.call!(
+              client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+              authorization_transaction: transaction_for(flow),
+            )
+          end
+        end
+        raise ActiveRecord::Rollback
+      end
+
+      assert_nil ClientSecretCredential.find_by!(issuance_id: @issuance.id).claimed_at
+      assert_predicate ClientSecretLookupQuery.call(client: @actor, secret: @raw), :present?
+      assert_equal 0, ClientSecretAuditOutbox.where(
+        credential_ref: ClientSecretCredential.find_by!(issuance_id: @issuance.id).public_id,
+        event_name: "secret.claimed",
+      ).count
+    end
+  end
+
+  test "a non-joinable outer Zenith transaction cannot claim a Secret" do
+    flow, ceremony = @browsers.first
+
+    AppZenithRecord.transaction(joinable: false) do
+      assert_raises(ClientSecretClaimCommitter::TransactionConflict) do
+        ClientSecretClaimCommitter.call!(
+          client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+          authorization_transaction: transaction_for(flow),
+        )
+      end
+    end
+
+    credential = ClientSecretCredential.find_by!(issuance_id: @issuance.id)
+
+    assert_nil credential.claimed_at
+    assert_predicate ClientSecretLookupQuery.call(client: @actor, secret: @raw), :present?
+    assert_equal 0, ClientSecretAuditOutbox.where(
+      credential_ref: credential.public_id, event_name: "secret.claimed",
+    ).count
   end
 
   test "source claim survives Ticket rollback and terminal reconciliation retires the unbound flow" do
@@ -287,6 +352,8 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: @actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: @actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: @actor.id).find_each(&:destroy!)
+      OpAppGrant.where(client_token_id: @token.id).delete_all
+      @token.association(:op_app_grants).reset
       @token&.destroy!
       # An Identity is physically erased only once it has lapsed and is purgeable.
       @actor.reload.update!(discard_at: @actor.created_at, purge_eligible_at: @actor.created_at)

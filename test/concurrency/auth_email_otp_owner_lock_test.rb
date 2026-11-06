@@ -7,6 +7,59 @@ class AuthEmailOtpOwnerLockTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
+  test "an Auth commit failure before initial Email OTP issuance preserves the ceremony and Contact" do
+    owner = Client.create!(
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+    )
+    email = owner.client_emails.create!(
+      address: "auth-issue-commit-failure-#{SecureRandom.hex(8)}@example.test",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    client = OidcClientRegistry.find!("core-app-jp")
+    parent = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: {
+        client_id: client.client_id,
+        response_type: "code",
+        scope: "openid profile",
+        redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+        state: SecureRandom.hex(8),
+        nonce: SecureRandom.hex(8),
+        code_challenge: OidcTestEntry::CODE_CHALLENGE,
+        code_challenge_method: "S256",
+      },
+    ).transaction
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "authentication_handoff", authorization_transaction_ref: parent.transaction_id,
+    )
+    original_sent_at = email.reload.otp_last_sent_at
+    auth_connection = ClientAuthCeremonySession.lease_connection
+    queued_otp_jobs_before =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    failed_commit = -> { raise ActiveRecord::ConnectionNotEstablished, "injected initial Auth commit failure" }
+
+    assert_raises(ActiveRecord::ConnectionNotEstablished) do
+      auth_connection.stub(:commit_db_transaction, failed_commit) do
+        AuthEmailSignInOtpIssuer.call(ceremony:, contact: email, destination: email.address)
+      end
+    end
+
+    assert_nil ceremony.reload.email_otp_context
+    assert_predicate ceremony.reload, :admitted?
+    assert_equal original_sent_at, email.reload.otp_last_sent_at
+    queued_otp_jobs_after =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_equal queued_otp_jobs_before, queued_otp_jobs_after
+  ensure
+    ActiveRecord::Base.connection_handler.clear_active_connections!
+    ceremony&.delete
+    parent&.delete
+    email&.delete
+    owner&.delete
+  end
+
   test "Email release waits for issuance and prevents the issued code from verifying" do
     owner = Client.create!(
       id: SecureRandom.random_number(1 << 60) + 1_000_000_000,

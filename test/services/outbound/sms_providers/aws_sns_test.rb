@@ -77,6 +77,24 @@ module Outbound
         assert_equal "session-token", captured_options[:session_token]
       end
 
+      test "configures finite SNS connection and read timeouts" do
+        captured_options = nil
+
+        Rails.app.stub(:creds, FakeCreds.new) do
+          ::Aws::SNS::Client.stub(
+            :new, ->(options) {
+                    captured_options = options
+                    OpenStruct.new
+                  },
+          ) do
+            OutboundSmsProvidersAwsSns.new
+          end
+        end
+
+        assert_equal 5, captured_options[:http_open_timeout]
+        assert_equal 10, captured_options[:http_read_timeout]
+      end
+
       private
 
       class FakeCreds

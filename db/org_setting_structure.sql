@@ -124,34 +124,6 @@ ALTER SEQUENCE public.org_preference_adult_content_gates_id_seq OWNED BY public.
 
 
 --
--- Name: org_preference_binding_methods; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.org_preference_binding_methods (
-    id bigint NOT NULL
-);
-
-
---
--- Name: org_preference_binding_methods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.org_preference_binding_methods_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: org_preference_binding_methods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.org_preference_binding_methods_id_seq OWNED BY public.org_preference_binding_methods.id;
-
-
---
 -- Name: org_preference_browser_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -224,9 +196,7 @@ ALTER SEQUENCE public.org_preference_consent_receipts_id_seq OWNED BY public.org
 CREATE TABLE public.org_preference_cookies (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
-    consent_version uuid,
     consented boolean DEFAULT false NOT NULL,
-    consented_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     functional boolean DEFAULT false NOT NULL,
     performant boolean DEFAULT false NOT NULL,
@@ -372,34 +342,6 @@ CREATE SEQUENCE public.org_preference_date_formats_id_seq
 --
 
 ALTER SEQUENCE public.org_preference_date_formats_id_seq OWNED BY public.org_preference_date_formats.id;
-
-
---
--- Name: org_preference_dbsc_statuses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.org_preference_dbsc_statuses (
-    id bigint NOT NULL
-);
-
-
---
--- Name: org_preference_dbsc_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.org_preference_dbsc_statuses_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: org_preference_dbsc_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.org_preference_dbsc_statuses_id_seq OWNED BY public.org_preference_dbsc_statuses.id;
 
 
 --
@@ -977,23 +919,13 @@ ALTER SEQUENCE public.org_preference_web_pushes_id_seq OWNED BY public.org_prefe
 
 CREATE TABLE public.org_preferences (
     id bigint NOT NULL,
-    binding_method_id bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    dbsc_challenge text,
-    dbsc_challenge_issued_at timestamp(6) with time zone,
-    dbsc_public_key jsonb,
-    dbsc_session_id character varying,
-    dbsc_status_id bigint DEFAULT 0 NOT NULL,
-    jti character varying,
+    jti character varying NOT NULL,
     public_id character varying(21) NOT NULL,
-    replaced_by_id bigint,
     status_id bigint DEFAULT 2 NOT NULL,
-    token_digest bytea,
     updated_at timestamp(6) with time zone NOT NULL,
-    used_at timestamp(6) with time zone,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT org_preferences_purged_at_not_null NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT org_preferences_discarded_at_not_null NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    last_issued_at timestamp(6) with time zone NOT NULL,
+    last_issued_expires_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_org_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
@@ -1038,13 +970,6 @@ ALTER TABLE ONLY public.org_preference_adult_content_gate_options ALTER COLUMN i
 --
 
 ALTER TABLE ONLY public.org_preference_adult_content_gates ALTER COLUMN id SET DEFAULT nextval('public.org_preference_adult_content_gates_id_seq'::regclass);
-
-
---
--- Name: org_preference_binding_methods id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preference_binding_methods ALTER COLUMN id SET DEFAULT nextval('public.org_preference_binding_methods_id_seq'::regclass);
 
 
 --
@@ -1094,13 +1019,6 @@ ALTER TABLE ONLY public.org_preference_date_format_options ALTER COLUMN id SET D
 --
 
 ALTER TABLE ONLY public.org_preference_date_formats ALTER COLUMN id SET DEFAULT nextval('public.org_preference_date_formats_id_seq'::regclass);
-
-
---
--- Name: org_preference_dbsc_statuses id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preference_dbsc_statuses ALTER COLUMN id SET DEFAULT nextval('public.org_preference_dbsc_statuses_id_seq'::regclass);
 
 
 --
@@ -1268,14 +1186,6 @@ ALTER TABLE ONLY public.org_preference_adult_content_gates
 
 
 --
--- Name: org_preference_binding_methods org_preference_binding_methods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preference_binding_methods
-    ADD CONSTRAINT org_preference_binding_methods_pkey PRIMARY KEY (id);
-
-
---
 -- Name: org_preference_browser_bindings org_preference_browser_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1329,14 +1239,6 @@ ALTER TABLE ONLY public.org_preference_date_format_options
 
 ALTER TABLE ONLY public.org_preference_date_formats
     ADD CONSTRAINT org_preference_date_formats_pkey PRIMARY KEY (id);
-
-
---
--- Name: org_preference_dbsc_statuses org_preference_dbsc_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preference_dbsc_statuses
-    ADD CONSTRAINT org_preference_dbsc_statuses_pkey PRIMARY KEY (id);
 
 
 --
@@ -1697,27 +1599,6 @@ CREATE UNIQUE INDEX index_org_preference_web_pushes_on_preference_id ON public.o
 
 
 --
--- Name: index_org_preferences_on_binding_method_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_org_preferences_on_binding_method_id ON public.org_preferences USING btree (binding_method_id);
-
-
---
--- Name: index_org_preferences_on_dbsc_session_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_org_preferences_on_dbsc_session_id ON public.org_preferences USING btree (dbsc_session_id);
-
-
---
--- Name: index_org_preferences_on_dbsc_status_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_org_preferences_on_dbsc_status_id ON public.org_preferences USING btree (dbsc_status_id);
-
-
---
 -- Name: index_org_preferences_on_jti; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1732,38 +1613,10 @@ CREATE UNIQUE INDEX index_org_preferences_on_public_id ON public.org_preferences
 
 
 --
--- Name: index_org_preferences_on_purge_eligible_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_org_preferences_on_purge_eligible_at ON public.org_preferences USING btree (purge_eligible_at);
-
-
---
--- Name: index_org_preferences_on_replaced_by_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_org_preferences_on_replaced_by_id ON public.org_preferences USING btree (replaced_by_id);
-
-
---
 -- Name: index_org_preferences_on_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_org_preferences_on_status_id ON public.org_preferences USING btree (status_id);
-
-
---
--- Name: index_org_preferences_on_token_digest; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_org_preferences_on_token_digest ON public.org_preferences USING btree (token_digest);
-
-
---
--- Name: index_org_preferences_on_used_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_org_preferences_on_used_at ON public.org_preferences USING btree (used_at);
 
 
 --
@@ -1806,27 +1659,11 @@ ALTER TABLE ONLY public.org_preference_timezones
 
 
 --
--- Name: org_preferences fk_org_preferences_on_binding_method_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_org_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.org_preference_binding_methods(id) NOT VALID;
-
-
---
--- Name: org_preferences fk_org_preferences_on_dbsc_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_org_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.org_preference_dbsc_statuses(id) NOT VALID;
-
-
---
 -- Name: org_preferences fk_org_preferences_on_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_org_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.org_preference_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_org_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.org_preference_statuses(id);
 
 
 --
@@ -1942,14 +1779,6 @@ ALTER TABLE ONLY public.org_preference_timezones
 
 
 --
--- Name: org_preferences fk_rails_981b4c7c84; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.org_preferences
-    ADD CONSTRAINT fk_rails_981b4c7c84 FOREIGN KEY (replaced_by_id) REFERENCES public.org_preferences(id) ON DELETE SET NULL NOT VALID;
-
-
---
 -- Name: org_preference_densities fk_rails_a7ea743e5b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2028,6 +1857,9 @@ ALTER TABLE ONLY public.org_preference_themes
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261101025006'),
+('20261031220001'),
+('20261031201209'),
 ('20261031191206'),
 ('20261020130001'),
 ('20261020130000'),

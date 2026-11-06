@@ -19,9 +19,10 @@ class ApplicationRecord < ActiveRecord::Base
 
   # Return one instant from this model's writer database. `clock_timestamp()`
   # is deliberately read outside the query cache so a state transition does
-  # not reuse a previously cached wall-clock value. Callers should obtain it
-  # after acquiring any lock required for their decision and pass the value
-  # through the rest of that decision unit.
+  # not reuse a previously cached wall-clock value. Callers may use it for
+  # coordinated predicates after acquiring their locks. Lifecycle transition
+  # writers read their owning model's clock after the transition lock instead
+  # of accepting a caller-supplied timestamp.
   def self.database_now
     value = uncached { lease_connection.select_value("SELECT clock_timestamp()", "DatabaseClock") }
     value.is_a?(Time) ? value : Time.zone.parse(value.to_s)

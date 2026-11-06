@@ -6,7 +6,7 @@ class SocialSignupMissingFlowTest < ActionDispatch::IntegrationTest
   NAVIGATION_HEADERS = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }.freeze
 
   %w(google apple).each do |provider|
-    test "#{provider} signup callback cannot replace its missing entry Flow" do
+    test "#{provider} sign-up creates its Flow only after the verified callback" do
       prior_test_mode = OmniAuth.config.test_mode
       prior_mock = OmniAuth.config.mock_auth[provider.to_sym]
       OmniAuth.config.test_mode = true
@@ -47,18 +47,15 @@ class SocialSignupMissingFlowTest < ActionDispatch::IntegrationTest
         (provider == "google") ? auth_app_social_google_registration_path : auth_app_social_apple_registration_path
       callback_path =
         (provider == "google") ? auth_app_social_google_callback_path : auth_app_social_apple_callback_path
-      assert_difference("ClientSignUpFlow.count", 1) { post(start_path, params: { ri: "jp" }) }
+      assert_no_difference("ClientSignUpFlow.count") { post(start_path, params: { ri: "jp" }) }
       assert_response :temporary_redirect
       state = session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
-      flow = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
-      flow.destroy!
 
-      assert_no_difference(
-        [
-          "ClientSignUpFlow.count", "Client.count", "ClientToken.count",
-          "ClientGoogleIdentity.count", "ClientAppleIdentity.count",
-        ],
-      ) do
+      assert_equal "#{provider}", session[SocialCallbackGuard::SOCIAL_STATE_PROVIDER_SESSION_KEY]
+      assert_equal 0, ClientSignUpFlow.where(auth_admission_binding_id: binding.id).count
+      assert_nil session[:auth_app_up_sequence_id]
+
+      assert_difference("ClientSignUpFlow.count", 1) do
         get(
           callback_path, params: { state: state, ri: "jp" }, headers: {
             "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
@@ -66,7 +63,29 @@ class SocialSignupMissingFlowTest < ActionDispatch::IntegrationTest
         )
       end
 
-      assert_response :bad_request
+      assert_response :found
+      flow = ClientSignUpFlow.find_by!(auth_admission_binding_id: binding.id)
+
+      assert_equal provider, flow.entry_method
+      assert_equal provider, flow.social_provider
+      assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, flow.status_id
+      assert_equal flow.public_id, session[:auth_app_up_sequence_id]
+      get(auth_app_sign_up_path(ri: "jp"), headers: NAVIGATION_HEADERS)
+
+      assert_response :conflict
+      assert_equal 1, ClientSignUpFlow.where(auth_admission_binding_id: binding.id).count
+
+      delete(
+        "/sign/up/check/#{provider}/confirmation",
+        params: { fb: SignFlowBindingCodec.encode(flow: flow, surface: :app), ri: "jp" },
+        headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" },
+      )
+
+      assert_response :see_other
+      target = URI.parse(jump_rt_url_from_location_for_test(response.location))
+
+      assert_equal "/oidc/cancellation", target.path
+      assert_predicate flow.reload, :sign_up_cancelled?
     ensure
       OmniAuth.config.mock_auth[provider.to_sym] = prior_mock
       OmniAuth.config.test_mode = prior_test_mode

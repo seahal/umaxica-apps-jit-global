@@ -12,10 +12,23 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   # Resolution writers commit chronicle rows, which later owner-scoped history tests would read.
   CHRONICLE_CLASSES = [ClientChronicle, OperatorChronicle].freeze
   AUTHORITY_STOP_CLASSES = [OpAppAuthorityStop, OpOrgAuthorityStop].freeze
+  # Sign-in flows and their resolutions are not fixture tables, so committed rows outlive the
+  # file. A recycled synthetic principal id then makes a later journey teardown match them and
+  # abort on their RESTRICT references, leaking rows that break fixture-load validation.
+  SIGN_IN_FLOW_CLASSES = [ClientSignInFlow, OperatorSignInFlow].freeze
+  RESOLUTION_CLASSES = [ClientSessionLimitResolutionTransaction, OperatorSessionLimitResolutionTransaction].freeze
 
   setup do
+    @created_operator_ids = []
     @chronicle_watermarks = CHRONICLE_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
     @authority_stop_watermarks = AUTHORITY_STOP_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
+    @sign_in_flow_watermarks = SIGN_IN_FLOW_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
+    @resolution_watermarks = RESOLUTION_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
+    # Fixture tables reload per test but only wipe the rows fixture files define, so the rows
+    # this file commits after that wipe have to go by identity rather than by id watermark.
+    @initial_client_ids = Client.pluck(:id)
+    @initial_token_ids = ClientToken.pluck(:id)
+    @initial_device_session_ids = ClientDeviceSession.pluck(:id)
   end
 
   teardown do
@@ -26,6 +39,25 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
         stop_ids: stop_class.where(id: (last_id + 1)..).pluck(:id),
       )
     end
+    # Resolutions reference their flow with ON DELETE RESTRICT, so they go first.
+    @resolution_watermarks&.each { |klass, last_id| klass.where(id: (last_id + 1)..).delete_all }
+    @sign_in_flow_watermarks&.each { |klass, last_id| klass.where(id: (last_id + 1)..).delete_all }
+    # client_tokens references client_device_sessions with ON DELETE RESTRICT, so tokens go
+    # first; the reverse reference is SET NULL and clears itself.
+    ClientToken.where.not(id: @initial_token_ids).delete_all
+    ClientDeviceSession.where.not(id: @initial_device_session_ids).delete_all
+    Client.where.not(id: @initial_client_ids).delete_all
+
+    operator_ids = @created_operator_ids
+    operator_flows = OperatorSignInFlow.where(principal_id: operator_ids)
+    OperatorSessionLimitResolutionTransaction.where(sign_in_flow_id: operator_flows.select(:id)).delete_all
+    operator_flows.delete_all
+    operator_tokens = OperatorToken.where(staff_id: operator_ids)
+    operator_device_session_ids = OperatorDeviceSession.where(staff_id: operator_ids).pluck(:id)
+    OperatorDeviceSession.where(id: operator_device_session_ids).update_all(current_refresh_token_id: nil)
+    operator_tokens.delete_all
+    OperatorDeviceSession.where(id: operator_device_session_ids).delete_all
+    Operator.where(id: operator_ids).delete_all
   end
 
   test "client resolution binds the parent and revokes only an owned selected session" do
@@ -136,6 +168,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "operator resolution uses its realm state and token ownership" do
     operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    @created_operator_ids << operator.id
     operator_flow_record =
       begin
         fv5026 = operator
@@ -350,7 +383,6 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
         browser_binding_digest: "b" * 64,
       )
     end
-
   end
 
   test "resolution expiry uses the parent deadline and rejects at -1, exact, and +1" do

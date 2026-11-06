@@ -65,12 +65,11 @@ class AnonymousComPreferenceWriteJourneyTest < ActionDispatch::IntegrationTest
     assert_not_includes payload.keys, "preference_type"
     assert_equal "com", payload.fetch("aud")
     assert_predicate payload.fetch("preferences"), :present?
-    cookie_headers = Array(response.headers["Set-Cookie"]).flat_map { |header| header.split("\n") }
-    ["preference_refresh", "preference_dbsc"].each do |name|
-      header = cookie_headers.find { |entry| entry.start_with?("#{name}=") }
 
-      assert_not_nil header
-      assert_operator Time.httpdate(header.match(/expires=([^;]+)/i)[1]), :<, Time.current
+    cookie_headers = Array(response.headers["Set-Cookie"]).flat_map { |header| header.split("\n") }
+
+    ["preference_refresh", "preference_dbsc"].each do |name|
+      assert cookie_headers.none? { |entry| entry.start_with?("#{name}=") }
     end
     [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
      PreferenceCookieName.anonymous_experience,].each do |name|
@@ -116,7 +115,7 @@ class AnonymousComPreferenceWriteJourneyTest < ActionDispatch::IntegrationTest
   end
 
   test "preference cookie header size accepts the nearest reachable boundary and rejects the next size" do
-    limit = SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+    limit = SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
     labels = @host.split(".")
     domain = ".#{labels.last(2).join(".")}" if labels.length >= 3
     sample_options = {
@@ -355,7 +354,7 @@ class AnonymousComPreferenceWriteJourneyTest < ActionDispatch::IntegrationTest
     assert_equal "dr", response.parsed_body.fetch("theme")
   end
 
-  test "the com page renders the verified JWT language and theme without writing" do
+  test "the com page applies the request region over JWT language and renders JWT theme without writing" do
     preference = ComPreference.create!(
       last_issued_at: Time.current,
       last_issued_expires_at: 400.days.from_now,
@@ -382,7 +381,7 @@ class AnonymousComPreferenceWriteJourneyTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :ok
-    assert_select "html[lang=en][data-theme=dark]"
+    assert_select "html[lang=ja][data-theme=dark]"
   end
 
   test "an older com JWT remains usable for display after the row generation changes" do
@@ -412,7 +411,7 @@ class AnonymousComPreferenceWriteJourneyTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :ok
-    assert_select "html[lang=en][data-theme=dark]"
+    assert_select "html[lang=ja][data-theme=dark]"
     assert_not_includes response.headers["Set-Cookie"].to_s, "#{PreferenceCookieName.anonymous_jwt}="
   end
 
@@ -564,6 +563,24 @@ class AnonymousComPreferenceWriteJourneyTest < ActionDispatch::IntegrationTest
       patch base_com_preference_timezone_path(ri: "jp"), params: { preference_timezone: { option_id: "unknown" } }
 
       assert_response :unprocessable_content
+    end
+  end
+
+  test "the first com region write creates the preference children without an N+1 on the parent" do
+    Prosopite.pause do
+      assert_nothing_raised do
+        Prosopite.scan do
+          patch base_com_preference_region_path(ri: "jp"), params: { preference_region: { option_id: "us" } }
+        end
+      end
+    end
+
+    assert_response :see_other
+
+    Prosopite.pause do
+      Prosopite.tc[:prosopite_query_counter] = Hash.new(0)
+      Prosopite.tc[:prosopite_query_holder] = Hash.new { |h, k| h[k] = [] }
+      Prosopite.tc[:prosopite_query_caller] = {}
     end
   end
 

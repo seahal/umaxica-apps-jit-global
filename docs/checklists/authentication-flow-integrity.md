@@ -28,9 +28,9 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   [root establishment](../../test/integration/root_login_establishment_flow_test.rb). Full
   family/surface matrix is planned where tests are missing; one app test does not certify all.
 - APP ordinary authentication admission opens only Sign In; Sign Up requires the persisted
-  `prompt=create` or the Binding's server-fixed Switch selection. Wrong-intent GET and POST
-  requests leave the Binding and admission unconsumed, and a later request cannot reinterpret an
-  admitted ceremony by changing its path or parameters.
+  `prompt=create` or the Binding's server-fixed Switch selection. Wrong-intent GET and POST requests
+  leave the Binding and admission unconsumed, and a later request cannot reinterpret an admitted
+  ceremony by changing its path or parameters.
 - Every APP/ORG Binding has a required immutable OP-issued 30-minute curfew and an explicit,
   purpose-constrained intent. Switch copies its original curfew across repeated switches. A
   re-verification Binding records `not_applicable`; NULL does not select an intent. For an
@@ -38,27 +38,28 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   active immediately before it, but expired at and after it. The 60-second Binding expiry governs
   redemption only; it does not shorten the ceremony or replace the curfew. The acceptance code's
   shorter lifetime remains independent of curfew storage.
-- APP sign-up Flows have one immutable Admission owner. Concurrent creation admits at most
-  one in-progress Flow per Binding, while terminal history remains distinct. Binding collection
-  retains every child until it is terminal, physically purgeable and either cleanup completed or
+- APP sign-up Flows have one immutable Admission owner. Concurrent creation admits at most one
+  in-progress Flow per Binding, while terminal history remains distinct. Binding collection retains
+  every child until it is terminal, physically purgeable and either cleanup completed or
   registration completed; collection deletes the Flow rows before their restrictive Binding and
   leaves the principal and Auth-session records to their own retention owners.
 - APP Social registration checks the retained Flow-to-Binding FK even when the result signature,
   provider candidate and browser/Admission proof are valid. A foreign or missing owner is refused
   before result/candidate consumption or principal creation. The same check protects committed
   receipt reads and completion-reference writes; refusal preserves an already registered identity.
-- APP telephone Passkey saving locks the Flow before the principal and rechecks its state,
-  deadline and request gate after waiting. An ended or expired registration creates no credential
-  or Secret allocation; expiry uses the named termination operation. Concurrent verified saves
-  return the existing success without adding another pending Passkey or allocation.
+- APP telephone Passkey saving locks the Flow before the principal and rechecks its state, deadline
+  and request gate after waiting. An ended or expired registration creates no credential or Secret
+  allocation; expiry uses the named termination operation. Concurrent verified saves return the
+  existing success without adding another pending Passkey or allocation.
 
 ## FLOW-2 — Safe reload and contradictory safe requests
 
 - Basis: F02/F03/F08/F11. Scope: each actual phase-bound GET/HEAD endpoint.
 - Given a valid current phase, reload succeeds without new proof/session artifacts. Given the same
   flow at another phase, request a past or unauthorized future phase: GET returns 409, text/plain,
-  exact body `この画面は古くなっています。最初からやり直してください。`, no Location and preserved Auth no-store; HEAD retains status/headers
-  without a body. The Japanese phrase is required customer copy, not repository prose.
+  exact body `この画面は古くなっています。最初からやり直してください。`, no Location and preserved
+  Auth no-store; HEAD retains status/headers without a body. The Japanese phrase is required
+  customer copy, not repository prose.
 - Flow and session workflow state remain unchanged: no halt/advance/cancel, OTP/challenge/provider
   creation or session issuance. No HTML/current-step recovery redirect. Non-phase errors keep their
   existing contract. Check
@@ -68,6 +69,38 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   [app MFA admission tests](../../test/controllers/auth/app/in/challenges_controller_test.rb) and
   the app passkey and MFA controller tests; these references establish only the scenarios they
   actually exercise. Other families/surfaces require explicit planned-to-actual test references.
+- APP entry Cancel has seven explicit HTTP cases: Sign In method selection, Email, Passkey and
+  Secret, plus Sign Up method selection, Email and Telephone. Each reads the page's supplied Cancel
+  action, submits with CSRF enabled, verifies the Auth ceremony and parent are cancelled, checks the
+  RP callback receives `access_denied` without a code, and follows it to Base `/sign/interruption`
+  with HTTP 200. See the seven-path table in
+  `test/integration/email_signup_http_delivery_commit_test.rb`.
+- The Sign In Email address form exposes a separate parent Cancel POST. It requires no address or
+  Turnstile response, keeps CSRF protection and follows Visa cancellation to `/sign/interruption`.
+  Coverage: `gait/features/auth/signin/signin_interaction.test.tsx` and the Email address-entry case
+  in `test/integration/email_signup_http_delivery_commit_test.rb`.
+- Email registration rechecks authorization before Source commit. A stopped actor is refused with
+  HTTP 422 and an overdue Flow with HTTP 410 through the existing expiry writer, with no effective
+  contact binding, completion receipt or finalization audit. A committed receipt remains eligible
+  for its original reconciliation instead. Coverage:
+  `test/integration/contact_email_signup_source_audit_test.rb`.
+- After Sign In Email OTP issuance, browser Back or a request for the old entry page refuses with
+  the same 409 and leaves the challenge available. The explicit Cancel control is distinct from
+  Back: when a parent cancellation action is supplied, it ends the pending authorization through
+  Visa; the local DELETE fallback ends only the OTP challenge. Delivery failure does not change the
+  progressed state or remove the established resend action.
+- APP Email, Telephone, Google and Apple signup checkpoint Cancel ends the owned registration Flow
+  and its pending artifacts, then cancels the admitted parent ceremony through Visa and returns the
+  RP to `/sign/interruption`. It does not redirect to the progressed `/sign/up` entry. Verify the
+  signed checkpoint binding and CSRF before cancellation; preserve the terminal Flow and parent
+  facts. HTTP coverage: `test/integration/email_signup_http_delivery_commit_test.rb` and
+  `test/integration/social_signup_missing_flow_test.rb`. Completed registration cancellation is
+  refused without changing the actor or Flow; see
+  `test/services/sign_up/completed_cancellation_boundary_test.rb`.
+- Auth APP browser coverage exercises both sign-up and Flow-less sign-in Email OTP: Back reaches the
+  server-side phase refusal, Forward re-evaluates the current OTP phase, and sign-up cancellation
+  remains an explicit action. See
+  [phase history browser coverage](../../e2e/rails/auth-phase-history.spec.ts).
 
 The `com` surface no longer owns a credential ceremony, so it has no Email sign-up phase case and no
 MFA admission case after the corporate anonymous-surface change; its former tests were removed with
@@ -124,11 +157,18 @@ APP MFA coverage is not evidence for ORG.
   transactions, device sessions or refresh/session tokens. Artifact cleanup cannot bypass terminal
   admission; all consumers must refuse unusable proof. Keep separate original-operation bounded
   receipts without fresh success or deadline extension (CONTACT-4).
-- APP cleanup rechecks unfinished registration under the principal writer lock after the
-  terminal Flow lock. Contact, pending Passkey, audit outbox and actor retention changes share
-  one principal transaction. A failed write leaves all artifacts pending for retry; a registration
-  committed while cleanup waits is preserved. APP Secret sign-up operations and telephone Passkey
-  saving use the same Flow-before-principal order.
+- APP cleanup rechecks unfinished registration under the principal writer lock after the terminal
+  Flow lock. Contact, pending Passkey, audit outbox and actor retention changes share one principal
+  transaction. A failed write leaves all artifacts pending for retry; a registration committed while
+  cleanup waits is preserved. APP Secret sign-up operations and telephone Passkey saving use the
+  same Flow-before-principal order.
+- APP Email and Telephone sign-up OTP generation and flow progress are committed before queue
+  enqueue; the applicable Source cooldown is committed before dispatch. Refuse an invocation under
+  an ambient Source or Ticket transaction before creating an OTP. On enqueue refusal, retain the
+  committed generation and cooldown for the existing resend/Cancel path. Verify enqueue-time
+  visibility from independent database connections; queue acceptance does not establish delivery.
+  Basis: [D-58/RV-69, two.md §12.2](../../two.md). Current APP producer reference:
+  [signup OTP enqueue boundary tests](../../test/operations/sign_up_otp_delivery_concurrency_test.rb).
 - Check actual independent-connection races and public integration counts, not only token_id unique
   index presence. Start at root establishment and phase regression tests; comprehensive
   race/consumer evidence is planned. Boundary tests cover lock waits and deadline before/at/after,
@@ -159,3 +199,24 @@ replay. Its durable `OperatorChronicleEvent::SIGN_FLOW_HALTED` assertion exposed
 user deferred that assertion for this delivery; the durable requirement above remains, with
 reproduction and restoration criteria in
 [the audit backlog](../../plans/backlog/org-normal-sign-in-durable-halt-audit.md).
+
+## APP Apple and Google signup completion
+
+- Verify each provider independently: dispatch creates no signup Flow; a verified, admission-bound
+  callback creates exactly one; explicit confirmation precedes the pending actor; birthdate and
+  finalization precede identity/actor promotion and the canonical Sign In handoff.
+- The original RP must receive its own verified OIDC session and reach Dashboard. Root issuance
+  alone and a generic final redirect are insufficient. Existing-subject Sign In must reach the same
+  RP boundary without allowing signup to relink an existing subject. Public HTTP cases are in
+  `test/integration/social_login_admission_test.rb`; the provider contract matrix is in
+  `test/integration/social_auth_app_flow_contract_test.rb`.
+- Keep callback state/provider/nonce, Auth SID, Admission, curfew, intent and candidate checks. A
+  canceled browser has no live admission: its later callback is refused without creating a Flow or
+  authentication evidence. A fresh callback is not a license to revive a canceled parent.
+- Source commit followed by Ticket failure, cross-tab callback generations and completion-receipt
+  recovery remain separate acceptance gates under the existing WU-A2 proposals. Passing the normal
+  journey does not close those failure/recovery cases or validate external provider deployment.
+- On the six method pages listed in `docs/architecture/auth-ceremony-session-boundary.md`, verify
+  one header Back link, localized through `actions.back`, with the server-provided destination. Do
+  not add a Back link to APP or ORG method-selection entries, or replace Cancel with a navigation
+  link.

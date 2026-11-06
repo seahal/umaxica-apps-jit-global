@@ -6,7 +6,7 @@ module AvatarOwnershipTransfers
     VALID_FOR = 5.days
 
     def initialize(actor:, surface:, subject_public_id:, avatar_public_id:, target_surface:,
-                   target_collective_public_id:, step_up_token: nil, step_up_requirement: nil)
+                   target_collective_public_id:, step_up_token: nil, step_up_evidence: nil)
       super()
       @actor = actor
       @surface = surface.to_s
@@ -15,14 +15,11 @@ module AvatarOwnershipTransfers
       @target_surface = target_surface.to_s
       @target_collective_public_id = target_collective_public_id.to_s
       @step_up_token = step_up_token
-      @step_up_requirement = step_up_requirement
+      @step_up_evidence = step_up_evidence
     end
 
     def call
-      validate_step_up_context!(
-        actor: actor, surface: surface, scope: "avatar_transfer_request",
-        token: step_up_token, requirement: step_up_requirement,
-      )
+      validate_step_up_context!(actor: actor, token: step_up_token, evidence: step_up_evidence)
       reject_legacy_transfer_after_cutover!
       validate_target!
       avatar = find_avatar!(avatar_public_id)
@@ -47,7 +44,7 @@ module AvatarOwnershipTransfers
     private
 
     attr_reader :actor, :surface, :subject_public_id, :avatar_public_id,
-                :target_surface, :target_collective_public_id, :step_up_token, :step_up_requirement
+                :target_surface, :target_collective_public_id, :step_up_token, :step_up_evidence
 
     def validate_target!
       raise InvalidTransfer, "unsupported target surface" unless OWNER_DATA.key?(target_surface)
@@ -98,7 +95,7 @@ module AvatarOwnershipTransfers
           request_actor_surface: surface,
           request_actor_public_id: subject_public_id,
         )
-        consume_step_up!(step_up_token, step_up_requirement)
+        verify_step_up!(actor:, token: step_up_token, evidence: step_up_evidence)
         transfer
       end
     end

@@ -3,7 +3,7 @@
 require "test_helper"
 
 class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
-  [ClientEmailCeremonyTransaction,    OperatorEmailCeremonyTransaction,].each do |model|
+  [ClientEmailCeremonyTransaction,    OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} delivers only the current authentic email code before cancellation" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "sign_up", email_candidate_ref: "candidate",
@@ -36,7 +36,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientEmailCeremonyTransaction,    OperatorEmailCeremonyTransaction,].each do |model|
+  [ClientEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} email delivery accepts deadline minus one microsecond and rejects deadline and plus one" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "sign_up", email_candidate_ref: "candidate",
@@ -61,7 +61,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} delivers only the current authentic telephone code before cancellation" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "sign_up", telephone_candidate_ref: "candidate",
@@ -90,7 +90,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
     end
   end
 
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction, OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} telephone delivery accepts deadline minus one microsecond and rejects deadline and plus one" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "sign_up", telephone_candidate_ref: "candidate",

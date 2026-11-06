@@ -86,28 +86,25 @@ class JwtTemporalValidationTest < ActiveSupport::TestCase
     end
   end
 
-  test "preference access enforces the fixed thirty second iat nbf and exp boundaries" do
+  test "anonymous preference JWT uses the exact 400 day lifetime without nbf" do
     travel_to Time.utc(2026, 10, 22, 12) do
-      now = Time.current.to_i
       host = Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
-      original = PreferenceToken.encode(
-        { "lx" => "ja" }, host: host, preference_type: "AppPreference",
-                          public_id: "temporal-preference", jti: "temporal-jti",
+      issued_at = Time.current
+      snapshot = SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first)
+      token = PreferenceToken.encode(
+        snapshot, host: host, preference_type: "AppPreference",
+                  public_id: "temporal-preference", jti: "temporal-jti",
+                  jwt_issuer_id: "preference_app", issued_at: issued_at,
       )
-      payload, header = JWT.decode(original, nil, false)
-      payload.merge!("iat" => now - 60, "nbf" => now - 60, "exp" => now + 300)
-      cases = [
-        ["iat", now + 29, true], ["iat", now + 30, true], ["iat", now + 31, false],
-        ["nbf", now + 29, true], ["nbf", now + 30, true], ["nbf", now + 31, false],
-        ["exp", now - 29, true], ["exp", now - 30, false], ["exp", now - 31, false],
-      ]
-      cases.each do |claim, value, accepted|
-        token = JWT.encode(
-          payload.merge(claim => value), PreferenceJwtConfiguration.private_key_for_active, "ES384", header,
-        )
 
-        assert_equal accepted, PreferenceToken.decode(token, host: host).present?, "#{claim}=#{value - now}"
-      end
+      payload, header = JWT.decode(token, nil, false)
+
+      assert_equal issued_at.to_i, payload.fetch("iat")
+      assert_equal issued_at.to_i + 400.days.to_i, payload.fetch("exp")
+      assert_equal "app", payload.fetch("aud")
+      assert_equal "JWT", header.fetch("typ")
+      assert_not payload.key?("nbf")
+      assert_predicate PreferenceToken.decode(token, host: host, jwt_issuer_id: "preference_app"), :present?
     end
   end
 

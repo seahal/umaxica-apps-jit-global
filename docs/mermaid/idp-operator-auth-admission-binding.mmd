@@ -1,30 +1,55 @@
 stateDiagram-v2
-    %% Realm-specific rendering of the shared D-82 Base/Auth admission contract.
-    [*] --> issued: parent Operator flow / binding transaction
-    issued --> attached: Auth attaches active session and confirmation reference
-    issued --> retired: expiry or explicit restart
-    attached --> confirmed: Base confirms nonce digest and root token
-    attached --> retired: expiry or cancellation
-    confirmed --> redeemed: matching browser-bound Auth session redeems
-    confirmed --> retired: expiry or cancellation
-    redeemed --> [*]
-    retired --> [*]
+    state "issued (status_id 10)" as issued
+    state "attached (status_id 20)" as attached
+    state "Base confirmed (status_id 30)" as confirmed
+    state "redeemed (status_id 40)" as redeemed
+    state "retired (status_id 90)" as retired
+    state "switched (status_id 91)" as switched
+
+    [*] --> issued: parent + binding transaction
+    issued --> attached: attach_auth_session!
+    issued --> retired: retire! / expiry or restart
+    attached --> confirmed: confirm_base! / browser nonce proof
+    attached --> retired: retire! / expiry or restart
+    confirmed --> redeemed: redeem! / admitted rotated session
+    confirmed --> retired: retire! / expiry or restart
+    redeemed --> switched: switch! / canceled first-page ceremony
+    redeemed --> [*]: retained accepted admission
+    retired --> [*]: retained terminal fact
+    switched --> [*]: retained switched fact
+
     note right of issued
-        References identify the operation;
-        the browser nonce digest is the proof binding.
-        No Auth general login session is created.
-        Distinct pending parents may share an active sid,
-        including continuity admitted for an earlier parent.
-        Attachment grants no authority for the new purpose.
-        Sign-in path checks the server-fixed effective intent before redemption.
-        Issuance stores immutable curfew_at = OP clock + 30 minutes.
-        Switch copies that curfew; entry_intent is required and purpose-constrained.
-        Re-verification intent is the explicit not_applicable value.
-        Curfew storage does not yet replace acceptance/parent expiry consumers.
-        Initial entry GET relays; a confirmed entry GET redeems the browser-bound admission.
-        The entry and attachment require navigation/document metadata and refuse HEAD.
-        Transitions use the owning Ticket DB clock.
-        Browser receivers lock root owner/device/token when present,
-        then the exact parent, binding and Auth rows in ID order.
-        Auth cookies are written only after Ticket commit.
+      operator_auth_admission_binding_statuses is an id-only reference table.
+      status_id is NOT NULL and is the lifecycle authority.
+      Proof timestamps and session ids remain immutable facts.
+      Active parent+purpose uniqueness covers status ids 10, 20, 30.
+      Expiry is a time condition; purge first retires active rows.
+      ORG public Switch remains unavailable under the current product contract.
+    end note
+
+    note right of attached
+      An attached reference is usable only when the current host-only auth_sid
+      resolves to the exact active Auth continuity row. A mismatch returns 409
+      before redirect, mutation, or Auth-cookie/DBSC issuance.
+    end note
+
+    note right of confirmed
+      Auth entry redemption requires Sec-Fetch-Mode: navigate and
+      Sec-Fetch-Dest: document. Missing or other metadata and HEAD are refused
+      before the binding or Auth continuity changes.
+    end note
+
+    note right of redeemed
+      The shared writer accepts Switch only when the encrypted handoff names
+      this exact admitted Auth session and its browser/token proof matches.
+      The old row becomes status 91 in the same Ticket transaction that
+      creates a replacement. Switched rows retain proof and accept no result.
+    end note
+
+    note right of retired
+      The purger waits for parent, binding and referenced Auth session
+      retention boundaries, then deletes Flow children before the binding.
+      After the last binding reference is removed, it may delete an expired
+      Auth session once its expiry or terminal event reaches retention. The
+      collector does not change Auth session status or delete principals.
     end note

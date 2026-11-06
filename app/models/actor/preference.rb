@@ -157,10 +157,10 @@ class Actor
 
     public
 
-    def with_browser_state(cookie:, web_push:)
+    def with_browser_state(cookie:, web_push:, region: @region)
       self.class.new(
         language: @language,
-        region: @region,
+        region: region,
         timezone: @timezone,
         theme: @theme,
         currency: @currency,

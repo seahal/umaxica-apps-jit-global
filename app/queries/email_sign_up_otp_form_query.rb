@@ -10,16 +10,20 @@ class EmailSignUpOtpFormQuery
 
       owner, transaction_model, pending_status = components(flow, email)
       return false unless flow.nonce_matches?(session_nonce)
-      return false unless eligible_parent_and_source?(flow, email, owner, pending_status)
+
+      now = transaction_model.database_now
+      return false unless eligible_parent_and_source?(flow, email, owner, pending_status, now)
 
       session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
       transactions = transaction_model.where(
         operation: "sign_up", purpose: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
         email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
       )
-      return false unless transactions.exists?
+      unless transactions.exists?
+        return AppRegisteredContactDestinationGuard.registered_by_other_owner?(contact: email, owner: owner)
+      end
 
-      available_form?(transactions.sole, transaction_model.database_now)
+      available_form?(transactions.sole, now)
     end
 
     private
@@ -34,8 +38,7 @@ class EmailSignUpOtpFormQuery
       end
     end
 
-    def eligible_parent_and_source?(flow, email, owner, pending_status)
-      now = flow.class.database_now
+    def eligible_parent_and_source?(flow, email, owner, pending_status, now)
       owner_id =
         case email
         when ClientEmail then email.user_id
@@ -45,7 +48,7 @@ class EmailSignUpOtpFormQuery
         flow.principal_id == owner.id && flow.pending_contact_type == "email" &&
         flow.pending_contact_id == email.id && owner_id == owner.id &&
         owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
-        owner.accessible?(owner.class.database_now) && email.accessible?(email.class.database_now) &&
+        owner.accessible?(now) && email.accessible?(now) &&
         !email.binding_finalized_at && !email.binding_released?
     end
 

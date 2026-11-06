@@ -74,8 +74,30 @@ class ChronicleRecordPolicyTest < ActiveSupport::TestCase
     assert_equal "compliance", ChronicleRecordPolicy.retention_policy_code_for("chronicle.audit_incomplete")
   end
 
+  test "step-up Chronicle actions select their explicit retention class" do
+    {
+      "step_up.requested" => "security",
+      "step_up.committed" => "compliance",
+      "step_up.installed" => "compliance",
+      "step_up.cancelled" => "compliance",
+      "step_up.expired" => "compliance",
+      "step_up.failed" => "compliance",
+      "step_up.refused" => "compliance",
+      "step_up.indeterminate" => "compliance",
+      "step_up.attempt_rejected" => "security",
+    }.each do |action, policy_code|
+      assert_equal policy_code, ChronicleRecordPolicy.retention_policy_code_for(action)
+    end
+  end
+
   test "retention_policy_code_for defaults to security for unknown actions" do
     assert_equal "security", ChronicleRecordPolicy.retention_policy_code_for("unknown.action")
+  end
+
+  test "retention_policy_code_for rejects unmapped step-up actions before suffix classification" do
+    assert_raises(ArgumentError) do
+      ChronicleRecordPolicy.retention_policy_code_for("step_up.future.deleted")
+    end
   end
 
   test "actor_payload returns nil values for blank actor" do

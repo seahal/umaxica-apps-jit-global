@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TelephoneCeremonyOtpVerificationAdmissionTest < ActiveSupport::TestCase
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction, OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} proof delivery consumption and receipt retain binding across runtime time zones" do
       transaction = nil
       code = nil

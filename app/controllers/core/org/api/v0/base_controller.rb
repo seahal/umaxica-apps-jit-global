@@ -28,10 +28,6 @@ module Core
 
           def core_actor_tld = :org
 
-          def core_resource_class = ::Operator
-
-          def core_token_class = ::OperatorToken
-
           def core_resource_type = "operator"
         end
       end

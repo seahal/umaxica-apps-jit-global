@@ -5,6 +5,13 @@
 Accepted (2026-08-07). Supersedes the 2026-08-06 revision of this ADR, which decided to serve these
 endpoints from surface-local controllers under `BareController`.
 
+## Amendment (2026-11-02)
+
+The owner retired the Service Worker on Auth APP and ORG. Its navigation re-fetch reaches the server
+as `Sec-Fetch-Dest: empty`, which `adr/sign-in-path-continuation-protocol.md` refuses for admission
+entry. Auth serves a self-unregistering script at `/service-worker` and has no `/offline`. Remove
+that route once installed Workers have aged out. Base, Warp and Palm keep the fallback below.
+
 ## Context
 
 When a browser has no network, users of the surfaces whose HTML Rails renders itself see the
@@ -95,11 +102,12 @@ uncommented verbatim and the Web Push blocks removed. It caches `/offline` on in
 failed `request.mode === "navigate"` requests from that cache. It performs no runtime caching, so no
 authenticated HTML, page props, JSON, CSRF token, or `Set-Cookie` response can enter the cache.
 
-`app/views/pwa/offline.html.erb` uses the shared `pwa.offline` translation keys for its title,
-body copy, and retry control, with English and Japanese text in all four canonical locale bundles.
-The `lang` attribute follows `I18n.locale`. The framework controller does not resolve user locale
-preferences; the cached document uses the rendering locale at service worker installation time. Markup, CSS, and `prefers-color-scheme` handling are unchanged. The
-retry control drops the generator's `action="."`; see "Retry target" below.
+`app/views/pwa/offline.html.erb` uses the shared `pwa.offline` translation keys for its title, body
+copy, and retry control, with English and Japanese text in all four canonical locale bundles. The
+`lang` attribute follows `I18n.locale`. The framework controller does not resolve user locale
+preferences; the cached document uses the rendering locale at service worker installation time.
+Markup, CSS, and `prefers-color-scheme` handling are unchanged. The retry control drops the
+generator's `action="."`; see "Retry target" below.
 
 Both templates are shared by all ten surfaces. This is compatible with `project/surfaces.mdc` only
 because they reference no user, actor, tenant, session, or database state, and rendering them

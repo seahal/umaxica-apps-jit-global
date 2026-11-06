@@ -73,8 +73,11 @@ class RpRefreshCommitter
 
   # Returns the token response Hash, or an outcome Symbol when no tokens are available.
   def dispatch
+    # Locally the public OP origin is served by the tunnel, so the call goes to the local port.
+    local_token_url = OutboundHttp::LocalBackChannel.url(token_url.to_s)
     outcome = OidcOpTokenClient.refresh(
-      client_id: cell.client_id, token_url:, refresh_token:, deadline: @dispatch_deadline,
+      client_id: cell.client_id, token_url: local_token_url, refresh_token:, deadline: @dispatch_deadline,
+      require_https: OutboundHttp::LocalBackChannel.require_https?(local_token_url),
     )
     return outcome.token_response if outcome.success?
     # An indeterminate commit may have rotated the credential at the OP; resending it would present

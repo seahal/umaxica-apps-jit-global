@@ -8,12 +8,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TurnstileApi } from "@/lib/turnstile";
-import OrgEntraSettingsEdit from "@/pages/auth/org/settings/entras/edit";
-import OrgEntraSettingsShow from "@/pages/auth/org/settings/entras/show";
 import OrgEmergencyPasskeySignInPage from "@/pages/auth/org/sign/in/emergency/passkeys/new";
 import OrgPasskeySignInPage from "@/pages/auth/org/sign/in/passkeys/new";
 import OrgSignInEntry from "@/pages/auth/org/sign/ins/show";
-import OrgInvitationPage from "@/pages/auth/org/sign/up/invitations/new";
 import OrgSignUpEntry from "@/pages/auth/org/sign/ups/show";
 import OrgEntraSessionEntry from "@/pages/auth/org/social/sessions/new";
 import OrgVerificationPasskeyPage from "@/pages/auth/org/verification/passkeys/new";
@@ -200,76 +197,6 @@ describe("OrgEntraSessionEntry", () => {
   });
 });
 
-describe("OrgEntraSettingsEdit", () => {
-  const props = {
-    title: "Entra ID",
-    heading: "Entra ID 連携",
-    back_link: BACK,
-    connected: false,
-    connected_notice: null,
-    unavailable_notice: null,
-    form: { action: "/org/settings/entra", submit_label: "連携する" },
-  };
-
-  it("offers the connect form when the server allows connecting", () => {
-    const screen = mount(<OrgEntraSettingsEdit {...props} />);
-
-    expect(screen.container.querySelector("form")?.getAttribute("action")).toBe(
-      "/org/settings/entra",
-    );
-    expect(screen.text("button")).toBe("連携する");
-    expect(screen.container.textContent).not.toContain("Connected");
-  });
-
-  it("reports an existing connection with the server's own notice and no form", () => {
-    const screen = mount(
-      <OrgEntraSettingsEdit
-        {...props}
-        connected
-        connected_notice="2026年8月に連携しました"
-        form={null}
-      />,
-    );
-
-    expect(screen.container.textContent).toContain("Connected");
-    expect(screen.container.textContent).toContain("2026年8月に連携しました");
-    expect(screen.container.querySelector("form")).toBeNull();
-  });
-
-  it("reports a connection without a notice, and an unavailable provider", () => {
-    const screen = mount(
-      <OrgEntraSettingsEdit
-        {...props}
-        connected
-        form={null}
-        unavailable_notice="この環境では利用できません"
-      />,
-    );
-
-    expect(screen.container.textContent).toContain("Connected");
-    expect(screen.container.textContent).toContain("この環境では利用できません");
-  });
-});
-
-describe("OrgEntraSettingsShow", () => {
-  it("shows the connection state and the route to change it", () => {
-    const screen = mount(
-      <OrgEntraSettingsShow
-        title="Entra ID"
-        heading="Entra ID 連携"
-        back_link={BACK}
-        status="未連携"
-        edit_link={{ label: "連携を編集", href: "/org/settings/entra/edit" }}
-      />,
-    );
-
-    expect(screen.container.textContent).toContain("未連携");
-    expect(screen.container.querySelector('a[href="/org/settings/entra/edit"]')?.textContent).toBe(
-      "連携を編集",
-    );
-  });
-});
-
 describe("OrgVerificationEntry", () => {
   const props = {
     cancel: STEP_UP_CANCEL,
@@ -340,56 +267,6 @@ describe("OrgVerificationSetup", () => {
   });
 });
 
-const turnstile = {
-  site_key: "site-key",
-  mode: "render" as const,
-  action: null,
-  cdata: null,
-};
-
-describe("OrgInvitationPage", () => {
-  it("posts the invitation code", () => {
-    const screen = mount(
-      <OrgInvitationPage
-        title="招待コード"
-        description="コードを入力してください"
-        form_error="無効なコードです"
-        form_action="/org/sign/up/invitation"
-        invitation_code_label="招待コード"
-        invitation_code=""
-        submit_label="送信する"
-        back_link={BACK}
-        turnstile={turnstile}
-      />,
-    );
-
-    expect(screen.container.querySelector("form")?.getAttribute("action")).toBe(
-      "/org/sign/up/invitation",
-    );
-    expect(screen.container.textContent).toContain("無効なコードです");
-  });
-
-  it("renders the invitation form with no inline error", () => {
-    const screen = mount(
-      <OrgInvitationPage
-        title="招待コード"
-        description="コードを入力してください"
-        form_error={null}
-        form_action="/org/sign/up/invitation"
-        invitation_code_label="招待コード"
-        invitation_code=""
-        submit_label="送信する"
-        back_link={BACK}
-        turnstile={turnstile}
-      />,
-    );
-
-    expect(screen.container.querySelector("form")?.getAttribute("action")).toBe(
-      "/org/sign/up/invitation",
-    );
-  });
-});
-
 describe("Org passkey ceremony pages", () => {
   const identifierField = {
     label: "ID",
@@ -438,11 +315,17 @@ describe("Org passkey ceremony pages", () => {
         restricted_mode_notice="制限モードのセッションになります"
         panel={{ ...panel, identifier_param: "identifier", field: identifierField }}
         back_link={BACK}
+        parent_cancel={{ label: "Cancel", action: "/sign/cancellation?ri=jp", method: "post" }}
       />,
     );
 
     expect(screen.container.textContent).toContain("制限モードのセッションになります");
     expect(screen.container.textContent).toContain("パスキーでログイン");
+    expect(screen.container.querySelector("header a")?.getAttribute("href")).toBe(BACK.href);
+    const cancelForm = screen.container.querySelector('form[action="/sign/cancellation?ri=jp"]');
+    expect(cancelForm?.getAttribute("method")).toBe("post");
+    expect(cancelForm?.textContent).toContain("Cancel");
+    expect(cancelForm?.querySelector('input[name="authenticity_token"]')).not.toBeNull();
   });
 
   it("renders passkey registration", () => {

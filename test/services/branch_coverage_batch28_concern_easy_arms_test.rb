@@ -58,10 +58,13 @@ class BranchCoverageBatch28ConcernEasyArmsTest < ActiveSupport::TestCase
     assert_not helper.respond_to?(:reject_csrf!, true)
   end
 
-  test "PreferenceJwtConfiguration class methods refuse blank host" do
-    assert_raises(ArgumentError) { PreferenceJwtConfiguration.audience_for("") }
-    assert_raises(ArgumentError) { PreferenceJwtConfiguration.audience_for(nil) }
-    assert_raises(ArgumentError) { PreferenceJwtConfiguration.host_scope_for("") }
+  test "PreferenceJwtConfiguration refuses the retired generic issuer" do
+    assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+      PreferenceJwtConfiguration.issuer_for("")
+    end
+    assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+      PreferenceJwtConfiguration.active_kid("preference")
+    end
   end
 
   test "PublishingManagementCell class methods raise without constants on concrete controller" do

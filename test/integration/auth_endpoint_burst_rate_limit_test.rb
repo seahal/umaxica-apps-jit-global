@@ -923,15 +923,18 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
         admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        # An entry reference is accepted only on a top-level document navigation, and a live
+        # reference never renders: it answers 303 to the ceremony binding action and redeems only
+        # after Base confirmed the binding.
+        admission_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
         admission_browser.get(
           admission_path,
           params: { entry_ref: admission_issuance.reference, ri: "jp" },
+          headers: admission_navigation,
         )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_browser.get(admission_browser.response.location, headers: admission_navigation)
 
         assert_equal 303, admission_browser.response.status
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -944,14 +947,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         admission_browser.get(
           admission_path,
           params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+          headers: admission_navigation,
         )
 
         assert_equal 303, admission_browser.response.status
+        admission_browser.get(admission_browser.response.location, headers: admission_navigation)
+
+        assert_equal 200, admission_browser.response.status
       end
       quota = RateLimitProfiles.interactive_post_ip.to
 
@@ -987,15 +989,18 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
         admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        # An entry reference is accepted only on a top-level document navigation, and a live
+        # reference never renders: it answers 303 to the ceremony binding action and redeems only
+        # after Base confirmed the binding.
+        admission_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
         admission_browser.get(
           admission_path,
           params: { entry_ref: admission_issuance.reference, ri: "jp" },
+          headers: admission_navigation,
         )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          "/ceremony_bindings",
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
-        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_browser.get(admission_browser.response.location, headers: admission_navigation)
 
         assert_equal 303, admission_browser.response.status
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -1008,14 +1013,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         admission_browser.get(
           admission_path,
           params: { entry_ref: admission_issuance.reference, ri: "jp" },
-        )
-        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        admission_browser.post(
-          admission_path,
-          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+          headers: admission_navigation,
         )
 
         assert_equal 303, admission_browser.response.status
+        admission_browser.get(admission_browser.response.location, headers: admission_navigation)
+
+        assert_equal 200, admission_browser.response.status
       end
       quota = RateLimitProfiles.email_address_submit.to
       params = { param_key => { address: "signup_addr_#{surface}@example.com", confirm_policy: "1" } }

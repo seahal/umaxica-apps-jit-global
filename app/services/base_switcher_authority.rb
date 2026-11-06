@@ -18,18 +18,19 @@ class BaseSwitcherAuthority
   # for the principal (cross-user, inconsistent, or avatar mismatch on an avatar-required surface).
   InvalidSwitch = Class.new(StandardError)
 
-  def self.current(surface:, principal:, session:)
-    new(surface: surface, principal: principal, session: session).current
+  def self.current(surface:, principal:, session:, selection: nil)
+    new(surface: surface, principal: principal, session: session, selection:).current
   end
 
   def self.switch(surface:, principal:, session:, params:)
     new(surface: surface, principal: principal, session: session).switch(params)
   end
 
-  def initialize(surface:, principal:, session: nil)
+  def initialize(surface:, principal:, session: nil, selection: nil)
     @config = AcmeSelector.config_for(surface)
     @principal = principal
     @session = session
+    @selection = selection
   end
 
   # Current selection plus the candidates the actor may switch to.
@@ -107,16 +108,49 @@ class BaseSwitcherAuthority
 
   private
 
-  attr_reader :config, :principal, :session
+  attr_reader :config, :principal, :session, :selection
 
   def current_selection
+    return selection if selection
     return nil if session.blank?
+    return rp_app_session_selection if session.instance_of?(RpBaseAppSession)
+    return rp_org_session_selection if session.instance_of?(RpBaseOrgSession)
 
     {
       account_public_id: session.try(:selected_account_public_id),
       organization_public_id: session.try(:selected_collective_public_id),
       organization_unit_public_id: session.try(:selected_collective_unit_public_id),
       avatar_public_id: session.try(:selected_avatar_public_id),
+    }
+  end
+
+  def rp_app_session_selection
+    record =
+      RpBaseAppRecord.connected_to(role: :writing) do
+        RpBaseAppSessionSelection.find_by(rp_session_id: session.id)
+      end
+    return nil unless record
+
+    {
+      account_public_id: record.account_public_id,
+      organization_public_id: record.organization_public_id,
+      organization_unit_public_id: record.organization_unit_public_id,
+      avatar_public_id: record.avatar_public_id,
+    }
+  end
+
+  def rp_org_session_selection
+    record =
+      RpBaseOrgRecord.connected_to(role: :writing) do
+        RpBaseOrgSessionSelection.find_by(rp_session_id: session.id)
+      end
+    return nil unless record
+
+    {
+      account_public_id: record.account_public_id,
+      organization_public_id: record.organization_public_id,
+      organization_unit_public_id: record.organization_unit_public_id,
+      avatar_public_id: nil,
     }
   end
 end

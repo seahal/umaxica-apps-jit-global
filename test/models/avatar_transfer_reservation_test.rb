@@ -10,6 +10,11 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   teardown do
+    # The race test commits a bare enterprise and everything the transfer records about it is a
+    # public id in another database, so this row is the only thing left to remove; a leftover
+    # enterprise is what the next fixture load re-enables its foreign keys against.
+    Enterprise.where(id: @organization.id).delete_all if @organization
+
     next unless @committed_registry_idempotency_key
 
     AvatarRecord.transaction(requires_new: true) do
@@ -471,7 +476,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   end
 
   test "concurrent same-key requests return one committed reservation" do
-    organization = Enterprise.create!(name: "Registry race owner", title: "Registry")
+    @organization = Enterprise.create!(name: "Registry race owner", title: "Registry")
     avatar = nil
     source_period = nil
     AvatarRecord.transaction do
@@ -486,7 +491,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
       )
       source_period = AvatarEnterpriseOwnershipPeriod.create!(
         avatar: avatar,
-        enterprise_public_id: organization.public_id,
+        enterprise_public_id: @organization.public_id,
         valid_from: avatar.created_at,
       )
     end
@@ -497,7 +502,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
       operation_kind: "enterprise_to_bureau",
       idempotency_key: key,
       request_fingerprint: Digest::SHA256.hexdigest("concurrent-request"),
-      source_collective_public_id: organization.public_id,
+      source_collective_public_id: @organization.public_id,
       destination_collective_public_id: "bureau_destination_concurrent",
       request_actor_public_id: "persona_actor_concurrent",
       source_ownership_period_id: source_period.id,

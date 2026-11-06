@@ -53,7 +53,8 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
         assert OidcClientRegistry.valid_post_logout_redirect_uri?(
           client_id: client_id, uri: uri, resource_type: client.resource_type,
         ), "#{client_id} rejects its registered logout URI"
-        other_realm = client.resource_type == "client" ? "operator" : "client"
+        other_realm = (client.resource_type == "client") ? "operator" : "client"
+
         assert_not OidcClientRegistry.valid_post_logout_redirect_uri?(
           client_id: client_id, uri: uri, resource_type: other_realm,
         ), "#{client_id} accepts its logout URI for another realm"

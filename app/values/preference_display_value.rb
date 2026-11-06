@@ -7,7 +7,7 @@ class PreferenceDisplayValue
   public
 
   def initialize(preferences)
-    unless SecurityJwtPreferenceTokenCodec.valid_anonymous_display_snapshot?(preferences)
+    unless SecurityJwtPreferenceTokenCodec.valid_display_snapshot?(preferences)
       raise ArgumentError, "invalid anonymous preference snapshot"
     end
 

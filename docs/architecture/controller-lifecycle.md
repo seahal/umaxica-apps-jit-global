@@ -43,10 +43,10 @@ authentication-aware request lifecycle.
 Base additionally separates its protocol Authority from its self-RP application lifecycle.
 `Base::{App,Com,Org}::AuthorityController` explicitly inherits `::ApplicationController`, not the
 same-namespace self-RP controller. It declares its own root-session lifecycle and standard CSRF
-protection. The leading `::` is security-relevant: an unqualified parent resolves to the local
-RP base and inherits RP authentication and refresh callbacks alongside root authentication.
-The self-RP `Base::{App,Com,Org}::ApplicationController` retains Browser RP concerns and no root
-authentication concern. See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+protection. The leading `::` is security-relevant: an unqualified parent resolves to the local RP
+base and inherits RP authentication and refresh callbacks alongside root authentication. The self-RP
+`Base::{App,Com,Org}::ApplicationController` retains Browser RP concerns and no root authentication
+concern. See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
 
 Authentication modes that are more specific than this base split, including bare endpoints,
 guest-only flows, optional access, and step-up requirements, must be declared and audited explicitly
@@ -93,15 +93,19 @@ order:
 3. `set_current_actor`
 4. `touch_session_activity!` inside current-resource resolution
 
-`set_preferences_cookie` reads the current preference credential and record on `GET`/`HEAD`. Those
-requests do not bootstrap preference rows, rotate or issue preference tokens, refresh token
-lifetime, clear cookies, or copy resource values into persistent preference state. Preference
-bootstrap, token rotation, and preference writes happen at their explicit non-GET boundaries.
+`set_preferences_cookie` verifies the current Preference JWT on `GET`/`HEAD`. Base app/org may make
+read-only queries to rebuild a missing or mismatched `language` or `__Secure-experience` display
+cookie from the verified snapshot, active anonymous row and explicit actor values. Base com may read
+its active row for region and browser-bound consent or Web Push. Base may delete unusable shared
+Preference cookies; these response-cookie changes do not alter persisted state. Other read-only
+surfaces verify the JWT without querying the Preference database or changing Preference cookies. No
+GET/HEAD path creates, updates, or retires Preference rows, reissues the JWT, or extends its expiry.
+Preference row lifecycle changes happen at their explicit non-GET writer boundaries.
 
 `transparent_refresh_access_token` remains in the authenticated controller lifecycle, but browser
 navigation does not use it: `transparent_refresh_allowed?` is false for `GET`/`HEAD`. Authentication
-refresh remains on its explicit POST protocol endpoint and does not update session/token state during
-ordinary navigation.
+refresh remains on its explicit POST protocol endpoint and does not update session/token state
+during ordinary navigation.
 
 `set_current_actor` should install the immutable request Actor snapshot. It must not create
 preference rows, rotate tokens, or repair malformed preference JWTs.
@@ -110,16 +114,15 @@ preference rows, rotate tokens, or repair malformed preference JWTs.
 `touch_session_activity!` does not update the token/session row during ordinary navigation. A
 surface action that intentionally opts into activity tracking must declare and test that boundary.
 
-The current read-side protocol callback writes are listed in
-[`docs/security/db-write-allowlist.md`](../security/db-write-allowlist.md). Ordinary page
-navigation and preference reads are not lifecycle write exceptions. A new read-side write requires
-an explicit reviewed contract and test before the allowlist changes.
+The current read-side database writes are listed in
+[`docs/security/db-write-allowlist.md`](../security/db-write-allowlist.md). Ordinary page navigation
+and Preference reads are not database-write exceptions. A new read-side database write requires an
+explicit reviewed contract and test before the allowlist changes.
 
-The request-local `lx`, `ct`, and `tz` overlay changes only the current request's
-`Actor.preferences`. It must not write the database, reissue JWTs, or update the persistent
-preference snapshot. Locale, timezone, theme, observability, and similar request effects should be
-applied after the Actor snapshot and request overlay are resolved. Runtime reads should use
-`Actor.preferences`.
+Supported request-local context overlays change only the current request's `Actor.preferences`. They
+must not write the database, reissue JWTs, or update the persistent Preference snapshot. Locale,
+timezone, theme, observability, and similar request effects should be applied after the Actor
+snapshot and request overlay are resolved. Runtime reads should use `Actor.preferences`.
 
 Do not add a database refresh of actor-local preference values to an HTML edit-page GET. If a future
 flow needs cross-device reconciliation, give it an explicit write boundary and document its
@@ -167,10 +170,10 @@ login-independent surface preference state. "Actor-local preference" means `Clie
 preference. This is not Rails `session`, and it is not the `Actor` CurrentAttributes object.
 
 `/preference`, `/setting`, and `/configurator` have distinct responsibilities. Current surface-local
-`/settings` routes are documented in [`preference.md`](preference.md#url-role-boundary): Auth APP
-and ORG own identity self-service on their Auth hosts, while Base ORG owns its separate management
-entry on the Base ORG host. Shared path text does not share a controller or lifecycle.
-`/configurator` remains the generic path for new operator-managed configuration.
+`/settings` routes are documented in [`preference.md`](preference.md#url-role-boundary): Auth APP is
+still completing the O-11 identity migration; Auth ORG has no `/settings` route, and Base ORG owns
+its separate management entry on the Base ORG host. Shared path text does not share a controller or
+lifecycle. `/configurator` remains the generic path for new operator-managed configuration.
 
 ## Cookie Key Compatibility
 

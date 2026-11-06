@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class TelephoneCredentialRegistrationOtpFinalizer
+  class DependencyFailure < StandardError; end
+
   class << self
     public
 
@@ -11,9 +13,11 @@ class TelephoneCredentialRegistrationOtpFinalizer
 
   public
 
-  def initialize(actor:, actor_context:, token:, telephone:, transaction:, browser_nonce:, requirement:, code:)
+  def initialize(actor:, actor_context:, token:, telephone:, transaction:, browser_nonce:, requirement:, code:,
+                 step_up_evidence: nil)
     @actor, @actor_context, @token, @telephone = actor, actor_context, token, telephone
     @transaction, @browser_nonce, @requirement, @code = transaction, browser_nonce, requirement, code
+    @step_up_evidence = step_up_evidence
     @surface, @policy_model, @audit_model =
       case [actor, token, telephone, transaction]
       in [Client, ClientToken, ClientTelephone, ClientTelephoneCeremonyTransaction]
@@ -26,49 +30,89 @@ class TelephoneCredentialRegistrationOtpFinalizer
     return :unavailable unless browser_nonce.is_a?(String) && browser_nonce.encoding.ascii_compatible? &&
       browser_nonce.valid_encoding? && browser_nonce.match?(/\A[A-Za-z0-9_-]{43}\z/)
 
-    transaction.class.connection_owner.connected_to(role: :writing) do
-      transaction.class.transaction do
-        committed = with_original_locks { finalize_source! }
-        next :unavailable unless committed
+    finalize =
+      lambda do
+        actor.class.connection_class_for_self.connected_to(role: :writing) do
+          actor.with_lock do
+            next :unavailable unless actor.active?
 
-        transaction.consume_registration_result! unless transaction.consumed?
-        :finalized
+            telephone.with_lock do
+              case consume_ticket_result!
+              when :committed
+                :finalized
+              when :consumed
+                unless finalize_source!
+                  raise IdentityTelephoneCeremony::Error,
+                        "Telephone Source finalization refused after Ticket consumption"
+                end
+
+                :finalized
+              else
+                :unavailable
+              end
+            end
+          end
+        end
       end
+
+    if actor.is_a?(Client) && telephone.user_id == actor.id
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: telephone, owner: actor, &finalize)
+    else
+      finalize.call
     end
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+    raise DependencyFailure, "Telephone registration storage is unavailable: #{e.class}"
   end
 
   private
 
   attr_reader :actor, :actor_context, :token, :telephone, :transaction, :browser_nonce, :requirement, :code,
-              :surface, :policy_model, :audit_model
+              :surface, :policy_model, :audit_model, :step_up_evidence
 
-  def with_original_locks
-    actor.class.connection_class_for_self.connected_to(role: :writing) do
-      actor.with_lock do
+  def consume_ticket_result!
+    transaction.class.connection_owner.connected_to(role: :writing) do
+      transaction.class.transaction do
         token_device_session.with_lock do
           token.with_lock do
-            telephone.with_lock do
-              transaction.lock!
-              yield
-            end
+            transaction.with_lock { consume_ticket_result_locked! }
           end
         end
       end
     end
   end
 
+  def consume_ticket_result_locked!
+    now = transaction.class.database_now
+    return :unavailable unless original_authority?(now) && current_policy_matches?
+
+    if transaction.consumed?
+      return :committed if telephone.binding_effective? && committed_provenance?
+
+      return :unavailable
+    end
+    return :unavailable if telephone.binding_effective? || telephone.binding_finalized_at || telephone.binding_released?
+
+    consumption_now = transaction.class.database_now
+    return :unavailable unless original_authority?(consumption_now) && current_policy_matches? &&
+      StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: actor, token: token)
+
+    transaction.consume_registration_result!
+    unless root_current?(transaction.consumed_at)
+      raise IdentityTelephoneCeremony::Error.new(
+        "Telephone registration Root expired before Ticket consumption committed", code: "transaction_unavailable",
+      )
+    end
+    :consumed
+  end
+
   def finalize_source!
     now = transaction.class.database_now
     return false unless original_authority?(now) && current_policy_matches?
     return committed_provenance? if telephone.binding_effective?
-    return false if transaction.consumed? || telephone.binding_finalized_at || telephone.binding_released?
+    return false if telephone.binding_finalized_at || telephone.binding_released?
 
     previous = previous_bindings.lock.to_a
-    return false unless current_credential?
-
-    now = transaction.class.database_now
-    return false unless original_authority?(now) && current_policy_matches? &&
-      StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
+    return false unless transaction.consumed?
 
     previous.each do |binding|
       binding.release_binding!
@@ -76,15 +120,14 @@ class TelephoneCredentialRegistrationOtpFinalizer
     end
     telephone.finalize_registration_binding!(transaction: transaction, code: code, session_ref: session_ref)
     record_audit!(telephone, "finalized")
-    # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it.
-    token.consume_step_up_evidence!(requirement: requirement)
+    # The Step-Up was consumed in Ticket before Source finalization.
     true
   end
 
   def original_authority?(now)
     source_now = telephone.class.database_now
     return false unless actor.login_allowed? && actor.accessible?(source_now) && telephone.accessible?(source_now) &&
-      source_owned? && actor_context_matches? && root_current?(now)
+      source_owned? && actor_context_matches? && ticket_root_authority_current?(now)
     return false unless transaction.surface == surface &&
       transaction.normalized_number_digest == telephone.number_digest && transaction.session_ref == session_ref
 
@@ -112,6 +155,12 @@ class TelephoneCredentialRegistrationOtpFinalizer
       token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
+  def ticket_root_authority_current?(now)
+    return root_current?(now) unless transaction.consumed?
+
+    transaction.consumed_at <= now
+  end
+
   def token_device_session
     @token_device_session ||= token.device_session_record!
   end
@@ -128,29 +177,6 @@ class TelephoneCredentialRegistrationOtpFinalizer
         telephone,
         user: actor,
       ).credential_registration_requirement(token: token).to_h
-  end
-
-  def current_credential?
-    credentials =
-      case [actor, token.last_step_up_method]
-      in [Client, "passkey"] then ClientPasskey.where(user_id: actor.id).active
-      in [Client, "email_otp"]
-        ClientEmail.where(user_id: actor.id).effective_binding.where(
-          user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES,
-        )
-      in [Client, "totp"]
-        ClientTotpCredential.where(
-          user_id: actor.id, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-        )
-      else return false
-      end
-    credential = credentials.lock.find_by(public_id: token.last_step_up_credential_ref)
-    return false unless credential
-
-    case credential
-    when ClientTotpCredential then credential.usable?
-    else credential.accessible?(credential.class.database_now)
-    end
   end
 
   def previous_bindings

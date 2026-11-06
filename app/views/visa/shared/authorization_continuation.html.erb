@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="<%= I18n.locale %>">
+  <head>
+    <meta charset="utf-8">
+    <meta name="referrer" content="strict-origin">
+    <title><%= t("actions.continue") %></title>
+  </head>
+  <body>
+    <main>
+      <%= form_with url: action_url, method: :post, id: "visa-authorization-continuation-form" do |form| %>
+        <%= form.hidden_field :ceremony_action, value: "continue" %>
+        <%= form.hidden_field :continuation, value: continuation %>
+        <noscript><button type="submit"><%= t("actions.continue") %></button></noscript>
+      <% end %>
+    </main>
+    <%= javascript_tag nonce: true do %>
+      document.getElementById("visa-authorization-continuation-form").requestSubmit();
+    <% end %>
+  </body>
+</html>

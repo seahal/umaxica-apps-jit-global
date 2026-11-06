@@ -6,39 +6,52 @@ class TelephoneSignUpOtpVerificationCommitter
 
     def call(flow:, telephone:, session_nonce:, code:)
       owner, transaction_model, pending_status, surface = components(flow, telephone)
-      source_failure_state = nil
-      verification =
-        owner.with_lock do
-          telephone.with_lock do
-            flow.with_lock do
-              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
-                  flow.nonce_matches?(session_nonce)
-                next result(:session_mismatch, telephone)
-              end
-              unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
-                  code.match?(/\A[0-9]{6}\z/)
-                next result(:invalid_code, telephone)
-              end
+      verify =
+        lambda do
+          source_failure_state = nil
+          verification =
+            owner.with_lock do
+              telephone.with_lock do
+                flow.with_lock do
+                  unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+                      session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
+                      flow.nonce_matches?(session_nonce)
+                    next result(:session_mismatch, telephone)
+                  end
+                  unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
+                      code.match?(/\A[0-9]{6}\z/)
+                    next result(:invalid_code, telephone)
+                  end
 
-              now = flow.class.database_now
-              if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
-                next result(:inactive_flow, telephone)
-              end
-              unless eligible_source?(flow, telephone, owner, pending_status)
-                next result(:inactive_candidate, telephone)
-              end
+                  now = flow.class.database_now
+                  if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
+                    next result(:inactive_flow, telephone)
+                  end
+                  unless eligible_source?(flow, telephone, owner, pending_status)
+                    next result(:inactive_candidate, telephone)
+                  end
 
-              source_failure_state = telephone.attributes.slice("otp_attempts_count", "locked_at", "updated_at")
-              verify_locked(flow, telephone, owner, transaction_model, surface, pending_status, code)
+                  source_failure_state = telephone.attributes.slice(
+                    "otp_attempts_count", "locked_at",
+                    "updated_at",
+                  )
+                  verify_locked(flow, telephone, owner, transaction_model, surface, pending_status, code)
+                end
+              end
             end
-          end
-        end
-      unless verification.success?
-        return verification
-      end
+          next verification unless verification.success?
 
-      reset_fresh_attempts(flow, telephone, owner, transaction_model, pending_status, code, source_failure_state)
+          reset_fresh_attempts(
+            flow, telephone, owner, transaction_model, pending_status, code,
+            source_failure_state,
+          )
+        end
+
+      if telephone.is_a?(ClientTelephone) && telephone.user_id == owner.id
+        AppRegisteredContactDestinationGuard.with_available_destination(contact: telephone, owner: owner, &verify)
+      else
+        verify.call
+      end
     end
 
     private

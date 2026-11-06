@@ -18,6 +18,8 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
       case [actor, token, telephone, transaction]
       in [Client, ClientToken, ClientTelephone, ClientTelephoneCeremonyTransaction]
         ["app", ClientTelephoneStatus::UNVERIFIED]
+      in [Client, ClientToken, ClientTelephone, nil]
+        ["app", ClientTelephoneStatus::UNVERIFIED]
       in [Operator, OperatorToken, OperatorTelephone, OperatorTelephoneCeremonyTransaction]
         ["org", OperatorTelephoneStatus::UNVERIFIED]
       else raise ArgumentError, "unsupported Telephone registration verification realm"
@@ -28,30 +30,52 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
     return result(:invalid_code) unless ascii_match?(code, /\A[0-9]{6}\z/)
     return result(:session_mismatch) unless ascii_match?(browser_nonce, /\A[A-Za-z0-9_-]{43}\z/)
 
+    if transaction.nil?
+      if actor.is_a?(Client) && telephone.user_id == actor.id
+        return AppRegisteredContactDestinationGuard.with_available_destination(contact: telephone, owner: actor) do
+          result(:unavailable)
+        end
+      end
+
+      return result(:unavailable)
+    end
+
     @session_ref = CredentialRegistrationOtpSessionValue.for(
       surface: surface, channel: :telephone, transaction_ref: transaction.transaction_id,
       root_ref: token.public_id, browser_nonce: browser_nonce,
     ).dump
-    snapshot = nil
-    verification =
-      with_locks do
-        next result(:session_mismatch) unless transaction.session_ref == session_ref
-        next result(:unavailable) unless current_authority?
-        next result(:locked) if telephone.locked?(now: telephone.class.database_now)
+    verify =
+      lambda do
+        snapshot = nil
+        verification =
+          with_locks do
+            next result(:session_mismatch) unless transaction.session_ref == session_ref
+            next result(:unavailable) unless current_authority?
+            next result(:locked) if telephone.locked?(now: telephone.class.database_now)
 
-        outcome = transaction.otp_consumed_at ? verify_receipt : verify_challenge
-        snapshot = telephone.attributes.slice("otp_attempts_count", "locked_at", "updated_at") if outcome.success?
-        outcome
+            outcome = transaction.otp_consumed_at ? verify_receipt : verify_challenge
+            snapshot = telephone.attributes.slice(
+              "otp_attempts_count", "locked_at",
+              "updated_at",
+            ) if outcome.success?
+            outcome
+          end
+        return verification unless verification.success?
+
+        with_locks do
+          next result(:unavailable) unless current_authority? && verified_receipt?
+
+          if telephone.attributes.slice(*snapshot.keys) == snapshot
+            telephone.update!(otp_attempts_count: 0, locked_at: TelephoneOtpPolicy::OTP_UNLOCKED_SENTINEL)
+          end
+          result(:verified)
+        end
       end
-    return verification unless verification.success?
 
-    with_locks do
-      next result(:unavailable) unless current_authority? && verified_receipt?
-
-      if telephone.attributes.slice(*snapshot.keys) == snapshot
-        telephone.update!(otp_attempts_count: 0, locked_at: TelephoneOtpPolicy::OTP_UNLOCKED_SENTINEL)
-      end
-      result(:verified)
+    if actor.is_a?(Client) && telephone.user_id == actor.id
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: telephone, owner: actor, &verify)
+    else
+      verify.call
     end
   end
 

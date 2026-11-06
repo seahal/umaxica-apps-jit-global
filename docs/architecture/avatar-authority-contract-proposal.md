@@ -13,10 +13,15 @@ grant as `current_session` (selected collective) and `Actor.selection` (selected
 ## After (proposed)
 
 Server-to-server, same pattern as Publishing (R5-WU13): the Base RP sends its private_key_jwt bound
-to the exact URL and the actor's Access JWT. The Avatar owner re-resolves the real actor from the
-token, the selected collective from the token's `sid` grant, and the persona from the request, then
-applies the existing `AvatarPolicy` / `AvatarPermissionResolver` / ownership-period checks and the
-existing Operations. Answers are allowlisted JSON.
+to the exact URL and the actor's Access JWT. For APP, Base reads the complete selected context from
+its RP session and sends the Persona, organization, unit and Avatar public IDs. The Avatar owner
+re-resolves the real actor from the Access Token and matches that complete tuple against candidates
+the actor may select; it never reads APP selection from the OP root or trusts the supplied IDs by
+themselves. The RP session remains the sole APP selection writer. ORG continues to use its existing
+OP-root selected context. Both surfaces then apply the existing `AvatarPolicy` /
+`AvatarPermissionResolver` / ownership-period checks and Operations. Answers are allowlisted JSON.
+The former APP `GET /api/v0/identity/selection` root-token reader returns `409` and exposes no
+competing selection.
 
 Base path: `/api/v0/avatar/:surface` (`surface` = `app` | `org`), on the realm Base host.
 
@@ -39,8 +44,8 @@ active Avatar per persona (409/422 under `avatar`); owner-surface checks; collec
 `AvatarOwnerMembershipLockService`; no new permission (D-10 deferred work stays unimplemented).
 Writes are not blindly retried; an indeterminate write is re-read.
 
-## Open questions for approval
+## Questions resolved on 2026-11-05
 
-1. Is carrying the selected persona as a request field (validated by the owner against the token
-   actor) acceptable, or must persona selection move into the RP local session?
-2. Is serving image bytes through the Avatar API acceptable for dashboard images?
+1. APP selection is owned by the Base RP session. The owner receives the full selected tuple and
+   validates it against the authenticated actor's candidates before applying Avatar policies.
+2. Serving private image bytes through the Avatar API remains accepted as specified above.

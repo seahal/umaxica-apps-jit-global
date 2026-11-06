@@ -1,29 +1,18 @@
 # typed: false
 # frozen_string_literal: true
 
-require "base64"
-require "json"
 require "jwt"
-require "openssl"
 require "jit_security_jwt_registry"
 
-# Resolves keysets, issuer, leeway and audience scoping for preference JWTs.
-# Audience hosts are derived from the configured boot hosts instead of a
-# standalone PREFERENCE_JWT_AUDIENCES env var.
+# Resolves the fixed preference realm issuer, key and clock-skew configuration.
 module PreferenceJwtConfiguration
-  class MissingAudienceError < StandardError; end
-
-  def self.active_kid(issuer_id = "preference")
+  def self.active_kid(issuer_id)
     JitSecurityJwtRegistry.issuer(issuer_id).current_kid ||
       raise(JitSecurityJwtRegistry::ConfigurationError, "#{issuer_id} active kid is not configured")
   end
 
   def self.leeway_seconds
     SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS
-  end
-
-  def self.issuer
-    ENV.fetch("PREFERENCE_JWT_ISSUER")
   end
 
   def self.com_issuer
@@ -37,129 +26,46 @@ module PreferenceJwtConfiguration
   end
 
   def self.issuer_for(issuer_id)
-    case issuer_id
-    when "preference_com"
-      com_issuer
-    when "preference_app", "preference_org"
-      JitSecurityJwtRegistry.issuer(issuer_id).issuer
-    else
-      raise JitSecurityJwtRegistry::ConfigurationError, "unsupported preference issuer: #{issuer_id.inspect}"
-    end
-  end
+    return com_issuer if issuer_id == "preference_com"
 
-  def self.client_id
-    ENV.fetch("PREFERENCE_JWT_CLIENT_ID")
-  end
-
-  # Audiences are the base surface hosts from boot config. Local environments
-  # additionally accept the `*.localhost` development hosts; no environment
-  # falls back to a default list when the boot hosts are missing.
-  def self.audiences
-    configured = audiences_from_boot_config
-    if configured.empty?
-      raise MissingAudienceError,
-            "preference JWT audiences are not configured: boot hosts " \
-            "base_service, base_corporate and base_staff are blank"
+    expected_audience =
+      case issuer_id
+      when "preference_app" then "app"
+      when "preference_org" then "org"
+      else raise JitSecurityJwtRegistry::ConfigurationError, "unsupported preference issuer: #{issuer_id.inspect}"
+      end
+    record = JitSecurityJwtRegistry.issuer(issuer_id)
+    unless record.issuer.present? && record.audiences == [expected_audience] && record.current_kid.present?
+      raise JitSecurityJwtRegistry::ConfigurationError,
+            "#{issuer_id} preference JWT issuer, audience or active key is missing"
     end
 
-    configured = with_local_development_audiences(configured) if Rails.env.local?
-    SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!(configured, label: "preference JWT audiences")
-    configured
+    record.issuer
   end
 
-  # Boot-time check so a production process with an incomplete or
-  # non-production preference token configuration refuses to start.
   def self.validate!
-    SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!([issuer], label: "PREFERENCE_JWT_ISSUER")
-    audiences
-    client_id
+    issuer_for("preference_app")
+    issuer_for("preference_org")
     com_issuer
     true
   end
 
-  # Returns the audiences that may legitimately accept a token issued for
-  # the given host. Selects entries sharing the host's TLD so a .app token
-  # cannot validate against the .com surface. In non-production the
-  # configured "localhost"/"*.localhost" entry is always retained so local
-  # development can move across surfaces.
-  def self.audience_for(host)
-    raise ArgumentError, "host is required" if host.blank?
-
-    all = audiences
-    host_tld = host.split(".").last
-    matched = all.select { |aud| aud.split(".").last == host_tld }
-
-    unless Rails.env.production?
-      localhost_aud = all.find { |aud| aud == "localhost" || aud.end_with?(".localhost") }
-      matched << localhost_aud if localhost_aud && matched.exclude?(localhost_aud)
-    end
-
-    raise MissingAudienceError, "No audience configured for host #{host.inspect}" if matched.empty?
-
-    matched
-  end
-
-  def self.host_scope_for(host)
-    raise ArgumentError, "host is required" if host.blank?
-
-    exact_or_nested =
-      audience_for(host).sort_by { |aud| -aud.to_s.length }.find do |aud|
-        host == aud || host.end_with?(".#{aud}")
-      end
-    return exact_or_nested if exact_or_nested.present?
-
-    same_tld =
-      audiences.sort_by { |aud| -aud.to_s.length }.find do |aud|
-        aud.split(".").last == host.split(".").last
-      end
-
-    same_tld || (Rails.env.local? ? "localhost" : host)
-  end
-
-  def self.private_key_for_active(issuer_id = "preference")
+  def self.private_key_for_active(issuer_id)
     private_key_for(active_kid(issuer_id), issuer_id: issuer_id)
   end
 
-  def self.private_key_for(kid, issuer_id: "preference")
+  def self.private_key_for(kid, issuer_id:)
     JitSecurityJwtRegistry.private_key_for(issuer_id, kid)
   end
 
-  def self.public_key_for(kid, issuer_id: "preference")
+  def self.public_key_for(kid, issuer_id:)
     JitSecurityJwtRegistry.public_key_for(issuer_id, kid)
-  end
-
-  def self.private_key
-    private_key_for(active_kid)
-  end
-
-  def self.public_key
-    public_key_for(active_kid)
   end
 
   def self.parse_header(token)
     JitSecurityJwtRegistry.parse_header(token)
   end
 
-  public_class_method :active_kid, :leeway_seconds, :issuer, :com_issuer, :issuer_for, :client_id,
-                      :audiences, :validate!, :audience_for, :host_scope_for, :private_key_for_active,
-                      :private_key_for, :public_key_for, :private_key, :public_key, :parse_header
-
-  def self.audiences_from_boot_config
-    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-
-    values =
-      %i(base_service base_corporate base_staff).filter_map do |key|
-        host = hosts.public_send(key)&.host
-        host.presence
-      end
-    values.freeze
-  end
-  private_class_method :audiences_from_boot_config
-
-  def self.with_local_development_audiences(values)
-    audiences = values.dup
-    audiences.concat(%w(app.localhost org.localhost com.localhost localhost))
-    audiences.uniq.freeze
-  end
-  private_class_method :with_local_development_audiences
+  public_class_method :active_kid, :leeway_seconds, :com_issuer, :issuer_for, :validate!,
+                      :private_key_for_active, :private_key_for, :public_key_for, :parse_header
 end

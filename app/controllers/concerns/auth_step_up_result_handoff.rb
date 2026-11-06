@@ -27,9 +27,7 @@ module AuthStepUpResultHandoff
                         state_before: @step_up_ceremony_transaction.status,
     )
     redirect_to(
-      ceremony_result_completion_url(
-        result_ref: issuance.reference, transaction_ref: issuance.transaction.transaction_id, ri: params[:ri],
-      ), allow_other_host: true, status: :see_other,
+      result_completion_url(issuance), allow_other_host: true, status: :see_other,
     )
   rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error => e
     log_step_up_refusal(e, transaction: @step_up_ceremony_transaction, stage: "auth_result_handoff")
@@ -41,4 +39,20 @@ module AuthStepUpResultHandoff
   private
 
   def load_result_ceremony_context! = load_step_up_ceremony_context!
+
+  def result_completion_url(issuance)
+    transaction = issuance.transaction
+    return ceremony_result_completion_url(
+      result_ref: issuance.reference, transaction_ref: transaction.transaction_id, ri: params[:ri],
+    ) unless transaction.required_scope == OidcAuthorizeRequestResolver::STEP_UP_SCOPE
+
+    resource_type = { "app" => "client", "org" => "operator" }.fetch(transaction.surface)
+    query = {
+      step_up_result_ref: issuance.reference,
+      step_up_ticket_ref: transaction.transaction_id,
+      step_up_context_ref: transaction.resource_ref,
+      ri: params[:ri],
+    }.compact.to_query
+    "#{OidcIssuer.authorization_endpoint(resource_type)}?#{query}"
+  end
 end

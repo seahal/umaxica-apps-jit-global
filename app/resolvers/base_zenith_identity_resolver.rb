@@ -6,6 +6,10 @@
 class BaseZenithIdentityResolver
   class DependencyUnavailable < StandardError; end
 
+  class WithdrawalRequired < ActiveRecord::RecordNotFound; end
+
+  class LoginBlocked < StandardError; end
+
   SURFACES = {
     app: {
       cell: RpCellBinding.fetch("rp_base_app"),
@@ -111,8 +115,14 @@ class BaseZenithIdentityResolver
     actor_class.connection_class_for_self.connected_to(role: :writing) do
       actor_class.uncached do
         actor = actor_class.find_by(public_id:)
-        refuse_identity! unless actor&.login_allowed? && !actor.deactivated?
+        refuse_identity! unless actor
         refuse_identity! unless secure_string_equal?(OidcSubject.for(actor, resource_type:), subject)
+        if actor.deactivated?
+          raise WithdrawalRequired, "Base APP identity requires withdrawal" if surface == :app
+
+          refuse_identity!
+        end
+        raise LoginBlocked, "Base identity is not eligible to log in" unless actor.login_allowed?
 
         actor
       end

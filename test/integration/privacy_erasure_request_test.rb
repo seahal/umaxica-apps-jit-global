@@ -20,9 +20,10 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
     cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
     valid_preference = PreferenceToken.encode(
-      { "theme" => "system", "language" => "ja", "timezone" => "Asia/Tokyo" },
+      SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first),
       host: host, preference_type: "AppPreference", public_id: PublicId.generate,
       jti: JitSecurityJwtJtiGenerator.generate,
+      issued_at: Time.current,
     )
 
     assert_predicate PreferenceToken.decode(valid_preference, host: host), :present?

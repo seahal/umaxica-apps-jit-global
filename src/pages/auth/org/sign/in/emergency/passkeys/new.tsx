@@ -8,6 +8,9 @@
 // The notice is not a warning decoration: it is the one place before the ceremony where the
 // operator learns that the session they are about to create cannot perform step-up verification.
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import PasskeyAuthenticationPanel, {
   type PasskeyAuthenticationPanelProps,
 } from "@/features/auth/passkeys/PasskeyAuthenticationPanel";
@@ -18,6 +21,7 @@ export type OrgEmergencyPasskeySignInPageProps = {
   restricted_mode_notice: string;
   panel: PasskeyAuthenticationPanelProps;
   back_link: { label: string; href: string };
+  parent_cancel: CeremonyCancellationProps | null;
 };
 
 export default function OrgEmergencyPasskeySignInPage({
@@ -26,6 +30,7 @@ export default function OrgEmergencyPasskeySignInPage({
   restricted_mode_notice: restrictedModeNotice,
   panel,
   back_link: backLink,
+  parent_cancel: parentCancel,
 }: OrgEmergencyPasskeySignInPageProps) {
   return (
     <Page
@@ -39,6 +44,7 @@ export default function OrgEmergencyPasskeySignInPage({
       </p>
 
       <PasskeyAuthenticationPanel {...panel} />
+      {parentCancel ? <CeremonyCancellation {...parentCancel} /> : null}
     </Page>
   );
 }

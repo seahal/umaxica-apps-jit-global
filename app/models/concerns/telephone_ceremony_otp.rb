@@ -27,6 +27,18 @@ module TelephoneCeremonyOtp
       otp_expires_at && otp_expires_at > at
   end
 
+  def telephone_otp_delivery_current?(generation:, code:)
+    return false unless valid_telephone_otp_code?(code)
+
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        telephone_otp_deliverable?(generation: generation, at: now) &&
+          ActiveSupport::SecurityUtils.secure_compare(otp_verifier, telephone_otp_digest(code))
+      end
+    end
+  end
+
   def issue_telephone_otp!(purpose:)
     raise ArgumentError, "unsupported telephone OTP purpose" unless OTP_PURPOSES.include?(purpose)
 

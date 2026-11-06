@@ -23,6 +23,7 @@ module Base
             around_action :with_actor_lifecycle
             before_action :authenticate_avatar_caller!
             before_action :set_current_actor
+            before_action :verify_avatar_persona!
             rescue_from ActionPolicy::Unauthorized, with: :render_forbidden
             rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
             rescue_from ActionController::ParameterMissing, with: :render_bad_request
@@ -31,14 +32,13 @@ module Base
 
             def show
               authorize!(avatar_actor, to: :show?)
-              render json: BaseSwitcherAuthority.current(surface: :app, principal: avatar_actor, session: avatar_root)
+              render json: avatar_switcher.current
             end
 
             def update
               authorize!(avatar_actor, to: :update?)
               BaseSwitcherAuthority.switch(
-                surface: :app, principal: avatar_actor, session: avatar_root,
-                params: switcher_params,
+                surface: :app, principal: avatar_actor, session: avatar_root, params: switcher_params,
               )
               render json: { status: "switched" }
             rescue BaseSwitcherAuthority::InvalidSwitch => e

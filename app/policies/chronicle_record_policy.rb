@@ -27,6 +27,16 @@ class ChronicleRecordPolicy
     "auth.sign_in.failed" => "security",
     "auth.step_up.succeeded" => "compliance",
     "auth.step_up.failed" => "compliance",
+    "sensitive_admission.closed" => "compliance",
+    "step_up.requested" => "security",
+    "step_up.committed" => "compliance",
+    "step_up.installed" => "compliance",
+    "step_up.cancelled" => "compliance",
+    "step_up.expired" => "compliance",
+    "step_up.failed" => "compliance",
+    "step_up.refused" => "compliance",
+    "step_up.indeterminate" => "compliance",
+    "step_up.attempt_rejected" => "security",
     "auth.aal.changed" => "compliance",
     "auth.session.revoked" => "compliance",
     "iam.role.assigned" => "compliance",
@@ -87,6 +97,12 @@ class ChronicleRecordPolicy
 
     def retention_policy_code_for(action)
       action_value = action.to_s
+      if action_value.start_with?("step_up.")
+        return RETENTION_POLICY_BY_ACTION.fetch(action_value) do
+          raise ArgumentError, "step-up Chronicle action has no explicit retention mapping: #{action_value.inspect}"
+        end
+      end
+
       return "permanent" if PERMANENT_ACTION_PATTERNS.any? { |pattern| pattern.match?(action_value) }
       return "security" if SECURITY_ACTION_PATTERNS.any? { |pattern| pattern.match?(action_value) }
 

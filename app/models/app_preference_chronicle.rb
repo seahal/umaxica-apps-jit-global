@@ -40,6 +40,8 @@
 #
 
 class AppPreferenceChronicle < ChronicleRecord
+  PREFERENCE_AUDIT_LOCK_KEY = 88_038_921_016_974
+
   self.belongs_to_required_by_default = false
 
   include Retainable
@@ -60,6 +62,33 @@ class AppPreferenceChronicle < ChronicleRecord
   validates :event_id, length: { maximum: 255 }
   validates :level_id, length: { maximum: 255 }
   validates :subject_id, exclusion: { in: [nil] }
+  before_create :coordinate_preference_reference!
+  before_update :coordinate_preference_reference!, if: :preference_reference_changing?
+
+  class << self
+    public
+
+    def lock_preference_audit_writers!
+      connection_pool.with_connection do |connection|
+        unless connection.transaction_open?
+          raise ActiveRecord::TransactionIsolationError, "Chronicle transaction is required"
+        end
+
+        connection.execute("SELECT pg_advisory_xact_lock_shared(#{PREFERENCE_AUDIT_LOCK_KEY})")
+      end
+    end
+
+    def lock_preference_audit_for_purge!
+      connection_pool.with_connection do |connection|
+        unless connection.transaction_open?
+          raise ActiveRecord::TransactionIsolationError, "Chronicle transaction is required"
+        end
+
+        connection.execute("SELECT pg_advisory_xact_lock(#{PREFERENCE_AUDIT_LOCK_KEY})")
+      end
+    end
+  end
+
   # Helper methods for compatibility
   def app_preference
     return if subject_id.blank?
@@ -70,5 +99,26 @@ class AppPreferenceChronicle < ChronicleRecord
   def app_preference=(pref)
     self.subject_id = pref.id.to_s
     self.subject_type = "AppPreference"
+  end
+
+  private
+
+  def preference_reference_changing?
+    will_save_change_to_subject_id? || will_save_change_to_subject_type? ||
+      will_save_change_to_actor_id? || will_save_change_to_actor_type?
+  end
+
+  def coordinate_preference_reference!
+    return unless subject_type == "AppPreference" || actor_type == "AppPreference"
+
+    self.class.lock_preference_audit_writers!
+    AppSettingRecord.connected_to(role: :writing) do
+      if subject_type == "AppPreference" && !AppPreference.exists?(id: subject_id)
+        raise ActiveRecord::RecordNotFound, "app preference audit subject is missing"
+      end
+      if actor_type == "AppPreference" && !AppPreference.exists?(id: actor_id)
+        raise ActiveRecord::RecordNotFound, "app preference audit actor is missing"
+      end
+    end
   end
 end

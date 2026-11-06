@@ -8,16 +8,16 @@ affected. No implementation change is authorized by this entry.
 ## Problem
 
 The identifier HMAC maintenance migrations
-(`db/{app,com,org}_principals_migrate/2026100802500{1,5,9}_*_identifier_hmac_maintenance.rb`) create
-NOLOGIN definer roles named `umaxica_<realm>_<channel>_hmac_definer_<first 12 hex of
-SHA-256(current_database())>` and write that literal name into the `rotate_*_hmac` SECURITY DEFINER
-function bodies and the digest-guard trigger functions.
+(`db/{app,org}_principals_migrate/*_identifier_hmac_maintenance.rb`) create NOLOGIN definer roles
+named `umaxica_<realm>_<channel>_hmac_definer_<first 12 hex of SHA-256(current_database())>` and
+write that literal name into the `rotate_*_hmac` SECURITY DEFINER function bodies and the
+digest-guard trigger functions.
 
 A database built from `db/*_zenith_structure.sql` (test, and any environment built by schema load)
 therefore carries the role name of whichever database was dumped, and schema load creates neither
-the role nor the function ownership. In such a database the rotation functions refuse
-("identifier rotation function owner is invalid") and the emergency rotation cannot run. A database
-built by running the migrations is correct.
+the role nor the function ownership. In such a database the rotation functions refuse ("identifier
+rotation function owner is invalid") and the emergency rotation cannot run. A database built by
+running the migrations is correct.
 
 `lib/tasks/db_verify_no_schema_drift.rake#normalize_roles` enforces the same naming rule, so the
 committed dumps must come from the database whose name they encode

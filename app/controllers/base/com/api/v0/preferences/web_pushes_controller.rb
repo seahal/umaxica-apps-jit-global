@@ -26,7 +26,7 @@ module Base
             public
 
             def show
-              render json: { web_push: readable_web_push }, status: :ok
+              render json: { web_push: readable_com_web_push }, status: :ok
             end
 
             def update
@@ -57,32 +57,6 @@ module Base
             end
 
             private
-
-            def readable_web_push
-              payload = decoded_preference_payload
-              public_id = PreferenceToken.extract_public_id(payload)
-              return "disabled" if public_id.blank?
-
-              with_preference_connection(:writing) do
-                ComPreference.transaction do
-                  preference = ComPreference.lock.find_by(
-                    public_id: public_id, status_id: ComPreferenceStatus::ACTIVE,
-                  )
-                  now = ComPreference.database_now
-                  return "disabled" unless preference&.issuance_active_at?(now: now) && now.to_i < payload.fetch("exp")
-
-                  binding = ComPreferenceBrowserBinding.find_by(preference_id: preference.id)
-                  return "disabled" unless binding &&
-                    PreferenceBrowserBinding.matches?(cookies[PreferenceBrowserBinding::COOKIE_NAME], binding.digest)
-
-                  push = ComPreferenceWebPush.find_by(preference_id: preference.id)
-                  (push&.option_id == ComPreferenceWebPushOption::ENABLED) ? "enabled" : "disabled"
-                end
-              end
-            rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
-              Rails.logger.error(JitLogEvent.format("preference.web_push.read_failed", error_class: e.class.name))
-              "disabled"
-            end
 
             def render_preference_dependency_failure
               render_problem(:service_unavailable)

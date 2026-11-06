@@ -7,12 +7,26 @@ require "test_helper"
 # boundary. The refusal body is fixed Japanese customer copy required by the contract, so it is
 # asserted literally here.
 class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
+  # The OTP delivery issuers refuse to run inside the fixture transaction, so these committed
+  # journeys clean up their own rows instead.
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
   include ActiveSupport::Testing::TimeHelpers
   include ActiveJob::TestHelper
+  include SignInFlowCleanup
+  include SignUpJourneyCleanup
+  include DatabaseSelectorPrimary
 
   REFUSAL_BODY = "この画面は古くなっています。最初からやり直してください。"
 
   setup do
+    # The expiry case travels the clock past the DatabaseSelector's read-your-writes delay, which
+    # would route its GETs to the replica. The test environment's replica is a static copy rather
+    # than a lagged writer, so those reads could not see the flow and OTP this case just
+    # committed; keep this file's requests on the primary instead.
+    keep_reads_on_primary!
+    sign_up_journey_watermarks!
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
@@ -33,6 +47,11 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
+    begin
+      delete_sign_up_journey_rows!
+    ensure
+      restore_database_selector_delay!
+    end
   end
 
   test "reloading the current otp phase with its flow binding renders it again without changing the flow" do

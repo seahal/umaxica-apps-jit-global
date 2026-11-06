@@ -111,7 +111,8 @@ class EmailCredentialRegistrationOtpDeliveryGuard
     target.is_a?(String) && catalog.key?(scope) && catalog.fetch(scope).match?(target) &&
       session.scope == scope && session.return_to == target && session.status == "PENDING" &&
       session.discard_at > now &&
-      binding.base_token_id == token.id && binding.purpose == "bootstrap_handoff" && binding.retired_at.nil?
+      binding.base_token_id == token.id && binding.purpose == "bootstrap_handoff" &&
+      !binding.retired? && !binding.switched?
   end
 
   def current_source?(owner, token, device_session)

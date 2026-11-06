@@ -17,6 +17,7 @@ module Base
         # Object-level authorization (ActionPolicy): new/create gate the actor type; edit
         # authorize the owned record (find is owner-scoped, so a non-owner gets 404 first).
         # Verification guards remain in place.
+        before_action :refuse_root_token_feature_in_rp_cell!, only: :create
         before_action :authorize_telephone_registration!, only: %i(new create)
 
         public

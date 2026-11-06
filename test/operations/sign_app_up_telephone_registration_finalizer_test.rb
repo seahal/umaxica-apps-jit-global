@@ -51,7 +51,11 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
     flow.verify_sign_up_contact!
     flow.advance_sign_up_to_guardrail!
     flow.advance_sign_up_to_checkpoint!
-    flow.update!(completed_requirements: { "otp" => { "cleared" => true } })
+    flow.update!(
+      completed_requirements: { "otp" => { "cleared" => true },
+                                "passkey" => { "cleared" => true },
+                                "birthdate" => { "cleared" => true }, },
+    )
     telephone.update!(otp_attempts_count: 2)
     retained = telephone.reload.attributes.slice("otp_attempts_count", "locked_at", "otp_last_sent_at")
     ClientPasskey.create!(
@@ -131,7 +135,11 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
     flow.verify_sign_up_contact!
     flow.advance_sign_up_to_guardrail!
     flow.advance_sign_up_to_checkpoint!
-    flow.update!(completed_requirements: { "otp" => { "cleared" => true } })
+    flow.update!(
+      completed_requirements: { "otp" => { "cleared" => true },
+                                "passkey" => { "cleared" => true },
+                                "birthdate" => { "cleared" => true }, },
+    )
     retained = telephone.reload.attributes.slice("otp_attempts_count", "locked_at", "otp_last_sent_at")
 
     assert_no_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::SIGNED_UP_WITH_TELEPHONE).count } do

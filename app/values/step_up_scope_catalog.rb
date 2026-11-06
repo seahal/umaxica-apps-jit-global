@@ -18,6 +18,7 @@ module StepUpScopeCatalog
     "avatar_transfer_request" => %r{\A/avatar_ownership_transfers(?:\z|[?#])},
     "avatar_transfer_accept" => %r{\A/avatar_ownership_transfers/[^/?#]+/accept(?:\z|[?#])},
     "avatar_transfer_cancel" => %r{\A/avatar_ownership_transfers/[^/?#]+/cancel(?:\z|[?#])},
+    "oidc_authorization" => %r{\A/oauth/authorize\z},
   }.freeze
 
   ORG = {
@@ -47,5 +48,6 @@ module StepUpScopeCatalog
     "enforcement_case_review_appeal" =>
       %r{\A/support/app/enforcement_cases/[0-9A-Za-z_-]{1,64}/appeal_review/new(?:\z|[?#])},
     "operator_capability" => %r{\A/iam/grants/(?:new|[0-9A-Za-z_-]{1,64}/revocation/new)(?:\z|[?#])},
+    "oidc_authorization" => %r{\A/oauth/authorize\z},
   }.freeze
 end

@@ -8,9 +8,9 @@ require "base64"
 # sign-in.
 #
 # It uses the operator's ordinary registered passkeys and the ordinary shared
-# WebAuthn machinery. What it produces is different: a session whose
-# authentication context is recorded as `emergency`, carried in the access
-# token, and never convertible into a normal one.
+# WebAuthn machinery. It records Auth-side evidence with the `standby`
+# authentication context. OIDC-started Root issuance does not yet carry that
+# context through Visa; see docs/security/org-emergency-access.md.
 class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::IntegrationTest
   include OrgEntraFirstStageHelper
 
@@ -19,6 +19,10 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   fixtures :operators, :operator_statuses, :operator_passkeys, :operator_passkey_statuses,
            :operator_token_binding_methods, :operator_token_kinds, :operator_token_statuses,
            :operator_token_dbsc_statuses
+  self.fixture_table_names = %w(
+    operators operator_statuses operator_passkeys operator_passkey_statuses
+    operator_token_binding_methods operator_token_kinds operator_token_statuses operator_token_dbsc_statuses
+  )
 
   setup do
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")

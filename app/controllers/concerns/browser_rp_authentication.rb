@@ -430,7 +430,7 @@ module BrowserRpAuthentication
       return
     end
 
-    render plain: "Authentication required", status: :unauthorized, content_type: "text/plain"
+    render plain: I18n.t("errors.messages.login_required"), status: :unauthorized, content_type: "text/plain"
   end
 
   # D-25 / D-80 / D-110: an RP session whose refresh was refused recovers through a new
@@ -452,19 +452,33 @@ module BrowserRpAuthentication
 
   def render_browser_rp_invalid_credentials!
     response.set_header("Cache-Control", "no-store")
-    render plain: "Authentication required", status: :unauthorized, content_type: "text/plain"
+    render plain: I18n.t("errors.messages.login_required"), status: :unauthorized, content_type: "text/plain"
+  end
+
+  # Names the failed stage and an exception class or closed outcome; never a credential or message.
+  def log_browser_rp_dependency_failure(stage:, detail:)
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "browser_rp.dependency.failed",
+        request_id: request.request_id,
+        stage: stage,
+        detail: detail,
+      ),
+    )
   end
 
   def render_browser_rp_dependency_failure!
     response.set_header("Cache-Control", "no-store")
-    render plain: "Service unavailable", status: :service_unavailable, content_type: "text/plain"
+    render plain: I18n.t("errors.messages.temporarily_unavailable"), status: :service_unavailable,
+           content_type: "text/plain"
   end
 
   def browser_rp_access_state
     return @browser_rp_access_state if defined?(@browser_rp_access_state)
 
     @browser_rp_access_state = resolve_browser_rp_access_cookie
-  rescue ActiveRecord::ActiveRecordError, OidcOpJwksClient::FetchError
+  rescue ActiveRecord::ActiveRecordError, OidcOpJwksClient::FetchError => e
+    log_browser_rp_dependency_failure(stage: "access_state", detail: e.class.name)
     @browser_rp_dependency_failed = true
     render_browser_rp_dependency_failure! unless performed?
     @browser_rp_access_state = AccessState.new(
@@ -569,26 +583,91 @@ module BrowserRpAuthentication
     )
   end
 
-  # R5-WU17 cell process: the selected context lives on the actor's OP root; the OP answers it
-  # (Base::*::Api::V0::Identity::SelectionsController). Nil outside a cell process.
+  # Base APP and ORG selections are RP-local; other RP cells read their owner API.
   def rp_cell_selected_context
     return unless rp_cell_process?
-    # Only the Base Self-RP holds the base-*-ww key the OP accepts here; other cells have no
-    # selected account/organization context.
+    # Base APP persona selection belongs to its RP session. The actor comes from the verified
+    # Access Token above; no OP root token or remote selection API participates.
     return Actor::SelectedContext::NULL unless browser_rp_authenticated? && rp_cell.client_id.start_with?("base-")
+
+    if rp_cell.client_id == RpBaseAppSession::CLIENT_ID
+      rp_session = browser_rp_access_state.rp_session
+      return Actor::SelectedContext::NULL unless rp_session.instance_of?(RpBaseAppSession)
+
+      selection =
+        RpBaseAppRecord.connected_to(role: :writing) do
+          RpBaseAppSessionSelection.find_by(rp_session_id: rp_session.id)
+        end
+      return Actor::SelectedContext::NULL unless selection
+
+      return Actor::SelectedContext.new(
+        account_public_id: selection.account_public_id,
+        collective_public_id: selection.organization_public_id,
+        collective_unit_public_id: selection.organization_unit_public_id,
+        avatar_public_id: selection.avatar_public_id,
+        selected_at: selection.selected_at,
+      )
+    end
+
+    return rp_org_cell_selected_context if rp_cell.client_id == RpBaseOrgSession::CLIENT_ID
 
     result = OrgAdminAuthorityClient.new(
       access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
       browser_request: request, surface: rp_cell.realm,
     ).get("/identity/selection")
-    raise RpCellLocalSession::OwnerUnavailable, "OP selection is unavailable" unless result.ok?
+    return selected_context_from_owner(result.data) if result.ok?
 
-    data = result.data
+    case result.status
+    when :unauthorized
+      if result.data.to_h["error"] == "invalid_token"
+        @browser_rp_refused_access_status = :invalid
+        clear_browser_rp_cookies!
+        render_browser_rp_unauthenticated!
+      else
+        render_rp_owner_dependency_failure!(result.status)
+      end
+    when :forbidden
+      head :forbidden
+    when :bad_request, :not_found, :conflict, :gone, :unprocessable, :unavailable, :dependency
+      render_rp_owner_dependency_failure!(result.status)
+    else
+      raise ArgumentError, "unsupported OP selection response status: #{result.status.inspect}"
+    end
+
+    Actor::SelectedContext::NULL
+  end
+
+  def rp_org_cell_selected_context
+    rp_session = browser_rp_access_state.rp_session
+    return Actor::SelectedContext::NULL unless rp_session.instance_of?(RpBaseOrgSession)
+
+    selection =
+      RpBaseOrgRecord.connected_to(role: :writing) do
+        RpBaseOrgSessionSelection.find_by(rp_session_id: rp_session.id)
+      end
+    return Actor::SelectedContext::NULL unless selection
+
+    Actor::SelectedContext.new(
+      account_public_id: selection.account_public_id,
+      collective_public_id: selection.organization_public_id,
+      collective_unit_public_id: selection.organization_unit_public_id,
+      avatar_public_id: nil,
+      selected_at: selection.selected_at,
+    )
+  end
+
+  def selected_context_from_owner(data)
     Actor::SelectedContext.new(
       account_public_id: data["account_public_id"], collective_public_id: data["collective_public_id"],
       collective_unit_public_id: data["collective_unit_public_id"], avatar_public_id: data["avatar_public_id"],
       selected_at: data["selected_at"] && Time.zone.parse(data["selected_at"]),
     )
+  end
+
+  def render_rp_owner_dependency_failure!(status)
+    log_browser_rp_dependency_failure(stage: "owner_selection", detail: status.to_s)
+    @browser_rp_dependency_failed = true
+    render_browser_rp_dependency_failure!
   end
 
   def rp_cell_client_id = browser_rp_client_id
@@ -643,6 +722,7 @@ module BrowserRpAuthentication
     # (test/security/invariants/withdrawal_gate_invariant_test.rb). Refusing it here would make
     # withdrawal recovery unreachable.
     return false unless resource.is_a?(browser_rp_resource_class)
+    return false unless resource.login_allowed?
     return false unless AuthorizationTokenClaims.base_session_id(payload).to_s == root_token.public_id.to_s
 
     authentication_context = payload[AuthenticationContextValue::CLAIM]
@@ -694,7 +774,7 @@ module BrowserRpAuthentication
     if entry_path
       redirect_to(entry_path, allow_other_host: false)
     else
-      render plain: "Authentication required", status: :unauthorized, content_type: "text/plain"
+      render plain: I18n.t("errors.messages.login_required"), status: :unauthorized, content_type: "text/plain"
     end
     false
   end
@@ -756,14 +836,19 @@ module BrowserRpAuthentication
     return refresh_rp_cell_credentials!(refresh_token) if rp_cell_process?
 
     # Public HTTPS to the OP token endpoint (R5-WU05); the RP holds no OP authority in-process.
+    # Locally that origin is served by the tunnel, so the call goes to the local port, as the Code
+    # Flow callback's token exchange does.
+    token_url = OutboundHttp::LocalBackChannel.url(OidcIssuer.token_endpoint(browser_rp_resource_type).to_s)
     result = OidcOpTokenClient.refresh(
       client_id: browser_rp_client_id,
-      token_url: OidcIssuer.token_endpoint(browser_rp_resource_type),
+      token_url: token_url,
       refresh_token: refresh_token,
+      require_https: OutboundHttp::LocalBackChannel.require_https?(token_url),
     )
     handle_browser_rp_refresh_result(result)
   rescue ActiveRecord::ActiveRecordError, Umaxica::Valkey::Unavailable,
-         Umaxica::Valkey::SerializationError, Umaxica::Valkey::OperationError
+         Umaxica::Valkey::SerializationError, Umaxica::Valkey::OperationError => e
+    log_browser_rp_dependency_failure(stage: "refresh", detail: e.class.name)
     @browser_rp_dependency_failed = true
     render_browser_rp_dependency_failure!
     :dependency
@@ -793,6 +878,7 @@ module BrowserRpAuthentication
     else
       # dependency, or superseded by a concurrent request: keep the cookies; a retry reads the
       # generation the other request installed.
+      log_browser_rp_dependency_failure(stage: "cell_refresh", detail: result.outcome)
       @browser_rp_dependency_failed = true
       render_browser_rp_dependency_failure!
       :dependency
@@ -809,6 +895,7 @@ module BrowserRpAuthentication
     # have rotated the credential, and presenting it again would be reuse (D-25). Transport failure
     # and an invalid remote answer keep the cookies so a later request can retry.
     unless %i(refused indeterminate).include?(result.outcome)
+      log_browser_rp_dependency_failure(stage: "refresh_result", detail: "#{result.outcome}:#{result.error}")
       @browser_rp_dependency_failed = true
       render_browser_rp_dependency_failure!
       return :dependency

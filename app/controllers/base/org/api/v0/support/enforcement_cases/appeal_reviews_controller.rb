@@ -35,6 +35,8 @@ module Base
               before_action :set_current_actor
               before_action :apply_browser_context
               rescue_from ActionPolicy::Unauthorized, with: :render_forbidden
+              rescue_from EnforcementCaseAuthorizationRejected, with: :render_forbidden
+              rescue_from TokenStatusManagement::StepUpEvidenceUnavailable, with: :render_forbidden
               rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
               rescue_from ActionController::BadRequest, with: :render_bad_request
 
@@ -56,14 +58,13 @@ module Base
                 appeal = @enforcement_case.appeal
                 raise ActiveRecord::RecordNotFound, "appeal not found" unless appeal
 
-                with_owner_step_up(STEP_UP_SCOPE) do |requirement|
-                  appeal.resolve!(
-                    reviewer_operator_public_id: current_operator.public_id,
-                    resolution_code: params.expect(:resolution_code),
-                    step_up_token: avatar_root,
-                    step_up_requirement: requirement,
-                  )
-                end
+                appeal.resolve!(
+                  reviewer_operator_public_id: current_operator.public_id,
+                  resolution_code: params.expect(:resolution_code),
+                  step_up_token: avatar_root,
+                  step_up_actor: current_operator,
+                  step_up_evidence: current_step_up_evidence,
+                )
                 return if performed?
 
                 respond_to do |format|

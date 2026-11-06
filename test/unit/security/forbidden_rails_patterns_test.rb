@@ -93,8 +93,7 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
 
   # Scoped Auth cancellation and Email ceremonies no longer skip these callbacks: their explicit
   # admitted context and ownership policy replace the former Auth root prerequisite.
-  SENSITIVE_SKIP_ALLOWLIST = %w(
-  ).freeze
+  SENSITIVE_SKIP_ALLOWLIST = %w().freeze
 
   test "verification and client-auth before_actions are skipped only in the reviewed allowlist" do
     offenders =

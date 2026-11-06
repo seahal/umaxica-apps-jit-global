@@ -309,7 +309,10 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
   def cycle_attrs(cycle_class)
     {
       auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(cycle_class),
-      principal_id: 123,
+      # with_cycle_lock locks the registration principal, so the cycle has to name a real Client.
+      principal_id: Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      ).id,
       status_id: cycle_class::STATUS_IDS.first,
       step: cycle_class::STEPS.first,
       nonce_digest: cycle_class.digest_nonce("nonce"),

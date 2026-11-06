@@ -179,8 +179,8 @@ class Operator < OrgPrincipalRecord
   has_one :core_org_operator_bridge,
           dependent: :destroy,
           inverse_of: :operator
-  has_one :operator_preference, class_name: "OperatorPreference", foreign_key: :operator_id,
-                             dependent: :destroy, inverse_of: :operator
+  has_one :operator_preference, class_name: "OperatorPreference",
+                                dependent: :destroy, inverse_of: :operator
 
   validates :status_id, numericality: { only_integer: true }
   mfa_status_reference OperatorMfaStatus

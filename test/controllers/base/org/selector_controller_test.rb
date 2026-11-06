@@ -22,10 +22,9 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
                    resource_type: "operator",
       ),
     )
-    bootstrap_and_select!(@operator, @token)
   end
 
-  test "authenticated operator without selected actor context can access selector" do
+  test "authenticated RP session receives ORG candidates without writing selection" do
     http_headers_1 =
       begin
         rp_headers = as_staff_headers(
@@ -76,7 +75,22 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
                                        rp_token.actor_record,
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
+                                     authentication_context: rp_token.strict_authentication_context_value.to_s,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_session_public_ids ||= {}
+            @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -85,6 +99,7 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -94,12 +109,15 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
     get base_org_selector_url(host: @host), headers: http_headers_1, as: :json
 
     assert_response :success
-    assert_equal "selected", response.parsed_body.fetch("status")
-    assert_predicate @token.reload, :selected_actor_context?
-    assert_nil @token.selected_avatar_public_id if @token.respond_to?(:selected_avatar_public_id)
+    assert_equal "selection_required", response.parsed_body.fetch("status")
+    assert_not @token.reload.selected_actor_context?
+    rp_session_id = @base_browser_rp_session_public_ids.fetch([RpBaseOrgSession::CLIENT_ID, @token.public_id])
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_id)
+
+    assert_not RpBaseOrgSessionSelection.exists?(rp_session_id: rp_session.id)
   end
 
-  test "selector update renders invalid selection error as json" do
+  test "authenticated RP session refuses ORG selector updates without mutating OP selection" do
     BaseSelectorAuthority.stub(:select, ->(*) { raise BaseSelectorAuthority::InvalidSelection, "bad" }) do
       http_headers_0 =
         begin
@@ -150,7 +168,22 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
                                          rp_token.actor_record,
                                          resource_type: "operator",
                                        ), client_id: rp_client.client_id,
+                                       authentication_context: rp_token.strict_authentication_context_value.to_s,
               )
+              rp_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+              unless rp_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+              end
+
+              rp_local_session = rp_local_enrollment.session
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[rp_key]
@@ -159,6 +192,7 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
                 rp_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
               ].join("; ")
               rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
             end
@@ -172,14 +206,11 @@ class Base::Org::SelectorControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_content
-    assert_equal "invalid_selection", response.parsed_body.fetch("status")
-  end
+    assert_not @token.reload.selected_actor_context?
+    rp_session_id = @base_browser_rp_session_public_ids.fetch([RpBaseOrgSession::CLIENT_ID, @token.public_id])
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_id)
 
-  private
-
-  def bootstrap_and_select!(operator, token)
-    BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
-    BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    assert_not RpBaseOrgSessionSelection.exists?(rp_session_id: rp_session.id)
   end
   private
 
@@ -400,7 +431,6 @@ class Base::Org::SelectorControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -423,24 +453,6 @@ class Base::Org::SelectorControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

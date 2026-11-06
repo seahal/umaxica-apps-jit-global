@@ -82,6 +82,22 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
       .unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
   end
 
+  test "a new admission holds an earlier browser attempt without changing its owner" do
+    original_binding, _ceremony, flow = owned_flow
+    session = {}
+    locator = SignUpCycleLocator.new(session, surface: :app)
+    locator.issue!(flow, nonce: "earlier-browser-nonce")
+    binding = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+
+    assert locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
+    assert_equal original_binding.id, flow.reload.auth_admission_binding_id
+
+    session[:app_sign_up_flow_locator]["nonce"] = "foreign-nonce"
+
+    assert_not locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony)
+  end
+
   # The predicate reads only status and cleanup, never the clock: a nonterminal flow, including one
   # past its deadline, is released only by the expiry job. Travelling past the deadline would also
   # expire the admission parent, which refuses the lookup before the predicate is reached.

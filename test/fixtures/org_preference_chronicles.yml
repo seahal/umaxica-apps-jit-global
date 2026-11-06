@@ -38,7 +38,7 @@
 #
 one:
   id: 1
-  subject_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  subject_id: 1
   subject_type: OrgPreference
   event_id: 1
   level_id: 1

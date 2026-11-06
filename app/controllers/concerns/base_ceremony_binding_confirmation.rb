@@ -28,8 +28,8 @@ module BaseCeremonyBindingConfirmation
                                                           lx: normalized_locale(params[:lx]),
                                                         }
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
-         AuthAdmissionBinding::InvalidTransition
-    render_invalid_binding!
+         AuthAdmissionBinding::InvalidTransition => e
+    render_invalid_binding!(e)
   end
 
   def create
@@ -39,8 +39,8 @@ module BaseCeremonyBindingConfirmation
     binding = load_ceremony_binding!
     confirm_and_redirect!(binding)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
-         AuthAdmissionBinding::InvalidTransition
-    render_invalid_binding!
+         AuthAdmissionBinding::InvalidTransition => e
+    render_invalid_binding!(e)
   end
 
   private
@@ -136,9 +136,12 @@ module BaseCeremonyBindingConfirmation
       end
     when :authorization_transaction
       transaction = auth_binding_parent_record(binding)
+      raise BaseAuthAdmissionCoordinator::Denied.new("authorization is unavailable", code: "invalid_admission") unless
+        transaction
+
       now = transaction.class.database_now
       raise BaseAuthAdmissionCoordinator::Denied.new("authorization is unavailable", code: "invalid_admission") if
-        transaction.expired?(now: now) || transaction.login_challenge_expired?(now: now) || transaction.consumed?
+        transaction.expired?(now: now) || transaction.login_challenge_expired?(now: now) || !transaction.pending?
     else
       raise BaseAuthAdmissionCoordinator::Denied.new("binding parent is unavailable", code: "invalid_admission")
     end
@@ -151,28 +154,36 @@ module BaseCeremonyBindingConfirmation
       when OperatorAuthAdmissionBinding then OperatorAuthCeremonySession
       else raise BaseAuthAdmissionCoordinator::Denied.new("binding is invalid", code: "invalid_admission")
       end
-    session = session_class.find_by(id: binding.auth_ceremony_session_id)
-    session.present? && session.active?(now: binding.class.database_now)
+    # Auth wrote this session immediately before redirecting here. Read the authoritative database
+    # so replica lag cannot turn the handoff into a refusal.
+    session_class.writing_connection do
+      session = session_class.find_by(id: binding.auth_ceremony_session_id)
+      session.present? && session.active?(now: session_class.database_now)
+    end
   end
 
   def auth_binding_parent_record(binding)
     case binding
     when ClientAuthAdmissionBinding
-      auth_binding_parent_record_for_surface(
-        binding.parent_kind,
-        authorization_transaction_id: binding.authorization_transaction_id,
-        step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-        authorization_transaction_class: ClientOidcAuthorizationTransaction,
-        step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
-      )
+      ClientOidcAuthorizationTransaction.connection_owner.connected_to(role: :writing) do
+        auth_binding_parent_record_for_surface(
+          binding.parent_kind,
+          authorization_transaction_id: binding.authorization_transaction_id,
+          step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+          authorization_transaction_class: ClientOidcAuthorizationTransaction,
+          step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
+        )
+      end
     when OperatorAuthAdmissionBinding
-      auth_binding_parent_record_for_surface(
-        binding.parent_kind,
-        authorization_transaction_id: binding.authorization_transaction_id,
-        step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-        authorization_transaction_class: OperatorOidcAuthorizationTransaction,
-        step_up_ceremony_transaction_class: OperatorStepUpCeremonyTransaction,
-      )
+      OperatorOidcAuthorizationTransaction.connection_owner.connected_to(role: :writing) do
+        auth_binding_parent_record_for_surface(
+          binding.parent_kind,
+          authorization_transaction_id: binding.authorization_transaction_id,
+          step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+          authorization_transaction_class: OperatorOidcAuthorizationTransaction,
+          step_up_ceremony_transaction_class: OperatorStepUpCeremonyTransaction,
+        )
+      end
     else
       raise BaseAuthAdmissionCoordinator::Denied.new("binding is invalid", code: "invalid_admission")
     end
@@ -262,7 +273,19 @@ module BaseCeremonyBindingConfirmation
     raise ArgumentError, "unsupported credential registration method"
   end
 
-  def render_invalid_binding!
+  # The refusal is the same for every cause so the response reveals nothing; the log records the
+  # coarse cause (a code or an error class, never a message, reference or token).
+  def render_invalid_binding!(error = nil)
+    if error
+      Rails.logger.info(
+        JitLogEvent.format(
+          "base.ceremony_binding_confirmation.refused",
+          reason_code: error.respond_to?(:code) ? error.code : nil,
+          error_class: error.class.name,
+          action: action_name,
+        ),
+      )
+    end
     apply_base_browser_continuation_headers!
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request,
            content_type: "text/plain"

@@ -17,13 +17,16 @@ class TechCapabilityClient
       return false if access_token.blank?
 
       base_origin = Rails.configuration.x.boot_config.fetch(:hosts).base_for_resource_type("operator")
-      endpoint = "#{base_origin}/api/v0/tech-capability-checks"
+      # Locally the tunnel serves the public origin, so the call goes to the local port. Base checks the
+      # assertion audience against the URL it receives, so the audience follows the same URL.
+      endpoint = OutboundHttp::LocalBackChannel.url("#{base_origin}/api/v0/tech-capability-checks")
       assertion = OidcClientAssertionJwt.issue(client_id: CLIENT_ID, token_url: endpoint)
       return false if assertion.blank?
 
       uri = URI.parse(endpoint)
       connection = OutboundHttp::Connection.build(
-        url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, require_https: true,
+        url: uri, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT,
+        require_https: OutboundHttp::LocalBackChannel.require_https?(endpoint),
       )
       response = connection.post(uri, { access_token:, client_assertion: assertion })
       return false unless response.status.to_i == 200

@@ -124,8 +124,25 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       https!
       get("/sign", params: { ri: "jp" })
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      # The RP start and the plain authorization GET mint nothing; only the receiver-local
-      # ceremony start POST creates the sign-in flow and its browser binding (D-82).
+      binding_model =
+        { "app" => ClientAuthAdmissionBinding,
+          "org" => OperatorAuthAdmissionBinding, }.fetch(surface)
+      auth_host = ENV.fetch(
+        {
+          "app" => "PUBLIC_AUTH_SERVICE_URL",
+          "org" => "PUBLIC_AUTH_STAFF_URL",
+        }.fetch(surface),
+      )
+      visa_host = ENV.fetch(
+        {
+          "app" => "PUBLIC_VISA_SERVICE_URL",
+          "org" => "PUBLIC_VISA_STAFF_URL",
+        }.fetch(surface),
+      )
+      configured_gateway = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin)
+      target = nil
+      # The RP start and the authorization request mint no sign-in flow: only Visa's
+      # authorization request creates the admission and its browser binding (D-82).
       assert_no_difference(-> { flow_model.count }) do
         post(
           "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
@@ -134,61 +151,57 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
         )
 
         assert_response :see_other
-        # The RP start reaches its own same-origin authorization endpoint by path: Jump refuses an
-        # rt whose url origin equals its iss.
-        authorization = URI.parse(response.location)
+        # Base and Visa are different origins, so the start reaches the OP through Jump.
+        gateway = URI.parse(response.location)
 
-        assert_equal [host, "/oauth/authorize"], [authorization.host, authorization.path]
+        assert_equal configured_gateway.host, gateway.host
+        assert_equal "https", gateway.scheme
+        rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
+        issuer = JitSecurityJwtRegistry.surface("BASE_#{surface.upcase}")
+        payload, header = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+
+        assert_equal issuer.current_kid, header.fetch("kid")
+        assert_equal "jump-redirect", payload.fetch("sub")
+        authorization = URI.parse(payload.fetch("url"))
+
+        assert_equal [visa_host, "/oauth/authorize"], [authorization.host, authorization.path]
         authorization_query = Rack::Utils.parse_query(authorization.query)
 
         assert_nil authorization_query["rt"]
 
         assert_equal "base-#{surface}-ww", authorization_query.fetch("client_id")
         assert_equal "S256", authorization_query.fetch("code_challenge_method")
-        get(authorization.request_uri)
+        assert_difference(-> { binding_model.count }, 1) do
+          host!(authorization.host)
+          https!
+          get(authorization.request_uri)
+        end
 
-        assert_response :success
-        assert_select 'form[method="post"] input[name="ceremony_action"][value="start"]', count: 1
-      end
-      start_form = response.parsed_body.at_css('form[method="post"]')
-      start_params = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      binding_model =
-        { "app" => ClientAuthAdmissionBinding,
-          "org" => OperatorAuthAdmissionBinding, }.fetch(surface)
-      assert_difference(-> { binding_model.count }, 1) do
-        post(
-          start_form["action"], params: start_params, headers: {
-            "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
-          },
+        assert_response :see_other
+        # Visa starts the ceremony and Jump-hands the browser to the matching Auth entry.
+        gateway = URI.parse(response.location)
+
+        assert_equal configured_gateway.host, gateway.host
+        assert_equal "https", gateway.scheme
+        rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
+        issuer = JitSecurityJwtRegistry.surface("VISA_#{surface.upcase}")
+        payload, header = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{authorization.host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
         )
+
+        assert_equal issuer.current_kid, header.fetch("kid")
+        assert_equal "jump-redirect", payload.fetch("sub")
+        target = URI.parse(payload.fetch("url"))
       end
-
-      assert_response :see_other
-      gateway = URI.parse(response.location)
-      configured_gateway = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin)
-
-      assert_equal configured_gateway.host, gateway.host
-      assert_equal "https", gateway.scheme
-      rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
-      issuer = JitSecurityJwtRegistry.surface("BASE_#{surface.upcase}")
-      payload, header = JWT.decode(
-        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-
-      assert_equal issuer.current_kid, header.fetch("kid")
-      assert_equal "jump-redirect", payload.fetch("sub")
-      target = URI.parse(payload.fetch("url"))
-      auth_host = ENV.fetch(
-        {
-          "app" => "PUBLIC_AUTH_SERVICE_URL",
-          "org" => "PUBLIC_AUTH_STAFF_URL",
-        }.fetch(surface),
-      )
 
       assert_equal auth_host, target.host
-      assert_equal "/sign/in", target.path
+      assert_equal "/sign/in/sentry", target.path
       query = Rack::Utils.parse_query(target.query)
 
       assert_equal "jp", query.fetch("ri")
@@ -205,10 +218,22 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       auth_browser = open_session
       auth_browser.host!(auth_host)
       auth_browser.https!
-      auth_browser.get(target.request_uri)
+      auth_browser.get(
+        target.request_uri,
+        headers: {
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "cross-site",
+        },
+      )
 
-      assert_equal 200, auth_browser.response.status
-      assert_includes auth_browser.response.body, 'name="authenticity_token"'
+      # The sentry entry only walks on as a document navigation; it never renders a page.
+      assert_equal 303, auth_browser.response.status
+      entry = URI.parse(auth_browser.response.location)
+
+      assert_equal auth_host, entry.host
+      assert_equal "/sign/in", entry.path
+      assert_equal query.fetch("entry_ref"), Rack::Utils.parse_query(entry.query).fetch("entry_ref")
       assert_nil binding.reload.redeemed_at
     ensure
       ActionController::Base.allow_forgery_protection = previous

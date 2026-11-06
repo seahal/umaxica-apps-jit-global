@@ -6,6 +6,8 @@ require "webauthn/fake_client"
 class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
+  self.fixture_table_names = []
+
   SECRET_LIFETIME_VALUES = {
     "APP_SECRET_ISSUANCE_TTL_SECONDS" => "600",
     "APP_SECRET_PURGE_DELAY_SECONDS" => "86400",
@@ -31,10 +33,88 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
     end
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
+
+    contact = ClientTelephone.find_by(public_id: @telephone_public_id) if @telephone_public_id
+    contact ||= ClientTelephone.find_by(number: @telephone_number) if @telephone_number
+    flow = ClientSignUpFlow.find_by(public_id: @flow_public_id) if @flow_public_id
+    flow ||= ClientSignUpFlow.find_by(pending_contact_type: "telephone", pending_contact_id: contact.id) if contact
+    actor_id = contact&.user_id || flow&.principal_id
+    actor = Client.find_by(id: actor_id) if actor_id
+
+    if actor
+      binding_id = @auth_admission_binding_id || flow&.auth_admission_binding_id
+      binding = ClientAuthAdmissionBinding.find_by(id: binding_id) if binding_id
+      parent_ids = binding&.authorization_transaction_id ? [binding.authorization_transaction_id] : []
+      ceremony_ids = [binding&.auth_ceremony_session_id, binding&.admitted_auth_ceremony_session_id].compact
+
+      # Every completed sign-up case runs IdentityGraphProvisioner, which bootstraps a persona, an
+      # enterprise and a root unit for the new actor, and these cases commit instead of rolling
+      # back (uses_transaction). None of those tables has a fixture file, so without this the next
+      # fixture load re-enables the enterprise foreign key against a row that is already gone.
+      # The ids are materialized here, while the membership rows still exist, because a lazy
+      # relation would re-run its subquery after they were deleted.
+      identity_ids = ClientIdentity.where(source_record_id: actor.id).pluck(:id)
+      persona_ids = ClientPersona.where(client_identity_id: identity_ids).pluck(:id)
+      enterprise_ids =
+        (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
+          EnterpriseOwnership.where(client_id: actor.id).pluck(:enterprise_id)).uniq
+      unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+      PersonaMembership.where(persona_id: persona_ids)
+        .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+      PersonaAssignment.where(persona_id: persona_ids).delete_all
+      ClientOidcIdentityBinding.where(client_identity_id: identity_ids).delete_all
+      AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
+      ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+      ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
+      ClientPersona.where(id: persona_ids).delete_all
+      ClientIdentity.where(id: identity_ids).delete_all
+      EnterpriseUnitClosure.where(ancestor_id: unit_ids)
+        .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
+      EnterpriseUnit.where(id: unit_ids).delete_all
+      EnterpriseLifecycle.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnership.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseAdministrationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseDelegationGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseViewGrant.where(enterprise_id: enterprise_ids).delete_all
+      EnterpriseOwnershipTransferRequest.where(enterprise_id: enterprise_ids).delete_all
+      Enterprise.where(id: enterprise_ids).delete_all
+
+      ClientTelephoneCeremonyTransaction.where(telephone_candidate_ref: contact.public_id).delete_all if contact
+      ClientPasskeyCeremonyTransaction.where(actor_ref: actor.public_id).delete_all
+      ClientContactAuditOutbox.where(owner_ref: actor.public_id).delete_all
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).delete_all
+      ClientSecretCredential.where(client_id: actor.id).delete_all
+      ClientSecretIssuance.where(client_id: actor.id).delete_all
+      ClientPasskey.where(user_id: actor.id).delete_all
+      ClientSignUpFlow.where(id: flow.id).delete_all if flow
+      ClientAuthAdmissionBinding.where(id: binding_id).delete_all if binding_id
+      ClientAuthCeremonySession.where(id: ceremony_ids).delete_all if ceremony_ids.any?
+      ClientOidcAuthorizationTransaction.where(id: parent_ids).delete_all if parent_ids.any?
+      ClientTelephone.where(user_id: actor.id).delete_all
+      ClientAuthorityLock.where(client_id: actor.id).delete_all
+      token_ids = ClientToken.where(user_id: actor.id).select(:id)
+      OpAppGrant.where(client_token_id: token_ids).delete_all
+      ClientDeviceSession.where(user_id: actor.id).update_all(current_refresh_token_id: nil)
+      ClientToken.where(user_id: actor.id).delete_all
+      ClientDeviceSession.where(user_id: actor.id).delete_all
+      # Registration completion receipts are durable rows keyed by the actor; they commit with
+      # these cases and would otherwise block the client delete below.
+      ClientRegistrationCompletion.where(client_id: actor.id).delete_all
+      ClientAccount.where(user_id: actor.id).delete_all
+      Client.where(id: actor.id).delete_all
+    end
   end
 
-  ((0..20).map { |count| [count, :completed] } +
-    [[0, :canceled], [0, :expired], [0, :payload_unavailable]]).each do |active_count, outcome|
+  SIGNUP_CASES = (0..20).map { |count| [count, :completed] } +
+    [[0, :canceled], [0, :expired], [0, :payload_unavailable]]
+  # The telephone OTP writer refuses the caller-owned fixture transaction; exercise its request commit boundary.
+  uses_transaction(
+    *SIGNUP_CASES.map do |active_count, outcome|
+      "test_telephone_signup_with_A=#{active_count}_saves_its_fixed_Secret_set_and_handles_#{outcome}"
+    end,
+  )
+
+  SIGNUP_CASES.each do |active_count, outcome|
     test "telephone signup with A=#{active_count} saves its fixed Secret set and handles #{outcome}" do # rubocop:disable Minitest/MultipleAssertions -- Verifies each observable boundary in one signup journey.
       host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -64,6 +144,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       https!
       headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
       get target.request_uri
+
       assert_response :see_other
       auth_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
@@ -80,6 +161,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       end
       host!(auth_uri.host)
       get auth_uri.request_uri, headers: headers
+
       12.times do
         if response.redirect?
           location = URI.parse(response.location)
@@ -89,15 +171,19 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
             location = URI.parse(jump_payload.fetch("url"))
           end
           host!(location.host) if location.host
-          get location.request_uri, headers: { "Sec-Fetch-Site" => "same-origin",
-                                               "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
-        elsif (form = response.parsed_body.at_css("form[id$='continuation-form'], form[id$='confirmation-form']"))
+          get location.request_uri, headers: {
+            "Sec-Fetch-Site" => "same-origin",
+            "Sec-Fetch-Mode" => "navigate",
+            "Sec-Fetch-Dest" => "document",
+          }
+        else
+          form = response.parsed_body.at_css("form[id$='continuation-form'], form[id$='confirmation-form']")
+          break unless form
+
           fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
           post form["action"], params: fields, headers: {
             "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin",
           }
-        else
-          break
         end
       end
 
@@ -107,15 +193,21 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+      @telephone_number = "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
       post auth_app_sign_up_telephone_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf), params: {
-        :user_telephone => { raw_number: "+819012345678", confirm_policy: "1", confirm_using_mfa: "1" },
+        :user_telephone => { raw_number: @telephone_number, confirm_policy: "1", confirm_using_mfa: "1" },
         "cf-turnstile-response" => "synthetic",
       }
 
+      registration = session[:user_telephone_registration]
+      @telephone_public_id = registration.stringify_keys.fetch("public_id") if registration
+      @flow_public_id = session[:auth_app_up_sequence_id] if session[:auth_app_up_sequence_id]
+
       assert_response :redirect
-      registration = session[:user_telephone_registration].stringify_keys
-      telephone = ClientTelephone.find_by!(public_id: registration.fetch("public_id"))
+      telephone = ClientTelephone.find_by!(public_id: @telephone_public_id)
       flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+      @flow_public_id = flow.public_id
+      @auth_admission_binding_id = flow.auth_admission_binding_id
       flow_binding = SignFlowBindingCodec.encode(flow: flow, surface: :app)
       transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
       delivery =
@@ -367,6 +459,50 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: flow)
       end
       assert_raises(ActiveRecord::ReadonlyAttributeError) { issuance.update!(signup_completed_at: nil) }
+      if active_count.zero?
+        admission_binding = ClientAuthAdmissionBinding.find(flow.auth_admission_binding_id)
+        authorization_transaction = ClientOidcAuthorizationTransaction.find(
+          admission_binding.authorization_transaction_id,
+        )
+
+        assert_equal "app", authorization_transaction.surface
+        assert_equal "sign_up", authorization_transaction.intent
+        assert_not_predicate authorization_transaction, :base_finalized?
+        cancellation = BaseAuthAdmissionCoordinator.issue_cancellation!(transaction: authorization_transaction)
+        BaseAuthAdmissionCoordinator.read_authorization_cancellation_handoff!(
+          handoff: cancellation.handoff, surface: "app", transaction_ref: authorization_transaction.transaction_id,
+        )
+        authorization_transaction.cancel!(
+          cancellation_handoff_digest: BaseAuthAdmissionCoordinator.cancellation_handoff_digest(cancellation.handoff),
+        )
+
+        assert_predicate authorization_transaction.reload, :canceled?
+        assert_not_predicate authorization_transaction, :base_finalized?
+        assert_predicate flow.reload, :sign_up_completed?
+        assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, Client.find(telephone.user_id).status_id
+
+        issuance.reload
+        completed_at = issuance.signup_completed_at
+        credential_facts = ClientSecretCredential.where(issuance_id: issuance.id).order(:id)
+          .pluck(:public_id, :confirmed_at, :revoked_at, :discard_at)
+        audit_facts = ClientSecretAuditOutbox.where(operation_ref: issuance.origin_operation_id)
+          .order(:id).pluck(:event_name, :credential_ref, :occurred_at, :item_count)
+
+        assert_equal expected_count, credential_facts.length
+        assert credential_facts.all? { |_, confirmed_at, revoked_at, discard_at|
+          confirmed_at.present? && revoked_at.nil? && discard_at == Float::INFINITY
+        }, "completed Secret credentials must remain active before lifecycle reconciliation"
+
+        ClientSecretLifecycleJob.perform_now(batch_size: 500, phase: "signup")
+
+        assert_predicate flow.reload, :sign_up_completed?
+        assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, Client.find(telephone.user_id).status_id
+        assert_equal completed_at, issuance.reload.signup_completed_at
+        assert_equal credential_facts, ClientSecretCredential.where(issuance_id: issuance.id).order(:id)
+          .pluck(:public_id, :confirmed_at, :revoked_at, :discard_at)
+        assert_equal audit_facts, ClientSecretAuditOutbox.where(operation_ref: issuance.origin_operation_id)
+          .order(:id).pluck(:event_name, :credential_ref, :occurred_at, :item_count)
+      end
       flow.destroy!
 
       values.each { |value| assert ClientSecretLookupQuery.call(client: actor, secret: value) }

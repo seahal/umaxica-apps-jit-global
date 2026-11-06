@@ -13,7 +13,6 @@ module Auth
           # Note: AuthenticationOperator is NOT included here for unauthenticated sign-up
           include ::PreferenceGlobal
 
-
           include ::ActorSupport
 
           include ::Finisher

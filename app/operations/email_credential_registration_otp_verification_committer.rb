@@ -17,6 +17,8 @@ class EmailCredentialRegistrationOtpVerificationCommitter
       case [actor, token, email, transaction]
       in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction]
         ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
+      in [Client, ClientToken, ClientEmail, nil]
+        ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
       in [Operator, OperatorToken, OperatorEmail, OperatorEmailCeremonyTransaction]
         ["org", OperatorEmailStatus::UNVERIFIED, OperatorStepUpCeremonyTransaction]
       else raise ArgumentError, "unsupported Email registration verification realm"
@@ -27,30 +29,52 @@ class EmailCredentialRegistrationOtpVerificationCommitter
     return result(:invalid_code) unless ascii_match?(code, /\A[0-9]{6}\z/)
     return result(:session_mismatch) unless ascii_match?(browser_nonce, /\A[A-Za-z0-9_-]{43}\z/)
 
+    if transaction.nil?
+      if actor.is_a?(Client) && email.user_id == actor.id
+        return AppRegisteredContactDestinationGuard.with_available_destination(contact: email, owner: actor) do
+          result(:unavailable)
+        end
+      end
+
+      return result(:unavailable)
+    end
+
     @session_ref = CredentialRegistrationOtpSessionValue.for(
       surface: surface, channel: :email, transaction_ref: transaction.transaction_id,
       root_ref: token.public_id, browser_nonce: browser_nonce,
     ).dump
-    source_snapshot = nil
-    verification =
-      with_locks do
-        next result(:session_mismatch) unless transaction.session_ref == session_ref
-        next result(:unavailable) unless current_authority?
-        next result(:locked) if email.locked?(now: email.class.database_now)
+    verify =
+      lambda do
+        source_snapshot = nil
+        verification =
+          with_locks do
+            next result(:session_mismatch) unless transaction.session_ref == session_ref
+            next result(:unavailable) unless current_authority?
+            next result(:locked) if email.locked?(now: email.class.database_now)
 
-        outcome = transaction.otp_consumed_at ? verify_receipt : verify_challenge
-        source_snapshot = email.attributes.slice("otp_attempts_count", "locked_at", "updated_at") if outcome.success?
-        outcome
+            outcome = transaction.otp_consumed_at ? verify_receipt : verify_challenge
+            source_snapshot = email.attributes.slice(
+              "otp_attempts_count", "locked_at",
+              "updated_at",
+            ) if outcome.success?
+            outcome
+          end
+        return verification unless verification.success?
+
+        with_locks do
+          next result(:unavailable) unless current_authority? && verified_receipt?
+
+          if email.attributes.slice(*source_snapshot.keys) == source_snapshot
+            email.update!(otp_attempts_count: 0, locked_at: EmailOtpPolicy::OTP_UNLOCKED_SENTINEL)
+          end
+          result(:verified)
+        end
       end
-    return verification unless verification.success?
 
-    with_locks do
-      next result(:unavailable) unless current_authority? && verified_receipt?
-
-      if email.attributes.slice(*source_snapshot.keys) == source_snapshot
-        email.update!(otp_attempts_count: 0, locked_at: EmailOtpPolicy::OTP_UNLOCKED_SENTINEL)
-      end
-      result(:verified)
+    if actor.is_a?(Client) && email.user_id == actor.id
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: email, owner: actor, &verify)
+    else
+      verify.call
     end
   end
 

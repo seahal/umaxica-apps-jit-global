@@ -13,6 +13,7 @@ module Auth
           include CloudflareTurnstile
 
           include CommonRedirect
+          include EmailOtpResponseTiming
 
           include EnforcementIdentifierGate
 
@@ -23,7 +24,8 @@ module Auth
           sign_entry_classification! :sign_up
 
           before_action :require_sign_up_ceremony_admission!
-          declare_authentication_mode! :guest, status: :unauthorized,
+          around_action :with_otp_issue_response_timing, only: :create
+          declare_authentication_mode! :guest, status: :forbidden,
                                                message: I18n.t("errors.messages.already_authenticated"),
                                                no_redirect: true
 
@@ -136,22 +138,28 @@ module Auth
               raise ArgumentError, "unsupported telephone signup outcome" unless result.status == :created
 
               session[:user_telephone_registration] = result.session_payload
-              bind_sign_up_flow_to_telephone!(@user_telephone)
+              flow = current_sign_up_flow
               begin
                 issued = TelephoneSignUpOtpDeliveryIssuer.call(
-                  flow: current_sign_up_flow, telephone: @user_telephone,
+                  flow:, telephone: @user_telephone,
                   session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+                  initial_submission: true,
+                  actor_context: Actor.authn,
+                  after_commit: lambda do |committed|
+                    session[:auth_app_up_sequence_id] = flow.public_id
+                    session[:user_telephone_registration] = result.session_payload.merge(
+                      expires_at: committed.transaction&.otp_expires_at&.to_i,
+                    )
+                  end,
                 )
               rescue ActiveJob::EnqueueError, TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable
                 return render_signup_telephone_delivery_unavailable
               end
-              unless issued.success?
-                render_sign_up_telephone_new(status: :unprocessable_content)
+              unless issued.success? || issued.status == :registered_destination
+                session.delete(:user_telephone_registration)
+                render_initial_signup_otp_refusal(issued)
                 return
               end
-              session[:user_telephone_registration] = result.session_payload.merge(
-                expires_at: issued.transaction.otp_expires_at.to_i,
-              )
               redirect_to(
                 auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params),
               )
@@ -215,16 +223,12 @@ module Auth
               submit_label: sign_up_telephone_submit_label,
               links: [
                 {
-                  key: "other_methods",
-                  label: t("sign.app.registration.telephone.new.link_to_other_methods"),
+                  key: "back",
+                  label: t("actions.back"),
                   href: auth_app_sign_up_path,
                 },
-                {
-                  key: "sign_in",
-                  label: t("sign.app.registration.telephone.new.link_to_sign_in"),
-                  href: auth_app_sign_in_path,
-                },
               ],
+              cancel: auth_parent_cancellation_form,
             }
           end
 
@@ -333,17 +337,13 @@ module Auth
           end
 
           def issue_sign_up_flow!
-            sign_up_flow_locator.issue!(
-              ClientSignUpFlow.create!(
-                auth_admission_binding: auth_sign_up_admission_binding!,
-                principal_id: nil,
-                status_id: ClientSignUpFlowStatus::STARTED,
-                step: "start",
-                nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-                issued_at: Time.current,
-                expires_at: ClientSignUpFlow.default_ttl.from_now,
-                entry_method: "telephone",
-              ),
+            sign_up_flow_locator.create_for_admission!(
+              admission_binding: auth_sign_up_admission_binding!,
+              ceremony_session: admitted_auth_ceremony_session,
+              entry_method: "telephone",
+              social_provider: nil,
+              return_to: nil,
+              reject_prior_flow: false,
             )
           end
 
@@ -351,15 +351,16 @@ module Auth
             current_sign_up_flow_ticket || issue_sign_up_flow!
           end
 
-          def bind_sign_up_flow_to_telephone!(telephone)
-            cycle = current_sign_up_flow
-            cycle.update!(
-              principal_id: telephone.user_id,
-              pending_contact_type: "telephone",
-              pending_contact_id: telephone.id,
-            )
-            SignUpStateMachine.call(ticket: cycle, event: :submit_contact, actor_context: Actor.authn)
-            session[:auth_app_up_sequence_id] = cycle.public_id
+          def render_initial_signup_otp_refusal(result)
+            case result.status
+            when :rate_limited, :locked
+              render_sign_up_telephone_new(status: :too_many_requests)
+            when :session_mismatch, :inactive_flow, :binding_mismatch, :inactive_candidate, :closed_challenge,
+                 :delivery_refused
+              render_sign_in_phase_refusal!
+            else
+              raise ArgumentError, "unsupported initial Telephone signup OTP refusal: #{result.status.inspect}"
+            end
           end
 
           def sign_up_flow_locator

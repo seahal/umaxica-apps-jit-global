@@ -3,7 +3,7 @@
 require "test_helper"
 
 class EmailCeremonyOtpVerificationAdmissionTest < ActiveSupport::TestCase
-  [ClientEmailCeremonyTransaction,    OperatorEmailCeremonyTransaction,].each do |model|
+  [ClientEmailCeremonyTransaction, OperatorEmailCeremonyTransaction].each do |model|
     test "#{model.name} admission wait checks the OTP deadline minus at and plus one microsecond" do
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
         transaction = model.create_transaction!(

@@ -178,6 +178,59 @@ class SignInOtpResendSerializationTest < ActiveSupport::TestCase
     end
   end
 
+  test "an Auth commit failure before issuance preserves the existing challenge and prevents delivery" do
+    address = "resend-auth-commit-failure-#{SecureRandom.hex(8)}@example.test"
+    body = OccurrenceHmac.digest(kind: :email, body: address)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    contact = owner.client_emails.create!(address:, confirm_policy: "1").tap(&:finalize_binding!)
+    admission = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "authentication_handoff", authorization_transaction_ref: admission.transaction.transaction_id,
+    )
+    ceremony.issue_email_otp!(contact:, destination: address)
+    original_context = ceremony.reload.email_otp_context.deep_dup
+    state = SignInOtpResendState.issue(
+      kind: :email, target: address, surface: :app, browser_binding: ceremony.sid_digest, contact:,
+    )
+    auth_connection = ClientAuthCeremonySession.lease_connection
+    adapter = Minitest::Mock.new
+    failed_commit = -> { raise ActiveRecord::ConnectionNotEstablished, "injected Auth transaction commit failure" }
+    queued_otp_jobs_before =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    result = nil
+    Rails.error.stub(:report, ->(*, **) { }) do
+      OtpAdapter.stub(:for, adapter) do
+        auth_connection.stub(:commit_db_transaction, failed_commit) do
+          result = SignInOtpResender.new(
+            kind: :email, state:, surface: :app,
+            browser_binding: ceremony.sid_digest, ceremony:,
+          ).call
+        end
+      end
+    end
+
+    assert_equal :service_unavailable, result.status
+    assert_equal original_context, ClientAuthCeremonySession.find(ceremony.id).email_otp_context
+    assert_nil EmailOccurrence.find_by(body:)
+    queued_otp_jobs_after =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_equal queued_otp_jobs_before, queued_otp_jobs_after
+    adapter.verify
+  ensure
+    EmailOccurrence.where(body:).delete_all if body
+    ceremony&.delete
+    if admission
+      ClientAuthAdmissionBinding.where(authorization_transaction_id: admission.transaction.id).delete_all
+      admission.transaction.delete
+    end
+    contact&.delete
+    owner&.delete
+  end
+
   test "a lost occurrence commit acknowledgement does not start delivery" do
     address = "resend-unknown-commit-#{SecureRandom.hex(8)}@example.test"
     body = OccurrenceHmac.digest(kind: :email, body: address)

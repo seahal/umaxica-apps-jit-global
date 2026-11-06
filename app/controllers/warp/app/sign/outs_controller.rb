@@ -36,12 +36,7 @@ module Warp
         end
 
         def create
-          launch_oidc_rp_logout!(
-            client_id: RpDeploymentBindingValue.client_id("warp-app"),
-            issuer_resource_type: "client",
-            token_issuer: "client",
-            session_authority: :rp_session,
-          )
+          launch_oidc_rp_logout!(client_id: RpDeploymentBindingValue.client_id("warp-app"))
         end
 
         private

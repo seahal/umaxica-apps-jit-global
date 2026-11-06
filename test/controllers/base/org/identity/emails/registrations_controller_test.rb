@@ -7,15 +7,25 @@ require "test_helper"
 # staff surface: the two-step OTP flow plus the Turnstile, invalid-address,
 # missing-code, wrong-code, lock-out, and expired-session branches guarding it.
 class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch::IntegrationTest
-  fixtures :operators, :operator_statuses, :operator_email_statuses,
-           :operator_token_kinds, :operator_token_statuses, :operator_token_binding_methods,
-           :operator_token_dbsc_statuses, :operator_passkeys
+  self.fixture_table_names = []
 
   setup do
     https!
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
-    @operator = operators(:one)
+    @operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    2.times do |index|
+      OperatorPasskey.create!(
+        staff_id: @operator.id,
+        webauthn_id: SecureRandom.urlsafe_base64(32),
+        public_key: "email-registration-test-public-key-#{index + 1}",
+        status_id: OperatorPasskeyStatus::ACTIVE,
+      )
+    end
     @token = OperatorToken.create!(
       authentication_epoch: 0,
       staff: @operator,
@@ -72,7 +82,7 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
         end
       cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
     end
-    passkey = @operator.operator_passkeys.first!
+    passkey = OperatorPasskey.find_by!(staff_id: @operator.id)
     passkey.update!(uv_verified_at: Time.current)
     _verification, raw_verification = OperatorVerification.issue_for_token!(token: @token)
     cookies[OperatorVerification.cookie_name] = raw_verification

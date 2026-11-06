@@ -31,7 +31,7 @@
 #  scope                      :string           not null
 #  session_ref                :string
 #  state                      :string           not null
-#  status                     :string           not null
+#  status_id                  :bigint           not null
 #  surface                    :string           not null
 #  created_at                 :datetime         not null
 #  updated_at                 :datetime         not null
@@ -50,6 +50,10 @@ class ClientOidcAuthorizationTransaction < OpBaseAppRecord
   validates :cancellation_handoff_digest, :result_digest, length: { maximum: 64 }
 
   oidc_authorization_surface "app"
+
+  belongs_to :status,
+             class_name: "ClientOidcAuthorizationTransactionStatus",
+             inverse_of: :client_oidc_authorization_transactions
 
   belongs_to :secret_sign_in_flow, class_name: "ClientSignInFlow", optional: true
 end

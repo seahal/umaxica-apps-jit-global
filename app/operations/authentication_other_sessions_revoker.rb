@@ -18,12 +18,12 @@ class AuthenticationOtherSessionsRevoker
   end
 
   def initialize(owner:, sessions:, current_token: nil, current_session_public_id: nil,
-                 step_up_requirement:, reason: "settings.session.revoke_others")
+                 step_up_evidence: nil, reason: "settings.session.revoke_others")
     @owner = owner
     @sessions = sessions
     @current_token = current_token
     @current_session_public_id = current_session_public_id
-    @step_up_requirement = step_up_requirement
+    @step_up_evidence = step_up_evidence
     @reason = reason
   end
 
@@ -32,27 +32,21 @@ class AuthenticationOtherSessionsRevoker
     revoked = []
     now = current_token.class.database_now
     current_token.class.transaction do
-      current_token.with_lock do
-        unless StepUpResolver.call(token: current_token, requirement: step_up_requirement, now:).satisfied?
-          raise StepUpUnavailable, "Revoking other sessions requires current scoped Step-Up"
-        end
+      unless StepUpEvidenceVerifier.call(evidence: step_up_evidence, actor: owner, token: current_token)
+        raise StepUpUnavailable, "Revoking other sessions requires current scoped Step-Up"
+      end
 
-        # Point-in-time (D-167): a session committed while this request waited for the lock is not
-        # one the person asked to revoke.
-        sessions.where(created_at: ..now).find_each do |token|
-          result = AuthenticationSelectedSessionRevoker.call(
-            owner: owner,
-            token: token,
-            current_token: current_token,
-            current_session_public_id: current_session_public_id,
-            reason: reason,
-          )
-          revoked.concat(result.revoked_tokens) if result.success?
-        end
-
-        if revoked.any?
-          current_token.consume_step_up_evidence!(requirement: step_up_requirement, now:)
-        end
+      # Point-in-time (D-167): a session committed while this request waited for the lock is not
+      # one the person asked to revoke.
+      sessions.where(created_at: ..now).find_each do |token|
+        result = AuthenticationSelectedSessionRevoker.call(
+          owner: owner,
+          token: token,
+          current_token: current_token,
+          current_session_public_id: current_session_public_id,
+          reason: reason,
+        )
+        revoked.concat(result.revoked_tokens) if result.success?
       end
     end
 
@@ -63,14 +57,13 @@ class AuthenticationOtherSessionsRevoker
 
   private
 
-  attr_reader :owner, :sessions, :current_token, :current_session_public_id, :step_up_requirement, :reason
+  attr_reader :owner, :sessions, :current_token, :current_session_public_id, :step_up_evidence, :reason
 
   def validate_binding!
     now = current_token&.class&.database_now
     unless owner&.persisted? && current_token&.persisted? && token_belongs_to_owner? &&
-        current_token.public_id == current_session_public_id && current_token.active_status?(now) &&
-        valid_step_up_requirement?
-      raise Denied, "Revoking other sessions requires the current surface session and Step-Up requirement"
+        current_token.public_id == current_session_public_id && current_token.active_status?(now)
+      raise Denied, "Revoking other sessions requires the current surface session"
     end
   end
 
@@ -80,19 +73,5 @@ class AuthenticationOtherSessionsRevoker
     in [Operator, OperatorToken] then current_token.staff_id == owner.id
     else false
     end
-  end
-
-  def valid_step_up_requirement?
-    surface =
-      case owner
-      when Client then "app"
-      when Operator then "org"
-      end
-    requirement = step_up_requirement
-    requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
-      requirement.scope == "session_revoke_all" && requirement.purpose == "step_up" &&
-      requirement.audience == "step_up:#{surface}" && requirement.actor_ref == owner.public_id &&
-      requirement.session_binding == current_token.public_id && requirement.token_binding == current_token.public_id &&
-      requirement.require_session_binding && requirement.ttl&.positive?
   end
 end

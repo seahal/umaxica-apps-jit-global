@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 import { readString } from "@/lib/payload";
 
@@ -40,7 +41,7 @@ export type EmailPassCodeFormProps = {
   turnstile: SignInTurnstile;
   form_errors: string[];
   delivery_help: string;
-  back_link: { label: string };
+  cancel_button: { label: string; parent_action?: string | null };
 };
 
 export default function EmailPassCodeForm({
@@ -51,7 +52,7 @@ export default function EmailPassCodeForm({
   turnstile,
   form_errors: formErrors,
   delivery_help: deliveryHelp,
-  back_link: backLink,
+  cancel_button: cancelButton,
 }: EmailPassCodeFormProps) {
   const field = form.pass_code_field;
   const input = useRef<HTMLInputElement>(null);
@@ -159,16 +160,26 @@ export default function EmailPassCodeForm({
 
       <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
-      <p className="text-base">
-        <button
-          type="button"
-          onClick={() => router.delete(form.action, { data: { pt: form.pt } })}
-          disabled={processing}
-          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
-        >
-          {backLink.label}
-        </button>
-      </p>
+      {cancelButton.parent_action ? (
+        <div className="text-base">
+          <CeremonyCancellation
+            label={cancelButton.label}
+            action={cancelButton.parent_action}
+            method="post"
+          />
+        </div>
+      ) : (
+        <p className="text-base">
+          <button
+            type="button"
+            onClick={() => router.delete(form.action, { data: { pt: form.pt } })}
+            disabled={processing}
+            className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
+          >
+            {cancelButton.label}
+          </button>
+        </p>
+      )}
     </Page>
   );
 }

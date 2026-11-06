@@ -78,11 +78,11 @@ module BaseAdmissionBrowserBinding
   end
 
   # cancellation: the Cancel exit stays open after the curfew; it is how the attempt ends (WU-06).
-  def validate_base_result_browser_binding!(transaction, cancellation: false)
+  def validate_base_result_browser_binding!(transaction, cancellation: false, source_auth_session_id: nil)
     BaseAuthAdmissionCoordinator.validate_result_browser_binding!(
       transaction:, surface: self.class.base_admission_surface_name,
       base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token,
-      cancellation:,
+      cancellation:, source_auth_session_id:,
     )
   end
 

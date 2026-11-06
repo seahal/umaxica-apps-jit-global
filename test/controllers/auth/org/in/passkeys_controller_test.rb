@@ -172,6 +172,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     ).surface
     assert_equal "jp", panel.fetch("region")
     assert_nil inertia_props["secret_link"]
+    assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("parent_cancel").fetch("action")
+    assert_equal "post", inertia_props.fetch("parent_cancel").fetch("method")
 
     transaction = session.fetch(OrgNormalSignInTransaction::SESSION_KEY).deep_dup
     stale_binding = OrgNormalSignInBindingCodec.encode(

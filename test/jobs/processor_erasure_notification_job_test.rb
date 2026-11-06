@@ -99,5 +99,4 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
   end
-
 end

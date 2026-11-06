@@ -55,13 +55,28 @@ module Visa
           def destroy
             return render_invalid_resolution unless resolution_loaded?
 
-            # Cancelling ends only this pending sign-in; no existing session is touched.
-            return render_invalid_resolution unless cancel_pending_resolution!
+            cancellation = @oidc_transaction ? cancel_oidc_pending_resolution! : nil
+            return render_invalid_resolution if @oidc_transaction && !cancellation
+            return render_invalid_resolution if @oidc_transaction.nil? && !cancel_pending_resolution!
 
-            # Base's neutral entry owns fresh admission. Cancellation grants no Auth continuity.
-            redirect_to(base_app_sign_show_path(ri: params[:ri]), status: :see_other)
+            if cancellation
+              redirect_to(
+                visa_app_oidc_cancellation_path(
+                  cancellation_ref: cancellation.reference,
+                  transaction_ref: cancellation.transaction.transaction_id,
+                  ri: params[:ri],
+                ), status: :see_other,
+              )
+            else
+              # A local/social sign-in has no OIDC parent to cancel or return to.
+              redirect_to(base_app_sign_show_path(ri: params[:ri]), status: :see_other)
+            end
             # The entry is a plain document, not an Inertia page.
             convert_redirect_to_inertia_location!
+          rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
+            render_invalid_resolution
+          rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+            render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
           end
 
           private
@@ -89,6 +104,25 @@ module Visa
           end
 
           def cancel_pending_resolution!
+            return false unless cancel_pending_resolution_records!
+
+            finish_pending_resolution_cancellation!
+            true
+          end
+
+          def cancel_oidc_pending_resolution!
+            cancellation = SessionLimitOidcCancellationCommitter.call!(
+              actor: @actor, resolution: @resolution, transaction: @oidc_transaction,
+              challenge: @resolution_challenge, browser_binding: @resolution_binding,
+            )
+            return false unless cancellation
+
+            finalize_oidc_secret_claim_cancellation!
+            finish_pending_resolution_cancellation!
+            cancellation
+          end
+
+          def cancel_pending_resolution_records!
             return false unless @resolution && @resolution_binding.present?
 
             @resolution.cancel!(
@@ -99,19 +133,26 @@ module Visa
             flow = ClientSignInFlow.find(@resolution.sign_in_flow_id)
             flow.cancel_sign_in! unless flow.sign_in_completed? || flow.sign_in_expired? ||
               flow.sign_in_cancelled? || flow.sign_in_halted?
-            if @oidc_transaction&.secret_sign_in_flow_id
-              credential = ClientSecretCredential.find_by(
-                client_id: @actor.id, claim_sign_in_flow_ref: flow.public_id,
-              )
-              ClientSecretClaimFinalizer.call!(
-                credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,
-              ) if credential
-            end
-            clear_current_sign_in_flow_locator!
-            session[:inertia_clear_history] = true
             true
           rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
             false
+          end
+
+          def finalize_oidc_secret_claim_cancellation!
+            return unless @oidc_transaction.secret_sign_in_flow_id
+
+            flow = ClientSignInFlow.find(@oidc_transaction.secret_sign_in_flow_id)
+            credential = ClientSecretCredential.find_by(
+              client_id: @actor.id, claim_sign_in_flow_ref: flow.public_id,
+            )
+            ClientSecretClaimFinalizer.call!(
+              credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,
+            ) if credential
+          end
+
+          def finish_pending_resolution_cancellation!
+            clear_current_sign_in_flow_locator!
+            session[:inertia_clear_history] = true
           end
 
           def render_limitation_page(status:)

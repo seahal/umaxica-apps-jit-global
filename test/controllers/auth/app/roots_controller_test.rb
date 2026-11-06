@@ -117,7 +117,6 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
-
 end
 
 # DAMP auth header helpers for this test class.

@@ -1,0 +1,10 @@
+%% Contract-only axis. Unit 1 adds persistence; transition writers are not implemented yet.
+flowchart LR
+  ABSENT((absent)) --> PENDING["PENDING (10)"]
+  PENDING -->|step-up committed| COMMITTED["COMMITTED (20)"]
+  PENDING -->|user cancels| CANCELLED["CANCELLED (90)"]
+  PENDING -->|authorization transaction expires| EXPIRED["EXPIRED (91)"]
+  PENDING -->|authenticated binding or policy mismatch| FAILED["FAILED (92)"]
+
+  %% The context and transition rows are transient and cascade with their OIDC authorization transaction.
+  %% Root-lifetime method attribution is stored separately in operator_step_up_commits.

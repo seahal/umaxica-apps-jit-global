@@ -3,13 +3,9 @@
 
 require "jwt"
 
-# Backward-compatible facade for preference JWT access tokens.
-#
-# PreferenceToken encoding/decoding lives in `SecurityJwtPreferenceTokenCodec`;
-# this class keeps the existing public API.
+# Preference JWT encoding and decoding entry point.
 class PreferenceToken
   JWT_ALGORITHM = SecurityJwtPreferenceTokenCodec::JWT_ALGORITHM
-  ACCESS_TOKEN_TTL = SecurityJwtPreferenceTokenCodec::ACCESS_TOKEN_TTL
   TOKEN_TYPE = SecurityJwtPreferenceTokenCodec::TOKEN_TYPE
   AudienceMismatchError = SecurityJwtPreferenceTokenCodec::AudienceMismatchError
 
@@ -38,8 +34,6 @@ class PreferenceToken
     def extract_preferences(payload) = codec.extract_preferences(payload)
 
     def extract_public_id(payload) = codec.extract_public_id(payload)
-
-    def extract_preference_type(payload) = codec.extract_preference_type(payload)
 
     def extract_jti(payload) = codec.extract_jti(payload)
 

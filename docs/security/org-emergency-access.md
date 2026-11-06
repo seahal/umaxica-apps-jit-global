@@ -1,7 +1,9 @@
 # Org Emergency Access (Restricted Mode)
 
-Emergency Access is a second, Entra-free way for an Operator to sign in to the org surface, and the
-restricted authentication context the resulting session runs under.
+Emergency Access is intended to provide an Entra-free way for an Operator to sign in to the org
+surface and run the resulting ORG Root session under a restricted authentication context. The
+current Auth-to-Visa implementation does not yet carry Standby through Root issuance; see
+[Current end-to-end issuance status](#current-end-to-end-issuance-status).
 
 It exists for the case where the Entra ID path is unavailable. It is not a convenience alternative
 to normal sign-in, and it is not a privilege: it can only ever be narrower than the Operator's
@@ -33,26 +35,44 @@ Entra alone completes nothing.
 Entra ID  ->  Passkey
 ```
 
-Emergency Access is one stage and uses no Entra:
+Emergency Access uses one credential stage and no Entra:
 
 ```text
-Emergency sign-in  ->  Passkey  ->  Restricted Mode session
+Emergency sign-in  ->  Passkey  ->  Standby Auth evidence  ->  OIDC Root issuance
 ```
+
+The final arrow is an intended continuation, not a currently working Standby Root path. The current
+Visa ORG issuer creates a Normal-context Root; see
+[Current end-to-end issuance status](#current-end-to-end-issuance-status).
 
 Emergency Access uses the Operator's **existing registered passkeys**. There is no separate
 emergency passkey registration, and no separate emergency credential of any kind. Secret/SecretKey
 is **not** available in Emergency Access: Emergency Access is passkey-only.
 
-|                   | Normal                        | Emergency                            |
-| ----------------- | ----------------------------- | ------------------------------------ |
-| Entry             | `GET /sign/in` -> Entra       | `GET /sign/in/emergency/passkey/new` |
-| First stage       | Entra ID                      | none                                 |
-| Credential        | Passkey                       | Passkey only                         |
-| Actor selected by | the pending Entra transaction | the submitted identifier             |
-| Challenge purpose | `authentication`              | `emergency_sign_in`                  |
-| Session context   | `normal`                      | `standby`                            |
-| Step-Up           | available                     | **unavailable**                      |
-| Sign-out          | `/sign/out`                   | `/sign/out` (the same ceremony)      |
+|                   | Normal                        | Emergency                                 |
+| ----------------- | ----------------------------- | ----------------------------------------- |
+| Entry             | `GET /sign/in` -> Entra       | `GET /sign/in/emergency/passkey/new`      |
+| First stage       | Entra ID                      | none                                      |
+| Credential        | Passkey                       | Passkey only                              |
+| Actor selected by | the pending Entra transaction | the submitted identifier                  |
+| Challenge purpose | `authentication`              | `emergency_sign_in`                       |
+| Auth evidence     | `normal`                      | `standby`                                 |
+| OIDC Root today   | `normal`                      | `normal` (Standby propagation incomplete) |
+| Step-Up           | available                     | **unavailable**                           |
+| Sign-out          | `/sign/out`                   | `/sign/out` (the same ceremony)           |
+
+## Current end-to-end issuance status
+
+The Emergency Passkey verifier calls `establish_signed_in_session!` with
+`AuthenticationContextValue::STANDBY_KEY`. For an OIDC-started ceremony, `AuthenticationBase`
+records authentication evidence and leaves Browser Root issuance to the later authorization
+continuation. `Visa::Org::AuthorizationBaseController#login_for_oidc` currently calls `log_in` with
+`AuthenticationContextValue::NORMAL_KEY`. Therefore the checked-in path does not issue a
+Standby-context ORG Browser Root from this ceremony, even though the Auth-side evidence is marked
+Standby. The Emergency flow must not be treated as an available Entra-outage sign-in path until the
+exact verified ceremony is bound to its OIDC authorization and that binding is checked at Root
+issuance. A request parameter, actor identity, or authentication method alone cannot establish that
+binding. An Auth-side test that stops after recording evidence does not demonstrate a Standby Root.
 
 ## Routes
 
@@ -68,10 +88,10 @@ Resourceful, and the same resource shape as the normal passkey ceremony
 There is deliberately **no** emergency sign-up route and **no** emergency sign-out route. Both modes
 terminate through the one canonical sign-out ceremony.
 
-The three Emergency entry controllers declare the `sign_in` classification and a fixed
-standby-only exception to the normal ORG Sign In stop. The exception is restricted to those named
-controllers and cannot be selected with a request parameter. Admission, credential eligibility and
-the existing rate, CSRF and verification controls still apply.
+The three Emergency entry controllers declare the `sign_in` classification and a fixed standby-only
+exception to the normal ORG Sign In stop. The exception is restricted to those named controllers and
+cannot be selected with a request parameter. Admission, credential eligibility and the existing
+rate, CSRF and verification controls still apply.
 
 ## Eligibility
 
@@ -84,15 +104,15 @@ a change to one method, not a hunt through controllers, concerns, views, and tok
 consulted twice per ceremony -- when the options are issued and again at verification -- because
 eligibility can be withdrawn between the two requests.
 
-Every syntactically valid identifier receives an empty `allowCredentials` array. Real credential
-IDs are never mixed with random padding: repeated responses could otherwise identify the stable
-real IDs. Challenges retain the selected Operator's fixed-length public reference, or an invalid
+Every syntactically valid identifier receives an empty `allowCredentials` array. Real credential IDs
+are never mixed with random padding: repeated responses could otherwise identify the stable real
+IDs. Challenges retain the selected Operator's fixed-length public reference, or an invalid
 fixed-length sentinel for unknown/ineligible selections. A sentinel challenge cannot authenticate
 any Operator. See [response nondisclosure](../../adr/credential-response-nondisclosure.md).
 
-Org registration requires discoverable credentials. Existing non-discoverable keys remain usable
-in normal Entra-bound sign-in but require re-registration before Emergency Access can use them.
-No database update can convert a non-discoverable authenticator credential. Establish usable
+Org registration requires discoverable credentials. Existing non-discoverable keys remain usable in
+normal Entra-bound sign-in but require re-registration before Emergency Access can use them. No
+database update can convert a non-discoverable authenticator credential. Establish usable
 discoverable keys before depending on Emergency Access during an Entra outage.
 
 Nothing reachable from an Emergency session can write the inputs this policy reads. An Emergency
@@ -216,20 +236,63 @@ by giving it a Step-Up gate, not by listing it in the capability layer.
 
 Two mechanisms carry the capability layer:
 
-1. **Scopes.** `AuthenticationContextValue#constrain_scopes` touches a token's `scp` claim only
-   for an unrecognised context, which keeps the structural scopes and loses every
-   capability-named scope. A Standby token issues exactly the same scopes as the same Operator's
-   Normal token (`authenticated`, `domain:operator`, `read:org`, `write:org`); withholding a
-   scarce operation happens at that operation's Step-Up gate, so the scp claim is not a second
-   place where the same restriction could drift apart.
+1. **Scopes.** `AuthenticationContextValue#constrain_scopes` touches a token's `scp` claim only for
+   an unrecognised context, which keeps the structural scopes and loses every capability-named
+   scope. A Standby token issues exactly the same scopes as the same Operator's Normal token
+   (`authenticated`, `domain:operator`, `read:org`, `write:org`); withholding a scarce operation
+   happens at that operation's Step-Up gate, so the scp claim is not a second place where the same
+   restriction could drift apart.
 2. **An Action Policy pre-check.** `ApplicationPolicy` runs `deny_capability_restricted_context`
    before every rule. Normal and Emergency contexts pass it and meet the ordinary rule; it never
    widens a rule that denies. An unrecognised context fails it for every rule instead of falling
    through to Normal.
 
-`test/unit/security/authentication_context_operation_inventory_test.rb` compares Normal and
-Standby over every declared policy operation and holds both to the identical decision, so the
-context layer cannot silently become a second authorization vocabulary.
+`test/unit/security/authentication_context_operation_inventory_test.rb` enumerates zero-argument
+predicate rules declared in each loaded policy class's `ApplicationPolicy` ancestry, excluding
+inherited `Object` methods and argument-taking helpers. It applies each rule through Action Policy's
+`apply` path under installed Normal, Standby and unknown token claims, so the real application
+pre-check runs. The generic comparison uses no actor or record except for the authentication access
+context; it verifies context parity and fail-closed behavior, not actor-specific permissions or
+public HTTP operations. AC-41's per-operation checks therefore remain open: the Step-Up-required
+operation inventory must be derived from policy and checked for Standby refusal plus Normal Step-Up
+success; writes outside that inventory also need an explicit disposition.
+
+A focused recheck on 2026-11-02 passed the four ORG enforcement-case operations and IAM grant and
+revocation on both sides of the context boundary: the Standby controller file passed with fresh
+matching Step-Up evidence (6 runs, 78 assertions), and the Normal enforcement/IAM controller files
+passed (28 runs, 128 assertions). The Standby file also covers contact and Telephone refusals. These
+are selected public cases; the policy-derived operation inventory, all remaining operation pairs,
+and the disposition of writes outside the inventory remain open. See
+[`wua6-standby-enforcement-matrix-recheck-B5J9.md`](../../evidence/2026-11-02-wua6-standby-enforcement-matrix-recheck-B5J9.md).
+
+The support-account session-revocation and IAM grant screens are now covered through the owner API:
+an ORG Standby access token with their required grants receives `403 step_up_required` without an
+active-session count or grantable-capability list; the same operator in Normal with fresh matching
+Step-Up receives the screen data. This closes only these read boundaries; it does not close the
+policy-derived AC-41 operation matrix.
+
+Focused ORG HTTP checks also refuse Standby Passkey rename/deletion, Email and Telephone
+registration, Secret bootstrap, session revocation, and the tested enforcement mutations. These
+cases preserve the Standby context and leave their protected records unchanged. They cover selected
+operations only; the policy-derived Normal Step-Up / Standby comparison and actual Standby Root
+issuance remain open. See `evidence/2026-11-02-wua6-org-owner-stepup-ops-N3F6.md` and the linked
+operation-specific evidence below.
+
+A separate Normal ORG integration flow now passes real WebAuthn verification in Auth, Base result
+consumption, freshness resolution, and access to the protected Passkey page (5 tests, 35 assertions
+in the affected file). It does not perform a sensitive mutation after Step-Up, so it verifies the
+shared ceremony boundary but does not close AC-41's per-operation comparison. See
+`evidence/2026-11-01-wua6-normal-step-up-fixture-isolation-F7N3.md`.
+
+One write outside the catalogued Step-Up scopes has an explicit current-policy disposition:
+`PublishingEntryPolicy#create?` requires an active Operator but has no Step-Up requirement. Under
+R-AU-10, its policy result is the same for Normal and Standby; the focused policy check confirms
+that parity and refuses an unknown context. A fixture-free integration test now calls the Base ORG
+Publishing create API with a valid Edit client assertion and signed access tokens bound to
+separately seeded Normal and Standby roots. Both requests create an entry attributed to the same
+active Operator. This verifies the downstream HTTP authorization path with a directly seeded Standby
+root; it does not demonstrate Visa issuance from the Auth Standby ceremony. That Root issuance path
+remains unavailable. See `evidence/2026-11-01-wua6-publishing-http-parity-P8J2.md`.
 
 The pre-check reads the context from the verified access-token claims that
 `AuthenticationBase#load_from_token` records and `ActorSupport#resolved_current_token` returns.
@@ -240,7 +303,9 @@ pre-check with no claims, so it treated every session as Normal.
 
 This is not "step-up has not happened yet". The authentication context is not eligible to perform
 step-up-protected operations at all, however valid the Operator's step-up passkey is. There is no
-separate Emergency step-up mechanism, and normal step-up behaviour is unchanged.
+separate Emergency step-up mechanism, and normal step-up behaviour is unchanged. The Base ORG
+Step-Up start and first-authenticator bootstrap pages also refuse Standby before offering or issuing
+any verification admission.
 
 Three independent layers enforce it:
 

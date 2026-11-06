@@ -56,33 +56,47 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
   test "a challenge is bound to the concrete transaction and consumed once" do
     actor = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.rotate_refresh_token!
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: actor, token: token,
-      requirement: StepUpRequirement.new(
-        step_up_required: true, phishing_resistant_required: false,
-        user_verification_required: false, full_reauthentication_required: false,
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
-        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id,
-        resource_ref: nil, tenant_ref: nil,
-      ),
-      return_to: "/identity/birthdate", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: token,
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
     )
-    record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("step-up-passkey-challenge"), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
+    )
+    transaction = issuance.ticket
+    record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
     reference = record.issue_bound_passkey_challenge!(
-      transaction: issuance.transaction, challenge: "public-challenge", rp_id: "app.example",
+      transaction:, challenge: "public-challenge", rp_id: "app.example",
       origin: "https://app.example",
     )
 
     assert_equal "public-challenge", record.consume_bound_passkey_challenge!(
-      transaction: issuance.transaction, reference: reference, rp_id: "app.example", origin: "https://app.example",
+      transaction:, reference:, rp_id: "app.example", origin: "https://app.example",
     )
     assert_raises(StepUpSessionConsumable::ChallengeError) do
       record.consume_bound_passkey_challenge!(
-        transaction: issuance.transaction, reference: reference, rp_id: "app.example", origin: "https://app.example",
+        transaction:, reference:, rp_id: "app.example", origin: "https://app.example",
       )
     end
+    assert_equal issuance.context.public_id, transaction.resource_ref
     assert_not_nil record.reload.passkey_challenge_consumed_at
     assert_equal 0, record.attempt_count
   end

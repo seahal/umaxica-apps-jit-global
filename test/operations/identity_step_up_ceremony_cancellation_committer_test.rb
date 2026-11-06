@@ -3,16 +3,16 @@
 require "test_helper"
 
 class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
-  fixtures :clients, :client_statuses
+  self.fixture_table_names = %w(clients client_statuses)
 
   setup do
     @actor = clients(:one)
     @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @requirement = StepUpRequirement.new(
       scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @actor.public_id,
-      resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+      phishing_resistant_required: true, user_verification_required: true,
+      full_reauthentication_required: true, ttl: 15.minutes, actor_ref: @actor.public_id,
+      resource_ref: nil, tenant_ref: nil, purpose: "reauthentication",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
@@ -25,10 +25,11 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(base_token: @token, browser_digest: binding.base_browser_digest)
     BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+      reference: binding.entry_ref, surface: "app", expected_intent: "reauthentication", binding:,
+      raw_auth_sid: raw_sid,
     )
     @ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: @transaction.transaction_id,
+      admission_purpose: "reauthentication_handoff", step_up_ceremony_transaction_ref: @transaction.transaction_id,
       previous_raw_sid: raw_sid,
     )
     binding.redeem!(auth_session: attached, admitted_auth_session: @ceremony)
@@ -138,25 +139,24 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
     IdentityStepUpCeremonyFreshnessCommitter.call!(
       actor: @actor, token: @token, transaction: @transaction, requirement: @requirement, raw_result: result.code,
     )
-    event = @token.reload.last_step_up_at
+    current_token = ClientToken.find(@token.device_session_record!.reload.current_refresh_token_id)
+    event = current_token.last_step_up_at
 
     assert_no_difference ["ClientStepUpCeremonyTransaction.count", "ClientAuthAdmissionBinding.count"] do
-      outcome = BaseStepUpCancelAndStartCommitter.call!(
-        actor: @actor, token: @token, previous_transaction: stale_parent,
-        requirement: @requirement, return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
-      )
-
-      assert_equal @transaction.id, outcome.transaction.id
-      assert_equal "consumed", outcome.transaction.status
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        BaseStepUpCancelAndStartCommitter.call!(
+          actor: @actor, token: @token, previous_transaction: stale_parent,
+          requirement: @requirement, return_to: "/identity/birthdate",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+        )
+      end
     end
 
-    assert_not IdentityStepUpCeremonyCancellationCommitter.call!(
-      actor: @actor, token: @token,
-      transaction: @transaction,
-    )
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyCancellationCommitter.call!(actor: @actor, token: @token, transaction: @transaction)
+    end
     assert_equal "consumed", @transaction.reload.status
-    assert_equal event, @token.reload.last_step_up_at
+    assert_equal event, current_token.reload.last_step_up_at
     assert_not_predicate @ceremony.reload, :cancelled?
   end
 end

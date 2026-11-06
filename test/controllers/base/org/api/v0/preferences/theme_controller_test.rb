@@ -13,6 +13,7 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     _ = PreferenceBase # ensure autoload of JwtConfiguration/Token defined in same file
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
+    https!
   end
 
   test "GET show without a Preference JWT returns default theme sy" do
@@ -33,7 +34,7 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       get base_org_api_v0_preferences_theme_path, as: :json
 
       assert_response :success
@@ -52,7 +53,7 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       patch base_org_api_v0_preferences_theme_path, params: { theme: "light" }, as: :json
     end
 
@@ -76,6 +77,14 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
       preference: preference,
       option_id: option_class::SYSTEM,
     )
+    (PreferenceClassRegistry::CHILD_RECORD_TYPES - [:theme]).each do |type|
+      child_option_class = PreferenceClassRegistry.option_class("Org", type)
+      child_option_class.ensure_defaults! if child_option_class.respond_to?(:ensure_defaults!)
+      PreferenceClassRegistry.record_class("Org", type).create!(
+        preference_id: preference.id,
+        option_id: PreferenceClassRegistry.default_option_id("Org", type),
+      )
+    end
     token = encode_preference_jwt(
       preferences: { "theme" => "system" },
       host: @host,
@@ -84,7 +93,7 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       patch base_org_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
     end
 
@@ -106,19 +115,20 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
   end
   private
 
-  def encode_preference_jwt(preferences:, host:, public_id:, preference_type: "AppPreference")
+  def encode_preference_jwt(preferences:, host:, public_id:, preference_type: "OrgPreference")
     preference = OrgPreference.find_by(public_id:)
     jti = preference&.jti || "test-jti-#{SecureRandom.uuid}"
     defaults = SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first)
     token = nil
 
-    with_preference_jwt_keys(host: host) do
+    with_preference_realm_issuers do
       token = PreferenceToken.encode(
         defaults.merge(preferences),
         host: host,
         preference_type: preference_type,
         public_id: public_id,
         jti: jti,
+        issued_at: OrgPreference.database_now,
       )
     end
 
@@ -133,7 +143,6 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -160,24 +169,6 @@ class Base::Org::Api::V0::Preferences::ThemeControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

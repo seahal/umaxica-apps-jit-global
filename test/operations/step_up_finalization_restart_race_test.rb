@@ -8,7 +8,7 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
-  test "finalization holding the source owner lock wins over cancel-and-start on an independent Ticket connection" do
+  test "full reauthentication finalization wins and refuses stale cancel-and-start on another Ticket connection" do
     # Fixture sequence resets can reuse IDs held by committed rows in the separate Ticket database.
     actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL,
@@ -21,8 +21,8 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
     )
     device = token.device_session
     requirement = StepUpRequirement.new(
-      scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: true, user_verification_required: true, full_reauthentication_required: false,
+      scope: "settings_passkey", purpose: "reauthentication", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: true, user_verification_required: true, full_reauthentication_required: true,
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
@@ -36,10 +36,11 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
     BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+      reference: issuance.reference, surface: "app", expected_intent: "reauthentication", binding:,
+      raw_auth_sid: raw_sid,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
+      admission_purpose: "reauthentication_handoff", previous_raw_sid: raw_sid,
       step_up_ceremony_transaction_ref: transaction.transaction_id,
     )
     binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
@@ -98,15 +99,21 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
       end
     restarter_backend, stale_status = Timeout.timeout(10) { ready.pop }
     release << true
-    finalized, outcome = Timeout.timeout(10) { [finalizer.value!, restarter.value!] }
+    finalized = Timeout.timeout(10) { finalizer.value! }
+    restart_error = assert_raises(BaseAuthAdmissionCoordinator::Denied) { Timeout.timeout(10) { restarter.value! } }
 
     assert_not_equal finalizer_backend, restarter_backend
     assert_equal "verified", stale_status
-    assert_instance_of BaseAuthAdmissionCoordinator::TerminalOutcome, outcome
+    assert_equal "session_expired", restart_error.code
     assert_equal [transaction.id, transaction.id, "consumed", nil, true],
-                 [finalized.id, outcome.transaction.id, transaction.reload.status, transaction.canceled_at,
+                 [finalized.id, transaction.id, transaction.reload.status, transaction.canceled_at,
                   ceremony.reload.completed?,]
-    assert_equal transaction.verified_at, token.reload.last_step_up_at
+    replacement = ClientToken.find(device.reload.current_refresh_token_id)
+
+    assert_equal transaction.verified_at, replacement.last_step_up_at
+    assert_not_nil token.reload.rotated_at
+    assert_not_equal token.id, device.current_refresh_token_id
+    assert_equal "reauthentication", transaction.purpose
     assert_equal 1, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count
     assert_equal 1, ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: transaction.id).count
   ensure
@@ -118,6 +125,7 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
     ClientStepUpSession.where(user_token_id: token.id).delete_all if token
     transaction&.delete
     device&.update!(current_refresh_token_id: nil)
+    device&.client_tokens&.where&.not(id: token&.id)&.delete_all
     token&.delete
     device&.delete
     credential&.delete

@@ -100,7 +100,7 @@ class AnonymousComPreferenceResponseBindingTest < ActionDispatch::IntegrationTes
                                                        issued_at: Time.current,
                                                        public_id: preference.public_id, jti: preference.jti,
     )
-    expiry = Time.at(now.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_ACCESS_TOKEN_TTL.to_i).utc
+    expiry = Time.at(now.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL.to_i).utc
     calls = 0
     clock =
       lambda do

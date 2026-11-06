@@ -12,7 +12,6 @@ scope(module: :auth, as: :auth) do
   ) do
     scope(module: :app, as: :app) do
       root "roots#index"
-      resources :billings, only: :index
 
       namespace(:well_known, path: ".well-known") do
         resource(:jwks, only: :show, path: "jwks.json", format: false)
@@ -47,12 +46,9 @@ scope(module: :auth, as: :auth) do
         controller: :ceremony_bindings, as: :ceremony_bindings,
       )
 
-      # PWA offline fallback. This is the route form Rails' own application generator emits, kept
-      # verbatim except for the leading slash on the controller, which escapes the enclosing
-      # `scope(module:)`. Approved exception to the resourceful routing rule; do not reshape it into
-      # `resource`. See adr/pwa-offline-route-exception.md.
-      get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
-      get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
+      # Service Worker retirement: adr/pwa-offline-route-exception.md. This URL stays only so a browser
+      # that installed the old Worker fetches its self-unregistering replacement.
+      get("service-worker", to: "service_worker_retirements#show", as: :pwa_service_worker)
 
       namespace :apple do
         resources :notifications, only: :create
@@ -104,15 +100,6 @@ scope(module: :auth, as: :auth) do
       end
 
       # Edge compatibility API: token lifecycle management.
-      namespace :edge do
-        namespace :v0 do
-          namespace :token do
-            resource :status, only: :show, path: "check", controller: :checks, as: :check
-            resource :dbsc, only: :create
-          end
-        end
-      end
-
       # Sign-up and sign-in ceremonies.
       namespace :sign do
         # Auth-up ceremony.
@@ -165,7 +152,6 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :guard, only: :show
           resource :check, only: :show
 
           # `destroy` cancels the pending second-factor ceremony.
@@ -259,7 +245,6 @@ scope(module: :auth, as: :auth) do
     end
   end
 
-
   # Staff credential gateway host.
   constraints(
     host: [Rails.configuration.x.boot_config.fetch(:hosts).auth_staff.host, ENV["PUBLIC_AUTH_STAFF_URL"],
@@ -301,20 +286,11 @@ scope(module: :auth, as: :auth) do
         controller: :ceremony_bindings, as: :ceremony_bindings,
       )
 
-      # PWA offline fallback. This is the route form Rails' own application generator emits, kept
-      # verbatim except for the leading slash on the controller, which escapes the enclosing
-      # `scope(module:)`. Approved exception to the resourceful routing rule; do not reshape it into
-      # `resource`. See adr/pwa-offline-route-exception.md.
-      get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
-      get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
+      # Service Worker retirement: adr/pwa-offline-route-exception.md. This URL stays only so a browser
+      # that installed the old Worker fetches its self-unregistering replacement.
+      get("service-worker", to: "service_worker_retirements#show", as: :pwa_service_worker)
 
       # Staff management areas.
-      resources :accounts, only: :index
-      resources :iam, only: :index
-      resources :system, only: :index
-      resources :audit, only: :index
-      resources :support, only: :index
-      resources :billing, only: :index
 
       # Canonical ceremony entrypoints and authed-out confirmation.
       namespace :sign do
@@ -350,22 +326,8 @@ scope(module: :auth, as: :auth) do
       end
 
       # Edge compatibility API: token lifecycle management.
-      namespace :edge do
-        namespace :v0 do
-          namespace :token do
-            resource :status, only: :show, path: "check", controller: :checks, as: :check
-            resource :dbsc, only: :create
-          end
-        end
-      end
-
       # Sign-up and sign-in ceremonies.
       namespace :sign do
-        # Staff invitation auth-up.
-        namespace :up do
-          resources :invitations, only: %i(new create)
-        end
-
         # Sign-in ceremony.
         namespace :in do
           resource :passkey, only: :new
@@ -392,7 +354,6 @@ scope(module: :auth, as: :auth) do
             end
           end
 
-          resource :guard, only: :show
           resource :check, only: :show
           # No second-factor challenge: every org sign-in completes as a passkey sign-in, which
           # bypasses MFA, so no org state reaches MFA_PENDING.
@@ -439,12 +400,6 @@ scope(module: :auth, as: :auth) do
           resource :passkey, only: %i(new create)
           resource :handoff, only: %i(show create)
         end
-      end
-
-      # Settings and credential management.
-      resource :settings, only: :show
-      namespace :settings do
-        resource :entra, only: %i(show edit create destroy)
       end
     end
   end

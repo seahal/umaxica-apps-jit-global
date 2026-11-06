@@ -1,12 +1,39 @@
 # frozen_string_literal: true
 
 class EmailSignUpOtpDeliveryIssuer
+  class DeliveryUnavailable < StandardError; end
+
   class << self
     public
 
-    def call(flow:, email:, session_nonce:, verification_token: nil)
-      issued = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: session_nonce)
-      return issued unless issued.success?
+    def call(flow:, email:, session_nonce:, verification_token: nil, initial_submission: false, actor_context: nil,
+             after_commit: nil)
+      unless flow.is_a?(ClientSignUpFlow) && email.is_a?(ClientEmail)
+        raise ArgumentError, "APP Email signup delivery requires its own flow and candidate"
+      end
+      if after_commit && (!initial_submission || !after_commit.is_a?(Proc))
+        raise ArgumentError, "Email signup after-commit work requires an initial submission callback"
+      end
+
+      source_transaction_open =
+        Client.connection_class_for_self.connected_to(role: :writing) do
+          Client.lease_connection.transaction_open?
+        end
+      ticket_transaction_open =
+        OpBaseAppRecord.connected_to(role: :writing) do
+          ClientSignUpFlow.lease_connection.transaction_open?
+        end
+      if source_transaction_open || ticket_transaction_open
+        raise DeliveryUnavailable, "Email signup delivery requires committed Source and Ticket changes"
+      end
+
+      issued = EmailSignUpOtpIssuer.call(
+        flow: flow, email: email, session_nonce: session_nonce, initial_submission:, actor_context:,
+      )
+      return issued unless issued.success? || issued.status == :registered_destination
+
+      after_commit&.call(issued)
+      return issued if issued.status == :registered_destination
 
       notifier =
         case flow

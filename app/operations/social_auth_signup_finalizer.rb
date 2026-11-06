@@ -8,17 +8,18 @@ class SocialAuthSignupFinalizer
 
   # adr/sign-up-finalization-in-auth.md F3: the pending Client created at the confirmation gets its
   # External Identity and its registered status in one principal transaction.
-  def initialize(user:, principal:, credential_candidate:, ceremony_started_at:)
+  def initialize(user:, principal:, credential_candidate:, ceremony_started_at:, flow:)
     @user = user
     @principal = principal
     @credential_candidate = credential_candidate
     @ceremony_started_at = ceremony_started_at
+    @flow = flow
   end
 
   def call
     validate_principal!
 
-    AppPrincipalRecord.transaction do
+    AppSignUpRegistrationCommitter.call!(flow: @flow, client: user, method: provider) do
       ClientExternalIdentity.with_subject_lock(
         provider: provider, issuer: principal.issuer, subject: uid,
       ) do
@@ -32,6 +33,7 @@ class SocialAuthSignupFinalizer
         create_signup_identity!
       end
     end
+    { user: user, identity: repository.find_for_user(user) }
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved, ActiveRecord::RecordNotUnique => e
     Rails.logger.error(
       JitLogEvent.format(
@@ -54,6 +56,7 @@ class SocialAuthSignupFinalizer
     raise SocialAuth::ProviderError.new("errors.social_auth.identity_conflict") if existing_identity&.user_id.present?
 
     user.lock!
+    verify_flow_evidence!
     raise ActiveRecord::RecordNotSaved, "pending client is unavailable" unless
       user.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
 
@@ -73,6 +76,16 @@ class SocialAuthSignupFinalizer
     return if principal.is_a?(ExternalAuthentication::VerifiedPrincipal)
 
     raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
+  end
+
+  def verify_flow_evidence!
+    evidence = @flow.completed_requirements.fetch("social_signup")
+    digest = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, [provider, uid].join(":"))
+    unless @flow.social_provider == provider && @flow.pending_contact_type == "social_identity" &&
+        evidence.fetch("provider") == provider && evidence.fetch("uid_digest") == digest &&
+        ceremony_started_at == @flow.issued_at
+      raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
+    end
   end
 
   def provider

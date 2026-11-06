@@ -33,28 +33,48 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
         surface: surface, principal: actor,
         session: token,
       ).selectable_candidates.first
-      scope = "settings_birthdate"
-      # D-70: a requirement states every mandatory property explicitly; nothing is defaulted.
-      requirement = StepUpRequirement.new(
-        step_up_required: true, scope: scope, allowed_methods: [:passkey],
-        phishing_resistant_required: true, user_verification_required: true,
-        full_reauthentication_required: false, ttl: 15.minutes,
-        purpose: "step_up", audience: "step_up:#{surface}",
-        session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      case [actor, token]
+      in [Client, ClientToken]
+        actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
+        resource_type = "client"
+        client = OidcClientRegistry.find!("core-app-jp")
+        grant_model = OpAppGrant
+        grant_owner = :client_token
+      in [Operator, OperatorToken]
+        actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
+        resource_type = "operator"
+        client = OidcClientRegistry.find!("core-org-jp")
+        grant_model = OpOrgGrant
+        grant_owner = :operator_token
+      end
+      now = grant_model.database_now
+      grant = grant_model.create!(
+        :authentication_epoch => token.authentication_epoch, grant_owner => token, :oidc_client_id => client.client_id,
+        :oidc_scope => "openid profile", :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16),
+        :oidc_auth_time => now - 1.hour, :refresh_token_expires_at => now + 1.hour,
       )
-      pending = BaseStepUpAdmissionIssuer.call!(
-        actor: actor,
-        token: token,
-        requirement: requirement,
-        return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: token,
-      ).transaction
+      grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+      realm = (surface == :app) ? "client" : "operator"
+      params = {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris_by_realm.fetch(realm).first,
+        scope: grant.oidc_scope,
+        state: SecureRandom.urlsafe_base64(32),
+        nonce: SecureRandom.urlsafe_base64(32),
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("selected-context-step-up"), padding: false),
+        code_challenge_method: "S256",
+        prompt: "login",
+        claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+      }
+      validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type:)
+      issuance = OidcStepUpAuthorizationIssuer.call!(
+        surface: surface.to_s, actor:, token:, client:, params:, validated_request:,
+      )
+      pending = issuance.ticket
       continuity, = ceremony_model.rotate_and_admit!(
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: pending.transaction_id,
       )
-      token.update!(last_step_up_at: token.class.database_now, last_step_up_scope: scope)
 
       selected = BaseSelectorAuthority.select(
         surface: surface, principal: actor, session: token, params: candidate.fetch(:public),
@@ -63,28 +83,28 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       assert_equal "selected", selected.fetch(:status)
       assert_equal "revoked", pending.reload.status, surface.to_s
       assert_not_nil continuity.reload.revoked_at
-      assert_nil token.reload.last_step_up_at
       assert_predicate token, :currently_usable?
       assert_predicate token, :selected_actor_context?
 
-      pending = BaseStepUpAdmissionIssuer.call!(
-        actor: actor,
-        token: token,
-        requirement: requirement,
-        return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: token,
-      ).transaction
+      second_params = params.merge(
+        state: SecureRandom.urlsafe_base64(32), nonce: SecureRandom.urlsafe_base64(32),
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("selected-context-step-up-again"), padding: false),
+      )
+      second_validated_request = OidcAuthorizeRequestResolver.call(
+        params: second_params, resource: actor, resource_type:,
+      )
+      issuance = OidcStepUpAuthorizationIssuer.call!(
+        surface: surface.to_s, actor:, token:, client:, params: second_params,
+        validated_request: second_validated_request,
+      )
+      pending = issuance.ticket
       continuity, = ceremony_model.rotate_and_admit!(
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: pending.transaction_id,
       )
-      verified_at = token.class.database_now
-      token.update!(last_step_up_at: verified_at, last_step_up_scope: scope)
       BaseSwitcherAuthority.switch(surface: surface, principal: actor, session: token, params: candidate.fetch(:public))
 
       assert_equal "pending", pending.reload.status, surface.to_s
       assert_nil continuity.reload.revoked_at
-      assert_equal verified_at, token.reload.last_step_up_at
       assert_raises BaseSwitcherAuthority::InvalidSwitch do
         BaseSwitcherAuthority.switch(
           surface: surface, principal: actor, session: token,
@@ -92,13 +112,11 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
         )
       end
       assert_equal "pending", pending.reload.status
-      assert_equal verified_at, token.reload.last_step_up_at
 
       token.clear_selected_actor_context!
 
       assert_equal "revoked", transaction_model.find(pending.id).status, surface.to_s
       assert_not_nil continuity.reload.revoked_at
-      assert_nil token.reload.last_step_up_at
       assert_not_predicate token, :selected_actor_context?
       assert_nil token.selected_at
       assert_predicate token, :currently_usable?

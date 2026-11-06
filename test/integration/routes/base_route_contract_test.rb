@@ -197,7 +197,6 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
   end
   # rubocop:enable Minitest/MultipleAssertions
 
-  # rubocop:disable Minitest/MultipleAssertions
   test "base com route contract" do
     recognized = Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/", method: :get)
 
@@ -236,8 +235,6 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
       end
     end
   end
-  # rubocop:enable Minitest/MultipleAssertions
-
   # rubocop:disable Minitest/MultipleAssertions
   test "base org route contract" do
     recognized = Rails.application.routes.recognize_path(

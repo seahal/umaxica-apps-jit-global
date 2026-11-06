@@ -26,7 +26,7 @@ class EmailSignUpOtpDeliveryTest < ActiveJob::TestCase
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
       )
-      issued = EmailSignUpOtpDeliveryIssuer.call(flow: flow, email: email, session_nonce: nonce)
+      issued = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
       arguments = {
         record: email,
         otp_code: issued.code,
@@ -36,6 +36,7 @@ class EmailSignUpOtpDeliveryTest < ActiveJob::TestCase
         sign_up_email_transaction_ref: issued.transaction.transaction_id,
         sign_up_email_otp_generation: issued.transaction.otp_generation,
       }
+      notifier.issue(**arguments)
       notification = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last
       payload = notification.fetch(:params)
 

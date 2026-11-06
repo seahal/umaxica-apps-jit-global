@@ -283,8 +283,10 @@ transport return explicit refusals. OIDC expiry/cancellation adds no invented tr
 ## idp-contact-audit-outbox
 
 Storage: `client_contact_audit_outboxes` in app Zenith and `visitor_contact_audit_outboxes` in com
-Zenith. Sources: `ContactAuditOutbox`, `ContactBindingAuditRecorder`, `ContactAuditDeliveryJob`.
-Tests: `contact_audit_delivery_job_test.rb`, `contact_ceremony_source_audit_test.rb`.
+Zenith. Sources: `ContactAuditOutbox`, `ContactBindingAuditRecorder`,
+`IdentityEmailPreferenceCommitter`, `ContactAuditDeliveryJob`.
+Tests: `contact_audit_delivery_job_test.rb`, `contact_ceremony_source_audit_test.rb`,
+`identity_email_preference_committer_test.rb`, `identity_email_preference_commit_order_test.rb`.
 
 | Transition ID                 | From                            | Event              | To                              | Guard and effect                                                                                        |
 | ----------------------------- | ------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -294,12 +296,19 @@ Tests: `contact_audit_delivery_job_test.rb`, `contact_ceremony_source_audit_test
 | idp-contact-audit-outbox:T004 | Chronicle committed, ACK absent | rescan             | acknowledged                    | Match action, occurrence, operation and references; ACK uses Source clock                               |
 | idp-contact-audit-outbox:T005 | acknowledged                    | duplicate scan     | acknowledged                    | Skip acknowledged rows; no second event                                                                 |
 
+The App Email preference writer emits `preferences_changed` only after a real preference change.
+The opaque owner/contact/actor/operation references and event commit in the same App Zenith
+transaction as the preference row. Delivery maps it to `contact.email.preferences_changed`; neither
+the address nor old/new preference values enter the event. The selected writer, independent-commit,
+and delivery tests passed on 2026-11-01 (19 runs, 128 assertions); see
+`evidence/2026-11-01-wua4-xdb03-preference-audit-M7Q2.md`.
+
 No expiry/deletion transition is introduced. A mismatched UUID or unavailable dependency raises, and
 neither is successful acknowledgment. Development and production scan every 15 minutes.
 
-Static code and test-reading evidence only. Tests were not executed. Model-permitted edges are
-explicitly distinguished from wired orchestration. Expiry predicates do not imply persisted EXPIRED
-writes.
+This focused execution verifies the App Email preference source and delivery path only; it does not
+claim the complete Contact audit matrix. Model-permitted edges remain distinct from wired
+orchestration. Expiry predicates do not imply persisted EXPIRED writes.
 
 ## idp-client-sign-in
 
@@ -1022,28 +1031,32 @@ linked continuity.
 
 ## idp-auth-admission-binding
 
-Implementation: `AuthAdmissionBinding` / `AuthAdmissionBindingPurger`. Storage:
-`client_auth_admission_bindings`, `visitor_auth_admission_bindings`, and
-`operator_auth_admission_bindings` / `base_confirmed_at`, `redeemed_at`, `retired_at`, `expires_at`,
-required immutable `curfew_at` and `entry_intent` facts.
+Implementation: `AuthAdmissionBinding` / `AuthAdmissionBindingPurger`. Current storage:
+`client_auth_admission_bindings` and `operator_auth_admission_bindings`, each with a NOT NULL
+`status_id` reference. The visitor binding is historical; WU-5 removed its table and writer.
+Bindings retain proof and deadline facts, including `base_confirmed_at`, `redeemed_at`,
+`retired_at`, `expires_at`, `curfew_at` and `entry_intent`.
 
 Sources: `app/models/concerns/auth_admission_binding.rb`,
-`app/models/client_auth_admission_binding.rb`, `app/models/visitor_auth_admission_binding.rb`,
-`app/models/operator_auth_admission_binding.rb`, `app/operations/auth_admission_binding_purger.rb`.
+`app/models/client_auth_admission_binding.rb`, `app/models/operator_auth_admission_binding.rb`,
+`app/operations/auth_admission_binding_purger.rb`.
 
 | Transition ID                   | Mutation kind         | From                               | Event / Trigger            | To                  | Guard                                                                                                                                  | Side effect                                                                                    | Source file                                     | Confidence |
 | ------------------------------- | --------------------- | ---------------------------------- | -------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------- |
-| idp-auth-admission-binding:T001 | INITIALIZATION        | absent                             | admission issuer           | issued              | Exactly one realm-local parent; immutable entry_ref, purpose, token and browser digest; bounded expiry                                 | Binding row and opaque entry are created in the parent Ticket transaction                      | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
-| idp-auth-admission-binding:T002 | DOCUMENTED_TRANSITION | issued                             | attach_auth_session!       | attached            | Live binding; active Auth session, including previously admitted continuity; unique confirmation_ref; binding lock before session lock | Auth session and confirmation_ref recorded as one proof pair; no authority for the new purpose | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T003 | DOCUMENTED_TRANSITION | attached                           | confirm_base!              | Base confirmed      | Matching base token and SHA-256 browser nonce digest; attachment present; binding lock                                                 | base_confirmed_at recorded once                                                                | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T004 | DOCUMENTED_TRANSITION | Base confirmed                     | redeem!                    | redeemed / admitted | Matching attached sid; active admitted rotated session; confirmation present; expiry not reached                                       | redeemed_at and admitted_auth_ceremony_session_id recorded atomically with admission           | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T005 | DOCUMENTED_TRANSITION | issued / attached / Base confirmed | retire!                    | retired             | Unredeemed binding; explicit expiry or restart                                                                                         | retired_at recorded without clearing terminal proof facts                                      | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
-| idp-auth-admission-binding:T006 | CLEANUP               | retired / redeemed                 | AuthAdmissionBindingPurger | absent              | Parent retention reached; referenced Auth sessions expired/terminal and retained; restrictive child-first order                        | Binding is deleted before parent and Auth-session rows                                         | app/operations/auth_admission_binding_purger.rb | CONFIRMED  |
+| idp-auth-admission-binding:T001 | INITIALIZATION        | absent                             | admission issuer           | issued (10)         | Exactly one realm-local parent; immutable entry_ref, purpose, token and browser digest; bounded expiry                                 | Binding row and opaque entry are created in the parent Ticket transaction                      | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
+| idp-auth-admission-binding:T002 | DOCUMENTED_TRANSITION | issued (10)                        | attach_auth_session!       | attached (20)       | Live binding; active Auth session; unique confirmation_ref; binding lock before session lock                                            | Auth session and confirmation_ref recorded as one proof pair                                    | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T003 | DOCUMENTED_TRANSITION | attached (20)                      | confirm_base!              | base-confirmed (30) | Matching Base token and browser nonce digest; attachment present; binding lock                                                         | base_confirmed_at recorded once                                                                | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T004 | DOCUMENTED_TRANSITION | base-confirmed (30)                | redeem!                    | redeemed (40)       | Matching attached SID; active admitted rotated session; confirmation present; expiry not reached                                      | redeemed_at and admitted_auth_ceremony_session_id recorded atomically with admission           | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T005 | DOCUMENTED_TRANSITION | issued / attached / base-confirmed | retire!                    | retired (90)        | Active unredeemed binding; explicit expiry or restart                                                                                  | retired_at recorded without clearing prior proof facts                                          | app/models/concerns/auth_admission_binding.rb   | CONFIRMED  |
+| idp-auth-admission-binding:T006 | DOCUMENTED_TRANSITION | redeemed (40)                      | switch!                    | switched (91)       | Exact handoff source; canceled before authentication progress; parent, binding and browser/token proof rechecked under lock             | Terminal status changes; redeemed proof facts remain                                           | app/services/base_auth_admission_coordinator.rb | CONFIRMED  |
+| idp-auth-admission-binding:T007 | CLEANUP               | retired / redeemed / switched      | AuthAdmissionBindingPurger | absent              | Parent and binding retention reached; referenced Auth sessions expired with status-specific retention; no remaining binding reference | Flow children and binding are deleted before parent; unreferenced eligible Auth sessions follow | app/operations/auth_admission_binding_purger.rb | CONFIRMED  |
 
-The three tables have the same constraints: one parent, purpose-to-parent matching, step-up token
-requirement, all-or-none proof pairs, mutually exclusive redeemed/retired terminal facts, immutable
-identity/proof/deadline facts, and one live binding per parent. `entry_ref` and `confirmation_ref`
-are independent lookup references; neither is accepted as browser or Auth proof.
+The current client and operator tables share the same status IDs: 10 issued, 20 attached, 30
+base-confirmed, 40 redeemed, 90 retired and 91 switched. `status_id` is the lifecycle authority;
+proof timestamps and session references remain persisted facts. Each row has one realm-local
+parent, purpose-to-parent matching, all-or-none proof pairs, and one live binding per parent.
+`entry_ref` and `confirmation_ref` are independent lookup references; neither is accepted as
+browser or Auth proof. Switching retains redemption proof and changes the explicit terminal status.
 
 Sign-in entry and redemption validate one effective intent through `AuthEntryIntentResolver` before
 consumption: persisted Switch selection, otherwise the OP prompt (`create` means Sign Up; ordinary
@@ -1056,7 +1069,8 @@ APP/COM Binding collection also locks every owned sign-up Flow in ID order and r
 set if any child is in progress, not physically purgeable, or awaiting artifact cleanup. A completed
 registration does not require artifact cleanup, but still obeys its own physical-retention boundary;
 the default infinite retention is not shortened here. Eligible Flow rows are deleted before their
-restrictive Binding. The collector does not delete principals or Auth-session rows.
+restrictive Binding. An expired Auth session is deleted only after status-specific retention and its
+final binding reference are gone; principals are not deleted.
 
 authorization purposes use `sign_in`/`sign_up`, and re-verification purposes use `not_applicable`,
 with the same rule enforced in each realm database. These are issuance facts, not new lifecycle

@@ -5,64 +5,71 @@
 Accepted (2026-10-02) as a future implementation contract.
 
 **Accepted design does not mean every runtime axis has been migrated.** No model, controller,
-service, operation, migration, schema, route, seed, constant, status id, or test was changed by
-this decision. Every "current" statement below was observed read-only at commit
-`7430ddea6da1e18da0b42418e5374379a52c8a4b`. Every "target" statement is a contract for future
-work tracked in `plans/backlog/idp-flow-state-machine-unification.md`.
+service, operation, migration, schema, route, seed, constant, status id, or test was changed by this
+decision. Every "current" statement below was observed read-only at commit
+`7430ddea6da1e18da0b42418e5374379a52c8a4b`. Every "target" statement is a contract for future work
+tracked in `plans/backlog/idp-flow-state-machine-unification.md`.
 
 This ADR extends `adr/idp-flow-lifecycle-vocabulary.md`. That ADR fixes the vocabulary and
-invariants and explicitly left the physical representation undecided; this ADR decides the
-physical representation (DB-backed state reference tables, id-only rows, FK ownership, id
-contract) and restates the vocabulary so both decisions can be read together. Where the two
-differ, this ADR governs storage and the vocabulary ADR governs terminology. The reference
-document is `docs/security/idp-flow-lifecycle.md`.
+invariants and explicitly left the physical representation undecided; this ADR decides the physical
+representation (DB-backed state reference tables, id-only rows, FK ownership, id contract) and
+restates the vocabulary so both decisions can be read together. Where the two differ, this ADR
+governs storage and the vocabulary ADR governs terminology. The reference document is
+`docs/security/idp-flow-lifecycle.md`.
 
 ## Context
 
 ### Current state-machine architecture
 
-| Flow     | Records (database)                                                                  | Transition owner today                                              |
-| -------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Flow     | Records (database)                                                                                               | Transition owner today                                                                   |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | Sign-in  | `client_sign_in_flows` (app_ticket), `visitor_sign_in_flows` (com_ticket), `operator_sign_in_flows` (org_ticket) | `FlowSignIn` concern, `TRANSITIONS` hash per model, called from controllers and services |
-| Sign-up  | `client_sign_up_flows`, `visitor_sign_up_flows`, `operator_sign_up_flows`          | `SignUpStateMachine`, `SignUpTermination`, `SignUpExpiryJob`, plus some direct writes |
-| Sign-out | `client_sign_out_flows`, `visitor_sign_out_flows`, `operator_sign_out_flows`       | `FlowSignOut` concern inside the logout primitive                   |
+| Sign-up  | `client_sign_up_flows`, `visitor_sign_up_flows`, `operator_sign_up_flows`                                        | `SignUpStateMachine`, `SignUpTermination`, `SignUpExpiryJob`, plus some direct writes    |
+| Sign-out | `client_sign_out_flows`, `visitor_sign_out_flows`, `operator_sign_out_flows`                                     | `FlowSignOut` concern inside the logout primitive                                        |
 
 Each flow table carries `status_id bigint NOT NULL DEFAULT 10` with a foreign key to a per-flow
 reference table `*_sign_{in,up,out}_flow_statuses`. Those reference tables already contain only
 `id bigint` (backed by a sequence). All nine FKs are declared `NOT VALID`; the sign-up FKs add
 `ON DELETE RESTRICT`, the others use the default `NO ACTION`.
 
-Sign-in and sign-up flow tables additionally carry `state` and `step` string columns. On the
-three sign-in tables, `CHECK` constraints (`chk_*_sign_in_cycles_status_state` and
-`..._status_step`, both `NOT VALID`) tie `state` and `step` to `status_id`. That is a second
-representation of the same fact, kept consistent by the database, and it embeds the id-to-name
-mapping in the schema.
+Sign-in and sign-up flow tables additionally carry `state` and `step` string columns. On the three
+sign-in tables, `CHECK` constraints (`chk_*_sign_in_cycles_status_state` and `..._status_step`, both
+`NOT VALID`) tie `state` and `step` to `status_id`. That is a second representation of the same
+fact, kept consistent by the database, and it embeds the id-to-name mapping in the schema.
 
 ### Current status ids
 
-| Id  | Sign-in (all actors)        | Sign-up client / visitor  | Sign-up operator     | Sign-out (all actors) |
-| --- | --------------------------- | ------------------------- | -------------------- | --------------------- |
-| 0   |                             |                           |                      | `NOTHING`             |
-| 10  | `PRIMARY_PENDING`           | `STARTED`                 | `STARTED`            | `REQUESTED`           |
-| 20  | `MFA_PENDING`               | `CONTACT_PENDING`         | `CONTACT_PENDING`    | `ACCESS_DISCARDED`    |
-| 30  | `SESSION_LIMIT_PENDING`     | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` | `LOGICALLY_REVOKED`   |
-| 35  |                             | `CONTACT_VERIFIED`        |                      |                       |
-| 36  |                             | `SOCIAL_CALLBACK_PENDING` |                      |                       |
-| 38  |                             | `GUARDRAIL_PENDING`       |                      |                       |
-| 40  | `GUARDRAIL_PENDING`         | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` | `AWAITING_EXPIRY`     |
-| 50  | `SESSION_ISSUANCE_PENDING`  |                           |                      |                       |
-| 60  | `CHECKPOINT_PENDING`        | `FINALIZING`              |                      |                       |
-| 65  | `SELECTOR_PENDING`          |                           |                      |                       |
-| 70  | `DASHBOARD_PENDING`         | `FINALIZED`               |                      |                       |
-| 80  | `RETURN_PENDING`            | `SIGN_IN_HANDOFF_PENDING` |                      |                       |
-| 100 | `COMPLETED`                 | `COMPLETED`               | `COMPLETED`          | `COMPLETED`           |
-| 900 | `FAILED`                    | `FAILED`                  |                      | `FAILED`              |
-| 910 |                             | `EXPIRED`                 |                      |                       |
-| 920 |                             | `CANCELLED`               |                      |                       |
+| Id  | Sign-in (all actors)       | Sign-up client / visitor  | Sign-up operator     | Sign-out (all actors) |
+| --- | -------------------------- | ------------------------- | -------------------- | --------------------- |
+| 0   |                            |                           |                      | `NOTHING`             |
+| 10  | `PRIMARY_PENDING`          | `STARTED`                 | `STARTED`            | `REQUESTED`           |
+| 20  | `MFA_PENDING`              | `CONTACT_PENDING`         | `CONTACT_PENDING`    | `ACCESS_DISCARDED`    |
+| 30  | `SESSION_LIMIT_PENDING`    | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` | `LOGICALLY_REVOKED`   |
+| 35  |                            | `CONTACT_VERIFIED`        |                      |                       |
+| 36  |                            | `SOCIAL_CALLBACK_PENDING` |                      |                       |
+| 38  |                            | `GUARDRAIL_PENDING`       |                      |                       |
+| 40  | `GUARDRAIL_PENDING`        | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` | `AWAITING_EXPIRY`     |
+| 50  | `SESSION_ISSUANCE_PENDING` |                           |                      |                       |
+| 60  | `CHECKPOINT_PENDING`       | `FINALIZING`              |                      |                       |
+| 65  | `SELECTOR_PENDING`         |                           |                      |                       |
+| 70  | `DASHBOARD_PENDING`        | `FINALIZED`               |                      |                       |
+| 80  | `RETURN_PENDING`           | `SIGN_IN_HANDOFF_PENDING` |                      |                       |
+| 100 | `COMPLETED`                | `COMPLETED`               | `COMPLETED`          | `COMPLETED`           |
+| 900 | `FAILED`                   | `FAILED`                  |                      | `FAILED`              |
+| 910 |                            | `EXPIRED`                 |                      |                       |
+| 920 |                            | `CANCELLED`               |                      |                       |
 
-The sign-up cleanup status tables (`*_sign_up_flow_cleanup_statuses`: 10 `IDLE`, 20 `PENDING`,
-30 `COMPLETED`, 40 `FAILED`) and sign-out kind tables are separate domains and are not flow
-lifecycle state.
+The sign-up cleanup status tables (`*_sign_up_flow_cleanup_statuses`: 10 `IDLE`, 20 `PENDING`, 30
+`COMPLETED`, 40 `FAILED`) and sign-out kind tables are separate domains and are not flow lifecycle
+state.
+
+### Persona selection boundary (2026-11-06)
+
+A sign-in with exactly one eligible persona selects it during sign-in. When multiple personas are
+eligible, sign-in completes and Base `/selector` records one choice for that RP session. That
+selector is currently outside the sign-in state machine; each RP session accepts its first selection
+only. Later persona changes use `/switcher` only. Connecting the multi-persona selector to the state
+machine remains a backlog item in `plans/backlog/2026-11-06-selector-state-machine-connection.md`.
 
 ### Current reference row provisioning
 
@@ -80,21 +87,20 @@ migration-controlled today.
 2. The state domain is enforced by FKs that are `NOT VALID` and by reference rows that may be
    inserted by request code, so the domain depends on runtime side effects.
 3. Sign-in duplicates state in `state`/`step` columns with `CHECK` constraints.
-4. State changes are written in several places, including controllers and operations that
-   assign `status_id` directly, so transition legality has no single owner.
-5. Terminal ids are not uniform, and the example convention proposed during design
-   (`900 COMPLETED`, `910 CANCELLED`, `920 EXPIRED`, `930 HALTED`) collides with ids already in
-   use: `900` is `FAILED` and `910` is `EXPIRED` and `920` is `CANCELLED` in sign-up, and `100` is
-   `COMPLETED` everywhere.
+4. State changes are written in several places, including controllers and operations that assign
+   `status_id` directly, so transition legality has no single owner.
+5. Terminal ids are not uniform, and the example convention proposed during design (`900 COMPLETED`,
+   `910 CANCELLED`, `920 EXPIRED`, `930 HALTED`) collides with ids already in use: `900` is `FAILED`
+   and `910` is `EXPIRED` and `920` is `CANCELLED` in sign-up, and `100` is `COMPLETED` everywhere.
 
 ## Decision
 
 ### 1. No single merged state machine
 
-Sign-in, sign-up, and sign-out remain separate state machines, one per flow and per actor
-database. What is shared is: lifecycle semantics, terminal semantics, event vocabulary, request
-semantics, transition invariants, and the state-reference-table contract. Flow-specific active
-phases keep their names and are not unified.
+Sign-in, sign-up, and sign-out remain separate state machines, one per flow and per actor database.
+What is shared is: lifecycle semantics, terminal semantics, event vocabulary, request semantics,
+transition invariants, and the state-reference-table contract. Flow-specific active phases keep
+their names and are not unified.
 
 ### 2. Lifecycle (logical)
 
@@ -102,15 +108,15 @@ phases keep their names and are not unified.
 ACTIVE  COMPLETED  CANCELLED  EXPIRED  HALTED
 ```
 
-This is a logical model computed by application code from the stored state id. It is not a
-column, not a reference-table attribute, and not a second FK.
+This is a logical model computed by application code from the stored state id. It is not a column,
+not a reference-table attribute, and not a second FK.
 
-| Lifecycle   | Meaning                                                                                                  |
-| ----------- | -------------------------------------------------------------------------------------------------------- |
-| `ACTIVE`    | Any non-terminal flow-specific phase.                                                                    |
-| `COMPLETED` | The flow finished normally.                                                                              |
-| `CANCELLED` | The user ended the flow by explicit intent.                                                              |
-| `EXPIRED`   | The flow's validity ended according to the authoritative clock or TTL.                                   |
+| Lifecycle   | Meaning                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `ACTIVE`    | Any non-terminal flow-specific phase.                                                                                                 |
+| `COMPLETED` | The flow finished normally.                                                                                                           |
+| `CANCELLED` | The user ended the flow by explicit intent.                                                                                           |
+| `EXPIRED`   | The flow's validity ended according to the authoritative clock or TTL.                                                                |
 | `HALTED`    | The system irreversibly ended the flow because continuing is unsafe, inconsistent, or forbidden by policy. It is never a user action. |
 
 ### 3. Transition events
@@ -135,8 +141,8 @@ start  advance  back  cancel  external_result  complete  expire  halt
   introduced.
 - `complete` produces `COMPLETED` when the orchestrator's completion conditions hold.
 - `expire` produces `EXPIRED` from the authoritative clock.
-- `halt` produces `HALTED`. It is system-only, requires a `reason_code`, is auditable, and is
-  never reachable from a UI action or a user-controlled parameter.
+- `halt` produces `HALTED`. It is system-only, requires a `reason_code`, is auditable, and is never
+  reachable from a UI action or a user-controlled parameter.
 
 ### 4. Request semantics (not events)
 
@@ -144,13 +150,13 @@ start  advance  back  cancel  external_result  complete  expire  halt
   returning from elsewhere, outdated browser navigation) and the server re-resolves the
   authoritative state. It does not transition by itself; expiry is evaluated first, so reentry can
   result in `expire`.
-- **replay** (not "retry / replay"): an already-processed request or event arrives again in the
-  same or substantially the same form. It never repeats side effects. A user entering a new value
-  after a rejection is a new `advance` attempt, not a replay.
-- **conflict** (not "stale / conflict"): the request's assumed state differs from the
-  authoritative state (multi-tab, concurrent request, outdated checkpoint or transition revision,
-  already advanced, already completed). Conflict never rolls back authoritative state. `stale`
-  survives only as a reason code, for example `reason_code = stale_version`.
+- **replay** (not "retry / replay"): an already-processed request or event arrives again in the same
+  or substantially the same form. It never repeats side effects. A user entering a new value after a
+  rejection is a new `advance` attempt, not a replay.
+- **conflict** (not "stale / conflict"): the request's assumed state differs from the authoritative
+  state (multi-tab, concurrent request, outdated checkpoint or transition revision, already
+  advanced, already completed). Conflict never rolls back authoritative state. `stale` survives only
+  as a reason code, for example `reason_code = stale_version`.
 
 ### 5. Outcomes and reasons
 
@@ -162,14 +168,14 @@ start  advance  back  cancel  external_result  complete  expire  halt
 
 ### 6. Cancel versus halt
 
-`cancel` requires user intent and is audited as such. `halt` requires a system determination and
-a reason code. A user action never produces `HALTED`, and a system decision never produces
+`cancel` requires user intent and is audited as such. `halt` requires a system determination and a
+reason code. A user action never produces `HALTED`, and a system decision never produces
 `CANCELLED`.
 
 ### 7. FAILED legacy handling
 
-`FAILED` is not a canonical terminal. Runtime `FAILED` (id `900`) is not changed by this ADR.
-Each code path that reaches `FAILED` is classified individually:
+`FAILED` is not a canonical terminal. Runtime `FAILED` (id `900`) is not changed by this ADR. Each
+code path that reaches `FAILED` is classified individually:
 
 - unrecoverable, non-resumable, terminal cause → target `HALTED` with a reason code;
 - explicit user decision to stop → target `CANCELLED`;
@@ -203,10 +209,10 @@ this lifecycle (it currently has no `FAILED`, `EXPIRED`, or `CANCELLED`) is an o
 plan. Reference tables are never shared across flows, actors, or databases.
 
 **Current:** `status_id` with `*_flow_statuses`. **Target terminology:** `state_id` with
-`*_flow_states`, because the column is a state-machine state, not an HTTP status, result status,
-or cleanup status. Whether and how to rename (and whether the reference table is renamed) is a
-future implementation decision with its own migration strategy. No rename happens now. Existing
-tables that already satisfy the id-only contract are not destructively recreated.
+`*_flow_states`, because the column is a state-machine state, not an HTTP status, result status, or
+cleanup status. Whether and how to rename (and whether the reference table is renamed) is a future
+implementation decision with its own migration strategy. No rename happens now. Existing tables that
+already satisfy the id-only contract are not destructively recreated.
 
 ### 9. Reference tables hold only `id`
 
@@ -229,21 +235,20 @@ code never joins them to interpret state.
 
 Flow state tables are an explicit exception to the `NOTHING = 0` sentinel in
 `adr/reference-table-discipline.md`: a flow always has a real state, so its default is its start
-state rather than an "unspecified" row. The existing sign-out `NOTHING = 0` row is retained (ids
-are never removed) but becomes unreachable from application code in the target.
+state rather than an "unspecified" row. The existing sign-out `NOTHING = 0` row is retained (ids are
+never removed) but becomes unreachable from application code in the target.
 
 ### 10. Meaning lives in the application contract
 
 The id-to-meaning map is fixed by application constants per flow and by
-`docs/security/idp-flow-lifecycle.md`. Application code defines, per flow, the active state set,
-the terminal state set, and which terminal id is `COMPLETED`, `CANCELLED`, `EXPIRED`, or
-`HALTED`.
+`docs/security/idp-flow-lifecycle.md`. Application code defines, per flow, the active state set, the
+terminal state set, and which terminal id is `COMPLETED`, `CANCELLED`, `EXPIRED`, or `HALTED`.
 
 No `lifecycle` column, no `lifecycle_status_id` plus `phase_id` pair, and no reference-table
 lifecycle attribute is added, because two stored facts can disagree (for example lifecycle
 `COMPLETED` with phase `CHECKPOINT_PENDING`). Existing duplicate representations (sign-in and
-sign-up `state`/`step` strings and the sign-in `CHECK` constraints) are migration items to retire
-in the plan; they are not part of the target.
+sign-up `state`/`step` strings and the sign-in `CHECK` constraints) are migration items to retire in
+the plan; they are not part of the target.
 
 ### 11. State id contract (immutable)
 
@@ -252,27 +257,28 @@ in the plan; they are not part of the target.
   (tombstones) and become unreachable from application code.
 - The meaning of an id is never mutated.
 - A reference row that is referenced, or ever was assigned, is never deleted.
-- Active phase ids are independent per flow. Equal active ids in different flows do not imply
-  equal meaning, because each reference table is its own namespace.
+- Active phase ids are independent per flow. Equal active ids in different flows do not imply equal
+  meaning, because each reference table is its own namespace.
 
 ### 12. Shared terminal id convention (adopted)
 
 Terminal ids are shared across all flows. Because ids are immutable, the convention is anchored on
 ids already in use rather than on a renumbering:
 
-| Lifecycle   | Id    | Status today                                                   |
-| ----------- | ----- | -------------------------------------------------------------- |
-| `COMPLETED` | `100` | Already `COMPLETED` in every flow.                             |
-| `EXPIRED`   | `910` | Already `EXPIRED` in client and visitor sign-up; free elsewhere. |
-| `CANCELLED` | `920` | Already `CANCELLED` in client and visitor sign-up; free elsewhere. |
-| `HALTED`    | `930` | Free in every flow.                                            |
-| legacy `FAILED` | `900` | Reserved tombstone; never reassigned, never a target terminal. |
+| Lifecycle       | Id    | Status today                                                       |
+| --------------- | ----- | ------------------------------------------------------------------ |
+| `COMPLETED`     | `100` | Already `COMPLETED` in every flow.                                 |
+| `EXPIRED`       | `910` | Already `EXPIRED` in client and visitor sign-up; free elsewhere.   |
+| `CANCELLED`     | `920` | Already `CANCELLED` in client and visitor sign-up; free elsewhere. |
+| `HALTED`        | `930` | Free in every flow.                                                |
+| legacy `FAILED` | `900` | Reserved tombstone; never reassigned, never a target terminal.     |
 
 The `900–999` range is reserved for terminal and legacy-terminal ids; active phases use ids below
-`900` and never `100`. The example numbering `900 COMPLETED / 910 CANCELLED / 920 EXPIRED /
-930 HALTED` is rejected because it would reassign `900`, `910`, and `920`, which violates the
-immutable id contract. Phase 0 of the plan must still re-run the inventory against every live
-database before adding any row, and record the result in `evidence/`.
+`900` and never `100`. The example numbering
+`900 COMPLETED / 910 CANCELLED / 920 EXPIRED / 930 HALTED` is rejected because it would reassign
+`900`, `910`, and `920`, which violates the immutable id contract. Phase 0 of the plan must still
+re-run the inventory against every live database before adding any row, and record the result in
+`evidence/`.
 
 ### 13. Responsibility split: FK versus application state machine
 
@@ -281,12 +287,12 @@ DB:   per-flow reference table + NOT NULL validated FK   -> valid state domain
 App:  per-flow state machine (from, event, to, guards)   -> valid transition
 ```
 
-The FK guarantees **state-domain integrity**: a flow row cannot hold a state id that does not
-exist for that flow. The FK does **not** guarantee **transition legality**: `STARTED -> COMPLETED`
-cannot be prevented by an FK because `COMPLETED` is a valid id.
+The FK guarantees **state-domain integrity**: a flow row cannot hold a state id that does not exist
+for that flow. The FK does **not** guarantee **transition legality**: `STARTED -> COMPLETED` cannot
+be prevented by an FK because `COMPLETED` is a valid id.
 
-Transition legality is owned by the per-flow application state machine. In the target, every
-state change passes through that flow's transition boundary. Direct writes such as
+Transition legality is owned by the per-flow application state machine. In the target, every state
+change passes through that flow's transition boundary. Direct writes such as
 `update!(status_id: ...)` or `update!(state_id: ...)` from controllers, operations, or arbitrary
 model code are forbidden. Current runtime has such direct writes; removing them is plan Phase 4.
 
@@ -301,20 +307,20 @@ own ADR.
 ### 15. Reference rows are migration-controlled
 
 Reference rows are immutable reference data owned by migrations, not optional seeds and not
-request-time side effects. A deployment-safe migration sequence creates or reuses the table,
-inserts every required id idempotently, then validates the FK. An environment where seeds did not
-run must still have every state id. Request-path `ensure_defaults!` calls for flow states are
-removed once migrations own the rows. No migration is created by this ADR.
+request-time side effects. A deployment-safe migration sequence creates or reuses the table, inserts
+every required id idempotently, then validates the FK. An environment where seeds did not run must
+still have every state id. Request-path `ensure_defaults!` calls for flow states are removed once
+migrations own the rows. No migration is created by this ADR.
 
 ### 16. Terminal and reachability invariants
 
 1. `COMPLETED`, `CANCELLED`, `EXPIRED`, and `HALTED` are terminal and absorbing.
-2. No terminal-to-active transition; no terminal-to-different-terminal transition. Terminal
-   meaning is never overwritten.
+2. No terminal-to-active transition; no terminal-to-different-terminal transition. Terminal meaning
+   is never overwritten.
 3. Every reachable non-terminal phase reaches some terminal through at least one of: advance,
    cancel, expire, halt, or deterministic external resolution. Cancel need not be available
-   everywhere; phases after an irreversible commit or authority handoff may only complete,
-   expire, or halt. No user is held in an indefinite `ACTIVE` phase.
+   everywhere; phases after an irreversible commit or authority handoff may only complete, expire,
+   or halt. No user is held in an indefinite `ACTIVE` phase.
 4. Temporary infrastructure failure (DB, network, provider, timeout) preserves authoritative state
    and does not produce `HALTED` by itself.
 5. A later request based on older state never rolls back an authoritative transition.
@@ -336,8 +342,8 @@ Shared lifecycle vocabulary never merges authority:
 
 - Future storage work has one target: one `state_id` per flow row, validated FK, id-only per-flow
   reference table, migration-owned rows, immutable ids.
-- Runtime interpretation never needs a JOIN; it needs per-flow constants that must stay aligned
-  with the documented id table. Tests and graph validation are the alignment mechanism.
+- Runtime interpretation never needs a JOIN; it needs per-flow constants that must stay aligned with
+  the documented id table. Tests and graph validation are the alignment mechanism.
 - Adding `HALTED` (`930`) and `EXPIRED`/`CANCELLED` (`910`/`920`) to sign-in and sign-out is
   additive. Legacy `900` rows stay readable as terminal during and after migration.
 - Retiring sign-in `state`/`step` strings and their `CHECK` constraints, validating the `NOT VALID`
@@ -348,27 +354,27 @@ Shared lifecycle vocabulary never merges authority:
 
 ## Strict sign-in admission amendment (2026-10-10)
 
-The state-id contract is now exercised by the implemented local sign-in phase-admission slice.
-The existing per-flow state tables retain immutable `HALTED = 930` rows. A state-changing request
-that is correctly bound to a local sign-in flow but presents an obsolete or contradictory phase
-uses the named halt transition and records `phase_regression` or `phase_violation`; it does not
-write a user cancellation or reuse the legacy `FAILED = 900` row. HALTED remains absorbing.
+The state-id contract is now exercised by the implemented local sign-in phase-admission slice. The
+existing per-flow state tables retain immutable `HALTED = 930` rows. A state-changing request that
+is correctly bound to a local sign-in flow but presents an obsolete or contradictory phase uses the
+named halt transition and records `phase_regression` or `phase_violation`; it does not write a user
+cancellation or reuse the legacy `FAILED = 900` row. HALTED remains absorbing.
 
-An invalid or missing request binding is an admission refusal, not a state transition. GET and
-HEAD return the authentication-safe 409 plain-text response without changing the flow. The
-binding is signed and purpose-bound and carries no raw locator nonce or database primary key.
-The flow lock/reload, actor check, expiry check, and the existing session-issuance boundary are
-still required. Provider-owned ceremonies keep their concrete transaction/state authority.
+An invalid or missing request binding is an admission refusal, not a state transition. GET and HEAD
+return the authentication-safe 409 plain-text response without changing the flow. The binding is
+signed and purpose-bound and carries no raw locator nonce or database primary key. The flow
+lock/reload, actor check, expiry check, and the existing session-issuance boundary are still
+required. Provider-owned ceremonies keep their concrete transaction/state authority.
 
 This is a runtime amendment for the covered sign-in paths, not a claim that all sign-up, sign-out,
-or provider ceremony axes have completed the broader lifecycle migration. Existing state ids are
-not renumbered or reinterpreted.
+or provider ceremony axes have completed the broader lifecycle migration. Existing state ids are not
+renumbered or reinterpreted.
 
 ## Remaining migration scope
 
-The broader storage cleanup remains incremental: legacy `status_id` names, historical direct
-writes, and the unmodified sign-up/sign-out/provider axes may still exist where their implementation
-slices have not landed. The local sign-in phase-admission slice has migration-owned `HALTED = 930`
+The broader storage cleanup remains incremental: legacy `status_id` names, historical direct writes,
+and the unmodified sign-up/sign-out/provider axes may still exist where their implementation slices
+have not landed. The local sign-in phase-admission slice has migration-owned `HALTED = 930`
 reference rows and named transition writers. Current acceptance must therefore be checked against
 the affected code, schema, and tests rather than inferred from this historical migration list.
 
@@ -389,8 +395,8 @@ The implementation cycle amends this future contract with the concrete sign-in g
 rules in `two.md`. The sign-in states are `PRIMARY_PENDING (10)`, `MFA_PENDING (20)`,
 `GUARDRAIL_PENDING (40)`, `SESSION_ISSUANCE_PENDING (50)`, `CHECKPOINT_PENDING (60)`,
 `SELECTOR_PENDING (65)`, and `COMPLETED (100)`, with every non-terminal state allowed to expire,
-cancel, or halt. `SESSION_LIMIT_PENDING (30)`, `DASHBOARD_PENDING (70)`, `RETURN_PENDING (80)`,
-and `FAILED (900)` remain readable tombstone rows and are never written by the new runtime.
+cancel, or halt. `SESSION_LIMIT_PENDING (30)`, `DASHBOARD_PENDING (70)`, `RETURN_PENDING (80)`, and
+`FAILED (900)` remain readable tombstone rows and are never written by the new runtime.
 
 The owning writer transaction locks and reloads the carrier, uses that model's database clock,
 checks expiry before mutation, rejects stale or illegal sources, and writes through one named
@@ -399,6 +405,6 @@ transaction; a terminal row is never rewritten. Reference rows are migration-own
 validated. The same authority pattern applies to sign-up, sign-out, and the three realm-specific
 session-limit child transactions.
 
-This is an **amendment** to the target storage contract. The id-only reference-table rule,
-immutable ids, restrictive ownership, no request-time reference creation, and no universal workflow
-table are **retained**.
+This is an **amendment** to the target storage contract. The id-only reference-table rule, immutable
+ids, restrictive ownership, no request-time reference creation, and no universal workflow table are
+**retained**.

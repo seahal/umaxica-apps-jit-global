@@ -97,6 +97,20 @@ module Security
                   "create still rate limits and reads bounded bodies only.",
         },
         {
+          pattern: "csrf bypass",
+          path: "app/controllers/auth/app/service_worker_retirements_controller.rb",
+          line: /skip_forgery_protection only: :show/,
+          reason: "The service-worker retirement script is a stateless non-XHR script GET that " \
+                  "Rails' cross-origin JavaScript guard would refuse, as in Rails::PwaController.",
+        },
+        {
+          pattern: "csrf bypass",
+          path: "app/controllers/auth/org/service_worker_retirements_controller.rb",
+          line: /skip_forgery_protection only: :show/,
+          reason: "The service-worker retirement script is a stateless non-XHR script GET that " \
+                  "Rails' cross-origin JavaScript guard would refuse, as in Rails::PwaController.",
+        },
+        {
           pattern: "csrf null_session",
           path: "app/controllers/acme/app/oauth/protocol_controller.rb",
           line: /with: :null_session/,

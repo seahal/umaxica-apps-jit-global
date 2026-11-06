@@ -5,6 +5,8 @@ require "test_helper"
 require "prism"
 
 class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   LIFECYCLE_CARRIERS = %w(
     ClientSignInFlow OperatorSignInFlow
     ClientSignUpFlow OperatorSignUpFlow

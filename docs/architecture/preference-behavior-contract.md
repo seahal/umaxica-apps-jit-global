@@ -1,16 +1,16 @@
 # Preference Behavior Contract
 
 This document describes the current app, org, and com Preference contract. The WU-9 destructive
-shape migrations have not been applied; local database cutover and final acceptance remain pending
-the separately approved execution ticket.
+shape migrations were approved and applied to the eight local development/test databases. Final
+behavior acceptance remains pending.
 
 ## Ownership
 
-| Surface | Writes | Reads |
-| --- | --- | --- |
-| Base app/org/com | Save and reset through `PreferenceWriteBoundary` | Realm-local anonymous preference and browser-bound consent/Web Push state |
-| Visa app/org | Apply explicit actor display values after finalized sign-in; rebuild anonymous state after committed sign-out | Realm-local actor Preference and anonymous Preference row |
-| Auth, Warp, Acme, Core, Edit, Tech | None | Verified anonymous Preference projection |
+| Surface                            | Writes                                                                                                        | Reads                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Base app/org/com                   | Save and reset through `PreferenceWriteBoundary`                                                              | Realm-local anonymous preference and browser-bound consent/Web Push state |
+| Visa app/org                       | Apply explicit actor display values after finalized sign-in; rebuild anonymous state after committed sign-out | Realm-local actor Preference and anonymous Preference row                 |
+| Auth, Warp, Acme, Core, Edit, Tech | None                                                                                                          | Verified anonymous Preference projection                                  |
 
 Interactive browser Preference controls are Base-owned. Auth, Core, and Warp can read verified
 display state, but do not persist theme or consent changes. Their browser API mutation routes return
@@ -27,7 +27,9 @@ The anonymous JWT carries one closed `preferences` object with theme, language, 
 date format, time format, motion, density, and page size. It identifies its row using `sub` and its
 realm using `aud`; it contains no account ID, consent, region, Web Push state, binding, or OIDC
 session. The display projection uses the same database snapshot to issue the JWT, `language`, and
-`__Secure-experience` cookies. The registered `infinity` page-size option is valid.
+`__Secure-experience` cookies. The registered `infinity` page-size option is valid. The anonymous
+JWT uses the option name `preferences.theme`; Base's Preference write response uses the short `ct`
+code (`li`, `dr`, or `sy`) for that same value.
 
 The host-only `__Host-preference_binding` cookie is issued only by Base saves that change consent or
 Web Push. Its digest is stored on the matching anonymous row. Visa can copy the database binding
@@ -37,7 +39,19 @@ not a boolean column.
 
 GET and HEAD do not create or refresh Preference rows, rotate credentials, or extend cookie expiry.
 An invalid or missing JWT may be followed by an explicit write that creates a new default row. An
-invalid JWT does not authorize mutation of the row it names.
+invalid JWT does not authorize mutation of the row it names. Base app/org/com HTML GET and HEAD
+requests build `Actor.preferences` from verified JWT display values plus the active anonymous row's
+region. Consent and Web Push are included only when the current realm, JWT expiry, consent receipt,
+and host-only browser binding authorize the browser; consent version and decision time come from
+that receipt. Missing or mismatched browser binding produces declined consent and disabled Web Push.
+Base JSON API reads keep state in their response and do not project it into the request Actor.
+Non-Base readers do not access browser-bound setting state. A read failure is logged and leaves safe
+Actor browser defaults in place. Base app/org browser API GET and HEAD requests run the
+display-cookie transport: a verified token with missing or mismatched display mirrors rebuilds the
+two display cookies from the authorized actor projection, active anonymous row, or defaults. This
+does not change the JWT, row lifecycle, expiry, or browser binding. An unusable token causes Base to
+clear only shared cookies that were present. Unsafe API requests skip this read transport and issue
+cookies only through the completed Preference writer.
 
 ## Actor-local preference
 
@@ -60,23 +74,29 @@ explicit display snapshot to the current anonymous row. It does not write the ac
 missing actor fields, copy consent/Web Push/binding, or transfer region itself. Region's explicit
 companion values may be applied independently.
 
+Visa authorization-result GETs are read-only: after validating the browser binding and result
+reference, they render a same-origin POST continuation. That POST revalidates the transaction and
+result generation, performs the Preference write, and only then issues the authorization code. The
+signed continuation is purpose-bound, expires within 60 seconds and no later than its parent
+transaction, and is protected by the normal Rails CSRF and Origin/Fetch Metadata checks.
+
 If Preference persistence or token issuance fails, the completed authentication result remains
-committed. The failure is logged, and the authorization code response continues without claiming
-that a new Preference cookie was issued.
+committed. The failure is logged; no authorization code is issued from that failed continuation. The
+user may retry while the authorization transaction remains valid.
 
 ## Visa sign-out
 
-After authentication logout has committed, Visa calls the same writer with
-`operation: :sign_out`. In one setting-database transaction it creates a new anonymous generation,
-copies the old row's display children, cookie-consent booleans, consent receipt, Web Push option, and
-binding digest, and retires the old row. It reads these values from the database only. It then issues
-the new shared display cookies after commit. A Preference failure does not undo the committed
-authentication logout or claim successful Preference delivery.
+After authentication logout has committed, Visa calls the same writer with `operation: :sign_out`.
+In one setting-database transaction it creates a new anonymous generation, copies the old row's
+display children, cookie-consent booleans, consent receipt, Web Push option, and binding digest, and
+retires the old row. It reads these values from the database only. It then issues the new shared
+display cookies after commit. A Preference failure does not undo the committed authentication logout
+or claim successful Preference delivery.
 
-A stale or invalid JWT does not let sign-out copy the row it names; the writer creates fresh defaults.
-Retired rows cannot transition back to active. Reset also retires the current anonymous row and
-creates defaults in one setting transaction, then issues the shared cookies and clears the old
-host-only binding cookie.
+A stale or invalid JWT does not let sign-out copy the row it names; the writer creates fresh
+defaults. Retired rows cannot transition back to active. Reset also retires the current anonymous
+row and creates defaults in one setting transaction, then issues the shared cookies and clears the
+old host-only binding cookie.
 
 ## Failure and transaction boundaries
 
@@ -98,7 +118,6 @@ authentication mechanisms. They do not refresh or bind Preference rows.
 
 ## Acceptance state
 
-Runtime implementation and reference documentation describe the WU-9 contract. The destructive
-shape cutover and behavior acceptance are not complete until the approved local migrations run,
-the app/org/com acceptance set passes against the target schema, and the single closing full-suite
-comparison is recorded in `evidence/`.
+Runtime implementation and reference documentation describe the WU-9 contract. The destructive shape
+cutover has run locally. Behavior acceptance remains incomplete until the app/org/com acceptance set
+and the single closing full-suite comparison are recorded in `evidence/`.

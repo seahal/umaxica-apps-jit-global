@@ -33,56 +33,43 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
+    )
+    entry_ref = issuance.entry_ref
+    issuance.ticket
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     https!
-    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+    admit_auth_ceremony_entry!(
+      auth_app_verification_path,
+      reference: entry_ref,
+      params: { ri: "jp" },
+      base_token: token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref:, nonce: issuance.authorization_transaction.login_challenge,
+      ),
+    )
 
     assert_response :see_other
 
@@ -106,56 +93,43 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
+    )
+    entry_ref = issuance.entry_ref
+    transaction = issuance.ticket
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     https!
-    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+    admit_auth_ceremony_entry!(
+      auth_app_verification_path,
+      reference: entry_ref,
+      params: { ri: "jp" },
+      base_token: token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref:, nonce: issuance.authorization_transaction.login_challenge,
+      ),
+    )
 
     assert_response :see_other
     TurnstileVerifierStub.enabled = true
@@ -173,8 +147,8 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
     assert_equal [I18n.t("sign.app.verification.errors.incorrect_code")], props.fetch("errors")
-    assert_equal "pending", issuance.transaction.reload.status
-    assert_nil issuance.transaction.verified_credential_ref
+    assert_equal "pending", transaction.reload.status
+    assert_nil transaction.verified_credential_ref
     assert_nil token.reload.last_step_up_at
   end
 
@@ -185,56 +159,45 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
+    )
+    entry_ref = issuance.entry_ref
+    transaction = issuance.ticket
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     https!
-    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
+    admit_auth_ceremony_entry!(
+      auth_app_verification_path,
+      reference: entry_ref,
+      params: { ri: "jp" },
+      base_token: token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref:, nonce: issuance.authorization_transaction.login_challenge,
+      ),
+    )
+
+    assert_response :see_other
 
     assert_response :see_other
     credential.update!(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::REVOKED)
@@ -252,7 +215,7 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     end
 
     assert_response :unprocessable_content
-    assert_equal "pending", issuance.transaction.reload.status
+    assert_equal "pending", transaction.reload.status
     assert_nil token.reload.last_step_up_at
   end
 
@@ -264,70 +227,52 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     )
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
-    # Two browsers, each with its own admitted ceremony for the same actor.
+    # Two browser sessions each receive an independently OIDC-mediated admission.
     ceremonies =
       2.times.map do
         token = ClientToken.create!(authentication_epoch: 0, user: actor)
-        issuance =
-          begin
-            admission_issuance = BaseStepUpAdmissionIssuer.call!(
-              actor: actor,
-              token: token,
-              requirement: StepUpRequirement.new(
-                step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
-                phishing_resistant_required: false, user_verification_required: false,
-                full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-                resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-                audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-                require_session_binding: true,
-              ),
-              return_to: "/identity/birthdate",
-              base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-              base_token: token,
-            )
-            admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-              surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-            )
-            admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-            admission_binding.attach_auth_session!(
-              auth_session: admission_session,
-              confirmation_ref: SecureRandom.uuid,
-            )
-            admission_binding.confirm_base!(
-              base_token: token,
-              browser_digest: AuthAdmissionBinding.browser_digest(
-                surface: admission_issuance.transaction.surface,
-                entry_ref: admission_issuance.reference,
-                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-              ),
-            )
-            admission_auth_host = {
-              "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-              "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-              "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-            }.fetch(admission_issuance.transaction.surface)
-            admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-            # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-            store_raw_cookies(
-              cookies,
-              "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-              URI.parse("https://#{admission_auth_host}/"),
-            )
-            admission_issuance
-          end
         browser = open_session
         browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
         browser.https!
-        _merged_cookies = browser.cookies.merge(
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/"),
+        client = OidcClientRegistry.find!("core-app-jp")
+        issuance_now = OpBaseAppRecord.database_now
+        grant = OpAppGrant.create!(
+          authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+          oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: issuance_now - 1.hour, refresh_token_expires_at: issuance_now + 1.hour,
         )
-        browser.get(
-          auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS,
+        grant.issue_refresh_token!(expires_at: issuance_now + 1.hour, now: issuance_now)
+        params = {
+          response_type: "code",
+          client_id: client.client_id,
+          redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+          scope: grant.oidc_scope,
+          state: SecureRandom.urlsafe_base64(32),
+          nonce: SecureRandom.urlsafe_base64(32),
+          code_challenge: "a" * 43,
+          code_challenge_method: "S256",
+          prompt: "login",
+          claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+        }
+        validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+        issuance = OidcStepUpAuthorizationIssuer.call!(
+          surface: "app", actor:, token:, client:, params:, validated_request:,
+        )
+        entry_ref = issuance.entry_ref
+        transaction = issuance.ticket
+        admit_auth_ceremony_entry!(
+          auth_app_verification_path,
+          reference: entry_ref,
+          params: { ri: "jp" },
+          browser: browser,
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "app", entry_ref:, nonce: issuance.authorization_transaction.login_challenge,
+          ),
         )
 
         assert_equal 303, browser.response.status
-        [browser, issuance.transaction]
+        [browser, transaction]
       end
     now = ClientTotpCredential.database_now
     code = ROTP::TOTP.new(credential.private_key).at(now.to_i)
@@ -349,61 +294,56 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
 
   test "the TOTP endpoints are refused when Base did not admit TOTP for the ceremony" do
     actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    email = actor.client_emails.create!(
+      address: "totp-method-exclusion-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    client = OidcClientRegistry.find!("core-app-jp")
+    now = OpBaseAppRecord.database_now
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour, refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type: "client")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "app", actor:, token:, client:, params:, validated_request:,
+    )
+    entry_ref = issuance.entry_ref
+    transaction = issuance.ticket
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
+    admit_auth_ceremony_entry!(
+      auth_app_verification_path,
+      reference: entry_ref,
+      params: { ri: "jp" },
+      base_token: token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref:, nonce: issuance.authorization_transaction.login_challenge,
+      ),
+    )
+
+    assert_response :see_other
+
     credential = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    issuance =
-      begin
-        admission_issuance = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: StepUpRequirement.new(
-            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
-            phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-            require_session_binding: true,
-          ),
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
-        )
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: token,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_issuance.transaction.surface,
-            entry_ref: admission_issuance.reference,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        admission_auth_host = {
-          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-        }.fetch(admission_issuance.transaction.surface)
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
-          URI.parse("https://#{admission_auth_host}/"),
-        )
-        admission_issuance
-      end
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    https!
-    get auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }, headers: NAVIGATION_HEADERS
 
     assert_response :see_other
 
@@ -419,7 +359,7 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
 
     assert_response :bad_request
     assert_equal I18n.t("errors.messages.invalid_request"), response.body
-    assert_equal "pending", issuance.transaction.reload.status
+    assert_equal "pending", transaction.reload.status
     assert_nil credential.reload.last_otp_at
   end
 end

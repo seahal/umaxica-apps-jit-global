@@ -11,9 +11,24 @@ require "test_helper"
 class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
+  # Secret claims commit in App Zenith independently from the Ticket evidence transaction.
+  # These HTTP journeys must run without Rails' enclosing fixture transaction so they exercise
+  # the same commit boundary as a request served by the application.
+  uses_transaction(
+    "test_A12-6:_a_repeated_final_result_after_Root_issuance_is_an_error_without_a_second_Root",
+    "test_a_Secret_flow_whose_transaction_method_is_not_passcode_is_refused_without_a_Root",
+    "test_expired_OIDC_Secret_flow_rejects_a_delayed_result_without_releasing_its_claim",
+    "test_terminally_failed_OIDC_Secret_flow_rejects_delayed_result_before_its_deadline",
+    "test_expired_OIDC_Secret_limitation_refuses_session_revocation",
+    "test_canceling_OIDC_Secret_session_limit_ends_its_flow_and_rejects_old_results",
+    "test_OIDC_Secret_session_limit_continuation_preserves_claim_and_commits_its_receipt",
+  )
+
+  self.fixture_table_names = []
   fixtures :clients, :client_statuses, :client_email_statuses,
            :client_telephone_statuses, :client_token_kinds, :client_token_statuses,
-           :client_token_binding_methods, :client_token_dbsc_statuses
+           :client_token_binding_methods, :client_token_dbsc_statuses,
+           :client_visibilities, :client_security_modes, :client_mfa_statuses
 
   setup do
     ClientSessionLimitResolutionState::DEFAULTS.each do |id|
@@ -31,17 +46,82 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! @host
     ClientIdentityState.ensure_defaults!
-    @user = clients(:one)
+    @test_owned_actor = self.class.uses_transaction?(name)
+    @user =
+      if @test_owned_actor
+        Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      else
+        clients(:one)
+      end
+    if @test_owned_actor
+      now = Client.database_now
+      issuance = ClientSecretIssuance.create!(
+        client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+        browser_session_ref: PublicId.generate, planned_count: 1,
+        expires_at: now + 1.hour, presented_at: now - 1.second, confirmed_at: now,
+        created_at: now - 1.second, updated_at: now,
+      )
+      @secret_credential = ClientSecretCredential.create!(
+        client: @user, issuance:, name: "OIDC integration Secret",
+        password_digest: Argon2::Password.create("a" * 32), confirmed_at: now,
+        created_at: now, updated_at: now,
+      )
+    end
     @address = "oidc_signin_#{SecureRandom.hex(4)}@example.com"
     @email_record = @user.client_emails.create!(address: @address, user_email_status_id: ClientEmailStatus::VERIFIED)
     @email_record.finalize_binding!
-    @user.client_telephones.create!(number: "+819012345901")
-    ClientToken.where(user_id: @user.id).delete_all
+    @telephone_record = @user.client_telephones.create!(number: "+819012345901")
+    ClientToken.where(user_id: @user.id).delete_all unless @test_owned_actor
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
 
   teardown do
+    # The Secret-claim cases run without fixture transactions, so remove only the contacts
+    # created by this test before the owning actor is cleaned up.
+    @email_record&.delete
+    @telephone_record&.delete
+    if @test_owned_actor && @user&.persisted?
+      flow_ids = ClientSignInFlow.where(principal_id: @user.id).pluck(:id)
+      parent_ids = ClientOidcAuthorizationTransaction.where(secret_sign_in_flow_id: flow_ids).pluck(:id)
+      parent_ids << @transaction.id if @transaction
+      parent_ids.uniq!
+      ClientSecretSignInReceipt.where(sign_in_flow_id: flow_ids).find_each(&:destroy!)
+      ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow_ids).delete_all
+      ClientSessionLimitResolutionTransaction.where(oidc_authorization_transaction_id: parent_ids).delete_all
+
+      bindings = ClientAuthAdmissionBinding.where(authorization_transaction_id: parent_ids)
+      ceremony_ids = bindings.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact.uniq
+      bindings.delete_all
+      ClientOidcAuthorizationTransaction.where(id: parent_ids).update_all(secret_sign_in_flow_id: nil)
+      ClientOidcAuthorizationTransaction.where(id: parent_ids).delete_all
+      ClientSignInFlow.where(id: flow_ids).find_each(&:destroy!)
+      ClientAuthCeremonySession.where(id: ceremony_ids).delete_all
+
+      token_ids = ClientToken.where(user_id: @user.id).pluck(:id)
+      stop_ids = OpAppAuthorityStopRootTarget.where(root_id: token_ids).pluck(:stop_id).uniq
+      OpAppAuthorityStopParticipant.where(stop_id: stop_ids).delete_all
+      OpAppAuthorityStopEpochCutoff.where(stop_id: stop_ids).delete_all
+      OpAppAuthorityStopGrantTarget.where(stop_id: stop_ids).delete_all
+      OpAppAuthorityStopRootTarget.where(stop_id: stop_ids).delete_all
+      OpAppAuthorityStop.where(id: stop_ids).delete_all
+      ClientStepUpSession.where(user_token_id: token_ids).delete_all
+      OpAppGrant.where(client_token_id: token_ids).delete_all
+      ClientDeviceSession.where(user_id: @user.id).update_all(current_refresh_token_id: nil)
+      ClientToken.where(id: token_ids).delete_all
+      ClientDeviceSession.where(user_id: @user.id).delete_all
+
+      ClientChronicle.where(subject_type: "Client", subject_id: @user.id.to_s).delete_all
+      Chronicle.where(subject_type: "Client", subject_id: @user.id).find_each(&:destroy!)
+      ClientSecretAuditOutbox.where(client_ref: @user.public_id).find_each(&:destroy!)
+      ClientSecretCredential.where(client_id: @user.id).delete_all
+      ClientSecretIssuance.where(client_id: @user.id).delete_all
+      ClientAccount.where(user_id: @user.id).delete_all
+      ClientAuthorityLock.where(client_id: @user.id).delete_all
+      ClientRetentionHold.where(client_id: @user.id).delete_all
+      ClientOidcConnection.where(user_id: @user.id).delete_all
+      Client.where(id: @user.id).delete_all
+    end
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = @previous_secret_proof_retention
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = @previous_secret_outbox_retention
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = @previous_secret_purge_delay
@@ -60,6 +140,222 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal @transaction.transaction_id, record.authorization_transaction_ref
     assert_nil session[:oidc_authorization_login_challenge]
     assert_nil session[:oidc_authorization_intent]
+  end
+
+  test "APP parent Cancel commits only through its browser-bound Visa POST continuation" do
+    visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+    client = OidcClientRegistry.find!("core-app-jp")
+    redirect_uri = client.redirect_uris_by_realm.fetch("client").first
+    state = SecureRandom.urlsafe_base64(32)
+    parameters = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: redirect_uri,
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      code_challenge_method: "S256",
+      state: state,
+      nonce: SecureRandom.urlsafe_base64(32),
+      scope: "openid profile",
+    }
+
+    @base_browser = open_session
+    @base_browser.host!(visa_host)
+    @base_browser.https!
+    @base_browser.get(
+      "/oauth/authorize", params: parameters, headers: {
+        "Host" => visa_host,
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+
+    current_browser = @base_browser
+    current_host = visa_host
+    12.times do
+      break unless current_browser.response.redirect?
+
+      target = URI.parse(current_browser.response.location.to_s)
+      target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+      if target.host == jump_host
+        jump_token = Rack::Utils.parse_query(target.query.to_s).fetch("rt")
+        issuer = JitSecurityJwtRegistry.surface("VISA_APP")
+        jump_claims, = JWT.decode(
+          jump_token,
+          JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{current_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        target = URI.parse(jump_claims.fetch("url"))
+      end
+
+      navigation_headers = {
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "cross-site",
+      }
+      case target.host
+      when visa_host
+        @base_browser.host!(visa_host)
+        @base_browser.https!
+        @base_browser.get(target.request_uri, headers: navigation_headers.merge("Host" => visa_host))
+        current_browser = @base_browser
+        current_host = visa_host
+      when auth_host
+        host!(auth_host)
+        https!
+        get(target.request_uri, headers: navigation_headers.merge("Host" => auth_host))
+        current_browser = self
+        current_host = auth_host
+      else
+        raise RuntimeError, "unexpected OIDC cancellation bootstrap host: #{target.host.inspect}"
+      end
+    end
+
+    assert_same self, current_browser
+    assert_response :success
+    page = css_select("script[data-page='app']").first
+
+    assert page, "expected the APP Auth sign-in page object"
+
+    cancel_form = JSON.parse(page.text).fetch("props").fetch("cancel_form")
+
+    assert_equal "/sign/cancellation?ri=jp", cancel_form.fetch("action")
+
+    post cancel_form.fetch("action"), params: {
+      authenticity_token: cancel_form.fetch("authenticity_token"),
+    }, headers: {
+      "Host" => auth_host,
+      "Origin" => "https://#{auth_host}",
+      "Sec-Fetch-Site" => "same-origin",
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+    }
+
+    assert_response :see_other
+    transaction = ClientOidcAuthorizationTransaction.find_by!(state: state)
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: transaction.id)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+
+    assert_predicate ceremony, :cancelled_before_authentication_progress?
+    assert_predicate transaction.reload, :canceled?
+    assert_predicate transaction.cancellation_handoff_ciphertext, :present?
+
+    auth_jump = URI.parse(response.location)
+    auth_jump_token = Rack::Utils.parse_query(auth_jump.query.to_s).fetch("rt")
+    auth_issuer = JitSecurityJwtRegistry.surface("AUTH_APP")
+    auth_jump_claims, = JWT.decode(
+      auth_jump_token,
+      JitSecurityJwtRegistry.public_key_for(auth_issuer.id, auth_issuer.current_kid),
+      true,
+      algorithms: ["ES384"],
+      verify_iss: true,
+      iss: "https://#{auth_host}",
+      verify_aud: true,
+      aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    visa_target = URI.parse(auth_jump_claims.fetch("url"))
+
+    assert_equal visa_host, visa_target.host
+
+    @base_browser.host!(visa_host)
+    @base_browser.https!
+    @base_browser.get(
+      visa_target.request_uri, headers: {
+        "Host" => visa_host,
+        "Sec-Fetch-Site" => "cross-site",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      },
+    )
+
+    assert_equal 200, @base_browser.response.status
+    continuation_form = Nokogiri::HTML(@base_browser.response.body)
+      .at_css("form#visa-authorization-continuation-form")
+
+    assert continuation_form, "expected the Visa cancellation POST continuation"
+    continuation_fields =
+      continuation_form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    @base_browser.post(
+      continuation_form["action"], params: continuation_fields, headers: {
+        "Host" => visa_host,
+        "Origin" => "https://#{visa_host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      },
+    )
+
+    assert_equal 303, @base_browser.response.status
+    denial_jump = URI.parse(@base_browser.response.location)
+    denial_token = Rack::Utils.parse_query(denial_jump.query.to_s).fetch("rt")
+    denial_issuer = JitSecurityJwtRegistry.surface("VISA_APP")
+    denial_claims, = JWT.decode(
+      denial_token,
+      JitSecurityJwtRegistry.public_key_for(denial_issuer.id, denial_issuer.current_kid),
+      true,
+      algorithms: ["ES384"],
+      verify_iss: true,
+      iss: "https://#{visa_host}",
+      verify_aud: true,
+      aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    denial_target = URI.parse(denial_claims.fetch("url"))
+    denial = Rack::Utils.parse_query(denial_target.query.to_s)
+
+    assert_equal URI.parse(redirect_uri).host, denial_target.host
+    assert_equal "access_denied", denial.fetch("error")
+    assert_equal state, denial.fetch("state")
+    assert_predicate transaction.reload, :canceled?
+    assert_predicate transaction.cancellation_handoff_digest, :present?
+
+    canceled_transaction_facts = transaction.attributes
+    base_session_facts = @base_browser.session.to_hash.slice(
+      "session_id", "auth_admission_browser_nonce", "timezone",
+    )
+    base_cookie_names = @base_browser.cookies.to_hash.keys.sort
+    auth_sid_cookie_name =
+      if JitSessionCookieConfig.force_secure?
+        "#{AuthIoKeys::HOST_COOKIE_PREFIX}#{AuthCeremonySidCookie::COOKIE_BASENAME}"
+      else
+        AuthCeremonySidCookie::COOKIE_BASENAME
+      end
+    authentication_cookie_names = [
+      auth_sid_cookie_name,
+      AuthenticationBase::ACCESS_COOKIE_KEY,
+      AuthenticationBase::REFRESH_COOKIE_KEY,
+      AuthenticationBase::DBSC_COOKIE_KEY,
+    ]
+    token_count = ClientToken.count
+    replay_headers = oidc_navigation_headers(visa_host, site: "same-origin").merge(base_result_headers).merge(
+      "Origin" => "https://#{visa_host}",
+    )
+    @base_browser.post(
+      continuation_form["action"], params: continuation_fields, headers: replay_headers,
+    )
+
+    assert_equal 303, @base_browser.response.status
+    replay_denial_target = decode_oidc_jump_target!(
+      URI.parse(@base_browser.response.location), issuer_namespace: "VISA_APP", issuer_host: visa_host,
+    )
+    replay_denial = Rack::Utils.parse_query(replay_denial_target.query.to_s)
+
+    assert_equal denial_target.host, replay_denial_target.host
+    assert_equal denial_target.path, replay_denial_target.path
+    assert_equal "access_denied", replay_denial.fetch("error")
+    assert_equal state, replay_denial.fetch("state")
+    assert_equal canceled_transaction_facts, transaction.reload.attributes
+    assert_equal base_session_facts,
+                 @base_browser.session.to_hash.slice("session_id", "auth_admission_browser_nonce", "timezone")
+    assert_equal base_cookie_names, @base_browser.cookies.to_hash.keys.sort
+    assert_empty authentication_cookie_names & @base_browser.cookies.to_hash.keys
+    assert_equal token_count, ClientToken.count
   end
 
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
@@ -81,6 +377,20 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_predicate ceremony.authentication_event_at, :present?
   end
 
+  test "an Inertia pass-code submission leaves the application for the sign-in checkpoint" do
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    start_oidc_authorization!(parameters)
+
+    assert_response :success
+
+    submit_email_otp!(extra_headers: { "X-Inertia" => "true" })
+
+    assert_response :conflict
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path,
+                 URI.parse(response.headers.fetch("X-Inertia-Location")).path
+    assert_nil response.headers["Location"]
+  end
+
   test "Visa APP sign-in reflects explicit display choices only and excludes region" do
     ClientPreferenceStatus.ensure_defaults!
     ClientPreference.where(client_id: @user.id).find_each(&:retire!)
@@ -92,9 +402,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       status_id: ClientPreferenceStatus::ACTIVE,
       explicit_fields: ["theme"],
     )
-    actor_preference.create_client_preference_theme!(option_id: ClientPreferenceThemeOption::DARK)
-    actor_preference.create_client_preference_language!(option_id: ClientPreferenceLanguageOption::EN)
-    actor_preference.create_client_preference_region!(option_id: ClientPreferenceRegionOption::US)
+    ClientPreferenceTheme.create!(preference_id: actor_preference.id, option_id: ClientPreferenceThemeOption::DARK)
+    ClientPreferenceLanguage.create!(preference_id: actor_preference.id, option_id: ClientPreferenceLanguageOption::EN)
+    ClientPreferenceRegion.create!(preference_id: actor_preference.id, option_id: ClientPreferenceRegionOption::US)
 
     start_oidc_authorization!(oidc_authorize_params(realm: "client").merge(ri: "jp"))
     submit_email_otp!
@@ -113,7 +423,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal "dark", claims.fetch("preferences").fetch("theme")
     assert_equal "ja", claims.fetch("preferences").fetch("language")
     assert_not_equal ClientPreferenceRegionOption::US,
-                     anonymous.app_preference_region.option_id,
+                     AppPreferenceRegion.find_by!(preference_id: anonymous.id).option_id,
                      "account region is deliberately not reflected into the anonymous row"
     assert_equal ["theme"], actor_preference.reload.explicit_field_names
   end
@@ -129,13 +439,14 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :redirect
+    assert_response :service_unavailable
+    assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
     assert_nil cookies[PreferenceCookieName.anonymous_jwt]
   end
 
   test "A12-6: a repeated final result after Root issuance is an error without a second Root" do
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
-    credential = client_secret_credentials(:one)
+    credential = @secret_credential
 
     assert_equal credential.id, ClientSecretLookupQuery.call(client: @user, secret: "a" * 32).id
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
@@ -265,7 +576,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "a Secret flow whose transaction method is not passcode is refused without a Root" do
-    credential = client_secret_credentials(:one)
+    credential = @secret_credential
     start_oidc_authorization!(oidc_authorize_params(realm: "client").merge(ri: "jp"))
     get new_auth_app_sign_in_secret_path(ri: "jp")
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
@@ -287,7 +598,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "expired OIDC Secret flow rejects a delayed result without releasing its claim" do
-    credential = client_secret_credentials(:one)
+    credential = @secret_credential
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
 
@@ -377,7 +688,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "terminally failed OIDC Secret flow rejects delayed result before its deadline" do
-    credential = client_secret_credentials(:one)
+    credential = @secret_credential
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
 
@@ -408,7 +719,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "expired OIDC Secret limitation refuses session revocation" do
-    client_secret_credentials(:one)
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
 
@@ -447,7 +757,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "canceling OIDC Secret session limit ends its flow and rejects old results" do
-    credential = client_secret_credentials(:one)
+    credential = @secret_credential
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
 
@@ -481,6 +791,43 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_nil credential.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     assert_predicate admitted_resolution.reload, :cancelled?
+    assert_predicate @transaction.reload, :canceled?
+
+    visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+    cancellation_location = URI.parse(response.location)
+
+    assert_equal "/oidc/cancellation", cancellation_location.path
+    assert_predicate @transaction.cancellation_handoff_ref, :present?
+    @base_browser.host!(visa_host)
+    @base_browser.https!
+    @base_browser.get(
+      cancellation_location.request_uri,
+      headers: oidc_navigation_headers(visa_host, site: "same-origin"),
+    )
+
+    assert_equal 200, @base_browser.response.status
+    cancellation_form = Nokogiri::HTML(@base_browser.response.body)
+      .at_css("form#visa-authorization-continuation-form")
+
+    assert cancellation_form, "session-limit Cancel must render the browser-bound Visa continuation"
+    cancellation_fields =
+      cancellation_form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    @base_browser.post(
+      cancellation_form["action"],
+      params: cancellation_fields,
+      headers: oidc_navigation_headers(visa_host, site: "same-origin").merge(
+        "Origin" => "https://#{visa_host}",
+      ),
+    )
+
+    assert_equal 303, @base_browser.response.status
+    denial_target = decode_oidc_jump_target!(
+      URI.parse(@base_browser.response.location), issuer_namespace: "VISA_APP", issuer_host: visa_host,
+    )
+    denial = Rack::Utils.parse_query(denial_target.query.to_s)
+
+    assert_equal "access_denied", denial.fetch("error")
+    assert_equal @transaction.state, denial.fetch("state")
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
       get_oidc_result!
     end
@@ -491,7 +838,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "OIDC Secret session limit continuation preserves claim and commits its receipt" do
-    credential = client_secret_credentials(:one)
+    credential = @secret_credential
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
     start_oidc_authorization!(parameters)
 
@@ -620,7 +967,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   private
 
-  def submit_email_otp!
+  def submit_email_otp!(extra_headers: {})
     post(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { user_email: { address: @address }, "cf-turnstile-response": "test_token" },
@@ -660,7 +1007,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     patch(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { :user_email => { pass_code: pass_code }, "cf-turnstile-response" => "test_token" },
-      headers: { "Host" => @host },
+      headers: { "Host" => @host }.merge(extra_headers),
     )
   end
 
@@ -681,6 +1028,11 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       headers: oidc_navigation_headers(base_host, site: "same-origin"),
     )
 
+    follow_oidc_authorization_bootstrap!(base_host:)
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+  end
+
+  def follow_oidc_authorization_bootstrap!(base_host:)
     jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
     current_browser = @base_browser
     current_host = base_host
@@ -688,35 +1040,40 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     12.times do
       break unless current_browser.response.redirect?
 
-      target = URI.parse(current_browser.response.location.to_s)
-      target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
-      if target.host == jump_host
-        namespace = (current_host == base_host) ? "VISA_APP" : "AUTH_APP"
-        target, = decode_oidc_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
-      end
-
-      case target.host
-      when base_host
-        @base_browser.host!(base_host)
-        @base_browser.https!
-        @base_browser.get(target.request_uri, headers: oidc_navigation_headers(base_host, site: "cross-site"))
-        current_browser = @base_browser
-        current_host = base_host
-      when @host
-        host!(@host)
-        https!
-        get(target.request_uri, headers: oidc_navigation_headers(@host, site: "cross-site"))
-        current_browser = self
-        current_host = @host
-      else
-        raise "unexpected OIDC bootstrap host: #{target.host.inspect}"
-      end
+      target = oidc_bootstrap_target_from_redirect(
+        browser: current_browser, current_host:, base_host:, jump_host:,
+      )
+      current_browser, current_host = navigate_oidc_bootstrap_target(target:, base_host:)
     end
 
-    raise "OIDC authorization bootstrap did not reach Auth" unless current_browser.equal?(self)
-    raise "OIDC authorization bootstrap did not render Auth entry" unless response.successful?
+    raise RuntimeError, "OIDC authorization bootstrap did not reach Auth" unless current_browser.equal?(self)
+    raise RuntimeError, "OIDC authorization bootstrap did not render Auth entry" unless response.successful?
+  end
 
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+  def oidc_bootstrap_target_from_redirect(browser:, current_host:, base_host:, jump_host:)
+    target = URI.parse(browser.response.location.to_s)
+    target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+    return target unless target.host == jump_host
+
+    namespace = (current_host == base_host) ? "VISA_APP" : "AUTH_APP"
+    decode_oidc_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
+  end
+
+  def navigate_oidc_bootstrap_target(target:, base_host:)
+    case target.host
+    when base_host
+      @base_browser.host!(base_host)
+      @base_browser.https!
+      @base_browser.get(target.request_uri, headers: oidc_navigation_headers(base_host, site: "cross-site"))
+      [@base_browser, base_host]
+    when @host
+      host!(@host)
+      https!
+      get(target.request_uri, headers: oidc_navigation_headers(@host, site: "cross-site"))
+      [self, @host]
+    else
+      raise RuntimeError, "unexpected OIDC bootstrap host: #{target.host.inspect}"
+    end
   end
 
   def decode_oidc_jump_target!(uri, issuer_namespace:, issuer_host:)
@@ -759,7 +1116,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   def follow_redirect_to_oidc_handoff!(destination: "document")
     target = URI.parse(response.location)
     3.times do
-      raise "OIDC handoff redirect is not on Auth" unless target.host == @host
+      raise RuntimeError, "OIDC handoff redirect is not on Auth" unless target.host == @host
 
       host!(@host)
       https!
@@ -774,7 +1131,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
       target = next_target
     end
-    raise "OIDC handoff did not redirect away from Auth" unless response.redirect?
+    raise RuntimeError, "OIDC handoff did not redirect away from Auth" unless response.redirect?
 
     @oidc_result_action = response.location
   end
@@ -787,6 +1144,20 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     get(
       target.request_uri,
       headers: oidc_navigation_headers(visa_host, site: "cross-site").merge(base_result_headers),
+    )
+    return unless response.status == 200
+
+    form = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+    raise RuntimeError, "Visa result did not render its POST continuation" unless form
+
+    fields = form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    post(
+      form["action"], params: fields, headers: base_result_headers.merge(
+        "Origin" => OidcIssuer.absolute_url(visa_host),
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "same-origin",
+      ),
     )
   end
 

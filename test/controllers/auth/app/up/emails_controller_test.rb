@@ -7,14 +7,27 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTest
+  # The cases create their own data; avoid loading fixtures for unrelated realms. The OTP
+  # delivery issuer also refuses to run inside a fixture transaction, so this committed journey
+  # cleans up its own rows instead.
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
   rate_limit_counters!
 
   include ActiveSupport::Testing::TimeHelpers
+  include SignInFlowCleanup
+  include SignUpJourneyCleanup
+  include DatabaseSelectorPrimary
 
   setup do
+    # Cases travel the clock past the DatabaseSelector's read-your-writes delay, which would
+    # route a read to the replica; the test environment's replica does not hold this case's rows.
+    keep_reads_on_primary!
+    sign_up_journey_watermarks!
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
@@ -117,6 +130,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
   end
 
+  test "the email entry Cancel ends the parent request instead of switching to sign-in" do
+    get new_auth_app_sign_up_email_url(ri: "jp")
+
+    assert_response :success
+    assert_equal([I18n.t("actions.back")], inertia_props.fetch("links").map { |link| link.fetch("label") })
+
+    post inertia_props.fetch("cancel").fetch("action")
+
+    assert_response :see_other
+    assert_match(/[?&]rt=/, response.location)
+  end
+
   test "signup admission accepts explicit JSON boolean consent" do
     assert_difference(["Client.count", "ClientEmail.count", "ClientSignUpFlow.count"], 1) do
       post auth_app_sign_up_email_url(ri: "jp"),
@@ -155,6 +180,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     TurnstileVerifierStub.challenge_response = nil
     Rails.configuration.x.rate_limit.fetch(:store).clear
     reset_cookie_jar!
+    begin
+      delete_sign_up_journey_rows!
+    ensure
+      restore_database_selector_delay!
+    end
   end
 
   test "should get new" do
@@ -234,17 +264,25 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_no_match(/UMAXICA \(sign, app\)/, response.body)
   end
 
-  test "includes navigation links to other registration flows" do
+  test "the entry offers Back and Cancel without switching to sign-in" do
     get new_auth_app_sign_up_email_url(ri: "jp"), headers: default_headers
 
     assert_response :success
 
     # The links a specific ceremony needs live in the page body; the shared auth header carries no
     # sign-in/sign-up navigation of its own.
-    page_links = inertia_props.fetch("links").map { |link| link.fetch("href") }
+    links = inertia_props.fetch("links")
 
-    assert_equal 1, page_links.count(auth_app_sign_up_path(ri: "jp"))
-    assert_equal 1, page_links.count(new_auth_app_sign_in_email_path(ri: "jp"))
+    assert_equal(
+      [[I18n.t("actions.back"), auth_app_sign_up_path(ri: "jp")]],
+      links.map { |link| [link.fetch("label"), link.fetch("href")] },
+    )
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_sign_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
     assert_not inertia_props.fetch("chrome").key?("primary_navigation")
   end
 
@@ -313,6 +351,52 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     EmailSignUpOtpDeliveryIssuer.stub(:call, unexpected) do
       assert_raises(ArgumentError) { post target, headers: default_headers }
     end
+  end
+
+  test "initial email OTP phase refusal uses the shared conflict response boundary" do
+    refusal = EmailSignUpOtpIssueResult.new(status: :closed_challenge, transaction: nil, code: nil)
+
+    EmailSignUpOtpDeliveryIssuer.stub(:call, refusal) do
+      post auth_app_sign_up_email_url(ri: "jp"),
+           params: {
+             user_email: { raw_address: "phase-refusal@example.com", confirm_policy: "1" },
+             "cf-turnstile-response": "test",
+           },
+           headers: { "X-CSRF-Token" => "test-csrf-token", "Sec-Fetch-Site" => "same-origin" }
+    end
+
+    assert_response :conflict
+    assert_equal I18n.t("errors.messages.phase_violation_refused"), response.body
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_nil response.location
+  end
+
+  test "email entry GET after flow start refuses without changing the flow or ceremony" do
+    ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies["auth_sid"])
+    binding = ClientAuthAdmissionBinding.find_by!(admitted_auth_ceremony_session_id: ceremony.id)
+    flow = SignUpCycleLocator.new(session, surface: :app).create_for_admission!(
+      admission_binding: binding, ceremony_session: ceremony, entry_method: "email",
+      social_provider: nil, return_to: nil, reject_prior_flow: false,
+    )
+    flow_facts = flow.reload.attributes
+    ceremony_facts = ceremony.reload.attributes
+
+    get new_auth_app_sign_up_email_url(ri: "jp"), headers: default_headers
+
+    assert_response :conflict
+    assert_equal I18n.t("errors.messages.phase_violation_refused"), response.body
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_nil response.location
+    set_cookie = response.headers["Set-Cookie"].to_s
+
+    assert_no_match(/(?:__Host-)?auth_sid=/, set_cookie)
+    assert_no_match(/(?:__Host-)?session=/, set_cookie)
+    assert_nil response.headers["Secure-Session-Challenge"]
+    assert_nil response.headers["Secure-Session-Registration"]
+    assert_nil response.headers["Sec-Session-Challenge"]
+    assert_nil response.headers["Sec-Session-Registration"]
+    assert_withheld("Back does not mutate the admitted flow") { flow_facts == flow.reload.attributes }
+    assert_withheld("Back preserves the Auth ceremony") { ceremony_facts == ceremony.reload.attributes }
   end
 
   test "update accepts a valid otp submitted through client_email" do
@@ -525,7 +609,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_includes response.body, I18n.t("sign.app.registration.email.create.turnstile_validation_failed")
   end
 
-  test "create beside an effective email owns a new candidate without changing the original binding" do
+  test "create beside an effective email creates a separate candidate without delivery or changing the binding" do
     user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
@@ -540,7 +624,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientEmail.count", 1) do
-        assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
+        assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
           post auth_app_sign_up_email_url(ri: "jp"),
                params: {
                  user_email: {
@@ -665,7 +749,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not user_email.notifiable
   end
 
-  test "create delivers only the independent candidate OTP and preserves an effective contact OTP" do
+  test "create beside an effective email sends no OTP and preserves the effective contact" do
     user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
@@ -677,7 +761,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     before_otp_last_sent_at = existing_email.otp_last_sent_at
     before_otp_attempts_count = existing_email.otp_attempts_count
 
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -710,7 +794,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     browsers = []
     targets = []
 
-    [existing.address, "app-fresh-session-pending-signup@example.com"].each do |destination|
+    ["app-fresh-session-pending-signup@example.com", existing.address].each do |destination|
       2.times do |attempt|
         browser = open_session
         browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
@@ -809,6 +893,119 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     browsers.last.get(targets.last.request_uri)
 
     assert_equal 200, browsers.last.response.status
+  end
+
+  test "registered and pending email sign-up have equal entry and OTP issuance responses" do
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+    )
+    registered = owner.client_emails.create!(
+      raw_address: "parity-registered-#{SecureRandom.hex(8)}@example.test",
+      confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
+    )
+    destinations = [registered.address, "parity-pending-#{SecureRandom.hex(8)}@example.test"]
+    redirects = []
+    entry_pages = []
+    otp_pages = []
+    clear_enqueued_jobs
+
+    destinations.each do |destination|
+      browser = open_session
+      browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+      browser.https!
+      issuance = OidcTestEntry.issue!(
+        surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference, browser: browser)
+      browser.get(new_auth_app_sign_up_email_path(ri: "jp"))
+      entry_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+      entry_pages << [browser.response.status, entry_page.fetch("component"), entry_page.dig("props", "title")]
+      browser.post(
+        auth_app_sign_up_email_path(ri: "jp"),
+        params: { :user_email => { raw_address: destination, confirm_policy: "1" },
+                  "cf-turnstile-response" => "test", },
+        headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" },
+      )
+
+      assert_equal 302, browser.response.status
+      target = URI.parse(browser.response.location)
+      redirects << [browser.response.status, target.path, Rack::Utils.parse_query(target.query).keys.sort]
+      browser.get(target.request_uri)
+      otp_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+      otp_pages << [browser.response.status, otp_page.fetch("component"), otp_page.dig("props", "title")]
+    end
+
+    assert_equal entry_pages.first, entry_pages.last
+    assert_equal redirects.first, redirects.last
+    assert_equal otp_pages.first, otp_pages.last
+  end
+
+  test "a registered email race before birthdate commit raises without changing sign-up state" do
+    address = "signup-registration-race-#{SecureRandom.hex(8)}@example.test"
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: {
+           :user_email => { raw_address: address, confirm_policy: "1" },
+           "cf-turnstile-response" => "test",
+         }, headers: default_headers
+
+    assert_response :redirect
+    otp_uri = URI.parse(response.location)
+    flow_binding = Rack::Utils.parse_query(otp_uri.query).fetch("fb")
+    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
+    candidate = ClientEmail.find(flow.pending_contact_id)
+    notification =
+      (enqueued_jobs + performed_jobs).reverse.filter_map do |job|
+        next unless job.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        record = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+        next unless record.fetch(:params).fetch(:public_id) == candidate.public_id
+
+        record
+      end.first
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    patch otp_uri.request_uri,
+          params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "test" },
+          headers: default_headers
+
+    assert_response :redirect
+    birthdate_uri = URI.parse(response.location)
+    Rack::Utils.parse_query(birthdate_uri.query).fetch("fb")
+    competitor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+    )
+    registered = competitor.client_emails.create!(
+      raw_address: address,
+      confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
+    )
+    competitor_facts = competitor.reload.attributes
+    registered_facts = registered.reload.attributes
+    candidate_facts = candidate.reload.attributes
+    flow_facts = flow.reload.attributes
+    candidate_owner = Client.find(candidate.user_id)
+    candidate_owner_facts = candidate_owner.attributes
+
+    get birthdate_uri.request_uri, headers: default_headers
+
+    assert_response :success
+    assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
+      patch birthdate_uri.request_uri,
+            params: {
+              requirement: "birthdate", birthdate: "1990-01-15", checkpoint_version: flow.reload.checkpoint_version,
+            }, headers: default_headers
+    end
+
+    assert_equal candidate_facts, candidate.reload.attributes
+    assert_equal candidate_owner_facts, candidate_owner.reload.attributes
+    assert_equal flow_facts, flow.reload.attributes
+    assert_equal competitor_facts, competitor.reload.attributes
+    assert_equal registered_facts, registered.reload.attributes
+    assert_equal 0, ClientToken.where(user_id: competitor.id).count
   end
 
   test "create with validation failure enqueues no emails and returns 422" do
@@ -1090,7 +1287,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     get new_auth_app_sign_up_email_url(ri: "jp"),
         headers: as_user_headers(user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
 
-    assert_response :unauthorized
+    assert_response :forbidden
     assert_equal I18n.t("errors.messages.already_authenticated"), response.body
   end
 
@@ -1113,7 +1310,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            )
     end
 
-    assert_response :unauthorized
+    assert_response :forbidden
     assert_equal I18n.t("errors.messages.already_authenticated"), response.body
   end
 
@@ -1996,7 +2193,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     original_contact_facts = existing_email.reload.attributes
     original_owner_facts = user.reload.attributes
 
-    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -2012,6 +2209,14 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     first_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: first_binding)
+    flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    candidate = ClientEmail.find(flow.pending_contact_id)
+
+    assert_not ClientEmailCeremonyTransaction.exists?(email_candidate_ref: candidate.public_id)
+    get response.location
+
+    assert_response :success
+    assert_not_includes response.body, I18n.t("errors.messages.taken")
     assert_withheld("effective contact facts remain unchanged") {
       original_contact_facts == existing_email.reload.attributes
     }
@@ -2025,7 +2230,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "create rejects signup for an email blocked by an in-force registration_blocked Identifier Effect, " \
        "sending no OTP" do
-    operator = operators(:one)
+    operator = principal = the_case = nil
+    operator = Operator.create!(
+      security_mode_id: OperatorSecurityMode::ADVANCED,
+      status_id: OperatorStatus::NOTHING,
+    )
     principal = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     the_case = AppEnforcementCase.new(
       kind: "permanent_ban",
@@ -2045,15 +2254,17 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     )
 
     assert_enqueued_jobs 0, only: OtpNotifierEmailDeliveryJob do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: "Enforcement_Blocked@Example.com",
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
+      post(
+        auth_app_sign_up_email_url(ri: "jp"),
+        params: {
+          user_email: {
+            raw_address: "Enforcement_Blocked@Example.com",
+            confirm_policy: "1",
+          },
+          "cf-turnstile-response": "test",
+        },
+        headers: default_headers,
+      )
     end
 
     assert_response :unprocessable_content
@@ -2061,6 +2272,23 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not ClientEmail.exists?(
       address_digest: IdentifierBlindIndex.bidx_for_email("enforcement_blocked@example.com", realm: :app),
     )
+  ensure
+    if the_case&.persisted?
+      ChronicleRecord.connected_to(role: :writing) do
+        EnforcementEvent.where(realm: "app", case_public_id: the_case.public_id).delete_all
+      end
+      AppEnforcementIdentifierEffect.where(app_enforcement_case_id: the_case.id).delete_all
+      AppEnforcementCase.where(id: the_case.id).delete_all
+    end
+    Client.where(id: principal&.id).delete_all if principal
+    if operator&.persisted?
+      OperatorCapabilityGrant.where(operator_id: operator.id).delete_all
+      OperatorCapabilityGrant.where(granted_by_operator_id: operator.id).delete_all
+      OperatorCapabilityGrant.where(revoked_by_operator_id: operator.id).delete_all
+      OperatorAuthorityLock.where(operator_id: operator.id).delete_all
+      OperatorAccount.where(staff_id: operator.id).delete_all
+      Operator.where(id: operator.id).delete_all
+    end
   end
 
   private
@@ -2325,7 +2553,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -2373,24 +2600,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

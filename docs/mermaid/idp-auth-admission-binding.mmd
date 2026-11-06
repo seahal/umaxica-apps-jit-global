@@ -1,5 +1,7 @@
 stateDiagram-v2
-    %% D-82 derived lifecycle. The same contract is stored in app, com and org Ticket DBs.
+    %% Historical derived lifecycle retained for the retired visitor realm (WU-5).
+    %% Current APP and ORG state references are in idp-client-auth-admission-binding.mmd and
+    %% idp-operator-auth-admission-binding.mmd.
     state "issued / unbound" as issued
     state "attached" as attached
     state "Base confirmed" as confirmed

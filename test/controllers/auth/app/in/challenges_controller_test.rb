@@ -258,8 +258,9 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     cancel = inertia_props.fetch("cancel")
 
     assert_equal I18n.t("actions.cancel"), cancel.fetch("label")
-    assert_equal URI.parse(mfa_challenge_path).path, URI.parse(cancel.fetch("action")).path
-    assert_equal "delete", cancel.fetch("method")
+    assert_equal URI.parse(auth_app_sign_cancellation_path(ri: "jp")).path,
+                 URI.parse(cancel.fetch("action")).path
+    assert_equal "post", cancel.fetch("method")
     assert_not inertia_props.key?("back_link")
   end
 

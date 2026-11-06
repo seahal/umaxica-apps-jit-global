@@ -13,22 +13,15 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
     get edit_base_app_preference_timezone_url(ri: "jp")
 
     assert_response :success
+    existing_preferences = AppPreference.count
 
     patch base_app_preference_timezone_url(ri: "jp"),
           params: { preference_timezone: { option_id: "../etc/passwd" } }
 
     assert_redirected_to edit_base_app_preference_timezone_url(ri: "jp")
     assert_empty flash.to_hash
-
-    follow_redirect!
-
-    claims = PreferenceToken.decode(
-      cookies[PreferenceCookieName.anonymous_jwt],
-      host: request.host,
-      jwt_issuer_id: "preference_app",
-    )
-
-    assert_not_equal "../etc/passwd", claims.dig("preferences", "timezone")
+    assert_equal existing_preferences, AppPreference.count
+    assert_nil cookies[PreferenceCookieName.anonymous_jwt]
   end
 
   test "theme update pt redirect refuses absolute URLs and protocol-relative paths" do

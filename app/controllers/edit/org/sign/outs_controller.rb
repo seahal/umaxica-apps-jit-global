@@ -50,12 +50,7 @@ module Edit
         end
 
         def create
-          launch_oidc_rp_logout!(
-            client_id: "edit-org-ww",
-            issuer_resource_type: "operator",
-            token_issuer: "operator",
-            session_authority: :rp_session,
-          )
+          launch_oidc_rp_logout!(client_id: "edit-org-ww")
         end
 
         private

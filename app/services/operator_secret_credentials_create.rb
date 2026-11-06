@@ -7,22 +7,22 @@ class OperatorSecretCredentialsCreate
 
   Result = Struct.new(:secret_credential, :raw_secret_credential, keyword_init: true)
 
-  def self.call(actor:, staff:, params:, raw_secret_credential: nil, step_up_token:, step_up_requirement:,
+  def self.call(actor:, staff:, params:, raw_secret_credential: nil, step_up_token:, step_up_evidence: nil,
                 step_up_bootstrap:)
     new(
       actor: actor, staff: staff, params: params, raw_secret_credential: raw_secret_credential,
-      step_up_token: step_up_token, step_up_requirement: step_up_requirement, step_up_bootstrap: step_up_bootstrap,
+      step_up_token: step_up_token, step_up_evidence: step_up_evidence, step_up_bootstrap: step_up_bootstrap,
     ).call
   end
 
-  def initialize(actor:, staff:, params:, raw_secret_credential:, step_up_token:, step_up_requirement:,
+  def initialize(actor:, staff:, params:, raw_secret_credential:, step_up_token:, step_up_evidence:,
                  step_up_bootstrap:)
     @actor = actor
     @staff = staff
     @params = params
     @raw_secret_credential = raw_secret_credential
     @step_up_token = step_up_token
-    @step_up_requirement = step_up_requirement
+    @step_up_evidence = step_up_evidence
     @step_up_bootstrap = step_up_bootstrap
   end
 
@@ -60,7 +60,7 @@ class OperatorSecretCredentialsCreate
         raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret creation requires a Normal session"
       end
 
-      now = verify_step_up!
+      verify_step_up!
       raw_secret_credential = @raw_secret_credential.presence ||
         OperatorSecretCredential.generate_raw_secret_credential
       secret_credential = @staff.staff_secret_credentials.new(name: @params[:name].to_s.strip)
@@ -80,7 +80,6 @@ class OperatorSecretCredentialsCreate
             occurred_at: Time.current,
             context: { action: ACTION },
           )
-          consume_step_up!(now)
         end
       end
 
@@ -96,30 +95,14 @@ class OperatorSecretCredentialsCreate
   end
 
   def verify_step_up!
-    now = OperatorToken.database_now
-    if @step_up_requirement.nil?
-      unless @step_up_bootstrap && StepUpBootstrapEligibilityQuery.call(actor: @actor)
-        raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret creation requires Step-Up"
-      end
-
-      return now
+    if @step_up_bootstrap && @step_up_evidence.nil? && StepUpBootstrapEligibilityQuery.call(actor: @actor)
+      return
     end
+    return if !@step_up_bootstrap && StepUpEvidenceVerifier.call(
+      evidence: @step_up_evidence, actor: @actor, token: @step_up_token,
+    )
 
-    requirement = @step_up_requirement
-    unless !@step_up_bootstrap && requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
-        requirement.scope == "settings_secret_credential" && requirement.actor_ref == @actor.public_id &&
-        requirement.token_binding == @step_up_token.public_id && @step_up_token.active_status?(now) &&
-        StepUpResolver.call(token: @step_up_token, requirement:, now:).satisfied?
-      raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret creation requires current Step-Up"
-    end
-
-    now
-  end
-
-  def consume_step_up!(now)
-    return if @step_up_requirement.nil?
-
-    @step_up_token.consume_step_up_evidence!(requirement: @step_up_requirement, now:)
+    raise TokenStatusManagement::StepUpEvidenceUnavailable, "operator Secret creation requires current Step-Up"
   end
 
   def status_id_for(enabled_param)

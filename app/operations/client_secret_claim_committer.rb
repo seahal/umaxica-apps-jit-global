@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class ClientSecretClaimCommitter
+  # An enclosing Zenith transaction would roll the irreversible Secret consumption back while the
+  # caller reports a successful claim, leaving the Secret reusable. Refuse instead.
+  class TransactionConflict < ArgumentError; end
+
   class << self
     public
 
@@ -56,6 +60,7 @@ class ClientSecretClaimCommitter
 
     def call!(client:, secret:, flow:, ceremony:, authorization_transaction:)
       verify_claim_request!(flow, ceremony, authorization_transaction)
+      require_independent_source_commit!
 
       credential = ClientSecretLookupQuery.call(client: client, secret: secret)
       return unless credential
@@ -99,6 +104,17 @@ class ClientSecretClaimCommitter
 
     private
 
+    # The Secret consumption precedes the Ticket evidence commit, so it must own its commit.
+    # Checked before any lock or Secret lookup.
+    def require_independent_source_commit!
+      AppZenithRecord.connected_to(role: :writing) do
+        connection = AppZenithRecord.lease_connection
+        if connection.transaction_open?
+          raise TransactionConflict, "Secret claim requires an independent source commit"
+        end
+      end
+    end
+
     def verify_claim_request!(flow, ceremony, transaction)
       unless flow.is_a?(ClientSignInFlow) && flow.persisted? &&
           ceremony.is_a?(ClientAuthCeremonySession) && ceremony.persisted?
@@ -116,7 +132,7 @@ class ClientSecretClaimCommitter
 
     def oidc_binding_admitted?(actor, credential, transaction, ceremony, now)
       credential.available_at?(at: Client.database_now) && actor.sign_in_allowed? &&
-        transaction.status == "pending" && !transaction.expired?(now: now) &&
+        transaction.pending? && !transaction.expired?(now: now) &&
         !transaction.login_challenge_expired?(now: now) && ceremony.admitted? && ceremony.active?(now: now) &&
         ceremony.admission_purpose == "authentication_handoff" && !ceremony.authentication_evidence_recorded? &&
         ceremony.authorization_transaction_ref == transaction.transaction_id

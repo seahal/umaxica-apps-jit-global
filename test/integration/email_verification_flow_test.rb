@@ -54,62 +54,52 @@ class EmailVerificationFlowTest < ActionDispatch::IntegrationTest
             },
           )
           JitSecurityJwtRegistry.surface("BASE_APP")
-          2.times do |flow0_index|
-            flow0_target = URI.parse(@base_browser.response.location)
+          # The Base sign entry hands the browser to the Visa OP authorize endpoint, which
+          # relays an unauthenticated browser to the Auth sign-in entry. The Auth admission
+          # then runs its ceremony-binding confirmation on Visa and redeems the reference,
+          # so the chain must be followed until Auth renders the sign-in page itself.
+          flow0_admission_browser = @base_browser
+          12.times do |flow0_admission_index|
+            raise RuntimeError,
+                  "Social admission stopped before a redirect" unless flow0_admission_browser.response.redirect?
+
+            flow0_target = URI.parse(flow0_admission_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-            unless flow0_target.host == flow0_base_host
-              flow0_target = URI.parse(jump_rt_url_from_location_for_test(flow0_target.to_s))
-            end
-            if flow0_index.zero?
-              raise RuntimeError,
-                    "Base authorization host mismatch" unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
+            3.times do
+              break unless flow0_target.host == "jump.umaxica.net"
 
-              @base_browser.host!(flow0_target.host)
-              @base_browser.get(flow0_target.request_uri)
-              flow0_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-              flow0_fields =
-                flow0_form.css("input[name]").to_h { |flow0_input|
-                  [
-                    flow0_input["name"],
-                    flow0_input["value"],
-                  ]
-                }
-              @base_browser.post(
-                flow0_form["action"], params: flow0_fields, headers: {
-                  "Origin" => "https://#{visa_host_for_test_base_host(flow0_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                },
-              )
-            else
+              flow0_unwrapped = URI.parse(jump_rt_url_from_location_for_test(flow0_target.to_s))
+              break if flow0_unwrapped.to_s == flow0_target.to_s
+
+              flow0_target = flow0_unwrapped
+            end
+            if flow0_admission_index.zero?
+              unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
+                raise RuntimeError, "Base authorization host mismatch"
+              end
+            elsif flow0_admission_index == 1
               raise RuntimeError, "Auth admission host mismatch" unless flow0_target.host == flow0_auth_host
-
-              host!(flow0_auth_host)
-              https!
-              get(flow0_target.request_uri)
             end
-          end
-          3.times do |flow0_index|
-            flow0_sender = (flow0_index == 1) ? @base_browser : self
-            flow0_form = Nokogiri::HTML(flow0_sender.response.body).at_css("form")
-            flow0_fields =
-              flow0_form.css("input[name]").to_h { |flow0_input|
-                [
-                  flow0_input["name"],
-                  flow0_input["value"],
-                ]
-              }
-            flow0_sender.post(
-              flow0_form["action"], params: flow0_fields, headers: {
-                "Origin" => "https://#{(flow0_index == 1) ? flow0_base_host : flow0_auth_host}",
-                "Sec-Fetch-Site" => "same-origin",
+            flow0_next_browser =
+              if flow0_target.host.nil?
+                flow0_admission_browser
+              elsif flow0_target.host == flow0_auth_host
+                self
+              else
+                @base_browser
+              end
+            flow0_next_browser.host!(flow0_target.host) if flow0_target.host
+            flow0_next_browser.https!
+            flow0_next_browser.get(
+              flow0_target.request_uri, headers: {
+                "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
               },
             )
-            raise RuntimeError,
-                  "Social admission failed at step #{flow0_index}" unless flow0_sender.response.status == 303
-            next if flow0_index == 2
-
-            flow0_receiver = flow0_index.zero? ? @base_browser : self
-            flow0_receiver.get(URI.parse(flow0_sender.response.location).request_uri)
+            flow0_admission_browser = flow0_next_browser
+            break if flow0_next_browser == self && !response.redirect?
           end
+
+          assert_equal [flow0_auth_host, 200], [request.host, response.status]
         end
         flow0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         host!(flow0_host)
@@ -433,7 +423,6 @@ class EmailVerificationFlowTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -456,24 +445,6 @@ class EmailVerificationFlowTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

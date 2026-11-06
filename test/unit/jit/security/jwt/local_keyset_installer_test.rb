@@ -17,7 +17,6 @@ module Jit
           @previous = @env_keys.index_with { |key| ENV[key] }
           @original_issuers = JitSecurityJwtRegistry.instance_variable_get(:@issuers)
           clear_local_jwt_env!
-          ENV["PREFERENCE_JWT_AUDIENCES"] = "log.umaxica.app"
         end
 
         teardown do
@@ -26,79 +25,78 @@ module Jit
           FileUtils.rm_f(@store_path)
         end
 
-        test "reinstalling from the same local store keeps preference jwt signatures valid" do
+        test "reinstalling from the same local store keeps app preference jwt signatures valid" do
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
           JitSecurityJwtRegistry.reload!
 
           token = PreferenceToken.encode(
-            { "ct" => "dr" },
+            SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first),
             host: "log.umaxica.app",
             preference_type: "AppPreference",
             public_id: "pref-public",
             jti: "pref-jti",
+            issued_at: Time.current,
           )
 
           assert_not_nil PreferenceToken.decode(token, host: "log.umaxica.app")
 
           clear_local_jwt_env!
-          ENV["PREFERENCE_JWT_AUDIENCES"] = "log.umaxica.app"
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
           JitSecurityJwtRegistry.reload!
 
           decoded = PreferenceToken.decode(token, host: "log.umaxica.app")
 
           assert_not_nil decoded
-          assert_equal "pref-public", decoded["public_id"]
+          assert_equal "pref-public", decoded["sub"]
           assert_equal "pref-jti", decoded["jti"]
         end
 
-        test "reinstalling keeps surface-scoped preference jwt signatures valid" do
-          ENV["PREFERENCE_JWT_AUDIENCES"] = "log.umaxica.org"
+        test "reinstalling from the same local store keeps org preference jwt signatures valid" do
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
           JitSecurityJwtRegistry.reload!
 
           token = PreferenceToken.encode(
-            { "ct" => "dr" },
+            SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first),
             host: "log.umaxica.org",
             preference_type: "OrgPreference",
             public_id: "org-pref-public",
             jti: "org-pref-jti",
-            jwt_issuer_id: "surface:AUTH_ORG",
+            issued_at: Time.current,
+            jwt_issuer_id: "preference_org",
           )
 
           assert_not_nil PreferenceToken.decode(
             token,
             host: "log.umaxica.org",
-            jwt_issuer_id: "surface:AUTH_ORG",
+            jwt_issuer_id: "preference_org",
           )
 
           clear_local_jwt_env!
-          ENV["PREFERENCE_JWT_AUDIENCES"] = "log.umaxica.org"
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
           JitSecurityJwtRegistry.reload!
 
           decoded = PreferenceToken.decode(
             token,
             host: "log.umaxica.org",
-            jwt_issuer_id: "surface:AUTH_ORG",
+            jwt_issuer_id: "preference_org",
           )
 
           assert_not_nil decoded
-          assert_equal "org-pref-public", decoded["public_id"]
+          assert_equal "org-pref-public", decoded["sub"]
           assert_equal "org-pref-jti", decoded["jti"]
         end
 
         test "partial keyset env is repaired from local store as one matching set" do
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
-          original_private_keyset = ENV.fetch("PREFERENCE_JWT_PRIVATE_KEYSET")
-          original_public_keyset = ENV.fetch("PREFERENCE_JWT_PUBLIC_KEYSET")
+          original_private_keyset = ENV.fetch("PREFERENCE_APP_JWT_PRIVATE_KEYSET")
+          original_public_keyset = ENV.fetch("PREFERENCE_APP_JWT_PUBLIC_KEYSET")
 
-          ENV["PREFERENCE_JWT_PRIVATE_KEYSET"] = nil
+          ENV["PREFERENCE_APP_JWT_PRIVATE_KEYSET"] = nil
 
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
 
-          assert_equal original_private_keyset, ENV["PREFERENCE_JWT_PRIVATE_KEYSET"]
-          assert_equal original_public_keyset, ENV["PREFERENCE_JWT_PUBLIC_KEYSET"]
+          assert_equal original_private_keyset, ENV["PREFERENCE_APP_JWT_PRIVATE_KEYSET"]
+          assert_equal original_public_keyset, ENV["PREFERENCE_APP_JWT_PUBLIC_KEYSET"]
         end
 
         test "partial surface env is repaired from local store as one matching set" do
@@ -143,7 +141,7 @@ module Jit
 
           store = JSON.parse(File.read(@store_path))
           expected_keys =
-            %w(AUTH PREFERENCE) +
+            %w(AUTH PREFERENCE_APP PREFERENCE_COM PREFERENCE_ORG) +
             JitSecurityJwtRegistry::SURFACE_NAMESPACES.map { |namespace| "JWT_#{namespace}" } +
             JitSecurityJwtRegistry::OIDC_CLIENT_NAMESPACES.map { |namespace| "OIDC_CLIENT_#{namespace}" }
 
@@ -157,7 +155,9 @@ module Jit
           store = JSON.parse(File.read(@store_path))
           public_keysets = [
             JSON.parse(store.fetch("AUTH").fetch("public_keyset")),
-            JSON.parse(store.fetch("PREFERENCE").fetch("public_keyset")),
+            JSON.parse(store.fetch("PREFERENCE_APP").fetch("public_keyset")),
+            JSON.parse(store.fetch("PREFERENCE_COM").fetch("public_keyset")),
+            JSON.parse(store.fetch("PREFERENCE_ORG").fetch("public_keyset")),
           ]
           JitSecurityJwtRegistry::SURFACE_NAMESPACES.each do |namespace|
             public_keysets << JSON.parse(store.fetch("JWT_#{namespace}").fetch("public_keyset"))
@@ -186,8 +186,8 @@ module Jit
           JitSecurityJwtRegistry.reload!
 
           assert(logged.any? { |message| message.include?("jwt.local_keyset_store.malformed") })
-          assert JitSecurityJwtRegistry.private_key_for("preference")
-          assert JitSecurityJwtRegistry.public_key_for("preference", ENV.fetch("PREFERENCE_JWT_ACTIVE_KID"))
+          assert JitSecurityJwtRegistry.private_key_for("preference_app")
+          assert JitSecurityJwtRegistry.public_key_for("preference_app", ENV.fetch("PREFERENCE_APP_JWT_ACTIVE_KID"))
         end
 
         test "generating fresh local keys warns that prior tokens will fail verification" do
@@ -200,7 +200,9 @@ module Jit
 
           assert_predicate regenerated, :present?,
                            "first install with no store should warn that local keys were minted"
-          assert(regenerated.any? { |message| message.include?("PREFERENCE") })
+          assert(regenerated.any? { |message| message.include?("PREFERENCE_APP") })
+          assert(regenerated.any? { |message| message.include?("PREFERENCE_COM") })
+          assert(regenerated.any? { |message| message.include?("PREFERENCE_ORG") })
           assert(regenerated.all? { |message| message.include?("will fail verification") })
         end
 
@@ -208,8 +210,6 @@ module Jit
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
 
           clear_local_jwt_env!
-          ENV["PREFERENCE_JWT_AUDIENCES"] = "log.umaxica.app"
-
           warnings = []
           Rails.logger.stub(:warn, ->(message) { warnings << message }) do
             JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
@@ -264,15 +264,15 @@ module Jit
         end
 
         test "explicit local jwt env values are not replaced" do
-          ENV["PREFERENCE_JWT_ACTIVE_KID"] = "explicit-pref-kid"
-          ENV["PREFERENCE_JWT_PRIVATE_KEYSET"] = '{"explicit-pref-kid":"private"}'
-          ENV["PREFERENCE_JWT_PUBLIC_KEYSET"] = '{"keys":[]}'
+          ENV["PREFERENCE_APP_JWT_ACTIVE_KID"] = "explicit-pref-app-kid"
+          ENV["PREFERENCE_APP_JWT_PRIVATE_KEYSET"] = '{"explicit-pref-app-kid":"private"}'
+          ENV["PREFERENCE_APP_JWT_PUBLIC_KEYSET"] = '{"keys":[]}'
 
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
 
-          assert_equal "explicit-pref-kid", ENV["PREFERENCE_JWT_ACTIVE_KID"]
-          assert_equal '{"explicit-pref-kid":"private"}', ENV["PREFERENCE_JWT_PRIVATE_KEYSET"]
-          assert_equal '{"keys":[]}', ENV["PREFERENCE_JWT_PUBLIC_KEYSET"]
+          assert_equal "explicit-pref-app-kid", ENV["PREFERENCE_APP_JWT_ACTIVE_KID"]
+          assert_equal '{"explicit-pref-app-kid":"private"}', ENV["PREFERENCE_APP_JWT_PRIVATE_KEYSET"]
+          assert_equal '{"keys":[]}', ENV["PREFERENCE_APP_JWT_PUBLIC_KEYSET"]
         end
 
         private
@@ -284,8 +284,9 @@ module Jit
         def local_jwt_env_keys
           keys = %w(
             AUTH_JWT_ACTIVE_KID AUTH_JWT_PRIVATE_KEYSET AUTH_JWT_PUBLIC_KEYSET
-            PREFERENCE_JWT_ACTIVE_KID PREFERENCE_JWT_PRIVATE_KEYSET PREFERENCE_JWT_PUBLIC_KEYSET
-            PREFERENCE_JWT_AUDIENCES
+            PREFERENCE_APP_JWT_ACTIVE_KID PREFERENCE_APP_JWT_PRIVATE_KEYSET PREFERENCE_APP_JWT_PUBLIC_KEYSET
+            PREFERENCE_COM_JWT_ACTIVE_KID PREFERENCE_COM_JWT_PRIVATE_KEYSET PREFERENCE_COM_JWT_PUBLIC_KEYSET
+            PREFERENCE_ORG_JWT_ACTIVE_KID PREFERENCE_ORG_JWT_PRIVATE_KEYSET PREFERENCE_ORG_JWT_PUBLIC_KEYSET
           )
           JitSecurityJwtRegistry::SURFACE_NAMESPACES.each do |namespace|
             keys << "JWT_#{namespace}_ACTIVE_KID"

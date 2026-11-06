@@ -4,7 +4,7 @@
 require "test_helper"
 
 # The PWA offline fallback is served by the framework's own Rails::PwaController on every origin whose
-# public HTML Rails renders itself: base, auth, warp, and palm. See adr/pwa-offline-route-exception.md.
+# public HTML Rails renders itself: base, warp, and palm. See adr/pwa-offline-route-exception.md.
 class PwaEndpointsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
@@ -12,8 +12,6 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
     ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
     ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
     ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-    ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-    ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
     ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
     ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
     ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),
@@ -23,6 +21,24 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
   # A browser fetching a service worker script sends `Accept: */*`; the offline document is fetched
   # by the worker's `cache.add`, which sends the same.
   WORKER_HEADERS = { "Accept" => "*/*" }.freeze
+
+  test "the Auth hosts serve only a self-unregistering Worker and no offline document" do
+    %w(auth.app.localhost auth.org.localhost).each do |host|
+      host! host
+      get "/service-worker", headers: WORKER_HEADERS
+
+      assert_response :success, "on #{host}"
+      assert_match(%r{\Atext/javascript}, response.content_type, "on #{host}")
+      assert_includes response.body, "self.registration.unregister()"
+      assert_includes response.body, 'caches.delete("offline")'
+      assert_not_includes response.body, '"fetch"'
+      assert_nil response.headers["Set-Cookie"]
+
+      get "/offline", headers: WORKER_HEADERS
+
+      assert_response :not_found, "on #{host}"
+    end
+  end
 
   test "every Rails-rendered origin serves the service worker script" do
     HOSTS.each do |host|

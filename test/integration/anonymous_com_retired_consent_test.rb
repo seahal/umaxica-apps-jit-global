@@ -106,7 +106,9 @@ class AnonymousComRetiredConsentTest < ActionDispatch::IntegrationTest
     ComPreferenceCookie.create!(
       preference: preference, consented: true, functional: true,
     )
-    ComPreferenceConsentReceipt.create!(preference: preference, version: SecureRandom.uuid, recorded_at: Time.current)
+    receipt = ComPreferenceConsentReceipt.create!(
+      preference: preference, version: SecureRandom.uuid, recorded_at: Time.current,
+    )
     ComPreferenceBrowserBinding.create!(preference: preference, digest: PreferenceBrowserBinding.digest_for(raw))
     cookies[PreferenceCookieName.anonymous_jwt] = PreferenceToken.encode(
       DISPLAY_SNAPSHOT.merge({ "theme" => "dark" }), host: @host, preference_type: "ComPreference",
@@ -128,7 +130,9 @@ class AnonymousComRetiredConsentTest < ActionDispatch::IntegrationTest
 
     assert categories.find { |category| category.fetch("key") == "consented" }.fetch("value")
     assert categories.find { |category| category.fetch("key") == "functional" }.fetch("value")
-    assert rendered_preferences.any? { |value| value.cookie.consented? && value.cookie.functional? }
+    assert rendered_preferences.all? { |value| value.cookie.consented? && value.cookie.functional? }
+    assert rendered_preferences.all? { |value| value.cookie.consent_version == receipt.version }
+    assert rendered_preferences.all? { |value| value.cookie.consented_at == receipt.recorded_at }
     assert_not_includes response.headers["Set-Cookie"].to_s, "#{PreferenceBrowserBinding::COOKIE_NAME}="
 
     token = cookies[PreferenceCookieName.anonymous_jwt]

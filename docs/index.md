@@ -10,6 +10,8 @@ coding agents. Product-user prose belongs in [manuals](../manuals/README.md).
 - [Durable checklists](checklists/README.md): behavior that must keep working.
 - [Risk management](risk-management/README.md): actual risks, responses and ownership.
 - [Spec lifecycle](../specs/README.md): accepted changes, evidence and closure.
+- [Runbooks](runbooks/README.md): operator procedures for key rotation, rollout, provisioning and
+  incident response.
 - [Development environment setup](operations/development-environment-setup.md) (draft): ordered
   steps from a fresh clone to a running local environment, including external sign-in providers.
 - [AWS production service inventory](operations/aws-production-service-inventory.md) (planning):
@@ -115,11 +117,6 @@ Current content-model references:
 - `docs/operations/postgresql-version-tracking.md`
 - `docs/operations/cloudflare-private-origin.md`
 - `docs/operations/core-nextjs-zero-cookie-edge-contract.md`
-- `docs/operations/jump-rt-key-rotation.md`
-- `docs/operations/jwt-key-rotation.md`
-- `docs/operations/apple-second-key-runbook.md`
-- `docs/operations/entra-org-login-runbook.md`
-- `docs/runbooks/chain_seal_key_rotation.md`
 - `docs/dictionary/README.md`
 - `docs/dictionary/access-terms.md`
 - `docs/dictionary/alphabet.md`

@@ -18,8 +18,8 @@ class Base::App::SecretsController < Base::App::ApplicationController
   rescue_from ClientSecretManualReservationIssuer::CapacityFull,
               ClientSecretIssuanceCountValue::ReservationConflict, with: :conflicting_secret_operation
   rescue_from ClientSecretNameCommitter::InvalidName, with: :invalid_secret_name
-  rescue_from ClientSecretNameCommitter::DependencyFailure, ClientSecretRevocationCommitter::DependencyFailure,
-              with: :secret_storage_unavailable
+  rescue_from ClientSecretNameCommitter::DependencyFailure, ClientSecretNameCommitter::TransactionConflict,
+              ClientSecretRevocationCommitter::DependencyFailure, with: :secret_storage_unavailable
 
   public
 
@@ -63,6 +63,7 @@ class Base::App::SecretsController < Base::App::ApplicationController
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: secret_actor_context, token: current_session_token, operation_id: operation_id,
       expires_after: ClientSecretLifetimesValue.issuance_ttl,
+      step_up_evidence: current_step_up_evidence,
     )
     state = issuance.state(at: Client.database_now)
     return redirect_to(base_app_secret_issuance_path(issuance.public_id), status: :see_other) if
@@ -76,6 +77,7 @@ class Base::App::SecretsController < Base::App::ApplicationController
     ClientSecretNameCommitter.call!(
       actor_context: secret_actor_context, token: current_session_token, credential: @secret,
       name: params.slice(:name).permit(:name)[:name],
+      step_up_evidence: current_step_up_evidence,
     )
     redirect_to(base_app_secret_path(@secret.public_id), status: :see_other)
   end
@@ -85,6 +87,7 @@ class Base::App::SecretsController < Base::App::ApplicationController
     ClientSecretRevocationCommitter.call!(
       actor_context: secret_actor_context, token: current_session_token, credential: @secret,
       purge_after: ClientSecretLifetimesValue.purge_delay,
+      step_up_evidence: current_step_up_evidence,
     )
     session[:inertia_clear_history] = true
     redirect_to(base_app_secrets_path, status: :see_other)

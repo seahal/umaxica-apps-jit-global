@@ -50,13 +50,12 @@ does not extract Publishing persistence or introduce cross-database associations
 Anonymous Publishing management requests start Edit's OIDC flow. On a host that is not same-site
 with the Base authority (for example `edit.org.localhost`), the authorize redirect goes through the
 Jump gateway with an `EDIT_ORG` rt whose keys Edit publishes at `/.well-known/jwks.json`; see
-`docs/operations/jump-rt-key-rotation.md`.
+`docs/runbooks/jump-rt-key-rotation.md`.
 
 Edit's root uses its surface layout with the same typography, column width, and action styling as
 the Base landing. Anonymous visitors enter the existing authenticated Publishing dashboard through
 Sign in; its authentication boundary initiates Edit's OIDC flow. Sign up opens the Base org root,
 where the existing CSRF-protected registration admission form owns account creation. Signed-in
-operators see a Publishing dashboard link. The footer links to Base org preferences with an
-absolute URL, preserving regional context. Edit does not duplicate Base's identity or preference
-controllers. The root response uses `private, no-store` because its navigation depends on login
-state.
+operators see a Publishing dashboard link. The footer links to Base org preferences with an absolute
+URL, preserving regional context. Edit does not duplicate Base's identity or preference controllers.
+The root response uses `private, no-store` because its navigation depends on login state.

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import WarpSettings, { type WarpSettingsProps } from "@/features/dashboards/WarpSettings";
 import WarpAppSettingsShow from "@/pages/warp/app/settings/show";
-import WarpComSettingsShow from "@/pages/warp/com/settings/show";
 import WarpOrgSettingsShow from "@/pages/warp/org/settings/show";
 
 const props: WarpSettingsProps = {
@@ -49,7 +48,6 @@ describe("WarpSettings", () => {
 describe("side settings pages", () => {
   it.each([
     ["warp/app", WarpAppSettingsShow],
-    ["warp/com", WarpComSettingsShow],
     ["warp/org", WarpOrgSettingsShow],
   ])("%s renders the shared settings page", (_surface, Page) => {
     expect(Page).toBe(WarpSettings);

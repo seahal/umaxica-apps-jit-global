@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button";
 import TextField from "@/components/ui/TextField";
 import { csrfToken } from "@/lib/csrf";
 import { readNonEmptyString, readObject, readString } from "@/lib/payload";
+import { handleStepUpChallenge } from "@/lib/step_up_challenge";
 
 import { solveInvisibleTurnstile } from "./invisibleTurnstile";
 import { PASSKEY_MESSAGES, TURNSTILE_DEFAULT_ERROR, authenticationErrorMessage } from "./messages";
@@ -57,6 +58,10 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 
 /** Reproduces the controller's failure branches, including the reload on 401/302. */
 async function readFailure(response: Response, fallback: string): Promise<Error | null> {
+  if (handleStepUpChallenge(response)) {
+    return null;
+  }
+
   /* v8 ignore next -- fetch always supplies a Headers object */
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {

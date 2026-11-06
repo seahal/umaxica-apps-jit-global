@@ -41,7 +41,10 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
       )
 
       assert_predicate handoff, :present?
-      assert_equal [parent, "sign_up"], BaseAuthAdmissionCoordinator.read_switch_handoff!(handoff:, surface: "app")
+      assert_equal(
+        [parent, "sign_up", admitted],
+        BaseAuthAdmissionCoordinator.read_switch_handoff!(handoff:, surface: "app"),
+      )
     end
     [curfew, curfew + 1.second].each do |decision_time|
       ClientOidcAuthorizationTransaction.stub(:database_now, decision_time) do
@@ -59,7 +62,8 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
           error =
             assert_raises(BaseAuthAdmissionCoordinator::Denied) do
               BaseAuthAdmissionCoordinator.issue_switch_admission!(
-                transaction: parent, base_browser_nonce: browser_nonce, base_token: nil, target: "sign_up",
+                transaction: parent, source_auth_session: admitted, base_browser_nonce: browser_nonce,
+                base_token: nil, target: "sign_up",
               )
             end
 
@@ -169,12 +173,14 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
         },
       ).transaction
       nonce = SecureRandom.hex(32)
-      # Zero original Bindings is below the supported Switch-history boundary; the loop below
-      # exercises one original Binding and then multiple redeemed Bindings with one curfew.
+      session_class = model.auth_admission_session_class
+      # Without a source ceremony, Switch cannot mint a new admission. The loop below exercises
+      # an original Binding and multiple redeemed Bindings with one curfew.
       assert_no_difference -> { model.count } do
         assert_raises(BaseAuthAdmissionCoordinator::Denied) do
           BaseAuthAdmissionCoordinator.issue_switch_admission!(
-            transaction: parent, base_browser_nonce: nonce, base_token: nil, target: "sign_up",
+            transaction: parent, source_auth_session: nil, base_browser_nonce: nonce, base_token: nil,
+            target: "sign_up",
           )
         end
       end
@@ -183,7 +189,6 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
         base_token: nil,
       )
       binding = model.find_by!(entry_ref: issued.reference)
-      session_class = model.auth_admission_session_class
       original_deadline = binding.curfew_at
       %w(sign_up sign_in).each do |target|
         attached, raw_sid = session_class.issue!
@@ -199,7 +204,8 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
         replacement =
           model.stub(:database_now, later) do
             BaseAuthAdmissionCoordinator.issue_switch_admission!(
-              transaction: parent, base_browser_nonce: nonce, base_token: nil, target: target,
+              transaction: parent, source_auth_session: admitted, base_browser_nonce: nonce,
+              base_token: nil, target: target,
             )
           end
         switched = model.find_by!(entry_ref: replacement.reference)
@@ -246,12 +252,14 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
       ceremony_selects.clear
       counter =
         lambda do |*, payload|
-          ceremony_selects << payload[:sql] if payload[:sql].match?(/\ASELECT .*FROM "client_auth_ceremony_sessions"/)
+          ceremony_selects << payload[:sql] if
+            payload[:sql].match?(/\ASELECT .*FROM "client_auth_ceremony_sessions".*"id" IN \(/)
         end
       replacement =
         ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
           BaseAuthAdmissionCoordinator.issue_switch_admission!(
-            transaction: parent, base_browser_nonce: nonce, base_token: nil, target: target,
+            transaction: parent, source_auth_session: admitted, base_browser_nonce: nonce,
+            base_token: nil, target: target,
           )
         end
       binding = ClientAuthAdmissionBinding.find_by!(entry_ref: replacement.reference)
@@ -287,17 +295,34 @@ class AdmissionBindingDeadlineIntentTest < ActiveSupport::TestCase
       authorization_transaction_ref: parent.transaction_id,
     )
     binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    admitted.cancel!
+    replacement = BaseAuthAdmissionCoordinator.issue_switch_admission!(
+      transaction: parent, source_auth_session: admitted, base_browser_nonce: nonce, base_token: nil,
+      target: "sign_up",
+    )
+    switched_binding = ClientAuthAdmissionBinding.find_by!(entry_ref: replacement.reference)
+    second_attached, second_raw_sid = ClientAuthCeremonySession.issue!
+    switched_binding.attach_auth_session!(
+      auth_session: second_attached, confirmation_ref: SecureRandom.uuid,
+    )
+    switched_binding.confirm_base!(base_token: nil, browser_digest: switched_binding.base_browser_digest)
+    live_admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      previous_raw_sid: second_raw_sid, admission_purpose: "authentication_handoff",
+      authorization_transaction_ref: parent.transaction_id,
+    )
+    switched_binding.redeem!(auth_session: second_attached, admitted_auth_session: live_admitted)
 
     assert_no_difference -> { ClientAuthAdmissionBinding.count } do
       error =
         assert_raises(BaseAuthAdmissionCoordinator::Denied) do
           BaseAuthAdmissionCoordinator.issue_switch_admission!(
-            transaction: parent, base_browser_nonce: nonce, base_token: nil, target: "sign_up",
+            transaction: parent, source_auth_session: admitted, base_browser_nonce: nonce,
+            base_token: nil, target: "sign_up",
           )
         end
       assert_equal "invalid_admission", error.code
     end
-    assert_not admitted.reload.cancelled?
+    assert_not live_admitted.reload.cancelled?
   end
 
   test "re-verification stores not_applicable and rejects authentication intent on all realms" do

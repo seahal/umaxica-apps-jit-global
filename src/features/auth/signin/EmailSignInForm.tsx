@@ -3,13 +3,15 @@
 // The endpoint, the verb, the parameter wrapper and the Turnstile challenge are all server
 // decisions that arrive as props; the form only collects the address and the token. It never learns
 // whether the address is registered - the server answers identically either way.
-import { useForm } from "@inertiajs/react";
+import { useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
-import { readString } from "@/lib/payload";
 
 import type { SignInField, SignInLink, SignInTurnstile } from "./types";
 
@@ -20,12 +22,14 @@ export type EmailSignInFormProps = {
     action: string;
     method: string;
     pt: string | null;
+    authenticity_token: string;
     address_field: SignInField;
     submit_label: string;
   };
   turnstile: SignInTurnstile;
   form_errors: string[];
   back_link: SignInLink;
+  cancel: CeremonyCancellationProps | null;
 };
 
 export default function EmailSignInForm({
@@ -35,34 +39,38 @@ export default function EmailSignInForm({
   turnstile,
   form_errors: formErrors,
   back_link: backLink,
+  cancel,
 }: EmailSignInFormProps) {
   const field = form.address_field;
-  const { data, setData, post, processing } = useForm<{
-    [key: string]: string | null | Record<string, string>;
-    "cf-turnstile-response": string;
-    pt: string | null;
-  }>({
-    [field.scope]: { [field.field]: "" },
-    "cf-turnstile-response": "",
-    pt: form.pt,
-  });
-
-  /* v8 ignore next -- useForm always initialises the scoped field as a string */
-  const value = readString(data[field.scope], field.field) ?? "";
+  const [address, setAddress] = useState(field.value ?? "");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
     <Page
       title={title}
+      up={backLink}
       description={description}
       width="narrow"
     >
       <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          post(form.action);
-        }}
+        action={form.action}
+        method={form.method}
+        data-turbo="false"
         className="flex flex-col gap-4"
+        onSubmit={() => setIsSubmitting(true)}
       >
+        <input
+          type="hidden"
+          name="authenticity_token"
+          value={form.authenticity_token}
+        />
+        {form.pt !== null ? (
+          <input
+            type="hidden"
+            name="pt"
+            value={form.pt}
+          />
+        ) : null}
         {formErrors.length > 0 ? (
           <div
             className="animate-shake rounded-md border border-danger bg-surface p-3"
@@ -80,8 +88,8 @@ export default function EmailSignInForm({
           label={field.label}
           type="email"
           name={field.name}
-          value={value}
-          onChange={(next) => setData(field.scope, { [field.field]: next })}
+          value={address}
+          onChange={setAddress}
           placeholder={field.placeholder}
           isRequired
         />
@@ -91,26 +99,17 @@ export default function EmailSignInForm({
           mode={turnstile.mode}
           action={turnstile.action}
           cdata={turnstile.cdata}
-          onToken={(token) => setData("cf-turnstile-response", token)}
         />
 
         <Button
           type="submit"
-          isDisabled={processing}
+          isDisabled={isSubmitting}
         >
           {form.submit_label}
         </Button>
       </form>
 
-      <p className="text-base">
-        {/* Document visit: leaving the ceremony returns to the method selection page. */}
-        <a
-          href={backLink.href}
-          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
-        >
-          {backLink.label}
-        </a>
-      </p>
+      {cancel ? <CeremonyCancellation {...cancel} /> : null}
     </Page>
   );
 }

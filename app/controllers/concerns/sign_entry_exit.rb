@@ -1,9 +1,9 @@
 # typed: false
 # frozen_string_literal: true
 
-# D05/D06/D09: the RP-facing Cancel and the Sign In/Up Switch. Both exist only on the first Sign In
-# or Sign Up page of an Auth ceremony admitted for a parent OIDC authorization transaction. After
-# that page, the in-Auth step cancellation (restart within Auth) is the only cancellation.
+# D05/D06/D09: the RP-facing Cancel and the Sign In/Up Switch. Cancel remains available for the
+# current admitted ceremony while its parent OIDC authorization is unfinalized; Switch is limited
+# to the first Sign In or Sign Up page. A clean entry-page reload after progress is refused.
 #
 # The including controller defines:
 # - sign_entry_exit_sign_up_cycle_class: the surface sign-up cycle model, e.g. ClientSignUpFlow, or
@@ -18,9 +18,8 @@ module SignEntryExit
 
   # The ceremony is still on its first page while it is admitted for a parent authorization, is not
   # terminal, has recorded no authentication evidence, has sent no email OTP and has started no
-  # sign-up cycle. Anything else is progress, and Cancel/Switch are refused.
-  def sign_entry_first_page_ceremony
-    record = admitted_auth_ceremony_session
+  # sign-up cycle. Anything else is progress, and Switch is refused.
+  def sign_entry_first_page_ceremony(record: admitted_auth_ceremony_session)
     return nil unless record && !record.terminal? && record.admission_purpose == "authentication_handoff"
     return nil if sign_entry_ceremony_progressed?(record)
 
@@ -33,6 +32,16 @@ module SignEntryExit
     return nil if binding && cycle_class.exists?(auth_admission_binding_id: binding.id)
 
     record
+  end
+
+  def refuse_progressed_sign_entry_page!(expected_intent:)
+    record = admitted_auth_ceremony_session
+    return false unless record&.admission_purpose == "authentication_handoff"
+    return false unless auth_ceremony_handoff_intent(record) == expected_intent.to_s
+    return false if sign_entry_first_page_ceremony(record: record)
+
+    refuse_sign_entry_exit!("not_on_first_page")
+    true
   end
 
   # Authentication evidence ends the first page everywhere; App also records a sent email OTP
@@ -49,7 +58,47 @@ module SignEntryExit
 
   def sign_entry_parent_transaction
     transaction = auth_ceremony_authorization_transaction
-    transaction if transaction && transaction.status == OidcAuthorizationTransactionable::STATUS_PENDING
+    transaction if transaction&.pending?
+  end
+
+  # Parent Cancel remains available after authentication progress until Base finalizes the
+  # authorization. Switch is intentionally narrower and continues to use the first-page check.
+  def sign_entry_parent_cancellation
+    ceremony = admitted_auth_ceremony_session
+    ceremony_class = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
+    ceremony ||= ceremony_class.find_cancelled_parent_cancel_replay_by_raw_sid(read_auth_ceremony_sid_cookie)
+    return unless ceremony && (ceremony.cancelled? || ceremony.active?) &&
+      ceremony.admission_purpose == "authentication_handoff"
+
+    transaction = auth_ceremony_authorization_transaction(ceremony)
+    return unless transaction&.cancellation_handoff_available?
+
+    [ceremony, transaction]
+  end
+
+  def commit_sign_entry_parent_cancellation!(ceremony:, transaction:)
+    issuance = nil
+    ceremony.class.connection_owner.connected_to(role: :writing) do
+      ceremony.class.connection_owner.transaction do
+        issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(
+          transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+        )
+        ceremony.cancel! unless ceremony.cancelled?
+      end
+    end
+    issuance
+  end
+
+  def redirect_to_sign_entry_parent_cancellation!(ceremony:, transaction:)
+    issuance = commit_sign_entry_parent_cancellation!(ceremony:, transaction:)
+    delete_auth_ceremony_sid_cookie!
+    reset_session
+    redirect_to_jump_url(
+      visa_app_oidc_cancellation_url(
+        cancellation_ref: issuance.reference, transaction_ref: transaction.transaction_id, ri: params[:ri],
+        host: visa_authority_host, protocol: "https",
+      ), status: :see_other,
+    )
   end
 
   # True when this page belongs to an OIDC parent. Such a page must not offer the plain

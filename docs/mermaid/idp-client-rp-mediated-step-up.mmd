@@ -1,0 +1,10 @@
+%% Contract-only axis. Unit 1 adds persistence; transition writers are not implemented yet.
+flowchart LR
+  ABSENT((absent)) --> PENDING["PENDING (10)"]
+  PENDING -->|authorization code callback| DISPATCHING["DISPATCHING (15)"]
+  PENDING -->|access denied| CANCELLED["CANCELLED (90)"]
+  PENDING -->|OIDC error| REFUSED["REFUSED (92)"]
+  PENDING -->|pending lifetime elapsed| EXPIRED["EXPIRED (91)"]
+  DISPATCHING -->|evidence installed| INSTALLED["INSTALLED (20)"]
+  DISPATCHING -->|exchange failure| REFUSED
+  DISPATCHING -->|uncertain exchange or deadline| INDETERMINATE["INDETERMINATE (93)"]

@@ -36,7 +36,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
 
     def request_ip_address = "127.0.0.1"
 
-    def sign_org_edge_v0_token_dbsc_path = "/edge/v0/token/dbsc"
+    def visa_org_edge_v0_token_dbsc_path = "/edge/v0/token/dbsc"
 
     def invoke(name, ...) = send(name, ...)
 

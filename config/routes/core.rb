@@ -89,7 +89,6 @@ scope module: :core, as: :core do
     end
   end
 
-
   # Staff BFF host.
   # Two request paths reach this surface with different Host headers, so both names are
   # listed. Requests forwarded by cloudflared carry the browser-facing PUBLIC_* site name,

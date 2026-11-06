@@ -16,6 +16,63 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
     @rotated_private_key = OpenSSL::PKey::EC.generate("secp384r1")
   end
 
+  test "id token verifier names the failed check without disclosing token values" do
+    {
+      "nonce" => id_payload.merge("nonce" => "other-nonce"),
+      "act" => id_payload.merge("act" => "operator"),
+    }.each do |detail, payload|
+      result = id_verifier(token: encode(payload, typ: OidcOpIdTokenVerifier::TOKEN_TYPE)).call
+
+      assert_equal "invalid_id_token", result.error
+      assert_equal detail, result.detail
+      assert_not_includes result.detail, "other-nonce"
+    end
+
+    wrong_issuer = id_payload.merge("iss" => "https://other.example/app")
+    result = id_verifier(token: encode(wrong_issuer, typ: OidcOpIdTokenVerifier::TOKEN_TYPE)).call
+
+    assert_equal "issuer", result.detail
+  end
+
+  test "a valid id token reports no failed check" do
+    assert_nil id_verifier(token: id_token).call.detail
+  end
+
+  test "ID Token nonce can be checked against the RP's stored digest" do
+    nonce = "rp-step-up-nonce"
+    token = encode(id_payload.merge("nonce" => nonce), typ: OidcOpIdTokenVerifier::TOKEN_TYPE)
+    verifier = OidcOpIdTokenVerifier.new(
+      id_token: token,
+      client_id: CLIENT_ID,
+      realm: REALM,
+      issuer: ISSUER,
+      expected_nonce_digest: Digest::SHA256.hexdigest(nonce),
+      expected_max_age: 60,
+      expected_resource_type: "client",
+      jwks_client: jwks_client,
+    )
+
+    assert_predicate verifier.call, :success?
+    assert_raises(ArgumentError) do
+      OidcOpIdTokenVerifier.new(
+        id_token: token, client_id: CLIENT_ID, realm: REALM, issuer: ISSUER,
+        expected_nonce: nonce, expected_nonce_digest: Digest::SHA256.hexdigest(nonce), jwks_client: jwks_client,
+      )
+    end
+    assert_raises(ArgumentError) do
+      OidcOpIdTokenVerifier.new(
+        id_token: token, client_id: CLIENT_ID, realm: REALM, issuer: ISSUER,
+        expected_nonce_digest: "A" * 64, jwks_client: jwks_client,
+      )
+    end
+    assert_raises(ArgumentError) do
+      OidcOpIdTokenVerifier.new(
+        id_token: token, client_id: CLIENT_ID, realm: REALM, issuer: ISSUER,
+        expected_nonce: "", expected_nonce_digest: Digest::SHA256.hexdigest(nonce), jwks_client: jwks_client,
+      )
+    end
+  end
+
   test "access verifier accepts a target token using only the fixed public JWKS" do
     result = access_verifier(token: access_token).call
 

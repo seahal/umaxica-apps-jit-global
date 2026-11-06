@@ -2,12 +2,15 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/rp_cell_session_helper"
 
 # adr/invalid-browser-credential-recovery.md, Auth. A refused auth browser credential is detached
 # with deletions that match the issued cookie's identity, and the request continues anonymous: a
 # public HTML page renders, a protected HTML page takes the ordinary sign-in path, and JSON keeps its
 # authentication failure contract. Policy states and system failures are not credential refusals.
 class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
+  include RpCellSessionHelper
+
   fixtures :clients, :operators
 
   ACCESS = OidcRpBrowserCredentialContract::ACCESS_COOKIE
@@ -234,6 +237,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
             :refresh_token_expires_at => 10.minutes.from_now,
           )
+          install_local_rp_session!(
+            surface: rc6_realm.to_sym, resource: rc6_actor, issuer: OidcIssuer.for_client(rc6_registered),
+            sid: rc6_rp.public_id, expires_at: 1.hour.from_now,
+          )
           AuthenticationTokenService.encode(
             rc6_actor, host: host, resource_type: rc6_type,
                        session_public_id: rc6_root.public_id, base_session_public_id: rc6_root.public_id,
@@ -394,6 +401,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
             :refresh_token_expires_at => 10.minutes.from_now,
           )
+          install_local_rp_session!(
+            surface: :app, resource: rc4_actor, issuer: OidcIssuer.for_client(rc4_registered),
+            sid: rc4_rp.public_id, expires_at: 1.hour.from_now,
+          )
           AuthenticationTokenService.encode(
             rc4_actor, host: host, resource_type: rc4_type,
                        session_public_id: rc4_root.public_id, base_session_public_id: rc4_root.public_id,
@@ -474,7 +485,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   end
 
   test "app: a JSON request with a malformed access cookie keeps the existing 401 contract" do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = "malformed"
 
     get "/edge/v0/token/check", headers: { "Accept" => "application/json" }, as: :json
@@ -524,6 +535,10 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           :oidc_client_id => rc2_registered.client_id, :oidc_scope => "openid profile",
           :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
           :refresh_token_expires_at => 10.minutes.from_now,
+        )
+        install_local_rp_session!(
+          surface: :app, resource: rc2_actor, issuer: OidcIssuer.for_client(rc2_registered),
+          sid: rc2_rp.public_id, expires_at: 1.hour.from_now,
         )
         AuthenticationTokenService.encode(
           rc2_actor, host: host, resource_type: rc2_type,
@@ -708,49 +723,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: resource)
-    cookies[ACCESS] =
-      begin
-        rc0_actor = resource
-        rc0_type = { Client => "client", Operator => "operator" }.fetch(rc0_actor.class)
-        rc0_realm = { "client" => "app", "operator" => "org" }.fetch(rc0_type)
-        rc0_root_model = {
-          "client" => ClientToken,
-          "operator" => OperatorToken,
-        }.fetch(rc0_type)
-        rc0_root = rc0_root_model.find_by(public_id: token.public_id) || surface_token(rc0_realm.to_sym, rc0_actor)
-        rc0_registered = OidcClientRegistry.find!(
-          {
-            "app" => "base-app-ww",
-            "org" => "base-org-ww",
-          }.fetch(rc0_realm),
-        )
-        rc0_rp_model = {
-          "client" => OpAppGrant,
-          "operator" => OpOrgGrant,
-        }.fetch(rc0_type)
-        rc0_fk = {
-          "client" => :client_token_id,
-          "operator" => :operator_token_id,
-        }.fetch(rc0_type)
-        rc0_rp = rc0_rp_model.create!(
-          :authentication_epoch => 0,
-          rc0_fk => rc0_root.id, :device_session_id => rc0_root.device_session_id,
-          :oidc_client_id => rc0_registered.client_id, :oidc_scope => "openid profile",
-          :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
-          :refresh_token_expires_at => 10.minutes.from_now,
-        )
-        AuthenticationTokenService.encode(
-          rc0_actor, host: host, resource_type: rc0_type,
-                     session_public_id: rc0_root.public_id, base_session_public_id: rc0_root.public_id,
-                     oidc_sid: rc0_rp.public_id, oidc_jti: rc0_rp.oidc_jti,
-                     expires_at: 5.minutes.from_now, scopes: %w(openid profile),
-                     issuer: OidcIssuer.for_resource_type(rc0_type), audiences: [rc0_registered.aud],
-                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc0_registered),
-                     subject: OidcSubject.for(rc0_actor, resource_type: rc0_type), client_id: rc0_registered.client_id,
-        )
-      end
+    sign_in_rp_cell("base-app-ww", actor: resource, root_token: token)
 
-    OpAppGrant.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
+    RpBaseAppSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
       get("/?ri=jp")
 
       assert_response :service_unavailable
@@ -783,6 +758,18 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def install_local_rp_session!(surface:, resource:, issuer:, sid:, expires_at:)
+    client_id = { app: "base-app-ww", org: "base-org-ww" }.fetch(surface)
+    resource_type = { app: "client", org: "operator" }.fetch(surface)
+    enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(client_id), issuer:, subject: OidcSubject.for(resource, resource_type:),
+      sid:, absolute_expires_at: expires_at,
+    )
+    raise ArgumentError, "RP enrollment failed: #{enrollment.outcome}" unless enrollment.success?
+
+    cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE] = enrollment.session.public_id
+  end
 
   def surface_resource(surface)
     case surface

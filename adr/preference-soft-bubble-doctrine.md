@@ -16,6 +16,13 @@
 > **Placement update (2026-05-18):** Session-side surface preference families now live in
 > `app_setting`, `org_setting`, and `com_setting`. Actor-local preferences stay in the matching
 > principal database.
+
+> **Amendment (2026-11-04):** The owner-approved redesign in `five.md` C0-C4 replaces this ADR's
+> Preference-specific read, synchronization, and screen-entry behavior. Keep the realm-local
+> database boundary as an architectural constraint, but do not use this ADR to reintroduce the
+> unified `Actor.preferences` runtime contract, sign-in copying, or edit-screen GET writes. The
+> current concepts are Browser Experience, Account Experience, Cookie Consent, Affinity and Display
+> Snapshot. Their exact persistent shapes and lifecycle remain subject to `five.md` C5.
 >
 > **Runtime overlay update (2026-05-19, superseded 2026-05-30):** `Actor.preferences` is the
 > effective request runtime preference. Normal authenticated requests now build it from the

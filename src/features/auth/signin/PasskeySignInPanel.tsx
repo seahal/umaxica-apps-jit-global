@@ -20,6 +20,7 @@ import { useCeremonyMessages } from "@/features/auth/passkeys/useCeremonyMessage
 import { getAssertion, passkeysSupported } from "@/features/auth/passkeys/webauthn";
 import { solveInvisibleTurnstile } from "@/features/auth/turnstile/invisibleToken";
 import { readNonEmptyString, readObject, readString } from "@/lib/payload";
+import { handleStepUpChallenge } from "@/lib/step_up_challenge";
 
 import { csrfToken } from "./csrf";
 
@@ -49,6 +50,10 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 
 /** Reproduces the controller's failure branches, including the reload on 401/302. */
 async function readFailure(response: Response, fallback: string): Promise<Error | null> {
+  if (handleStepUpChallenge(response)) {
+    return null;
+  }
+
   /* v8 ignore next -- fetch always supplies a Headers object */
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {

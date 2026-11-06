@@ -88,9 +88,8 @@ module TelephoneContactBinding
       in [ClientTelephone, ClientTelephoneCeremonyTransaction] then Client.find(user_id)
       else raise ArgumentError, "unsupported Telephone registration ceremony realm"
       end
-    transaction.normalized_number_digest == number_digest && transaction.telephone_otp_verified_evidence?(
-      code: code, purpose: "credential_registration", actor_ref: owner.public_id, session_ref: session_ref,
-      operation: "registration", candidate_ref: public_id,
+    transaction.normalized_number_digest == number_digest && transaction.telephone_registration_otp_evidence?(
+      code: code, actor_ref: owner.public_id, session_ref: session_ref, candidate_ref: public_id,
     )
   end
 

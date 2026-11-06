@@ -98,4 +98,4 @@ generic success response.
 - `adr/org-entra-id-sign-in-boundary.md`
 - `docs/security/social-login-provider-scope.md`
 - `docs/security/social-callback-boundary.md` (app-surface Google/Apple equivalent)
-- `docs/operations/entra-org-login-runbook.md`
+- `docs/runbooks/entra-org-login.md`

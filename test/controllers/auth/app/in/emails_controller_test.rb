@@ -657,26 +657,26 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     test_email = user.client_emails.create!(
       address: "otp_cooldown_#{SecureRandom.hex(4)}@example.com",
     ).tap(&:finalize_binding!)
-    test_email.update!(otp_last_sent_at: Time.current)
+    test_email.update!(otp_last_sent_at: ClientEmail.database_now)
     source_sent_at = test_email.reload.otp_last_sent_at
     original_challenge = @current_auth_ceremony.reload.email_otp_context.deep_dup
 
-    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
-         params: {
-           :user_email => { address: test_email.address },
-           "cf-turnstile-response" => "test_token",
-         },
-         headers: { "Host" => @host }
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+      post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: {
+             :user_email => { address: test_email.address },
+             "cf-turnstile-response" => "test_token",
+           },
+           headers: { "Host" => @host }
+    end
 
-    # The retained Source cooldown is an additional dispatch cap, independent of
-    # the flow-owned challenge and the destination/IP counters.
-    assert_response :too_many_requests
-    assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
+    # The registered address follows the same non-disclosing dummy continuation as an unknown
+    # address. The Source Contact and its OTP timestamp remain unchanged and no email is sent.
+    assert_response :found
+    assert_predicate SignAppInEmailAuthenticationState.load(session), :dummy?
     challenge = @current_auth_ceremony.reload.email_otp_context.deep_dup
 
-    challenge_unchanged = original_challenge == challenge
-
-    assert challenge_unchanged, "source cooldown must refuse before changing the challenge"
+    assert_not_equal original_challenge, challenge
     assert_equal source_sent_at, test_email.reload.otp_last_sent_at
 
     post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
@@ -690,6 +690,35 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       challenge == @current_auth_ceremony.reload.email_otp_context
     }
     assert_equal source_sent_at, test_email.reload.otp_last_sent_at
+  end
+
+  test "Source cooldown keeps the initial response identical for registered and unknown emails" do
+    email = clients(:one).client_emails.create!(
+      address: "source-cooldown-enumeration-#{SecureRandom.hex(6)}@example.test",
+    ).tap(&:finalize_binding!)
+    email.update!(otp_last_sent_at: ClientEmail.database_now)
+
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+      post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: {
+             :user_email => { address: email.address }, "cf-turnstile-response" => "test_token",
+           }, headers: { "Host" => @host }
+    end
+    registered_response = [response.status, response.location, response.body]
+    source_sent_at = email.reload.otp_last_sent_at
+
+    assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+      post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: {
+             :user_email => { address: "unknown-source-cooldown-#{SecureRandom.hex(6)}@example.test" },
+             "cf-turnstile-response" => "test_token",
+           }, headers: { "Host" => @host }
+    end
+    unknown_response = [response.status, response.location, response.body]
+
+    assert_equal unknown_response, registered_response
+    assert_equal 302, registered_response.first
+    assert_equal source_sent_at, email.reload.otp_last_sent_at
   end
 
   # The retired restricted placeholder no longer refuses the whole account: the address is
@@ -1730,7 +1759,6 @@ class Auth::App::Sign::In::EmailsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1757,24 +1785,6 @@ class Auth::App::Sign::In::EmailsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

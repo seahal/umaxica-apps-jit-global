@@ -10,7 +10,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
                                      app_preference_density app_preference_page_size app_preference_consent_receipt
                                      app_preference_browser_binding app_preference_web_push
                                      app_preference_adult_content_gate
-                                     app_preference_chronicles replacements).freeze
+                                     app_preference_chronicles).freeze
 
   setup do
     AppPreferenceStatus.ensure_defaults!

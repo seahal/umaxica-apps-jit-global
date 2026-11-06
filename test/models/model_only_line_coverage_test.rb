@@ -22,14 +22,32 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
 
   test "actor preferences decode the realm snapshot and cookie input forms" do
     preference = Actor::Preference.from_jwt(
-      "language" => "en", "region" => "us", "timezone" => "Etc/UTC", "theme" => "dark",
-      "currency" => "usd", "date_format" => "us", "time_format" => "12", "motion" => "reduced",
-      "density" => "compact", "page_size" => "infinity",
+      {
+        "language" => "en",
+        "region" => "us",
+        "timezone" => "Etc/UTC",
+        "theme" => "dark",
+        "currency" => "usd",
+        "date_format" => "us",
+        "time_format" => "12",
+        "motion" => "reduced",
+        "density" => "compact",
+        "page_size" => "infinity",
+      },
     )
     same = Actor::Preference.from_jwt(
-      "language" => "en", "region" => "us", "timezone" => "Etc/UTC", "theme" => "dark",
-      "currency" => "usd", "date_format" => "us", "time_format" => "12", "motion" => "reduced",
-      "density" => "compact", "page_size" => "infinity",
+      {
+        "language" => "en",
+        "region" => "us",
+        "timezone" => "Etc/UTC",
+        "theme" => "dark",
+        "currency" => "usd",
+        "date_format" => "us",
+        "time_format" => "12",
+        "motion" => "reduced",
+        "density" => "compact",
+        "page_size" => "infinity",
+      },
     )
 
     assert_equal "en", preference.language
@@ -344,8 +362,8 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_predicate OperatorSecretCredential.generate_raw_secret_credential, :present?
     assert_equal :operator, OperatorEmail.new.promotional_unsubscribe_scope
     assert_equal "public", Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "public").to_param
-    assert_equal "nothing", AppPreference.new.adult_content_gate
-    assert_equal "nothing", ClientPreference.new.adult_content_gate
+    assert_nil AppPreference.new.app_preference_adult_content_gate
+    assert_nil ClientPreference.new.client_preference_adult_content_gate
     assert_not ClientSecretCredential.new.available_at?(at: Client.database_now)
   end
 

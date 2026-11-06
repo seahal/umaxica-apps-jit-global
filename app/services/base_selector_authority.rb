@@ -29,9 +29,14 @@ class BaseSelectorAuthority
 
   def prepare
     candidates = selectable_candidates
+    if session.instance_of?(RpBaseAppSession) || session.instance_of?(RpBaseOrgSession)
+      return selected if session.selected_actor_context?
+
+      return selection_required(candidates)
+    end
     return selection_required(candidates) unless candidates.one?
 
-    persist_selection!(candidates.first)
+    persist_selection!(candidates.first, once: true)
     selected
   end
 
@@ -39,7 +44,7 @@ class BaseSelectorAuthority
     candidate = candidate_for_public_ids(params)
     raise InvalidSelection, "invalid_selection" if candidate.blank?
 
-    persist_selection!(candidate)
+    persist_selection!(candidate, once: true)
     selected
   end
 

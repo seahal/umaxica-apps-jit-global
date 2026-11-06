@@ -4,6 +4,8 @@
 require "test_helper"
 
 class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @operator = Operator.create!(
@@ -35,7 +37,27 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "registry request transport is refused before the verified ownership cutover" do
-    grant_step_up!("avatar_transfer_request")
+    client = OidcClientRegistry.find!("base-org-ww")
+    now = OpBaseOrgRecord.database_now
+    auth_time = Time.at(now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 10.minutes,
+    )
+    access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator", session_public_id: @token.public_id,
+                 base_session_public_id: @token.public_id, oidc_sid: grant.public_id, oidc_jti: grant.oidc_jti,
+                 expires_at: now + 10.minutes, scopes: %w(openid profile), acr: grant.oidc_acr, amr: ["passkey"],
+                 issuer: OidcIssuer.for_client(client), audiences: [client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: client.client_id,
+                 auth_time: auth_time, authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    @base_browser_rp_credentials = { [client.client_id, @token.public_id] => [access, grant.issue_refresh_token!] }
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a50"
 
     assert_no_difference -> { AvatarTransferReservation.count } do
@@ -52,15 +74,232 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_response :unprocessable_content
     assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
     assert_not AvatarOwnershipCutover.established?
-    assert_predicate @token.reload.last_step_up_at, :present?
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "a Standby session cannot request, accept or cancel ownership transfers with fresh Step-Up proof" do
+    accept_transfer_now = OpBaseAppRecord.database_now
+    accept_transfer_token = ClientToken.create!(
+      authentication_epoch: @target_client.authentication_epoch, user: @target_client,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: accept_transfer_now + 1.hour,
+    )
+    accept_transfer_token.update!(
+      root_login_established_at: accept_transfer_now,
+      established_authentication_method: "passkey",
+    )
+    accept_transfer_token.rotate_refresh_token!(now: accept_transfer_now)
+    accept_transfer_token.device_session_record!
+    accept_transfer_client = OidcClientRegistry.find!("base-app-ww")
+    accept_transfer_grant = OpAppGrant.create!(
+      authentication_epoch: accept_transfer_token.authentication_epoch, client_token: accept_transfer_token,
+      oidc_client_id: accept_transfer_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(accept_transfer_now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: accept_transfer_now + 1.hour,
+    )
+    accept_transfer_grant.issue_refresh_token!(now: accept_transfer_now)
+    accept_transfer_evidence = StepUpEvidenceValue.new(
+      acr: accept_transfer_grant.oidc_acr, amr: ["passkey"], auth_time: accept_transfer_now.to_i,
+      sid: accept_transfer_grant.public_id, sub: OidcSubject.for(@target_client, resource_type: "client"),
+      client_id: accept_transfer_client.client_id, aud: [accept_transfer_client.aud],
+      jti: accept_transfer_grant.oidc_jti,
+    )
+    accept_transfer =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @target_client,
+            surface: "app",
+            subject_public_id: @target.account.public_id,
+            avatar_public_id: @target.avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: @source.collective.public_id,
+            step_up_token: accept_transfer_token, step_up_evidence: accept_transfer_evidence,
+          )
+        end
+      end
+    cancel_transfer_now = OpBaseOrgRecord.database_now
+    cancel_transfer_token = OperatorToken.create!(
+      authentication_epoch: @operator.authentication_epoch, staff: @operator,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      discard_at: cancel_transfer_now + 1.hour,
+    )
+    cancel_transfer_token.update!(
+      root_login_established_at: cancel_transfer_now,
+      established_authentication_method: "passkey",
+    )
+    cancel_transfer_token.rotate_refresh_token!(now: cancel_transfer_now)
+    cancel_transfer_token.device_session_record!
+    cancel_transfer_client = OidcClientRegistry.find!("base-org-ww")
+    cancel_transfer_grant = OpOrgGrant.create!(
+      authentication_epoch: cancel_transfer_token.authentication_epoch, operator_token: cancel_transfer_token,
+      oidc_client_id: cancel_transfer_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(cancel_transfer_now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: cancel_transfer_now + 1.hour,
+    )
+    cancel_transfer_grant.issue_refresh_token!(now: cancel_transfer_now)
+    cancel_transfer_evidence = StepUpEvidenceValue.new(
+      acr: cancel_transfer_grant.oidc_acr, amr: ["passkey"], auth_time: cancel_transfer_now.to_i,
+      sid: cancel_transfer_grant.public_id, sub: OidcSubject.for(@operator, resource_type: "operator"),
+      client_id: cancel_transfer_client.client_id, aud: [cancel_transfer_client.aud],
+      jti: cancel_transfer_grant.oidc_jti,
+    )
+    cancel_transfer =
+      OpBaseOrgRecord.connected_to(role: :writing) do
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @operator,
+            surface: "org",
+            subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar_result.avatar.public_id,
+            target_surface: "app",
+            target_collective_public_id: @target.collective.public_id,
+            step_up_token: cancel_transfer_token, step_up_evidence: cancel_transfer_evidence,
+          )
+        end
+      end
+
+    assert_equal "pending", accept_transfer.state
+    assert_equal "pending", cancel_transfer.state
+
+    @token.update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
+    transaction_count = OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
+    reservation_count = AvatarTransferReservation.count
+    rp_client = OidcClientRegistry.find!("base-org-ww")
+    rp_token = @token.reload
+    rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+    freshness_at = Time.at(OpBaseOrgRecord.database_now.to_i).utc
+    rp_grant = OpOrgGrant.create!(
+      authentication_epoch: 0,
+      operator_token: rp_token,
+      oidc_client_id: rp_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: freshness_at,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    root_access_token = AuthenticationToken.encode(
+      @operator,
+      host: @host,
+      session_public_id: rp_token.public_id,
+      resource_type: "operator",
+      jwt_issuer_id: "surface:BASE_ORG",
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    )
+    rp_access_token = AuthenticationTokenService.encode(
+      @operator,
+      host: @host,
+      resource_type: "operator",
+      session_public_id: rp_token.public_id,
+      base_session_public_id: rp_token.public_id,
+      oidc_sid: rp_grant.public_id,
+      oidc_jti: rp_grant.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      acr: rp_grant.oidc_acr, amr: ["passkey"], auth_time: freshness_at,
+      issuer: OidcIssuer.for_client(rp_client),
+      audiences: [rp_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+      subject: OidcSubject.for(@operator, resource_type: "operator"),
+      client_id: rp_client.client_id,
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    )
+    rp_enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(rp_client.client_id),
+      issuer: OidcIssuer.for_client(rp_client),
+      subject: OidcSubject.for(@operator, resource_type: "operator"),
+      sid: rp_grant.public_id,
+      absolute_expires_at: rp_grant.refresh_token_expires_at,
+    )
+    raise ArgumentError, "RP session enrollment failed: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
+    cookie = [
+      "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access_token)}",
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access_token)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_grant.issue_refresh_token!)}",
+      "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_enrollment.session.public_id}",
+    ].join("; ")
+    headers = {
+      "Authorization" => "Bearer #{root_access_token}",
+      "Client-Agent" => "Mozilla/5.0",
+      "Host" => @host,
+      "X-TEST-SESSION-PUBLIC-ID" => rp_token.public_id,
+      "Cookie" => cookie,
+      "HTTP_COOKIE" => cookie,
+      "Idempotency-Key" => "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a80",
+    }
+
+    post base_org_avatar_ownership_transfers_url(host: @host),
+         params: {
+           avatar_public_id: @avatar_result.avatar.public_id,
+           target_surface: "app",
+           target_collective_public_id: @target.collective.public_id,
+         }, headers: headers, as: :json
+
+    assert_response :forbidden
+    assert_equal I18n.t("auth.step_up.emergency_unavailable"), response.parsed_body.fetch("error")
+    assert_equal reservation_count, AvatarTransferReservation.count
+    assert_equal freshness_at, rp_grant.reload.oidc_auth_time
+    assert_equal AuthenticationContextValue::STANDBY_KEY, @token.authentication_context
+    assert_equal transaction_count, OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
+
+    post base_org_accept_avatar_ownership_transfer_url(accept_transfer.public_id, host: @host),
+         params: { transfer_kind: "legacy" }, headers: headers, as: :json
+
+    assert_response :forbidden
+    assert_equal I18n.t("auth.step_up.emergency_unavailable"), response.parsed_body.fetch("error")
+    assert_equal "pending", accept_transfer.reload.state
+    assert_equal freshness_at, rp_grant.reload.oidc_auth_time
+    assert_equal AuthenticationContextValue::STANDBY_KEY, @token.authentication_context
+    assert_equal transaction_count, OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
+
+    post base_org_cancel_avatar_ownership_transfer_url(cancel_transfer.public_id, host: @host),
+         params: { transfer_kind: "legacy" }, headers: headers, as: :json
+
+    assert_response :forbidden
+    assert_equal I18n.t("auth.step_up.emergency_unavailable"), response.parsed_body.fetch("error")
+    assert_equal "pending", cancel_transfer.reload.state
+    assert_equal freshness_at, rp_grant.reload.oidc_auth_time
+    assert_equal AuthenticationContextValue::STANDBY_KEY, @token.authentication_context
+    assert_equal transaction_count, OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
   end
 
   # A client whose first response was lost retries with the same key and discovers the committed result.
   test "registry request replays the committed result for a stable idempotency key" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     establish_avatar_ownership_cutover!
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a55"
     headers = base_browser_headers.merge("Idempotency-Key" => key)
-    grant_step_up!("avatar_transfer_request")
     post(
       base_org_avatar_ownership_transfers_url(host: @host),
       params: org_request_params, headers: headers, as: :json,
@@ -77,24 +316,39 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       params: org_request_params, headers: headers, as: :json,
     )
 
-    assert_response :unprocessable_content
-    assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
-
-    grant_step_up!("avatar_transfer_request")
-    post(
-      base_org_avatar_ownership_transfers_url(host: @host),
-      params: org_request_params, headers: headers, as: :json,
-    )
-
     assert_response :success
     assert_equal first.fetch("transfer_public_id"), response.parsed_body.fetch("transfer_public_id")
-    assert_predicate @token.reload.last_step_up_at, :present?
     assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
   end
 
   test "registry request refuses a reused idempotency key with different input" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     establish_avatar_ownership_cutover!
-    grant_step_up!("avatar_transfer_request")
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a56"
     headers = base_browser_headers.merge("Idempotency-Key" => key)
     post base_org_avatar_ownership_transfers_url(host: @host),
@@ -107,7 +361,6 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       visibility_id: ClientVisibility::USER,
     )
     other_target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
-    grant_step_up!("avatar_transfer_request")
 
     assert_no_difference -> { AvatarTransferReservation.count } do
       post base_org_avatar_ownership_transfers_url(host: @host),
@@ -121,8 +374,33 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "registry request refuses a reused idempotency key from a different initiator" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     establish_avatar_ownership_cutover!
-    grant_step_up!("avatar_transfer_request")
     key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a57"
     post base_org_avatar_ownership_transfers_url(host: @host),
          params: org_request_params, headers: base_browser_headers.merge("Idempotency-Key" => key), as: :json
@@ -158,7 +436,31 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
         avatar_public_id: other_avatar_result.avatar.public_id,
       },
     )
-    grant_step_up!("avatar_transfer_request", token: other_token)
+    other_client = OidcClientRegistry.find!("base-org-ww")
+    other_now = OpBaseOrgRecord.database_now
+    other_auth_time = Time.at(other_now.to_i).utc
+    other_token.rotate_refresh_token! unless other_token.device_session_record.current_refresh_token_id
+    other_grant = OpOrgGrant.create!(
+      authentication_epoch: other_token.authentication_epoch, operator_token: other_token,
+      oidc_client_id: other_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: other_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: other_now + 10.minutes,
+    )
+    other_access = AuthenticationTokenService.encode(
+      other_operator, host: @host, resource_type: "operator", session_public_id: other_token.public_id,
+                      base_session_public_id: other_token.public_id, oidc_sid: other_grant.public_id,
+                      oidc_jti: other_grant.oidc_jti, expires_at: other_now + 10.minutes,
+                      scopes: %w(openid profile), acr: other_grant.oidc_acr, amr: ["passkey"],
+                      auth_time: other_auth_time, issuer: OidcIssuer.for_client(other_client),
+                      audiences: [other_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(other_client),
+                      subject: OidcSubject.for(other_operator, resource_type: "operator"),
+                      client_id: other_client.client_id,
+                      authentication_context: other_token.strict_authentication_context_value.to_s,
+    )
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[[other_client.client_id, other_token.public_id]] =
+      [other_access, other_grant.issue_refresh_token!]
 
     assert_no_difference -> { AvatarTransferReservation.count } do
       post base_org_avatar_ownership_transfers_url(host: @host),
@@ -172,8 +474,33 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "keyless legacy request is refused after the ownership cutover" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     establish_avatar_ownership_cutover!
-    grant_step_up!("avatar_transfer_request")
 
     assert_no_difference [-> { AvatarOwnershipTransfer.count }, -> { AvatarTransferReservation.count }] do
       post base_org_avatar_ownership_transfers_url(host: @host),
@@ -187,25 +514,79 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "registry accept transport is refused before the verified ownership cutover" do
-    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: @target_client,
-      surface: "app",
-      subject_public_id: @target.account.public_id,
-      avatar_public_id: @target.avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: @source.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a52",
-      request_fingerprint: registry_request_fingerprint(
-        actor: @target_client,
-        surface: "app",
-        subject_public_id: @target.account.public_id,
-        avatar_public_id: @target.avatar.public_id,
-        target_surface: "org",
-        target_collective_public_id: @source.collective.public_id,
-      ),
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
     )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
+    source_now = OpBaseAppRecord.database_now
+    source_token = ClientToken.create!(
+      authentication_epoch: @target_client.authentication_epoch, user: @target_client,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_now + 1.hour,
+    )
+    source_token.update!(root_login_established_at: source_now, established_authentication_method: "passkey")
+    source_token.rotate_refresh_token!(now: source_now)
+    source_token.device_session_record!
+    source_client_config = OidcClientRegistry.find!("base-app-ww")
+    source_grant = OpAppGrant.create!(
+      authentication_epoch: source_token.authentication_epoch, client_token: source_token,
+      oidc_client_id: source_client_config.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(source_now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_now + 1.hour,
+    )
+    source_grant.issue_refresh_token!(now: source_now)
+    source_evidence = StepUpEvidenceValue.new(
+      acr: source_grant.oidc_acr, amr: ["passkey"], auth_time: source_now.to_i, sid: source_grant.public_id,
+      sub: OidcSubject.for(@target_client, resource_type: "client"), client_id: source_client_config.client_id,
+      aud: [source_client_config.aud], jti: source_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: @target_client,
+            surface: "app",
+            subject_public_id: @target.account.public_id,
+            avatar_public_id: @target.avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: @source.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a52",
+            request_fingerprint: registry_request_fingerprint(
+              actor: @target_client,
+              surface: "app",
+              subject_public_id: @target.account.public_id,
+              avatar_public_id: @target.avatar.public_id,
+              target_surface: "org",
+              target_collective_public_id: @source.collective.public_id,
+            ),
+            step_up_token: source_token, step_up_evidence: source_evidence,
+          )
+        end
+      end
 
-    grant_step_up!("avatar_transfer_accept")
     post base_org_accept_avatar_ownership_transfer_url(
       reservation.public_id,
       host: @host,
@@ -222,7 +603,32 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "org owner can request app transfer and cancel only with cancel scope" do
-    grant_step_up!("avatar_transfer_request")
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     http_headers_2 =
       begin
         rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
@@ -246,6 +652,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
+          @base_browser_rp_sessions ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
               !(rp_token.device_session_id && OpOrgGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
@@ -270,14 +677,53 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
+            @base_browser_rp_sessions[rp_key] = rp_local_session
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
+            unless @base_browser_rp_sessions[rp_key]
+              rp_access = @base_browser_rp_credentials.fetch(rp_key).first
+              rp_payload = OidcRpBrowserCredentialContract.decode_access_token(
+                token: rp_access, host: rp_host, resource_type: "operator", client_id: rp_client.client_id,
+              )
+              raise ArgumentError, "Base ORG RP access credential is invalid" unless rp_payload
+
+              rp_grant = OpOrgGrant.find_by!(
+                public_id: AuthorizationTokenClaims.session_id(rp_payload), operator_token: rp_token,
+                oidc_client_id: rp_client.client_id,
+              )
+              rp_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                sid: rp_grant.public_id,
+                absolute_expires_at: rp_grant.refresh_token_expires_at,
+              )
+              unless rp_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+              end
+
+              @base_browser_rp_sessions[rp_key] = rp_local_enrollment.session
+            end
             rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_local_session = @base_browser_rp_sessions.fetch(rp_key)
             rp_cookie = [
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -299,7 +745,6 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_equal "app", transfer.to_owner_surface
     assert_equal @avatar_result.avatar.id, transfer.avatar_id
 
-    grant_step_up!("avatar_transfer_cancel")
     http_headers_1 =
       begin
         rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
@@ -347,6 +792,18 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                                        resource_type: "operator",
                                      ), client_id: rp_client.client_id,
             )
+            rp_local_enrollment = RpCallbackCommitter.call(
+              cell: RpCellBinding.for_client(rp_client.client_id),
+              issuer: OidcIssuer.for_client(rp_client),
+              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+              sid: rp_session.public_id,
+              absolute_expires_at: rp_now + 10.minutes,
+            )
+            unless rp_local_enrollment.success?
+              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+            end
+
+            rp_local_session = rp_local_enrollment.session
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
           if @base_browser_rp_credentials[rp_key]
@@ -355,6 +812,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               rp_headers.fetch("Cookie"),
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
             ].join("; ")
             rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
           end
@@ -370,14 +828,52 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "another authorized source agent can cancel a transfer over HTTP" do
-    transfer = AvatarOwnershipTransfers::RequestOperation.call(
-      actor: @operator,
-      surface: "org",
-      subject_public_id: @source.account.public_id,
-      avatar_public_id: @avatar_result.avatar.public_id,
-      target_surface: "app",
-      target_collective_public_id: @target.collective.public_id,
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
     )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
+    source_token = @token
+    source_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time.to_i,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@operator, resource_type: "operator"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
+    )
+    transfer =
+      OpBaseOrgRecord.connected_to(role: :writing) do
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @operator,
+            surface: "org",
+            subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar_result.avatar.public_id,
+            target_surface: "app",
+            target_collective_public_id: @target.collective.public_id,
+            step_up_token: source_token, step_up_evidence: source_evidence,
+          )
+        end
+      end
     other_operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE,
@@ -417,7 +913,31 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
         avatar_public_id: other_avatar_result.avatar.public_id,
       },
     )
-    grant_step_up!("avatar_transfer_cancel", token: other_token)
+    other_client = OidcClientRegistry.find!("base-org-ww")
+    other_now = OpBaseOrgRecord.database_now
+    other_auth_time = Time.at(other_now.to_i).utc
+    other_token.rotate_refresh_token! unless other_token.device_session_record.current_refresh_token_id
+    other_grant = OpOrgGrant.create!(
+      authentication_epoch: other_token.authentication_epoch, operator_token: other_token,
+      oidc_client_id: other_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: other_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: other_now + 10.minutes,
+    )
+    other_access = AuthenticationTokenService.encode(
+      other_operator, host: @host, resource_type: "operator", session_public_id: other_token.public_id,
+                      base_session_public_id: other_token.public_id, oidc_sid: other_grant.public_id,
+                      oidc_jti: other_grant.oidc_jti, expires_at: other_now + 10.minutes,
+                      scopes: %w(openid profile), acr: other_grant.oidc_acr, amr: ["passkey"],
+                      auth_time: other_auth_time, issuer: OidcIssuer.for_client(other_client),
+                      audiences: [other_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(other_client),
+                      subject: OidcSubject.for(other_operator, resource_type: "operator"),
+                      client_id: other_client.client_id,
+                      authentication_context: other_token.strict_authentication_context_value.to_s,
+    )
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[[other_client.client_id, other_token.public_id]] =
+      [other_access, other_grant.issue_refresh_token!]
 
     post base_org_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
          headers: base_browser_headers(operator: other_operator, token: other_token),
@@ -429,9 +949,46 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "URL-provided Avatar cannot replace a nil selected Avatar" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
+    @base_browser_rp_sessions ||= {}
+    step_up_enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(step_up_client.client_id),
+      issuer: OidcIssuer.for_client(step_up_client),
+      subject: OidcSubject.for(@operator, resource_type: "operator"),
+      sid: step_up_grant.public_id,
+      absolute_expires_at: step_up_grant.refresh_token_expires_at,
+    )
+
+    assert_predicate step_up_enrollment, :success?
+    @base_browser_rp_sessions[step_up_key] = step_up_enrollment.session
+
     assert_nil @source.avatar
     @token.update!(selected_avatar_public_id: nil)
-    grant_step_up!("avatar_transfer_request")
 
     assert_no_difference -> { AvatarOwnershipTransfer.count } do
       http_headers_0 =
@@ -457,6 +1014,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_client = OidcClientRegistry.find!(rp_client_id)
             rp_key = [rp_client.client_id, rp_token.public_id]
             @base_browser_rp_credentials ||= {}
+            @base_browser_rp_sessions ||= {}
             if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
                 !(rp_token.device_session_id && OpOrgGrant.exists?(
                   device_session_id: rp_token.device_session_id,
@@ -484,14 +1042,29 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                                          resource_type: "operator",
                                        ), client_id: rp_client.client_id,
               )
+              rp_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+                sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+              unless rp_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+              end
+
+              rp_local_session = rp_local_enrollment.session
+              @base_browser_rp_sessions[rp_key] = rp_local_session
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
             if @base_browser_rp_credentials[rp_key]
+              rp_local_session = @base_browser_rp_sessions.fetch(rp_key)
               rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
               rp_cookie = [
                 rp_headers.fetch("Cookie"),
                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
               ].join("; ")
               rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
             end
@@ -511,7 +1084,32 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "request is denied when the selected agent is no longer an owner member" do
-    grant_step_up!("avatar_transfer_request")
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     membership = @source.account.agent_memberships.find_by!(bureau: @source.collective)
     membership.update!(membership_kind_id: AgentMembershipKind::MEMBER)
 
@@ -529,7 +1127,32 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "request is refused after the operator principal enters a login-blocked status" do
-    grant_step_up!("avatar_transfer_request")
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     headers = base_browser_headers
     @operator.update!(status_id: OperatorStatus::RESERVED)
 
@@ -542,7 +1165,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
            headers: headers,
            as: :json
 
-      assert_response :forbidden
+      assert_response :unauthorized
     end
   end
 
@@ -564,6 +1187,32 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "an operator cannot accept a transfer addressed to another bureau" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     destination_operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE,
@@ -571,15 +1220,26 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     )
     OperatorPasskeyTestSupport.give_two_active_passkeys!(destination_operator)
     destination = BaseSelectorBootstrapAuthority.call(surface: :org, principal: destination_operator)
-    transfer = AvatarOwnershipTransfers::RequestOperation.call(
-      actor: @operator,
-      surface: "org",
-      subject_public_id: @source.account.public_id,
-      avatar_public_id: @avatar_result.avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: destination.collective.public_id,
+    source_token = @token
+    source_evidence = StepUpEvidenceValue.new(
+      acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time.to_i,
+      sid: step_up_grant.public_id, sub: OidcSubject.for(@operator, resource_type: "operator"),
+      client_id: step_up_client.client_id, aud: [step_up_client.aud], jti: step_up_grant.oidc_jti,
     )
-    grant_step_up!("avatar_transfer_accept")
+    transfer =
+      OpBaseOrgRecord.connected_to(role: :writing) do
+        OperatorToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @operator,
+            surface: "org",
+            subject_public_id: @source.account.public_id,
+            avatar_public_id: @avatar_result.avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: destination.collective.public_id,
+            step_up_token: source_token, step_up_evidence: source_evidence,
+          )
+        end
+      end
 
     post base_org_accept_avatar_ownership_transfer_url(transfer.public_id, host: @host),
          headers: base_browser_headers,
@@ -591,15 +1251,69 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "destination-side org authority cannot cancel an app-originated transfer" do
-    transfer = AvatarOwnershipTransfers::RequestOperation.call(
-      actor: @target_client,
-      surface: "app",
-      subject_public_id: @target.account.public_id,
-      avatar_public_id: @target.avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: @source.collective.public_id,
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
     )
-    grant_step_up!("avatar_transfer_cancel")
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
+    source_now = OpBaseAppRecord.database_now
+    source_token = ClientToken.create!(
+      authentication_epoch: @target_client.authentication_epoch, user: @target_client,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_now + 1.hour,
+    )
+    source_token.update!(root_login_established_at: source_now, established_authentication_method: "passkey")
+    source_token.rotate_refresh_token!(now: source_now)
+    source_token.device_session_record!
+    source_client_config = OidcClientRegistry.find!("base-app-ww")
+    source_grant = OpAppGrant.create!(
+      authentication_epoch: source_token.authentication_epoch, client_token: source_token,
+      oidc_client_id: source_client_config.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(source_now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_now + 1.hour,
+    )
+    source_grant.issue_refresh_token!(now: source_now)
+    source_evidence = StepUpEvidenceValue.new(
+      acr: source_grant.oidc_acr, amr: ["passkey"], auth_time: source_now.to_i, sid: source_grant.public_id,
+      sub: OidcSubject.for(@target_client, resource_type: "client"), client_id: source_client_config.client_id,
+      aud: [source_client_config.aud], jti: source_grant.oidc_jti,
+    )
+    transfer =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RequestOperation.call(
+            actor: @target_client,
+            surface: "app",
+            subject_public_id: @target.account.public_id,
+            avatar_public_id: @target.avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: @source.collective.public_id,
+            step_up_token: source_token, step_up_evidence: source_evidence,
+          )
+        end
+      end
 
     post base_org_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
          headers: base_browser_headers,
@@ -611,6 +1325,32 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "registry accept transport completes an explicit registry reservation" do
+    step_up_client = OidcClientRegistry.find!("base-org-ww")
+    step_up_now = OpBaseOrgRecord.database_now
+    step_up_auth_time = Time.at(step_up_now.to_i).utc
+    @token.rotate_refresh_token! unless @token.device_session_record.current_refresh_token_id
+    step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: step_up_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: step_up_auth_time,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: step_up_now + 10.minutes,
+    )
+    step_up_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator",
+                 session_public_id: @token.public_id, base_session_public_id: @token.public_id,
+                 oidc_sid: step_up_grant.public_id, oidc_jti: step_up_grant.oidc_jti,
+                 expires_at: step_up_now + 10.minutes, scopes: %w(openid profile),
+                 acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: step_up_auth_time,
+                 issuer: OidcIssuer.for_client(step_up_client), audiences: [step_up_client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(step_up_client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: step_up_client.client_id,
+                 authentication_context: @token.strict_authentication_context_value.to_s,
+    )
+    step_up_key = [step_up_client.client_id, @token.public_id]
+    step_up_refresh = step_up_grant.issue_refresh_token!
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     establish_avatar_ownership_cutover!
     source_client = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
@@ -629,25 +1369,53 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     )
 
     assert_predicate source_avatar_result, :success?, source_avatar_result.errors.inspect
-    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
-      actor: source_client,
-      surface: "app",
-      subject_public_id: source.account.public_id,
-      avatar_public_id: source_avatar_result.avatar.public_id,
-      target_surface: "org",
-      target_collective_public_id: @source.collective.public_id,
-      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a48",
-      request_fingerprint: registry_request_fingerprint(
-        actor: source_client,
-        surface: "app",
-        subject_public_id: source.account.public_id,
-        avatar_public_id: source_avatar_result.avatar.public_id,
-        target_surface: "org",
-        target_collective_public_id: @source.collective.public_id,
-      ),
+    source_now = OpBaseAppRecord.database_now
+    source_token = ClientToken.create!(
+      authentication_epoch: source_client.authentication_epoch, user: source_client,
+      user_token_status_id: ClientTokenStatus::ACTIVE, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      discard_at: source_now + 1.hour,
     )
+    source_token.update!(root_login_established_at: source_now, established_authentication_method: "passkey")
+    source_token.rotate_refresh_token!(now: source_now)
+    source_token.device_session_record!
+    source_client_config = OidcClientRegistry.find!("base-app-ww")
+    source_grant = OpAppGrant.create!(
+      authentication_epoch: source_token.authentication_epoch, client_token: source_token,
+      oidc_client_id: source_client_config.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(source_now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: source_now + 1.hour,
+    )
+    source_grant.issue_refresh_token!(now: source_now)
+    source_evidence = StepUpEvidenceValue.new(
+      acr: source_grant.oidc_acr, amr: ["passkey"], auth_time: source_now.to_i, sid: source_grant.public_id,
+      sub: OidcSubject.for(source_client, resource_type: "client"), client_id: source_client_config.client_id,
+      aud: [source_client_config.aud], jti: source_grant.oidc_jti,
+    )
+    reservation =
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientToken.transaction do
+          AvatarOwnershipTransfers::RegistryRequestOperation.call(
+            actor: source_client,
+            surface: "app",
+            subject_public_id: source.account.public_id,
+            avatar_public_id: source_avatar_result.avatar.public_id,
+            target_surface: "org",
+            target_collective_public_id: @source.collective.public_id,
+            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a48",
+            request_fingerprint: registry_request_fingerprint(
+              actor: source_client,
+              surface: "app",
+              subject_public_id: source.account.public_id,
+              avatar_public_id: source_avatar_result.avatar.public_id,
+              target_surface: "org",
+              target_collective_public_id: @source.collective.public_id,
+            ),
+            step_up_token: source_token, step_up_evidence: source_evidence,
+          )
+        end
+      end
 
-    grant_step_up!("avatar_transfer_accept")
     post base_org_accept_avatar_ownership_transfer_url(
       reservation.public_id,
       host: @host,
@@ -683,20 +1451,6 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     )
   end
 
-  def grant_step_up!(scope, token: @token)
-    token.reload.update!(
-      last_step_up_at: Time.current,
-      last_step_up_scope: scope,
-      last_step_up_aal: nil,
-      last_step_up_method: "passkey",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
-      last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:org",
-    )
-  end
-
   def base_browser_headers(operator: @operator, token: @token)
     rp_headers = as_staff_headers(operator, host: @host, session_public_id: token.public_id)
     rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -705,10 +1459,21 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @base_browser_rp_credentials ||= {}
     issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
     access, refresh = @base_browser_rp_credentials.fetch(rp_key)
+    rp_payload, = JWT.decode(access, nil, false)
+    rp_enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(rp_client.client_id),
+      issuer: rp_payload.fetch("iss"),
+      subject: rp_payload.fetch("sub"),
+      sid: rp_payload.fetch("sid"),
+      absolute_expires_at: Time.at(rp_payload.fetch("exp")).utc,
+    )
+    raise ArgumentError, "RP session enrollment failed: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+
     cookie = [
       rp_headers.fetch("Cookie"),
       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh)}",
+      "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_enrollment.session.public_id}",
     ].join("; ")
     rp_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
   end
@@ -748,6 +1513,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
       subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
       client_id: rp_client.client_id,
+      authentication_context: rp_token.strict_authentication_context_value.to_s,
     )
     @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
   end

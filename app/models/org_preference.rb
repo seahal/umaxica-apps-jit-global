@@ -36,14 +36,15 @@ class OrgPreference < OrgSettingRecord
           foreign_key: :preference_id,
           inverse_of: :preference,
           dependent: :destroy
-  has_many :org_preference_chronicles,
+  has_many :org_preference_chronicles, -> { where(subject_type: "OrgPreference") },
            foreign_key: :subject_id,
            inverse_of: :org_preference,
-           dependent: :destroy
+           dependent: :restrict_with_exception
 
   attribute :status_id, default: ACTIVE_STATUS_ID
   validates :public_id, presence: true, uniqueness: true
   validates :jti, presence: true, uniqueness: true
+  validates :last_issued_at, :last_issued_expires_at, presence: true
   validates :status_id, inclusion: { in: OrgPreferenceStatus::DEFAULTS }
   validate :retired_status_cannot_be_reactivated, on: :update
 

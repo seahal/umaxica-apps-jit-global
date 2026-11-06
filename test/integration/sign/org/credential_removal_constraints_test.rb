@@ -5,7 +5,16 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+  fixtures :operator_email_statuses, :operator_mfa_statuses, :operator_passkey_statuses,
+           :operator_secret_credential_kinds, :operator_secret_credential_statuses,
+           :operator_security_modes, :operator_statuses, :operator_telephone_statuses,
+           :operator_token_binding_methods, :operator_token_dbsc_statuses,
+           :operator_token_kinds, :operator_token_statuses, :operator_visibilities
+
   setup do
+    @created_operator_ids = []
     https!
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @base_host = @host
@@ -15,6 +24,53 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   end
 
   teardown do
+    operator_ids = Array(@created_operator_ids)
+    operator_refs = Operator.where(id: operator_ids).pluck(:public_id)
+    operator_tokens = OperatorToken.where(staff_id: operator_ids).pluck(:id)
+    operator_identities = OperatorIdentity.where(source_record_id: operator_ids).pluck(:id)
+    agent_ids = Agent.where(operator_identity_id: operator_identities).pluck(:id)
+    # Bootstrap reaches the collective through the membership graph, not through BureauOwnership:
+    # a principal that is not an eligible authority owner gets a bare Bureau with no ownership row,
+    # so an ownership-only lookup finds nothing and leaves bureau_units/bureaus behind for the next
+    # fixture load to trip over. The ids are materialized here, while the membership rows still
+    # exist, because a lazy relation would re-run its subquery after they are deleted.
+    membership_bureau_ids = AgentMembership.where(agent_id: agent_ids).pluck(:bureau_id)
+    bureau_ids = (membership_bureau_ids + BureauOwnership.where(operator_id: operator_ids).pluck(:bureau_id)).uniq
+    bureau_unit_ids = BureauUnit.where(bureau_id: bureau_ids).pluck(:id)
+    step_up_parents = OperatorStepUpCeremonyTransaction.where(actor_ref: operator_refs)
+    OperatorAuthCeremonySession.where(
+      step_up_ceremony_transaction_ref: step_up_parents.select(:transaction_id),
+    ).delete_all
+    step_up_parents.delete_all
+    OperatorStepUpSession.where(staff_token_id: operator_tokens).delete_all
+    org_grants = OpOrgGrant.where(operator_token_id: operator_tokens).select(:id)
+    OpOrgGrantLogoutHint.where(grant_id: org_grants).delete_all
+    OpOrgGrant.where(id: org_grants).delete_all
+    OperatorPasskeyAuditOutbox.where(actor_ref: operator_refs).delete_all
+    OperatorPreference.where(operator_id: operator_ids).destroy_all
+    OperatorAccount.where(staff_id: operator_ids).delete_all
+    OperatorSecretCredential.where(staff_id: operator_ids).delete_all
+    OperatorEmail.where(staff_id: operator_ids).delete_all
+    OperatorTelephone.where(staff_id: operator_ids).delete_all
+    OperatorPasskey.where(staff_id: operator_ids).delete_all
+    OperatorChronicle.where(subject_type: "Operator", subject_id: operator_ids.map(&:to_s)).delete_all
+    AgentMembership.where(agent_id: agent_ids).or(AgentMembership.where(bureau_id: bureau_ids)).delete_all
+    BureauUnitClosure.where(ancestor_id: bureau_unit_ids)
+      .or(BureauUnitClosure.where(descendant_id: bureau_unit_ids)).delete_all
+    AgentOwnership.where(operator_id: operator_ids).or(AgentOwnership.where(agent_id: agent_ids)).delete_all
+    AgentLifecycle.where(agent_id: agent_ids).delete_all
+    AgentAssignment.where(operator_identity_id: operator_identities).delete_all
+    BureauLifecycle.where(bureau_id: bureau_ids).delete_all
+    BureauOwnership.where(operator_id: operator_ids).delete_all
+    BureauUnit.where(id: bureau_unit_ids).delete_all
+    Bureau.where(id: bureau_ids).delete_all
+    Agent.where(id: agent_ids).delete_all
+    OperatorIdentity.where(id: operator_identities).delete_all
+    OperatorDeviceSession.where(staff_id: operator_ids).update_all(current_refresh_token_id: nil)
+    OperatorToken.where(staff_id: operator_ids).delete_all
+    OperatorDeviceSession.where(staff_id: operator_ids).delete_all
+    OperatorAuthorityLock.where(operator_id: operator_ids).delete_all
+    Operator.where(id: operator_ids).delete_all
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
@@ -1296,7 +1352,9 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   private
 
   def create_operator
-    Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    @created_operator_ids << operator.id
+    operator
   end
 
   def create_verified_email(operator, address)
@@ -1612,7 +1670,6 @@ class SignOrgCredentialRemovalConstraintsTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1635,24 +1692,6 @@ class SignOrgCredentialRemovalConstraintsTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

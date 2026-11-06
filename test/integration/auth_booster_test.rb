@@ -37,11 +37,7 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
       "/login?pt=#{return_to}"
     end
 
-    def sign_app_edge_v0_token_dbsc_path
-      "/dummy/dbsc"
-    end
-
-    def auth_app_edge_v0_token_dbsc_path
+    def visa_app_edge_v0_token_dbsc_path
       "/dummy/dbsc"
     end
 

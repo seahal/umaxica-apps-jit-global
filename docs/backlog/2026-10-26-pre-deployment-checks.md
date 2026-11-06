@@ -17,6 +17,6 @@ Record each run in `evidence/`.
 
 ## Sign Entry Sentry flags (A29-11, added 2026-10-27)
 
-Before enforcement in each deployed environment, run `bin/rails feature_flags:status` and record that
-all six `sign_{in,up}_available_{app,com,org}` flags are in the intended state. Development was
+Before enforcement in each deployed environment, run `bin/rails feature_flags:status` and record
+that all four `sign_{in,up}_available_{app,org}` flags are in the intended state. Development was
 recorded on 2026-10-27 (all on, after seeding).

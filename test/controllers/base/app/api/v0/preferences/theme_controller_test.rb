@@ -7,14 +7,13 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::IntegrationTest
-  fixtures :clients
-
   # include PreferenceJwtHelper
 
   setup do
     _ = PreferenceBase # ensure autoload of JwtConfiguration/Token defined in same file
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
+    https!
   end
 
   test "GET show without a Preference JWT returns default theme sy" do
@@ -34,7 +33,7 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       get base_app_api_v0_preferences_theme_path, as: :json
 
       assert_response :success
@@ -61,7 +60,7 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       patch base_app_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
     end
 
@@ -81,7 +80,7 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
     )
     cookies[PreferenceCookieName.anonymous_jwt] = token
 
-    with_preference_jwt_keys(host: @host) do
+    with_preference_realm_issuers do
       patch base_app_api_v0_preferences_theme_path, params: { theme: "dark" }, as: :json
     end
 
@@ -94,113 +93,104 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
   # A signed-in actor who has never had a preference row gets one created on the first
   # write, together with the child records every preference type expects.
   test "PATCH update creates the actor preference record on a signed-in first write" do
-    client = clients(:one)
-    ClientPreference.includes(
-      :client_preference_language,
-      :client_preference_timezone,
-      :client_preference_region,
-      :client_preference_theme,
-      :client_preference_currency,
-      :client_preference_date_format,
-      :client_preference_time_format,
-      :client_preference_motion,
-      :client_preference_density,
-      :client_preference_page_size,
-      :client_preference_adult_content_gate,
-    ).where(client_id: client.id).destroy_all
-    token = ClientToken.create!(
-      authentication_epoch: 0,
-      user: client,
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root_token = ClientToken.create!(
+      authentication_epoch: 0, user: client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discard_at: 1.day.from_now,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
-    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
-    access_token = AuthenticationToken.encode(
-      client, host: @host, session_public_id: token.public_id,
-              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: root_token)
+
+    cell = RpCellBinding.for_client("base-app-ww")
+    prior_runtime_role = ENV["UMAXICA_RUNTIME_ROLE"]
+    prior_browser_admission = ENV["UMAXICA_RP_BROWSER_ADMISSION"]
+    prior_forgery_protection = ActionController::Base.allow_forgery_protection
+    ENV["UMAXICA_RUNTIME_ROLE"] = "#{cell.connection.tr("_", "-")}-#{cell.region}"
+    ENV["UMAXICA_RP_BROWSER_ADMISSION"] = "open"
+    ActionController::Base.allow_forgery_protection = true
+    OidcOpJwksClient::CLIENTS.clear
+
     begin
-      rp_cookie_pairs =
-        begin
-          rp_host = @host
-          rp_token = token
-          rp_client = OidcClientRegistry.find!("base-app-ww")
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if @base_browser_rp_credentials[rp_key] ||
-              (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OpAppGrant.exists?(
-                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                )))
-            unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = OpAppGrant.create!(
-                authentication_epoch: 0,
-                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                client, host: rp_host, resource_type: "client",
-                        session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                        subject: OidcSubject.for(client, resource_type: "client"), client_id: rp_client.client_id,
-              )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            [
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ]
-          else
-            []
-          end
+      browser_client = OidcClientRegistry.find!("base-app-ww")
+      verifier = SecureRandom.urlsafe_base64(48)
+      authorization_params = {
+        client_id: browser_client.client_id,
+        redirect_uri: browser_client.redirect_uris.first,
+        response_type: "code",
+        scope: "openid",
+        state: SecureRandom.hex(16),
+        nonce: SecureRandom.hex(16),
+        code_challenge_method: "S256",
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false),
+      }
+      code = OidcAuthorizationCodeIssuer.call(
+        client: browser_client, params: authorization_params, resource: client,
+        session_token: root_token, authentication_event_at: 1.minute.ago,
+      )
+      resource_type = OidcIssuer.resource_type_for_client(browser_client)
+      token_exchange =
+        OidcClientRegistry.stub(:authenticate_assertion, ->(*, **) { true }) do
+          OidcTokenExchangeCoordinator.call(
+            grant_type: "authorization_code", code: code.code, redirect_uri: code.redirect_uri,
+            client_id: browser_client.client_id,
+            client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+            client_assertion: "controller-test-assertion",
+            token_endpoint_uri: OidcIssuer.token_endpoint(resource_type), code_verifier: verifier,
+            expected_resource_type: resource_type,
+          )
         end
-      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
-    end
-    https!
-    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"))
 
-    preference = AppPreference.create!(
-      status_id: AppPreferenceStatus::ACTIVE,
-      jti: SecureRandom.uuid,
-      last_issued_at: Time.current,
-      last_issued_expires_at: 400.days.from_now,
-    )
-    option_class = PreferenceClassRegistry.option_class("App", :theme)
-    ensure_theme_defaults!(option_class)
-    AppPreferenceTheme.create!(preference: preference, option_id: option_class::SYSTEM)
-    cookies[PreferenceCookieName.anonymous_jwt] = encode_preference_jwt(
-      preferences: { "theme" => "system" }, host: @host, public_id: preference.public_id,
-    )
+      assert_predicate token_exchange, :success?
 
-    assert_difference -> { ClientPreference.where(client_id: client.id).count }, 1 do
-      with_preference_jwt_keys(host: @host) do
-        patch base_app_api_v0_preferences_theme_path,
-              params: { theme: "dark" },
-              headers: {
-                "Authorization" => "Bearer #{access_token}",
-                "Client-Agent" => "Mozilla/5.0",
-                "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-                "Origin" => "https://#{@host}",
-                "Sec-Fetch-Site" => "same-origin",
-                "X-CSRF-Token" => csrf_token,
-              },
-              as: :json
+      token_response = token_exchange.token_response
+      id_payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
+      enrollment = RpCallbackCommitter.call(
+        cell: cell, issuer: id_payload.fetch("iss"), subject: id_payload.fetch("sub"), sid: id_payload.fetch("sid"),
+        absolute_expires_at: 1.hour.from_now,
+      )
+
+      assert_predicate enrollment, :success?, enrollment.outcome.to_s
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = token_response.fetch(:access_token)
+      cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = token_response.fetch(:refresh_token)
+      cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE] = enrollment.session.public_id
+
+      get(edit_base_app_sign_out_path(ri: "jp"))
+
+      assert_response :success
+
+      csrf_token = response.parsed_body.at_css('meta[name="csrf-token"]')&.[]("content") ||
+        response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+      assert_predicate csrf_token, :present?, response.body[0, 500]
+
+      assert_difference -> { ClientPreference.where(client_id: client.id).count }, 1 do
+        patch(
+          base_app_api_v0_preferences_theme_path,
+          params: { theme: "dark" }.to_json,
+          headers: {
+            "Accept" => "application/json",
+            "Content-Type" => "application/json",
+            "Origin" => "https://#{@host}",
+            "Sec-Fetch-Site" => "same-origin",
+            "X-CSRF-Token" => csrf_token,
+          },
+        )
       end
+
+      assert_response :ok
+    ensure
+      OidcOpJwksClient::CLIENTS.clear
+      prior_runtime_role.nil? ? ENV.delete("UMAXICA_RUNTIME_ROLE") : ENV["UMAXICA_RUNTIME_ROLE"] = prior_runtime_role
+      prior_browser_admission.nil? ? ENV.delete("UMAXICA_RP_BROWSER_ADMISSION") :
+        ENV["UMAXICA_RP_BROWSER_ADMISSION"] = prior_browser_admission
+      ActionController::Base.allow_forgery_protection = prior_forgery_protection
     end
 
-    assert_response :ok
     actor_preference = ClientPreference.find_by!(client_id: client.id)
+    option_class = PreferenceClassRegistry.option_class("Client", :theme)
 
     assert_equal option_class::DARK,
                  PreferenceClassRegistry.record_class("Client", :theme).find_by!(
@@ -210,27 +200,29 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
 
   private
 
-  def ensure_theme_defaults!(option_class)
-    option_class.ensure_defaults! if option_class.respond_to?(:ensure_defaults!)
-  end
-  private
-
   def encode_preference_jwt(preferences:, host:, public_id:, preference_type: "AppPreference")
     jti = AppPreference.find_by(public_id:)&.jti || "test-jti-#{SecureRandom.uuid}"
     defaults = {
-      "theme" => "system", "language" => "ja", "timezone" => "Asia/Tokyo", "currency" => "jpy",
-      "date_format" => "iso", "time_format" => "24", "motion" => "standard", "density" => "standard",
+      "theme" => "system",
+      "language" => "ja",
+      "timezone" => "Asia/Tokyo",
+      "currency" => "jpy",
+      "date_format" => "iso",
+      "time_format" => "24",
+      "motion" => "standard",
+      "density" => "standard",
       "page_size" => "infinity",
     }
     token = nil
 
-    with_preference_jwt_keys(host: host) do
+    with_preference_realm_issuers do
       token = PreferenceToken.encode(
         defaults.merge(preferences),
         host: host,
         preference_type: preference_type,
         public_id: public_id,
         jti: jti,
+        issued_at: Time.current,
       )
     end
 
@@ -245,7 +237,6 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -272,24 +263,6 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

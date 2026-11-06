@@ -2,10 +2,56 @@
 
 require "test_helper"
 
+# The Secret claim consumes the source Secret before the Ticket evidence commit, so it must own
+# its source commit. These cases therefore run outside the fixture transaction and load only the
+# reference and principal fixtures they use.
 class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+  fixtures :client_statuses, :client_visibilities, :client_security_modes, :client_mfa_statuses,
+           :client_token_statuses, :client_token_kinds, :client_token_binding_methods,
+           :client_token_dbsc_statuses, :clients, :client_secret_issuances, :client_secret_credentials
+
+  setup do
+    @created_client_ids = []
+    @created_transactions = []
+    @created_ceremonies = []
+    @created_flows = []
+  end
+
+  teardown do
+    # Admission bindings restrict deletion of their authorization transaction, so the
+    # transaction row is retained like the other committed-flow cases and only unlinked.
+    Array(@created_transactions).each do |transaction|
+      transaction.update_columns(secret_sign_in_flow_id: nil) if transaction.persisted?
+    end
+    Array(@created_client_ids).each do |client_id|
+      actor = Client.find_by(id: client_id)
+      next unless actor
+
+      ClientChronicle.where(subject_type: "Client", subject_id: client_id.to_s).delete_all
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).delete_all
+      ClientSecretCredential.where(client_id: client_id).delete_all
+      ClientSecretIssuance.where(client_id: client_id).delete_all
+      ClientAccount.where(user_id: client_id).delete_all
+      ClientTelephone.where(user_id: client_id).delete_all
+      tokens = ClientToken.where(user_id: client_id).select(:id)
+      ClientStepUpSession.where(user_token_id: tokens).delete_all
+      OpAppGrant.where(client_token_id: tokens).delete_all
+      ClientDeviceSession.where(user_id: client_id).update_all(current_refresh_token_id: nil)
+      ClientToken.where(user_id: client_id).delete_all
+      ClientDeviceSession.where(user_id: client_id).delete_all
+      ClientAuthorityLock.where(client_id: client_id).delete_all
+      Client.where(id: client_id).delete_all
+    end
+    Array(@created_ceremonies).each { |ceremony| ceremony.destroy! if ceremony.persisted? }
+    Array(@created_flows).each { |flow| flow.destroy! if flow.persisted? }
+  end
+
   test "OIDC Secret flow binding requires the admitted pending transaction and reuses its server-issued flow" do
     transaction, ceremony = oidc_admission
     unrelated, = ClientAuthCeremonySession.rotate_and_admit!(admission_purpose: "step_up_handoff")
+    @created_ceremonies << unrelated
     assert_no_difference("ClientSignInFlow.count") do
       assert_nil ClientSecretClaimCommitter.bind_oidc_flow!(
         client: clients(:one), secret: "z" * 32, transaction: transaction,
@@ -20,6 +66,7 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
       client: clients(:one), secret: "a" * 32,
       transaction: transaction, ceremony: ceremony,
     )
+    @created_flows << flow
 
     assert_equal clients(:one).id, flow.principal_id
     assert_equal flow.id, transaction.reload.secret_sign_in_flow_id
@@ -50,6 +97,7 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
       client: clients(:one), secret: "a" * 32,
       transaction: transaction, ceremony: ceremony,
     )
+    @created_flows << transaction.reload.secret_sign_in_flow
 
     assert_equal client_secret_credentials(:one).id, claim.id
     assert_equal transaction.reload.secret_sign_in_flow.public_id, claim.claim_sign_in_flow_ref
@@ -61,7 +109,7 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
     )
     assert_nil claim.reload.consumed_at
     assert_not ceremony.reload.authentication_evidence_recorded?
-    assert_equal "pending", transaction.reload.status
+    assert_equal "pending", transaction.reload.status_name
   end
 
   test "already authenticated OIDC transaction cannot claim or replace evidence with a Secret" do
@@ -91,22 +139,42 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
       id: 9_113_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: ClientStatus::ACTIVE,
     )
+    @created_client_ids << actor.id
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    now = ClientToken.database_now
+    token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now:)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence,
     )
-    token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
-    raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
-    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    ClientSecretPresentationIssuer.prepare!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
+    raw = ClientSecretPresentationIssuer.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    ).first
+    ClientSecretStorageConfirmationCommitter.call!(
+      actor_context: context, token: token, issuance: issuance,
+      step_up_evidence: evidence,
+    )
     telephone = ClientTelephone.create!(
       user: actor,
       number: "+8190#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}",
@@ -147,6 +215,8 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
       authorization_transaction_ref: admission.transaction.transaction_id,
     )
     transaction = admission.transaction
+    @created_transactions << transaction
+    @created_ceremonies << ceremony
 
     assert_nil ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: "1" * 32, transaction:, ceremony:)
     credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
@@ -158,6 +228,7 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
 
     assert_equal credential.id, claim.id
     flow = transaction.reload.secret_sign_in_flow
+    @created_flows << flow
 
     assert_equal flow.public_id, claim.claim_sign_in_flow_ref
     assert_equal ceremony.id, claim.claim_ceremony_session_id
@@ -186,6 +257,8 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "authentication_handoff", authorization_transaction_ref: transaction.transaction_id,
     )
+    @created_transactions << transaction
+    @created_ceremonies << ceremony
     [transaction, ceremony]
   end
 end

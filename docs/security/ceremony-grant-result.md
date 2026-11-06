@@ -45,9 +45,10 @@ account, preference, downstream token, authorization, or step-up freshness chang
 For the current Visa/Auth browser OIDC flow, the Auth-to-Visa result is never placed in a URL. After
 a successful Auth ceremony, Auth redirects the browser to the same-origin Design D
 `GET /sign/oidc/handoff` continuation. That GET issues the short-lived opaque result and redirects
-to the matching Visa continuation with a non-secret reference. Visa validates and consumes the
-result at its dedicated GET continuation; the result is never submitted as a URL bearer value or to
-the ordinary authorization endpoint.
+to the matching Visa continuation with a non-secret reference. Visa validates the browser binding,
+transaction, and result reference at its display GET and renders a same-origin POST continuation.
+The existing authorization POST consumes the result and finalizes the transaction; the result is
+never submitted as a URL bearer value or to the ordinary authorization-start endpoint.
 
 The Visa result endpoint accepts only the exact configured Auth origin (with the existing
 same-site/null-origin proxy case), validates the result's digest/generation and transaction binding,
@@ -60,11 +61,12 @@ cross-host form does not share an Auth-host CSRF token and is protected by the e
 boundary, result generation/digest binding, and surface binding.
 
 `GET /oauth/authorize?result=...` is not a result consumer. A result value in that ordinary
-authorization request cannot consume or resume an authorization transaction. The dedicated Visa
-continuation is the only GET consumer. Auth ceremony continuity remains in the surface-specific
-`AuthCeremonySession`; no Rails-session pre-authentication map carries the result or RP transaction
-state. Visa remains the authority for the authorization transaction, Root Session, and authorization
-code; Base remains the browser RP for its RP Session.
+authorization-start request cannot consume or resume an authorization transaction. The dedicated
+Visa continuation GET is read-only; the same-origin authorization POST is the result consumer and
+commit boundary. Auth ceremony continuity remains in the surface-specific `AuthCeremonySession`; no
+Rails-session pre-authentication map carries the result or RP transaction state. Visa remains the
+authority for the authorization transaction, Root Session, and authorization code; Base remains the
+browser RP for its RP Session.
 
 ## Redirects Are Not Results
 

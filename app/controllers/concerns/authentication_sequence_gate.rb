@@ -396,7 +396,7 @@ module AuthenticationSequenceGate
           flow.lock!
           ceremony.lock!
           now = ClientSignInFlow.database_now
-          unless transaction.status == "pending" && !transaction.expired?(now: now) &&
+          unless transaction.pending? && !transaction.expired?(now: now) &&
               !transaction.login_challenge_expired?(now: now) && flow.principal_id == resource.id &&
               flow.sign_in_primary_pending? && !flow.expired?(now) &&
               ceremony.admitted? && ceremony.active?(now: now) &&

@@ -29,12 +29,18 @@ module PreferenceWriteBoundary
   }.freeze
   ACTOR_PREFERENCE_REALMS = {
     "app" => {
-      actor_class: Client, preference_class: ClientPreference, foreign_key: :client_id,
-      status_class: ClientPreferenceStatus, prefix: "Client",
+      actor_class: Client,
+      preference_class: ClientPreference,
+      foreign_key: :client_id,
+      status_class: ClientPreferenceStatus,
+      prefix: "Client",
     }.freeze,
     "org" => {
-      actor_class: Operator, preference_class: OperatorPreference, foreign_key: :operator_id,
-      status_class: OperatorPreferenceStatus, prefix: "Operator",
+      actor_class: Operator,
+      preference_class: OperatorPreference,
+      foreign_key: :operator_id,
+      status_class: OperatorPreferenceStatus,
+      prefix: "Operator",
     }.freeze,
   }.freeze
 
@@ -98,7 +104,7 @@ module PreferenceWriteBoundary
             end
             preference ||= create_anonymous_com_preference!(decision_time)
             @preferences = preference
-            block.call(preference, decision_time, submitted) if operation == :save
+            yield(preference, decision_time, submitted) if operation == :save
             rotate_preference_jti!(preference)
             preference.reload
             ensure_preference_option_defaults("Com")
@@ -163,8 +169,10 @@ module PreferenceWriteBoundary
         end
         preference = previous || create_anonymous_realm_preference!(preference_class, context, decision_time)
         @preferences = preference
-        apply_anonymous_realm_submission!(preference, normalized, realm, previous:, binding_value:,
-                                          binding_was_valid:, decision_time:)
+        apply_anonymous_realm_submission!(
+          preference, normalized, realm, previous:, binding_value:,
+                                         binding_was_valid:, decision_time:,
+        )
         preference.update!(jti: JitSecurityJwtJtiGenerator.generate)
         issuance = prepare_anonymous_realm_token!(preference, context, decision_time)
         preference.confirm_issuance!(
@@ -203,7 +211,8 @@ module PreferenceWriteBoundary
 
       value = values.fetch(field)
       allowed_values = SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.fetch(field.to_s)
-      raise ArgumentError, "invalid #{field} Preference value" unless value.is_a?(String) && allowed_values.include?(value)
+      raise ArgumentError,
+            "invalid #{field} Preference value" unless value.is_a?(String) && allowed_values.include?(value)
 
       normalized[field] = value
     end
@@ -211,9 +220,10 @@ module PreferenceWriteBoundary
     if values.key?(:region)
       region = values.fetch(:region)
       region = region.downcase if region.is_a?(String)
-      regional_defaults = REGIONAL_DISPLAY_DEFAULTS.fetch(region) do
-        raise ArgumentError, "unsupported Preference region: #{region.inspect}"
-      end
+      regional_defaults =
+        REGIONAL_DISPLAY_DEFAULTS.fetch(region) do
+          raise ArgumentError, "unsupported Preference region: #{region.inspect}"
+        end
       raise ArgumentError, "region save cannot include other Preference fields" if normalized.any? ||
         (values.keys.map(&:to_sym) - [:region]).any?
 
@@ -223,7 +233,8 @@ module PreferenceWriteBoundary
 
     consent_fields = values.keys.map(&:to_sym) & COOKIE_CONSENT_FIELDS
     if consent_fields.any?
-      raise ArgumentError, "cookie consent requires all four fields" unless consent_fields.sort == COOKIE_CONSENT_FIELDS.sort
+      raise ArgumentError,
+            "cookie consent requires all four fields" unless consent_fields.sort == COOKIE_CONSENT_FIELDS.sort
       unless COOKIE_CONSENT_FIELDS.all? { |field| [true, false].include?(values.fetch(field)) }
         raise ArgumentError, "cookie consent values must be booleans"
       end
@@ -247,16 +258,16 @@ module PreferenceWriteBoundary
     return if actor.nil?
 
     config = ACTOR_PREFERENCE_REALMS.fetch(realm)
-    unless actor.instance_of?(config.fetch(:actor_class)) && actor.persisted?
-      raise UnsupportedSurfaceError, "Base Preference writer actor does not match its realm"
-    end
+    return if actor.instance_of?(config.fetch(:actor_class)) && actor.persisted?
+
+    raise UnsupportedSurfaceError, "Base Preference writer actor does not match its realm"
   end
 
   def authorize_base_actor_preference_write!(actor, realm)
     config = ACTOR_PREFERENCE_REALMS.fetch(realm)
     record = config.fetch(:preference_class).new(
       config.fetch(:foreign_key) => actor.id,
-      status_id: config.fetch(:status_class)::ACTIVE,
+      :status_id => config.fetch(:status_class)::ACTIVE,
     )
     authorize!(record, to: :update?, context: { user: actor })
   end
@@ -274,7 +285,7 @@ module PreferenceWriteBoundary
         status_class.ensure_defaults!
         preference = preference_class.lock.find_by(
           foreign_key => actor.id,
-          status_id: status_class::ACTIVE,
+          :status_id => status_class::ACTIVE,
         )
         if operation == :reset
           if preference
@@ -284,8 +295,8 @@ module PreferenceWriteBoundary
         elsif (values = submitted.slice(*ANONYMOUS_DISPLAY_TYPES, :region)).any?
           preference ||= preference_class.create!(
             foreign_key => actor.id,
-            status_id: status_class::ACTIVE,
-            explicit_fields: [],
+            :status_id => status_class::ACTIVE,
+            :explicit_fields => [],
           )
           explicit_fields = preference.explicit_field_names
 
@@ -305,6 +316,7 @@ module PreferenceWriteBoundary
       option_class.ensure_defaults!
       record_class = PreferenceClassRegistry.record_class(prefix, type)
       record_class.find_or_create_by!(preference_id: preference.id) do |record|
+        record.preference = preference
         record.option_id = PreferenceClassRegistry.default_option_id(prefix, type)
       end
     end
@@ -315,7 +327,7 @@ module PreferenceWriteBoundary
       option = preference_option_for_wire_value(prefix, type, value)
       record_class = PreferenceClassRegistry.record_class(prefix, type)
       record = record_class.find_by!(preference_id: preference.id)
-      record.update!(option_id: option.id)
+      record.update!(preference: preference, option_id: option.id)
     end
   end
 
@@ -335,10 +347,11 @@ module PreferenceWriteBoundary
   def decode_base_preference_cookie(context)
     cookie_name = PreferenceCookieName.anonymous_jwt
     raw_cookie = request.get_header("HTTP_COOKIE").to_s
-    matching_names = raw_cookie.split(";").filter_map do |part|
-      name, = part.strip.split("=", 2)
-      name if name == cookie_name
-    end
+    matching_names =
+      raw_cookie.split(";").filter_map do |part|
+        name, = part.strip.split("=", 2)
+        name if name == cookie_name
+      end
     raise PreferenceBase::ResolutionError, "ambiguous Preference cookie" if matching_names.length > 1
 
     token = BrowserCredentialCookie.read(cookies, cookie_name)
@@ -352,34 +365,35 @@ module PreferenceWriteBoundary
   end
 
   def apply_anonymous_realm_submission!(preference, submitted, realm, previous:, binding_value:,
-                                       binding_was_valid:, decision_time:)
+                                        binding_was_valid:, decision_time:)
     prefix = realm.capitalize
     display_values = submitted.slice(*ANONYMOUS_DISPLAY_TYPES, :region)
     display_values.each do |field, value|
       option = preference_option_for_wire_value(prefix, field, value)
       PreferenceClassRegistry.record_class(prefix, field).find_by!(preference_id: preference.id)
-        .update!(option_id: option.id)
+        .update!(preference: preference, option_id: option.id)
     end
 
     consent_values = submitted.slice(*COOKIE_CONSENT_FIELDS)
     if consent_values.any?
       enforce_realm_binding_match!(previous, realm, binding_value, binding_was_valid)
-      PreferenceClassRegistry.cookie_class(prefix).find_by!(preference_id: preference.id).update!(consent_values)
+      PreferenceClassRegistry.cookie_class(prefix).find_by!(preference_id: preference.id)
+        .update!(preference: preference, **consent_values)
       store_realm_consent_receipt!(preference, realm, decision_time)
       store_realm_binding!(preference, realm, binding_value)
     end
 
-    if submitted.key?(:web_push)
-      enforce_realm_binding_match!(previous, realm, binding_value, binding_was_valid)
-      store_realm_web_push!(preference, realm, submitted.fetch(:web_push))
-      store_realm_binding!(preference, realm, binding_value)
-    end
+    return unless submitted.key?(:web_push)
+
+    enforce_realm_binding_match!(previous, realm, binding_value, binding_was_valid)
+    store_realm_web_push!(preference, realm, submitted.fetch(:web_push))
+    store_realm_binding!(preference, realm, binding_value)
   end
 
   def enforce_realm_binding_match!(previous, realm, binding_value, binding_was_valid)
     return unless previous
 
-    binding_class = realm == "app" ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding
+    binding_class = (realm == "app") ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding
     binding = binding_class.find_by(preference_id: previous.id)
     return unless binding
     return if binding_was_valid && PreferenceBrowserBinding.matches?(binding_value, binding.digest)
@@ -388,22 +402,22 @@ module PreferenceWriteBoundary
   end
 
   def store_realm_consent_receipt!(preference, realm, decision_time)
-    receipt_class = realm == "app" ? AppPreferenceConsentReceipt : OrgPreferenceConsentReceipt
+    receipt_class = (realm == "app") ? AppPreferenceConsentReceipt : OrgPreferenceConsentReceipt
     receipt = receipt_class.find_or_initialize_by(preference_id: preference.id)
-    receipt.update!(version: SecureRandom.uuid, recorded_at: decision_time)
+    receipt.update!(preference: preference, version: SecureRandom.uuid, recorded_at: decision_time)
   end
 
   def store_realm_binding!(preference, realm, raw_value)
-    binding_class = realm == "app" ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding
+    binding_class = (realm == "app") ? AppPreferenceBrowserBinding : OrgPreferenceBrowserBinding
     binding = binding_class.find_or_initialize_by(preference_id: preference.id)
-    binding.update!(digest: PreferenceBrowserBinding.digest_for(raw_value))
+    binding.update!(preference: preference, digest: PreferenceBrowserBinding.digest_for(raw_value))
   end
 
   def store_realm_web_push!(preference, realm, value)
-    record_class = realm == "app" ? AppPreferenceWebPush : OrgPreferenceWebPush
-    option_class = realm == "app" ? AppPreferenceWebPushOption : OrgPreferenceWebPushOption
+    record_class = (realm == "app") ? AppPreferenceWebPush : OrgPreferenceWebPush
+    option_class = (realm == "app") ? AppPreferenceWebPushOption : OrgPreferenceWebPushOption
     option = preference_option_from_class(option_class, realm.capitalize, :web_push, value)
-    record_class.find_by!(preference_id: preference.id).update!(option_id: option.id)
+    record_class.find_by!(preference_id: preference.id).update!(preference: preference, option_id: option.id)
   end
 
   def clear_retired_preference_cookies!(clear_binding:)
@@ -516,7 +530,7 @@ module PreferenceWriteBoundary
   end
 
   def create_anonymous_realm_preference!(preference_class, context, decision_time)
-    issuer_expiry = Time.at(decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL.to_i).utc
+    issuer_expiry = Time.at(decision_time.to_i + SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL.to_i).utc
     status_class = PreferenceClassRegistry.status_class_for(preference_class)
     status_class.ensure_defaults!
     prefix = context.fetch(:realm).capitalize
@@ -532,12 +546,14 @@ module PreferenceWriteBoundary
       last_issued_expires_at: issuer_expiry,
     )
     PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
+      # Pass the loaded parent: with only the foreign key, each child's required belongs_to validation
+      # selects the same preference row again (N+1). Every child writer below follows this rule.
       PreferenceClassRegistry.record_class(prefix, type).create!(
-        preference_id: preference.id,
+        preference: preference,
         option_id: PreferenceClassRegistry.default_option_id(prefix, type),
       )
     end
-    PreferenceClassRegistry.cookie_class(prefix).create!(preference_id: preference.id)
+    PreferenceClassRegistry.cookie_class(prefix).create!(preference: preference)
     create_realm_web_push_row!(preference, context.fetch(:realm))
     preference
   end
@@ -553,9 +569,9 @@ module PreferenceWriteBoundary
   def create_realm_web_push_row!(preference, realm)
     case realm
     when "app"
-      AppPreferenceWebPush.create!(preference_id: preference.id, option_id: AppPreferenceWebPushOption::DISABLED)
+      AppPreferenceWebPush.create!(preference: preference, option_id: AppPreferenceWebPushOption::DISABLED)
     when "org"
-      OrgPreferenceWebPush.create!(preference_id: preference.id, option_id: OrgPreferenceWebPushOption::DISABLED)
+      OrgPreferenceWebPush.create!(preference: preference, option_id: OrgPreferenceWebPushOption::DISABLED)
     else
       raise ArgumentError, "unsupported Visa Preference realm: #{realm.inspect}"
     end
@@ -565,22 +581,44 @@ module PreferenceWriteBoundary
     # Base explicit saves take the same actor lock; read from the owner database after that writer
     # commits so sign-in cannot reflect a lagging replica or a half-applied child set.
     case realm
-      when "app"
-        ClientPreference.connection_class_for_self.connected_to(role: :writing) do
-          actor.with_lock do
-            preference = ClientPreference.find_by(client_id: actor.id, status_id: ClientPreferenceStatus::ACTIVE)
-            preference&.explicit_display_snapshot || {}.freeze
-          end
+    when "app"
+      ClientPreference.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          preference = ClientPreference.includes(
+            client_preference_language: :option,
+            client_preference_timezone: :option,
+            client_preference_region: :option,
+            client_preference_theme: :option,
+            client_preference_currency: :option,
+            client_preference_date_format: :option,
+            client_preference_time_format: :option,
+            client_preference_motion: :option,
+            client_preference_density: :option,
+            client_preference_page_size: :option,
+          ).find_by(client_id: actor.id, status_id: ClientPreferenceStatus::ACTIVE)
+          preference&.explicit_values || {}.freeze
         end
-      when "org"
-        OperatorPreference.connection_class_for_self.connected_to(role: :writing) do
-          actor.with_lock do
-            preference = OperatorPreference.find_by(operator_id: actor.id, status_id: OperatorPreferenceStatus::ACTIVE)
-            preference&.explicit_display_snapshot || {}.freeze
-          end
+      end
+    when "org"
+      OperatorPreference.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          preference = OperatorPreference.includes(
+            operator_preference_language: :option,
+            operator_preference_timezone: :option,
+            operator_preference_region: :option,
+            operator_preference_theme: :option,
+            operator_preference_currency: :option,
+            operator_preference_date_format: :option,
+            operator_preference_time_format: :option,
+            operator_preference_motion: :option,
+            operator_preference_density: :option,
+            operator_preference_page_size: :option,
+          ).find_by(operator_id: actor.id, status_id: OperatorPreferenceStatus::ACTIVE)
+          preference&.explicit_values || {}.freeze
         end
-      else
-        raise ArgumentError, "unsupported Visa Preference realm: #{realm.inspect}"
+      end
+    else
+      raise ArgumentError, "unsupported Visa Preference realm: #{realm.inspect}"
     end
   end
 
@@ -591,7 +629,7 @@ module PreferenceWriteBoundary
       option = preference_option_for_wire_value(prefix, type, value)
 
       PreferenceClassRegistry.record_class(prefix, type).find_by!(preference_id: preference.id)
-        .update!(option_id: option.id)
+        .update!(preference: preference, option_id: option.id)
     end
   end
 
@@ -616,13 +654,13 @@ module PreferenceWriteBoundary
       record_class = PreferenceClassRegistry.record_class(prefix, type)
       source_record = record_class.find_by!(preference_id: source.id)
       target_record = record_class.find_by!(preference_id: target.id)
-      target_record.update!(option_id: source_record.option_id)
+      target_record.update!(preference: target, option_id: source_record.option_id)
     end
 
     cookie_class = PreferenceClassRegistry.cookie_class(prefix)
     source_cookie = cookie_class.find_by!(preference_id: source.id)
     target_cookie = cookie_class.find_by!(preference_id: target.id)
-    target_cookie.update!(source_cookie.attributes.symbolize_keys.slice(*COOKIE_CONSENT_FIELDS))
+    target_cookie.update!(preference: target, **source_cookie.attributes.symbolize_keys.slice(*COOKIE_CONSENT_FIELDS))
     copy_realm_receipt_and_binding!(source, target, realm)
     copy_realm_web_push!(source, target, realm)
   end
@@ -644,14 +682,14 @@ module PreferenceWriteBoundary
     receipt = receipt_class.find_by(preference_id: source.id)
     return unless receipt
 
-    receipt_class.create!(preference_id: target.id, version: receipt.version, recorded_at: receipt.recorded_at)
+    receipt_class.create!(preference: target, version: receipt.version, recorded_at: receipt.recorded_at)
   end
 
   def copy_binding!(binding_class, source, target)
     binding = binding_class.find_by(preference_id: source.id)
     return unless binding
 
-    binding_class.create!(preference_id: target.id, digest: binding.digest)
+    binding_class.create!(preference: target, digest: binding.digest)
   end
 
   def copy_realm_web_push!(source, target, realm)
@@ -669,7 +707,7 @@ module PreferenceWriteBoundary
     web_push = web_push_class.find_by(preference_id: source.id)
     return unless web_push
 
-    web_push_class.find_by!(preference_id: target.id).update!(option_id: web_push.option_id)
+    web_push_class.find_by!(preference_id: target.id).update!(preference: target, option_id: web_push.option_id)
   end
 
   def prepare_anonymous_realm_token!(preference, context, decision_time)
@@ -721,7 +759,7 @@ module PreferenceWriteBoundary
       header = Rack::Utils.set_cookie_header(
         name, anonymous_realm_cookie_options(expires_at:, httponly:).merge(value: value),
       )
-      if header.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_TOKEN_MAX_BYTES
+      if header.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
         raise PreferenceBase::ResolutionError, "anonymous preference cookie exceeds size limit"
       end
     end
@@ -795,7 +833,7 @@ module PreferenceWriteBoundary
   end
 
   def create_anonymous_com_preference!(decision_time)
-    lifetime = SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_ACCESS_TOKEN_TTL
+    lifetime = SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL
     expiry = Time.at(decision_time.to_i + lifetime.to_i).utc
     ensure_preference_reference_defaults!
     preference = ComPreference.create!(

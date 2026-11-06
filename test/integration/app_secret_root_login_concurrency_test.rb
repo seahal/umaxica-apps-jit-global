@@ -12,6 +12,8 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
   )
 
   setup do
+    @client_sign_in_flow_id_before_test = ClientSignInFlow.maximum(:id) || 0
+    @client_auth_ceremony_session_id_before_test = ClientAuthCeremonySession.maximum(:id) || 0
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     @previous_purge_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
@@ -36,21 +38,37 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         address: identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
       ).finalize_binding!
       token = ClientToken.create!(authentication_epoch: 0, user: actor)
-      token.update!(
-        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+      now = ClientToken.database_now
+      token.update!(authentication_event_at: now, established_authentication_method: "passkey")
+      token.rotate_refresh_token!(now:)
+      token.device_session_record!
+      oidc_client = OidcClientRegistry.find!("base-app-ww")
+      step_up_grant = OpAppGrant.create!(
+        authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+        oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: Time.at(now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+        oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: now + 1.hour,
+      )
+      step_up_grant.issue_refresh_token!(now:)
+      step_up_evidence = StepUpEvidenceValue.new(
+        acr: step_up_grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: step_up_grant.public_id,
+        sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+        aud: [oidc_client.aud], jti: step_up_grant.oidc_jti,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       issuance = ClientSecretManualReservationIssuer.call!(
         actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+        step_up_evidence: step_up_evidence,
       )
-      token.reload.update!(last_step_up_resource_ref: issuance.public_id)
-      ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
-      raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
-      ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+      ClientSecretPresentationIssuer.prepare!(
+        actor_context: context, token: token, issuance: issuance, step_up_evidence: step_up_evidence,
+      )
+      raw = ClientSecretPresentationIssuer.call!(
+        actor_context: context, token: token, issuance: issuance, step_up_evidence: step_up_evidence,
+      ).first
+      ClientSecretStorageConfirmationCommitter.call!(
+        actor_context: context, token: token, issuance: issuance, step_up_evidence: step_up_evidence,
+      )
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
       auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       base = open_session
@@ -84,26 +102,23 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
           end
           fv5069.host!(fv5071.host)
           fv5069.https!
-          fv5069.get(fv5071.request_uri)
-          fv5007 = Nokogiri::HTML(fv5069.response.body).at_css("form#base-authorization-ceremony-start-form")
-          fv5069.post(
-            fv5007["action"],
-            params: fv5007.css("input[name]").to_h { |fv5070|
-              [fv5070["name"], fv5070["value"]]
-            },
-            headers: {
-              "Origin" => "https://#{fv5065}",
-              "Sec-Fetch-Site" => "same-origin",
-            },
+          # The Visa OP authorize endpoint relays an unauthenticated browser to the Auth
+          # sign-in entry through a Visa-signed Jump rt; it never renders the ceremony-start
+          # form.
+          fv5069.get(
+            fv5071.request_uri,
+            headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
           )
           fv5068 = URI.parse(fv5069.response.location)
           fv5067 = Rack::Utils.parse_query(fv5068.query).fetch("rt")
+          fv_visa_surface = JitSecurityJwtRegistry.surface("VISA_APP")
           fv5064, = JWT.decode(
             fv5067, JitSecurityJwtRegistry.public_key_for(
-              fv5066.id,
-              fv5066.current_kid,
+              fv_visa_surface.id,
+              fv_visa_surface.current_kid,
             ), true,
-            algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5065}",
+            algorithms: ["ES384"],
+            verify_iss: true, iss: "https://#{ENV.fetch("PUBLIC_VISA_SERVICE_URL")}",
             verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
           )
           URI.parse(fv5064.fetch("url"))
@@ -116,6 +131,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       auth.https!
       auth_headers = {
         "Host" => auth_host, "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin",
+      }
+      navigation_headers = {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
       }
       begin
         fv5063 = auth
@@ -137,182 +155,95 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
           fv5041 = fv5056
           fv5016 = nil
           fv5010 = fv5020.merge(fv5055 => fv5054)
-          fv5004.get(fv5011, params: fv5010, headers: fv5013)
-          fv5048 =
-            begin
-              fv5053 = fv5004.response.body
-              fv5052 = true
-              fv5051 = Nokogiri::HTML(fv5053).at_css("form")
-              if fv5051.nil? && fv5052
-                nil
-              else
-                raise RuntimeError, "Auth continuation form is missing" unless fv5051
+          # Design D keeps the entry GET as a relay: the sentry hands the browser to the
+          # sign-in entry, /sign/in relays it to /ceremony_bindings, and the attachment
+          # hands the browser to the Visa confirmation receiver. No hop renders a form.
+          fv5004.get(fv5011, params: fv5010, headers: fv5013.merge(navigation_headers))
+          fv5044 = nil
+          3.times do
+            raise RuntimeError, "Auth admission stopped before a redirect" unless fv5004.response.redirect?
 
-                fv5050 = fv5051.at_css("input[name='authenticity_token']")&.[]("value")
-                raise RuntimeError,
-                      "Auth continuation is missing its CSRF token" if fv5050.blank?
-
-                fv5049 = fv5051.css("input[type='hidden']").to_h do |input|
-                  [input["name"], input["value"]]
-                end.except("authenticity_token")
-                [fv5051["action"], fv5050, fv5049]
-              end
-            end
-          if fv5048
-
-            fv5047, fv5045, fv5046 = fv5048
-
-            fv5004.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
-              "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-            fv5004.post(fv5047, params: fv5046.merge(authenticity_token: fv5045), headers: fv5013)
-            fv5044 = fv5004.response.location
-            if fv5044.present?
-
-              fv5040 = URI.parse(fv5044)
-              fv5039 = fv5040.host
-              fv5015 =
-                begin
-                  fv5043 = fv5039
-                  {
-                    ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
-                    ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
-                    ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
-                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
-                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
-                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
-                  }.fetch(fv5043)
-                end
-              fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
-                surface: fv5015, reference: fv5040.path.split("/").fetch(-2),
-              )
-
-              if fv5042
-                fv5022 = fv5041 || fv5004
-                fv5022.host!(fv5039)
-                fv5022.https!
-                fv5022.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
-                  "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-                fv5038 = fv5040.request_uri
-                fv5029 = fv5013.merge(
-                  "Host" => fv5039,
-                  "Origin" => "https://#{fv5039}",
-                  "Sec-Fetch-Site" => "same-origin",
-                )
-                fv5022.get(fv5038, headers: fv5029)
-                fv5032, fv5030, fv5031 =
-                  begin
-                    fv5037 = fv5022.response.body
-                    fv5036 = false
-                    fv5035 = Nokogiri::HTML(fv5037).at_css("form")
-                    if fv5035.nil? && fv5036
-                      nil
-                    else
-                      raise RuntimeError, "Auth continuation form is missing" unless fv5035
-
-                      fv5034 = fv5035.at_css("input[name='authenticity_token']")&.[]("value")
-                      raise RuntimeError,
-                            "Auth continuation is missing its CSRF token" if fv5034.blank?
-
-                      fv5033 = fv5035.css("input[type='hidden']").to_h do |input|
-                        [input["name"], input["value"]]
-                      end.except("authenticity_token")
-                      [fv5035["action"], fv5034, fv5033]
-                    end
-                  end
-                fv5022.post(
-                  fv5032,
-                  params: fv5031.merge(authenticity_token: fv5030),
-                  headers: fv5029,
-                )
-                begin
-                  fv5023 = fv5022
-                  fv5025 = "session"
-                  fv5024 = fv5023.response.cookies[fv5025]
-                  if fv5024.nil?
-                    fv5028 = fv5023.response.headers["Set-Cookie"] || fv5023.response.headers["set-cookie"]
-                    fv5027 =
-                      if fv5028.is_a?(String) && fv5028.start_with?("[")
-                        JSON.parse(fv5028)
-                      else
-                        Array(fv5028)
-                      end
-                    fv5026 =
-                      fv5027.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-                        entry.split(";", 2).first.to_s.start_with?("#{fv5025}=")
-                      end
-                    if fv5026
-
-                      _, fv5024 = fv5026.split(";", 2).first.to_s.split("=", 2)
-                      fv5024 = Rack::Utils.unescape(fv5024.to_s)
-                    end
-                  end
-
-                  unless fv5024.nil?
-                    fv5023.cookies.delete(fv5025)
-                    # Rack::Test's []= uses its default host. The current request may target a
-                    # different surface, so install the cookie against the browser's active host.
-                    fv5023.cookies.merge(
-                      "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
-                      URI.parse("https://#{fv5023.host}/"),
-                    )
-                  end
-                end
-                fv5021 = fv5022.response.location
-                raise RuntimeError, "Base confirmation did not return to Auth" if fv5021.blank?
-
-                fv5018 = URI.parse(fv5021)
-                if fv5020[:ri].present?
-                  fv5019 = Rack::Utils.parse_nested_query(fv5018.query.to_s)
-                  fv5019["ri"] ||= fv5020[:ri].to_s
-                  fv5018.query = URI.encode_www_form(fv5019)
-                end
-                fv5004.host!(fv5018.host)
-                fv5004.https!
-                fv5017 = fv5018.request_uri
-                fv5000 = fv5013.merge("Host" => fv5018.host)
-                fv5004.get(fv5017, headers: fv5000)
-              else
-                fv5014.confirm_base!(
-                  base_token: fv5016,
-                  browser_digest: AuthAdmissionBinding.browser_digest(
-                    surface: fv5015,
-                    entry_ref: fv5014.entry_ref,
-                    nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-                  ),
-                )
-                fv5012 = fv5004.host
-                fv5004.host!(fv5012)
-                fv5004.https!
-                fv5000 = fv5013.merge("Host" => fv5012)
-                fv5004.get(fv5011, params: fv5010, headers: fv5000)
-              end
-              fv5003, fv5001, fv5002 =
-                begin
-                  fv5009 = fv5004.response.body
-                  fv5008 = false
-                  fv5007 = Nokogiri::HTML(fv5009).at_css("form")
-                  if fv5007.nil? && fv5008
-                    nil
-                  else
-                    raise RuntimeError, "Auth continuation form is missing" unless fv5007
-
-                    fv5006 = fv5007.at_css("input[name='authenticity_token']")&.[]("value")
-                    raise RuntimeError,
-                          "Auth continuation is missing its CSRF token" if fv5006.blank?
-
-                    fv5005 = fv5007.css("input[type='hidden']").to_h do |input|
-                      [input["name"], input["value"]]
-                    end.except("authenticity_token")
-                    [fv5007["action"], fv5006, fv5005]
-                  end
-                end
-              fv5004.post(
-                fv5003,
-                params: fv5002.merge(authenticity_token: fv5001),
-                headers: fv5000,
-              )
+            fv5017 = URI.parse(fv5004.response.location)
+            if fv5017.host == auth_host
+              fv5004.get(fv5017.request_uri, headers: fv5013.merge(navigation_headers))
+            else
+              fv5044 = fv5004.response.location
+              break
             end
           end
+          raise RuntimeError, "Auth admission did not reach the confirmation receiver" if fv5044.blank?
+
+          fv5040 = URI.parse(fv5044)
+          fv5039 = fv5040.host
+          fv5015 =
+            begin
+              fv5043 = fv5039
+              {
+                ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
+                ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
+                ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
+              }.fetch(fv5043)
+            end
+          fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
+            surface: fv5015, reference: fv5040.path.split("/").fetch(-2),
+          )
+
+          if fv5042
+            fv5022 = fv5041 || fv5004
+            fv5022.host!(fv5039)
+            fv5022.https!
+            fv5022.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+              "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+            fv5038 = fv5040.request_uri
+            fv5029 = fv5013.merge(
+              "Host" => fv5039,
+              "Origin" => "https://#{fv5039}",
+              "Sec-Fetch-Site" => "same-origin",
+            )
+            # The Visa confirmation receiver is GET-only: a top-level navigation GET
+            # confirms the binding and hands the browser back to Auth.
+            fv5022.get(fv5038, headers: fv5029.merge(navigation_headers))
+            fv5021 = fv5022.response.location
+            raise RuntimeError, "Base confirmation did not return to Auth" if fv5021.blank?
+
+            fv5018 = URI.parse(fv5021)
+            if fv5020[:ri].present?
+              fv5019 = Rack::Utils.parse_nested_query(fv5018.query.to_s)
+              fv5019["ri"] ||= fv5020[:ri].to_s
+              fv5018.query = URI.encode_www_form(fv5019)
+            end
+            fv5004.host!(fv5018.host)
+            fv5004.https!
+            fv5017 = fv5018.request_uri
+            fv5000 = fv5013.merge("Host" => fv5018.host)
+            fv5004.get(fv5017, headers: fv5000.merge(navigation_headers))
+          else
+            fv5014.confirm_base!(
+              base_token: fv5016,
+              browser_digest: AuthAdmissionBinding.browser_digest(
+                surface: fv5015,
+                entry_ref: fv5014.entry_ref,
+                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              ),
+            )
+            fv5012 = fv5004.host
+            fv5004.host!(fv5012)
+            fv5004.https!
+            fv5000 = fv5013.merge("Host" => fv5012)
+            fv5004.get(fv5011, params: fv5010, headers: fv5000)
+          end
+          raise RuntimeError, "Auth admission did not redeem the reference" unless fv5004.response.redirect?
+
+          fv5019 = URI.parse(fv5004.response.location)
+          unless fv5019.path == URI.parse(auth_app_sign_in_path(ri: "jp")).path
+            raise RuntimeError, "Auth admission did not return to the sign-in entry"
+          end
+
+          fv5004.get(fv5019.request_uri, headers: fv5000.merge(navigation_headers))
+          raise RuntimeError, "Auth sign-in entry did not render" unless fv5004.response.status == 200
         end
       end
       auth.get(new_auth_app_sign_in_secret_path(ri: "jp"))
@@ -327,29 +258,38 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       )
       auth.follow_redirect!
       auth.follow_redirect! if auth.response.redirect?
-      csrf = Nokogiri::HTML(auth.response.body).at_css('input[name="authenticity_token"]')["value"]
-      auth.post(
-        auth_app_sign_oidc_handoff_path(ri: "jp"), params: { authenticity_token: csrf }, headers: auth_headers,
+      # The handoff is a Design D GET: it issues the result reference and relays the
+      # browser to Visa's result resource.
+      auth.get(
+        auth_app_sign_oidc_handoff_path(ri: "jp"), headers: auth_headers.merge(navigation_headers),
       )
 
       assert_equal 303, auth.response.status
       result_uri = URI.parse(auth.response.location)
       base.host!(result_uri.host)
       base.https!
-      base.get(result_uri.request_uri, headers: { "Host" => result_uri.host })
-      result_form = Nokogiri::HTML(base.response.body).at_css("form#oidc-authorization-result-form")
+      base.get(
+        result_uri.request_uri, headers: { "Host" => result_uri.host }.merge(navigation_headers),
+      )
+      result_form = Nokogiri::HTML(base.response.body).at_css("form#visa-authorization-continuation-form")
       result_action = result_form["action"]
-      result_ref = result_form.at_css('input[name="result_ref"]')["value"]
-      transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+      ceremony_action = result_form.at_css('input[name="ceremony_action"]')["value"]
+      continuation = result_form.at_css('input[name="continuation"]')["value"]
       authenticity_token = result_form.at_css('input[name="authenticity_token"]')["value"]
+      result_origin = "https://#{result_uri.host}"
       flow = ClientSignInFlow.find(transaction.reload.secret_sign_in_flow_id)
       credential = ClientSecretCredential.find_by!(issuance_id: issuance.id)
       ceremony = ClientAuthCeremonySession.find(credential.claim_ceremony_session_id)
       duplicate = open_session
-      duplicate.host!(base_host)
+      duplicate.host!(result_uri.host)
       duplicate.https!
-      # Two in-flight requests from the same legitimate pre-completion browser.
-      base.cookies.to_hash.each { |name, value| duplicate.cookies[name] = value }
+      # Two in-flight requests from the same legitimate pre-completion browser. Clone the
+      # cookies this browser sends to the continuation host: the jar is sorted by name, so
+      # `to_hash` would collapse the Base and Visa sessions into whichever sorts last.
+      continuation_uri = URI.parse("https://#{result_uri.host}/")
+      base.cookies.for(continuation_uri).split("; ").each do |raw_cookie|
+        duplicate.cookies.merge(raw_cookie, continuation_uri)
+      end
       ready = Queue.new
       release = Queue.new
       ActiveRecord::Base.connection_handler.clear_active_connections!
@@ -366,10 +306,10 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                   ready << connection.select_value("SELECT pg_backend_pid()")
                   release.pop
                   browser.post(
-                    result_action, params: { result_ref: result_ref,
-                                             transaction_ref: transaction_ref,
+                    result_action, params: { ceremony_action: ceremony_action,
+                                             continuation: continuation,
                                              authenticity_token: authenticity_token, },
-                                   headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+                                   headers: { "Origin" => result_origin, "Sec-Fetch-Site" => "same-origin" },
                                    env: { "rack.response_finished" => response_finished },
                   )
                   browser.response.status
@@ -408,10 +348,10 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                   ready << connection.select_value("SELECT pg_backend_pid()")
                   release.pop
                   base.post(
-                    result_action, params: { result_ref: result_ref,
-                                             transaction_ref: transaction_ref,
+                    result_action, params: { ceremony_action: ceremony_action,
+                                             continuation: continuation,
                                              authenticity_token: authenticity_token, },
-                                   headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+                                   headers: { "Origin" => result_origin, "Sec-Fetch-Site" => "same-origin" },
                                    env: { "rack.response_finished" => response_finished },
                   )
                   base.response.status
@@ -466,10 +406,10 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       statuses = Timeout.timeout(15) { futures.map(&:value!) }
       unless outcome == :completion
         duplicate.post(
-          result_action, params: { result_ref: result_ref,
-                                   transaction_ref: transaction_ref,
+          result_action, params: { ceremony_action: ceremony_action,
+                                   continuation: continuation,
                                    authenticity_token: authenticity_token, },
-                         headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+                         headers: { "Origin" => result_origin, "Sec-Fetch-Site" => "same-origin" },
         )
         statuses << duplicate.response.status
       end
@@ -501,17 +441,60 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       2.times { release << true } if release
       futures&.each { |future| future.wait(15) }
       if actor
-        ClientSecretSignInReceipt.where(client_ref: actor.public_id).find_each(&:destroy!)
-        if flow
-          ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
-          transaction_rows = ClientOidcAuthorizationTransaction.where(secret_sign_in_flow_id: flow.id)
-          ClientAuthAdmissionBinding.where(
-            authorization_transaction_id: transaction_rows.select(:id),
-          ).find_each(&:destroy!)
-          transaction_rows.find_each(&:destroy!)
+        # OP grants have a strict-loaded logout hint. Destroying the grant via the
+        # association can raise during teardown and skip the root-token cleanup,
+        # leaving ClientSignInFlow.token_id pointing at a missing token for later
+        # fixture loads. Delete the owned child rows explicitly before the grant.
+        token_ids = ClientToken.where(user_id: actor.id).pluck(:id)
+        OpBaseAppRecord.connected_to(role: :writing) do
+          stop_ids = OpAppAuthorityStopRootTarget.where(root_id: token_ids).pluck(:stop_id)
+          OpAppAuthorityStopParticipant.where(stop_id: stop_ids).delete_all
+          OpAppAuthorityStopEpochCutoff.where(stop_id: stop_ids).delete_all
+          OpAppAuthorityStopGrantTarget.where(stop_id: stop_ids).delete_all
+          OpAppAuthorityStopRootTarget.where(stop_id: stop_ids).delete_all
+          OpAppAuthorityStop.where(id: stop_ids).delete_all
+          grant_ids = OpAppGrant.where(client_token_id: token_ids).pluck(:id)
+          OpAppGrantLogoutHint.where(grant_id: grant_ids).delete_all
+          OpAppGrant.where(id: grant_ids).delete_all
         end
-        ceremony&.destroy!
-        flow&.destroy!
+        ClientSecretSignInReceipt.where(client_ref: actor.public_id).find_each(&:destroy!)
+        flow_ids = ClientSignInFlow.where("id > ?", @client_sign_in_flow_id_before_test).or(
+          ClientSignInFlow.where(principal_id: actor.id),
+        ).pluck(:id)
+        flow_ids << flow.id if flow && flow_ids.exclude?(flow.id)
+        unless flow_ids.empty?
+          transaction_rows = ClientOidcAuthorizationTransaction.where(secret_sign_in_flow_id: flow_ids)
+          transaction_ids = transaction_rows.select(:id)
+          auth_transaction_refs = transaction_rows.pluck(:transaction_id)
+          ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow_ids).or(
+            ClientSessionLimitResolutionTransaction.where(oidc_authorization_transaction_id: transaction_ids),
+          ).find_each(&:destroy!)
+          admission_rows = ClientAuthAdmissionBinding.where(authorization_transaction_id: transaction_ids)
+          ceremony_ids = admission_rows.pluck(
+            :auth_ceremony_session_id,
+            :admitted_auth_ceremony_session_id,
+          ).flatten.compact
+          ClientAuthAdmissionBinding.where(id: admission_rows.select(:id)).find_each(&:destroy!)
+          transaction_rows.find_each(&:destroy!)
+          ceremony_ids.concat(
+            ClientAuthCeremonySession.where(authorization_transaction_ref: auth_transaction_refs).pluck(:id),
+          )
+          ceremony_ids.concat(
+            ClientAuthCeremonySession.where("id > ?", @client_auth_ceremony_session_id_before_test).pluck(:id),
+          )
+          ceremony_ids << ceremony.id if ceremony && ceremony_ids.exclude?(ceremony.id)
+          ceremony_ids.uniq!
+          loop do
+            previous_digests = ClientAuthCeremonySession.where(id: ceremony_ids).pluck(:previous_sid_digest).compact
+            previous_ids = ClientAuthCeremonySession.where(sid_digest: previous_digests).where.not(id: ceremony_ids).pluck(:id)
+            break if previous_ids.empty?
+
+            ceremony_ids.concat(previous_ids)
+            ceremony_ids.uniq!
+          end
+          ClientAuthCeremonySession.where(id: ceremony_ids).find_each(&:destroy!)
+          ClientSignInFlow.where(id: flow_ids).find_each(&:destroy!)
+        end
         Chronicle.where(subject_type: "Client", subject_id: actor.id).find_each(&:destroy!)
         ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
         ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)

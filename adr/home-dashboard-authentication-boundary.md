@@ -31,17 +31,37 @@ This partially supersedes the anonymous `/dashboard` cell of the table below and
 no redirect to sign-in is performed, for Base only. The authenticated Home 404, the absence of a
 redirect between `/` and `/dashboard`, and the Warp contract are unchanged.
 
+## Amendment: authenticated Home is refused with 403 (2026-11-03)
+
+Decided by the owner on 2026-11-03. An authenticated `GET /` on Base and Warp (app and org) is
+answered 403, not 404, and still never redirects. The page exists and is denied to that session, so
+a not-found answer misdescribes it. JSON receives `{"status":403,"error":"Forbidden"}`; other
+requests receive the `errors.messages.not_authorized` text as plain text. Both carry
+`Cache-Control: private, no-store`.
+
+The anonymous `/dashboard` cells, the Base anonymous redirect amendment and the absence of any
+redirect between `/` and `/dashboard` are unchanged. Warp and Base `com` were not touched by this
+change; `com` has no Home controller using this boundary in the current tree (unverified).
+
 ## Amendment: Global browser region canonicalization (2026-10-25)
 
-The owner requested automatic `ri` insertion on Global browser URLs. Base Home and Dashboard now
-use `PreferenceGlobal#set_region` for HTML navigation: missing or invalid region context is
+The owner requested automatic `ri` insertion on Global browser URLs. Base Home and Dashboard now use
+`PreferenceGlobal#set_region` for HTML navigation: missing or invalid region context is
 canonicalized by a same-origin, same-path GET/HEAD redirect before the final page outcome. Valid
 request context is preserved. Base JSON representations retain their existing in-request region
 resolution. The table below describes the final response after canonicalization; the Home versus
-Dashboard authentication boundary remains intact. Warp retains its Regional context behavior.
-See `specs/global-region-canonicalization/spec.md` and `docs/architecture/preference.md`.
+Dashboard authentication boundary remains intact. Warp retains its Regional context behavior. See
+`specs/global-region-canonicalization/spec.md` and `docs/architecture/preference.md`.
 
 ## Decision
+
+### Persona selection and switching (2026-11-06)
+
+During sign-in, a single eligible persona is selected automatically. If multiple personas are
+eligible, the sign-in completes and Base `/selector` records one selection per RP session. A
+selected session cannot write another selector choice; later changes go through `/switcher` only.
+The selector remains outside the sign-in state machine for now; connecting it is tracked in
+`plans/backlog/2026-11-06-selector-state-machine-connection.md`.
 
 Base and Warp apply the same contract on their app, com, and org hosts:
 

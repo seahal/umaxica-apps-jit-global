@@ -86,11 +86,20 @@ class WellKnownJwksControllerTest < ActionDispatch::IntegrationTest
       "AUTH_JWT_ISSUER" => "auth-test-issuer",
       "AUTH_JWT_PRIVATE_KEYSET" => JSON.generate("auth-test" => key),
       "AUTH_JWT_PUBLIC_KEYSET" => JSON.generate(keys: []),
-      "PREFERENCE_JWT_ACTIVE_KID" => "preference-test",
-      "PREFERENCE_JWT_ISSUER" => "preference-test-issuer",
-      "PREFERENCE_JWT_PRIVATE_KEYSET" => JSON.generate("preference-test" => key),
-      "PREFERENCE_JWT_PUBLIC_KEYSET" => JSON.generate(keys: []),
+      "PREFERENCE_COM_JWT_ISSUER" => "https://www.umaxica.com",
+      "PREFERENCE_COM_JWT_AUDIENCE" => "com",
+      "PREFERENCE_COM_JWT_REVOKED_KIDS" => "",
     }
+    {
+      "PREFERENCE_APP" => "preference-app-test",
+      "PREFERENCE_COM" => "preference-com-test",
+      "PREFERENCE_ORG" => "preference-org-test",
+    }.each do |prefix, kid|
+      preference_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
+      env["#{prefix}_JWT_ACTIVE_KID"] = kid
+      env["#{prefix}_JWT_PRIVATE_KEYSET"] = JSON.generate(kid => preference_key)
+      env["#{prefix}_JWT_PUBLIC_KEYSET"] = JSON.generate(keys: [])
+    end
     ENDPOINTS.each_with_object(env) do |(_name, namespace, _host), jwt_env|
       jwt_env["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       jwt_env["JWT_#{namespace}_PRIVATE_KEY"] = key

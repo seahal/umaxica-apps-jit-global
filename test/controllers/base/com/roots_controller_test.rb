@@ -21,17 +21,20 @@ class Base::Com::RootsControllerTest < ActionDispatch::IntegrationTest
 
   test "anonymous root and preference screens read only corporate settings and chronicle databases" do
     databases = []
-    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
-      connection = payload[:connection]
-      databases << connection.pool.db_config.name if connection
-    end
+    subscriber =
+      ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+        connection = payload[:connection]
+        databases << connection.pool.db_config.name if connection
+      end
 
-    get base_com_root_url(ri: "jp")
+    get(base_com_root_url(ri: "jp"))
 
     assert_response :success
-    get base_com_preference_path(ri: "jp")
+    get(base_com_preference_path(ri: "jp"))
+
     assert_response :success
-    get edit_base_com_preference_theme_path(ri: "jp")
+    get(edit_base_com_preference_theme_path(ri: "jp"))
+
     assert_response :success
     assert_empty databases.uniq - %w(com_setting com_setting_replica chronicle chronicle_replica)
   ensure
@@ -47,17 +50,18 @@ class Base::Com::RootsControllerTest < ActionDispatch::IntegrationTest
 
   test "region does not change the anonymous entry copy for the same language" do
     %w(en ja).each do |locale|
-      copy = %w(jp us).map do |region|
-        browser = open_session
-        browser.host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-        browser.https!
-        browser.get base_com_root_path(ri: region, lx: locale)
+      copy =
+        %w(jp us).map do |region|
+          browser = open_session
+          browser.host!(ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
+          browser.https!
+          browser.get(base_com_root_path(ri: region, lx: locale))
 
-        assert_equal 200, browser.response.status
-        page = browser.response.parsed_body.at_css("script[data-page='app']")
-        props = JSON.parse(page.text).fetch("props")
-        [props.fetch("description"), props.fetch("links").first.fetch("label")]
-      end
+          assert_equal 200, browser.response.status
+          page = browser.response.parsed_body.at_css("script[data-page='app']")
+          props = JSON.parse(page.text).fetch("props")
+          [props.fetch("description"), props.fetch("links").first.fetch("label")]
+        end
 
       assert_equal copy.first, copy.last, locale
       assert_equal I18n.t("landing.thin_endpoint", locale: locale), copy.first.first

@@ -65,5 +65,4 @@ class CoverageThresholdAuthenticationHelpersTest < ActiveSupport::TestCase
     assert_predicate harness, :am_i_operator?
     assert_not_predicate harness, :am_i_owner?
   end
-
 end

@@ -16,7 +16,9 @@ class TelephoneSignUpOtpFormQuery
         operation: "sign_up", purpose: "sign_up", actor_ref: owner.public_id, session_ref: session_ref,
         telephone_candidate_ref: telephone.public_id, normalized_number_digest: telephone.number_digest,
       )
-      return false unless transactions.exists?
+      unless transactions.exists?
+        return AppRegisteredContactDestinationGuard.registered_by_other_owner?(contact: telephone, owner: owner)
+      end
 
       live_transaction?(transactions.sole, transaction_model.database_now)
     end

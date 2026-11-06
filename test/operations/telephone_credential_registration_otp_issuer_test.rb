@@ -3,6 +3,34 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
+  test "APP Telephone registration suppresses OTP issuance for another Client's effective number" do
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
+    number = "+1202555#{SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")}"
+    telephone = owner.client_telephones.create!(raw_number: number, confirm_policy: true, otp_attempts_count: 1)
+    competitor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    registered = competitor.client_telephones.create!(
+      raw_number: number, confirm_policy: true, user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+    )
+    registered.finalize_binding!
+    token.rotate_refresh_token!
+    before = telephone.reload.attributes
+    transaction_count = ClientTelephoneCeremonyTransaction.count
+
+    issued = TelephoneCredentialRegistrationOtpIssuer.call(
+      actor: owner, token: token, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+
+    assert_equal :registered_destination, issued.status
+    assert_nil issued.transaction
+    assert_nil issued.code
+    assert_equal transaction_count, ClientTelephoneCeremonyTransaction.count
+    assert_equal before, telephone.reload.attributes
+    assert_predicate registered.reload, :binding_effective?
+  end
+
   %i(app org).product(
     [[:never_sent, nil, :issued], [:before, 29, :rate_limited], [:at, 30, :issued], [:after, 31, :issued]],
   ).each do |surface, (label, age, expected)|

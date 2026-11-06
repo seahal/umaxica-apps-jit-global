@@ -402,6 +402,11 @@ module StepUpCeremonyTransactionable
 
   def canceled? = status == STATUS_CANCELED
 
+  def cancellation_handoff_available?(now: nil)
+    now ||= self.class.database_now
+    %w(pending verified canceled).include?(status) && !expired?(now: now)
+  end
+
   # The callers below hold the actor, session and row locks and have validated the request; these
   # methods perform the write, so that no other class writes a step-up transaction status.
   #

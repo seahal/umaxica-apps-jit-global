@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-13). User decision.
+Accepted (2026-10-13); amended 2026-11-01 for WU-A8 RP-local callback identity.
 
 This is a **target contract**. At commit `9c6a0fcaee7d88e94892e2b24f2b2dbe70c89c1e` Tech does not
 exist and Palm is still a native relying party.
@@ -97,8 +97,14 @@ refresh when `tech.access` is no longer held.
 
 ### UserInfo behavior
 
-No surface-specific behavior. Tech and Palm use the IdP's UserInfo endpoint and the common identity
-provisioning exactly as the existing browser RPs do.
+The original participation target assigned Tech and Palm the existing Browser RP UserInfo and common
+identity-provisioning path.
+
+**Amendment (2026-11-01; WU-A8).** Tech and Palm, like the other first-party RPs, verify the ID
+Token against the OP's JWKS and commit its verified issuer, realm, client and subject to that RP
+cell's own identity binding. The callback does not call UserInfo or read OP/Zenith account data to
+select or create the RP principal. Tech separately checks `tech.access` through the existing Org
+capability API before saving its RP credentials; its authorization contract is unchanged.
 
 ### Sign-out semantics
 

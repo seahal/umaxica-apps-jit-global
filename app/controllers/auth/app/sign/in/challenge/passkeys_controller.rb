@@ -129,7 +129,7 @@ module Auth
                   label: page_t("#{scope}.back"),
                   href: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
                 },
-                cancel: {
+                cancel: auth_parent_cancellation_form || {
                   label: t("actions.cancel"),
                   action: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
                   method: "delete",

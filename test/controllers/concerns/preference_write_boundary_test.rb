@@ -166,7 +166,7 @@ class PreferenceWriteBoundaryTest < ActiveSupport::TestCase
     end
   end
 
-  test "static Visa writer authorization is limited to authorization and committed logout POSTs" do
+  test "static Visa writer authorization is limited to verified results and committed logout confirmations" do
     {
       ["visa/app", :sign_in, AppPreference] => Visa::App::Oauth::AuthorizationsController,
       ["visa/app", :sign_out, AppPreference] => Visa::App::Oidc::Logouts::ConfirmationsController,

@@ -42,7 +42,7 @@ class Warp::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "authenticated direct root request returns 404 without redirect" do
+  test "authenticated direct root request returns 403 without redirect" do
     host! @host
     http_headers_1 =
       begin
@@ -107,7 +107,7 @@ class Warp::Org::RootsControllerTest < ActionDispatch::IntegrationTest
       end
     get "/", headers: http_headers_1
 
-    assert_response :not_found
+    assert_response :forbidden
     assert_nil response.location
     assert_equal "private, no-store", response.headers["Cache-Control"]
     assert_no_match(/signed-in landing/, response.body)
@@ -502,7 +502,6 @@ class Warp::Org::RootsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -525,24 +524,6 @@ class Warp::Org::RootsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

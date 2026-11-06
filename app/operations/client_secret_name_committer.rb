@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class ClientSecretNameCommitter
+  # An enclosing OP transaction would defer the evidence consumption while the independent
+  # Zenith name and audit commit. Refuse instead of reporting a committed rename.
+  class TransactionConflict < ArgumentError; end
+
   class Denied < StandardError; end
 
   class DependencyFailure < StandardError; end
@@ -10,13 +14,14 @@ class ClientSecretNameCommitter
   class << self
     public
 
-    def call!(actor_context:, token:, credential:, name:)
+    def call!(actor_context:, token:, credential:, name:, step_up_evidence: nil)
       validate_name!(name)
       validate_binding!(actor_context, token, credential)
+      require_independent_ticket_commit!
 
       AppZenithRecord.connected_to(role: :writing) do
         actor_context.subject.with_lock do
-          rename!(actor_context, token, credential, name)
+          rename!(actor_context, token, credential, name, step_up_evidence)
         end
       end
     rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
@@ -24,6 +29,17 @@ class ClientSecretNameCommitter
     end
 
     private
+
+    # Evidence consumption precedes the Zenith rename, so it must own its commit.
+    # Checked before any lock or evidence consumption.
+    def require_independent_ticket_commit!
+      OpBaseAppRecord.connected_to(role: :writing) do
+        connection = OpBaseAppRecord.lease_connection
+        if connection.transaction_open?
+          raise TransactionConflict, "Secret rename requires an independent OP commit"
+        end
+      end
+    end
 
     def validate_name!(name)
       unless name.is_a?(String) && name.valid_encoding? && name.exclude?("\0") &&
@@ -42,7 +58,7 @@ class ClientSecretNameCommitter
       end
     end
 
-    def rename!(actor_context, token, credential, name)
+    def rename!(actor_context, token, credential, name, step_up_evidence)
       actor = actor_context.subject
       raise Denied, "Secret rename actor is unavailable" unless actor.login_allowed?
 
@@ -60,12 +76,12 @@ class ClientSecretNameCommitter
           device.with_lock do
             raise Denied, "Secret rename device is unavailable" unless device.usable? && device.user_id == actor.id
 
-            session, requirement = verify_session!(actor, token, owned)
+            session = verify_session!(actor, token)
             unless session.device_session_id == device.id && device.current_refresh_token_id == session.id
               raise Denied, "Secret rename session binding changed"
             end
 
-            session.consume_step_up_evidence!(requirement: requirement)
+            verify_step_up!(actor, session, step_up_evidence)
           end
         end
       end
@@ -81,26 +97,20 @@ class ClientSecretNameCommitter
       raise Denied, e.message
     end
 
-    def verify_session!(actor, token, credential)
+    def verify_session!(actor, token)
       locked_token = ClientToken.lock.find_by(id: token.id, user_id: actor.id, public_id: token.public_id)
       raise Denied, "Secret rename session is unavailable" unless locked_token
 
       now = ClientToken.database_now
-      requirement = StepUpRequirement.new(
-        scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: locked_token.public_id, token_binding: locked_token.public_id,
-        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: credential.public_id, tenant_ref: nil,
-      )
-      unless locked_token.active_status?(now) &&
-          StepUpResolver.call(token: locked_token, requirement: requirement, now: now).satisfied?
-        raise Denied, "Secret rename requires current scoped Step-Up"
-      end
+      raise Denied, "Secret rename session is unavailable" unless locked_token.active_status?(now)
 
-      [locked_token, requirement]
+      locked_token
+    end
 
+    def verify_step_up!(actor, token, evidence)
+      return if StepUpEvidenceVerifier.call(evidence:, actor:, token:)
+
+      raise TokenStatusManagement::StepUpEvidenceUnavailable, "Secret rename requires current Step-Up"
     end
   end
 end

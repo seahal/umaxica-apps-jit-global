@@ -24,6 +24,6 @@ module OidcPkce
 
     ActiveSupport::SecurityUtils.secure_compare(code_challenge.to_s, challenge_for(code_verifier))
   end
-  # Inputs of `verify`, not a separate API: callers compare through `verify`.
-  private_class_method :challenge_for, :valid_verifier?
+  # Challenge generation is public so authorization-request builders can emit S256 PKCE values.
+  private_class_method :valid_verifier?
 end

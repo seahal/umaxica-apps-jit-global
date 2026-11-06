@@ -1,44 +1,123 @@
 # frozen_string_literal: true
 
 class TelephoneSignUpOtpIssuer
+  class InitialSubmissionRollback < StandardError
+    attr_reader :result
+
+    def initialize(result)
+      @result = result
+      super("initial Telephone signup OTP issue was refused")
+    end
+  end
+
   class << self
     public
 
-    def call(flow:, telephone:, session_nonce:)
+    def call(flow:, telephone:, session_nonce:, initial_submission: false, actor_context: nil)
       owner, transaction_model, pending_status = components(flow, telephone)
-      owner.with_lock do
-        telephone.with_lock do
-          issued =
-            flow.with_lock do
-              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
-                  flow.nonce_matches?(session_nonce)
-                next refused(:session_mismatch)
-              end
-
-              now = flow.class.database_now
-              if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
-                next refused(:inactive_flow)
-              end
-              unless flow.pending_contact_type == "telephone" && flow.pending_contact_id == telephone.id &&
-                  flow.principal_id == owner.id
-                next refused(:binding_mismatch)
-              end
-              unless owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
-                  owner.accessible?(owner.class.database_now)
-                next refused(:inactive_candidate)
-              end
-
-              issue_locked(flow, telephone, owner, transaction_model)
-            end
-          telephone.update!(otp_last_sent_at: telephone.class.database_now) if issued.success?
-          issued
-        end
+      if initial_submission && actor_context.nil?
+        raise ArgumentError, "initial Telephone signup requires an actor context"
       end
 
+      issue =
+        lambda do |registered_destination|
+          owner.with_lock do
+            telephone.with_lock do
+              issued =
+                if initial_submission
+                  issue_initial_submission(
+                    flow:, telephone:, owner:, pending_status:, transaction_model:, session_nonce:, actor_context:,
+                    registered_destination:,
+                  )
+                else
+                  flow.with_lock do
+                    refusal = current_issuance_refusal(
+                      flow:, contact: telephone, owner:, pending_status:, session_nonce:, contact_type: "telephone",
+                    )
+                    next refusal if refusal
+
+                    issue_locked(flow, telephone, owner, transaction_model, registered_destination:)
+                  end
+                end
+              telephone.update!(otp_last_sent_at: telephone.class.database_now) if issued.success?
+              issued
+            end
+          end
+        end
+
+      if telephone.is_a?(ClientTelephone)
+        AppRegisteredContactDestinationGuard.with_lock(contact: telephone, owner: owner, &issue)
+      else
+        issue.call(false)
+      end
+    rescue InitialSubmissionRollback => e
+      e.result
     end
 
     private
+
+    def issue_initial_submission(flow:, telephone:, owner:, pending_status:, transaction_model:, session_nonce:,
+                                 actor_context:, registered_destination:)
+      flow.with_cycle_lock do
+        refusal = current_issuance_refusal(
+          flow:, contact: telephone, owner:, pending_status:, session_nonce:, contact_type: "telephone",
+          initial_submission: true,
+        )
+        expire_initial_flow_if_due(flow, actor_context) if refusal&.status == :inactive_flow
+        next refusal if refusal
+        next refused(:binding_mismatch) unless initial_flow_unbound?(flow, "telephone")
+        next refused(:locked) if telephone.locked?(now: telephone.class.database_now)
+        next refused(:rate_limited) if telephone_cooldown_active?(telephone)
+
+        transition = SignUpStateMachine.call(ticket: flow, event: :submit_contact, actor_context: actor_context)
+        next refused(:inactive_flow) if transition.status == :expired
+        next refused(:binding_mismatch) unless transition.status == :advanced
+
+        flow.update!(principal_id: owner.id, pending_contact_type: "telephone", pending_contact_id: telephone.id)
+        issued = issue_locked(flow, telephone, owner, transaction_model, registered_destination:)
+        raise InitialSubmissionRollback, issued unless issued.success? || issued.status == :registered_destination
+
+        issued
+      end
+    end
+
+    def current_issuance_refusal(flow:, contact:, owner:, pending_status:, session_nonce:, contact_type:,
+                                 initial_submission: false)
+      unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+          session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
+        return refused(:session_mismatch)
+      end
+
+      now = flow.class.database_now
+      return refused(:inactive_flow) if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
+
+      unless initial_submission ||
+          (flow.pending_contact_type == contact_type && flow.pending_contact_id == contact.id &&
+            flow.principal_id == owner.id)
+        return refused(:binding_mismatch)
+      end
+      return if owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
+        owner.accessible?(owner.class.database_now)
+
+      refused(:inactive_candidate)
+    end
+
+    def initial_flow_unbound?(flow, contact_type)
+      flow.sign_up_started? && flow.step == "start" && flow.entry_method == contact_type &&
+        flow.principal_id.nil? && flow.pending_contact_type.nil? && flow.pending_contact_id.nil?
+    end
+
+    def expire_initial_flow_if_due(flow, actor_context)
+      return unless flow.sign_up_started? && flow.expires_at <= flow.class.database_now
+
+      SignUpStateMachine.call(ticket: flow, event: :submit_contact, actor_context: actor_context)
+    end
+
+    def telephone_cooldown_active?(telephone)
+      now = telephone.class.database_now
+      sent_at = telephone.otp_last_sent_at
+      sent_at && sent_at != -Float::INFINITY && sent_at > now - TelephoneOtpPolicy::SEND_COOLDOWN
+    end
 
     def components(flow, telephone)
       case flow
@@ -50,7 +129,7 @@ class TelephoneSignUpOtpIssuer
       end
     end
 
-    def issue_locked(flow, telephone, owner, transaction_model)
+    def issue_locked(flow, telephone, owner, transaction_model, registered_destination: false)
       now = telephone.class.database_now
       flow_now = flow.class.database_now
       if flow.sign_up_terminal? || flow.expires_at <= flow_now || flow.lapsed?(flow_now)
@@ -64,6 +143,7 @@ class TelephoneSignUpOtpIssuer
       if telephone.binding_finalized_at || telephone.binding_released? || !telephone.accessible?(now)
         return refused(:inactive_candidate)
       end
+      return refused(:registered_destination) if registered_destination
       return refused(:locked) if telephone.locked?(now: now)
 
       sent_at = telephone.otp_last_sent_at

@@ -8,6 +8,8 @@ module Base
         include ::SurfaceInertiaPage
 
         AUTHENTICATION_MODE = :private
+
+        before_action :refuse_root_token_feature_in_rp_cell!
         declare_authentication_mode! :private
 
         before_action :set_session, only: %i(show destroy)

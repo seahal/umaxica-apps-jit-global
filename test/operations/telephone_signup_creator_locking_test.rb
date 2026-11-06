@@ -11,8 +11,7 @@ class TelephoneSignupCreatorLockingTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "signup creation refuses persisted Telephone candidates without transferring their owner" do
-    [[Client, ClientTelephone, :user, :user_id]].each do |
-      owner_model, telephone_model, association, owner_key|
+    [[Client, ClientTelephone, :user, :user_id]].each do |owner_model, telephone_model, association, owner_key|
       owner = owner_model.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_model))
       telephone = telephone_model.create!(
         association => owner, :raw_number => "+12025550161", :confirm_policy => true,

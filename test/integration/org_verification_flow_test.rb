@@ -89,33 +89,51 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
       end
     @headers["X-TEST-SESSION-PUBLIC-ID"] = @token.public_id
     @token.rotate_refresh_token! unless @token.device_session.current_refresh_token_id
-    requirement = StepUpRequirement.new(
-      step_up_required: true, scope: "settings_passkey", allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-      ttl: 15.minutes, purpose: "step_up", audience: "step_up:org", session_binding: @token.public_id,
-      token_binding: @token.public_id, require_session_binding: true, actor_ref: @staff.public_id,
-      resource_ref: nil, tenant_ref: nil,
+    client = OidcClientRegistry.find!("base-org-ww")
+    now = OpBaseOrgRecord.database_now
+    grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch,
+      operator_token: @token,
+      oidc_client_id: client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: now - 1.hour,
+      refresh_token_expires_at: now + 1.hour,
     )
-    nonce = SecureRandom.urlsafe_base64(32)
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: @staff, token: @token, requirement: requirement, return_to: "/identity/passkeys",
-      base_browser_nonce: nonce, base_token: @token,
+    grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+    verifier = SecureRandom.urlsafe_base64(32)
+    params = {
+      response_type: "code",
+      client_id: client.client_id,
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+      scope: grant.oidc_scope,
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false),
+      code_challenge_method: "S256",
+      prompt: "login",
+      claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+    }
+    validated_request = OidcAuthorizeRequestResolver.call(params:, resource: @staff, resource_type: "operator")
+    issuance = OidcStepUpAuthorizationIssuer.call!(
+      surface: "org", actor: @staff, token: @token, client:, params:, validated_request:,
     )
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: issuance.reference)
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: issuance.entry_ref)
     attached, raw_sid = OperatorAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
     binding.confirm_base!(
       base_token: @token, browser_digest: AuthAdmissionBinding.browser_digest(
-        surface: "org", entry_ref: issuance.reference, nonce: nonce,
+        surface: "org", entry_ref: issuance.entry_ref, nonce: issuance.authorization_transaction.login_challenge,
       ),
     )
     BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "org", expected_intent: "step_up", binding: binding,
+      reference: issuance.entry_ref, surface: "org", expected_intent: "step_up", binding: binding,
       raw_auth_sid: raw_sid,
     )
     admitted, admitted_sid = OperatorAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
-      step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+      step_up_ceremony_transaction_ref: issuance.ticket.transaction_id,
     )
     binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"

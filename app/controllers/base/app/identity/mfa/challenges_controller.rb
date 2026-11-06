@@ -21,14 +21,7 @@ module Base
           # active Passkeys, counted under the owner lock; leaving ADVANCED revokes every session.
           def update
             requested = requested_security_mode_id
-            previous = current_client.security_mode_id
-            current_client.with_lock do
-              if requested == ClientSecurityMode::ADVANCED && active_passkey_count < 2
-                raise ArgumentError, "ADVANCED requires two active passkeys"
-              end
-
-              current_client.update!(security_mode_id: requested)
-            end
+            previous = update_security_mode!(requested, evidence: current_step_up_evidence)
             if previous != requested
               downgrade = requested == ClientSecurityMode::NORMAL
               CredentialSecurityTransition.call(
@@ -52,6 +45,35 @@ module Base
           private
 
           def authorize_mfa_challenge! = authorize!(current_client, to: :"#{action_name}?")
+
+          def update_security_mode!(requested, evidence:)
+            token = current_session_token
+            current_client.with_lock do
+              previous = current_client.security_mode_id
+              if requested == ClientSecurityMode::ADVANCED && active_passkey_count < 2
+                raise ArgumentError, "ADVANCED requires two active passkeys"
+              end
+
+              if previous == ClientSecurityMode::ADVANCED && requested == ClientSecurityMode::NORMAL
+                unless token.is_a?(ClientToken) && token.user_id == current_client.id &&
+                    token.public_id == current_session_public_id
+                  raise ArgumentError, "ADVANCED to NORMAL requires the current client session"
+                end
+
+                token.class.transaction do
+                  unless StepUpEvidenceVerifier.call(evidence: evidence, actor: current_client, token: token)
+                    raise ArgumentError, "ADVANCED to NORMAL requires current Step-Up evidence"
+                  end
+
+                  current_client.update!(security_mode_id: requested)
+                end
+              else
+                current_client.update!(security_mode_id: requested)
+              end
+
+              previous
+            end
+          end
 
           def verification_required_action? = %w(show update).include?(action_name)
 

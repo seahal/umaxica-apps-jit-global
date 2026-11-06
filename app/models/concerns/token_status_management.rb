@@ -125,7 +125,7 @@ module TokenStatusManagement
           ceremony_transaction.commit_revocation!(now: decision_time)
           ceremonies = ceremony_model.where(step_up_ceremony_transaction_ref: ceremony_transaction.transaction_id)
           ceremonies.order(:id).lock.each do |ceremony|
-            ceremony.revoke!(now: decision_time) unless ceremony.terminal?
+            ceremony.revoke! unless ceremony.terminal?
           end
         end
       end

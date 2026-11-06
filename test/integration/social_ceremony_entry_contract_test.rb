@@ -20,6 +20,8 @@ require_relative "../support/oidc_auth_admission_test_helper"
 # a visitor into an account they did not choose. That is why the request phase is
 # POST-only and why the cushion page must not submit itself.
 class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   include OidcAuthAdmissionTestHelper
 
   PROVIDERS = %w(google apple).freeze
@@ -75,7 +77,11 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
       with_forgery_protection do
         post "/social/#{provider}",
              params: { authenticity_token: token },
-             headers: { "Host" => @host, "Sec-Fetch-Site" => "same-origin" }
+             headers: {
+               "Host" => @host,
+               "Origin" => "https://#{@host}",
+               "Sec-Fetch-Site" => "same-origin",
+             }
       end
 
       assert_response :redirect,
@@ -90,12 +96,16 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
       with_forgery_protection do
         post "/social/#{provider}",
              params: { authenticity_token: "not-a-real-token" },
-             headers: { "Host" => @host, "Sec-Fetch-Site" => "cross-site" }
+             headers: {
+               "Host" => @host,
+               "Origin" => "https://attacker.example.test",
+               "Sec-Fetch-Site" => "cross-site",
+             }
       end
 
-      # The request phase rejects it, so OmniAuth routes to the failure endpoint
-      # instead of the provider.
-      assert_response :redirect
+      # The request phase rejects it at either the canonical-Origin or Rails
+      # authenticity-token boundary, before it can redirect to the provider.
+      assert_includes [302, 403], response.status
       assert_no_match(
         %r{accounts\.google\.com|appleid\.apple\.com}, response.location.to_s,
         "a cross-site submission reached the provider: login CSRF is not being blocked",

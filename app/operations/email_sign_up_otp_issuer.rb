@@ -1,44 +1,117 @@
 # frozen_string_literal: true
 
 class EmailSignUpOtpIssuer
+  class InitialSubmissionRollback < StandardError
+    attr_reader :result
+
+    def initialize(result)
+      @result = result
+      super("initial Email signup OTP issue was refused")
+    end
+  end
+
   class << self
     public
 
-    def call(flow:, email:, session_nonce:)
+    def call(flow:, email:, session_nonce:, initial_submission: false, actor_context: nil)
       owner, transaction_model, pending_status = components(flow, email)
-      owner.with_lock do
-        email.with_lock do
-          issued =
-            flow.with_lock do
-              unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
-                  session_nonce.encoding.ascii_compatible? && session_nonce.present? &&
-                  flow.nonce_matches?(session_nonce)
-                next refused(:session_mismatch)
-              end
-
-              now = flow.class.database_now
-              if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
-                next refused(:inactive_flow)
-              end
-              unless flow.pending_contact_type == "email" && flow.pending_contact_id == email.id &&
-                  flow.principal_id == owner.id
-                next refused(:binding_mismatch)
-              end
-              unless owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
-                  owner.accessible?(owner.class.database_now)
-                next refused(:inactive_candidate)
-              end
-
-              issue_locked(flow, email, owner, transaction_model)
-            end
-          email.update!(otp_last_sent_at: email.class.database_now) if issued.success?
-          issued
-        end
+      if initial_submission && actor_context.nil?
+        raise ArgumentError, "initial Email signup requires an actor context"
       end
 
+      issue =
+        lambda do |registered_destination|
+          owner.with_lock do
+            email.with_lock do
+              issued =
+                if initial_submission
+                  issue_initial_submission(
+                    flow:, email:, owner:, pending_status:, transaction_model:, session_nonce:, actor_context:,
+                    registered_destination:,
+                  )
+                else
+                  flow.with_lock do
+                    refusal = current_issuance_refusal(
+                      flow:, contact: email, owner:, pending_status:, session_nonce:, contact_type: "email",
+                    )
+                    next refusal if refusal
+
+                    issue_locked(flow, email, owner, transaction_model, registered_destination:)
+                  end
+                end
+              email.update!(otp_last_sent_at: email.class.database_now) if issued.success?
+              issued
+            end
+          end
+        end
+
+      if email.is_a?(ClientEmail)
+        AppRegisteredContactDestinationGuard.with_lock(contact: email, owner: owner, &issue)
+      else
+        issue.call(false)
+      end
+    rescue InitialSubmissionRollback => e
+      e.result
     end
 
     private
+
+    def issue_initial_submission(flow:, email:, owner:, pending_status:, transaction_model:, session_nonce:,
+                                 actor_context:, registered_destination:)
+      flow.with_cycle_lock do
+        refusal = current_issuance_refusal(
+          flow:, contact: email, owner:, pending_status:, session_nonce:, contact_type: "email",
+          initial_submission: true,
+        )
+        expire_initial_flow_if_due(flow, actor_context) if refusal&.status == :inactive_flow
+        next refusal if refusal
+        next refused(:binding_mismatch) unless initial_flow_unbound?(flow, "email")
+        next refused(:locked) if email.locked?(now: email.class.database_now)
+        next refused(:rate_limited) if email.otp_cooldown_active?(now: email.class.database_now)
+
+        transition = SignUpStateMachine.call(ticket: flow, event: :submit_contact, actor_context: actor_context)
+        next refused(:inactive_flow) if transition.status == :expired
+        next refused(:binding_mismatch) unless transition.status == :advanced
+
+        flow.update!(principal_id: owner.id, pending_contact_type: "email", pending_contact_id: email.id)
+        issued = issue_locked(flow, email, owner, transaction_model, registered_destination:)
+        raise InitialSubmissionRollback, issued unless issued.success? || issued.status == :registered_destination
+
+        issued
+      end
+    end
+
+    def current_issuance_refusal(flow:, contact:, owner:, pending_status:, session_nonce:, contact_type:,
+                                 initial_submission: false)
+      unless session_nonce.is_a?(String) && session_nonce.valid_encoding? &&
+          session_nonce.encoding.ascii_compatible? && session_nonce.present? && flow.nonce_matches?(session_nonce)
+        return refused(:session_mismatch)
+      end
+
+      now = flow.class.database_now
+      return refused(:inactive_flow) if flow.sign_up_terminal? || flow.expires_at <= now || flow.lapsed?(now)
+
+      unless initial_submission ||
+          (flow.pending_contact_type == contact_type && flow.pending_contact_id == contact.id &&
+            flow.principal_id == owner.id)
+        return refused(:binding_mismatch)
+      end
+      return if owner.status_id == pending_status && owner.active? && owner.access_enabled? &&
+        owner.accessible?(owner.class.database_now)
+
+      refused(:inactive_candidate)
+    end
+
+    def initial_flow_unbound?(flow, contact_type)
+      flow.sign_up_started? && flow.step == "start" && flow.entry_method == contact_type &&
+        flow.principal_id.nil? && flow.pending_contact_type.nil? && flow.pending_contact_id.nil?
+    end
+
+    def expire_initial_flow_if_due(flow, actor_context)
+      return unless flow.sign_up_started? && flow.expires_at <= flow.class.database_now
+
+      SignUpStateMachine.call(ticket: flow, event: :submit_contact, actor_context: actor_context)
+    end
 
     def components(flow, email)
       case flow
@@ -50,7 +123,7 @@ class EmailSignUpOtpIssuer
       end
     end
 
-    def issue_locked(flow, email, owner, transaction_model)
+    def issue_locked(flow, email, owner, transaction_model, registered_destination: false)
       now = email.class.database_now
       flow_now = flow.class.database_now
       if flow.sign_up_terminal? || flow.expires_at <= flow_now || flow.lapsed?(flow_now)
@@ -69,6 +142,7 @@ class EmailSignUpOtpIssuer
       if email.binding_finalized_at || email.binding_released? || !email.accessible?(now)
         return refused(:inactive_candidate)
       end
+      return refused(:registered_destination) if registered_destination
       return refused(:locked) if email.locked?(now: now)
       return refused(:rate_limited) if email.otp_cooldown_active?(now: now)
 

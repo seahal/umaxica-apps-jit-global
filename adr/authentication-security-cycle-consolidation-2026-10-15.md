@@ -8,6 +8,41 @@ This ADR records which items of the authentication security audit are decided, w
 and how the earlier ADRs are partially superseded. Where this ADR and an earlier ADR conflict, this
 ADR wins within the scope stated in "Supersession".
 
+> **Amendment (2026-11-03, owner): reusable step-up evidence.** For ordinary step-up on the RPs in
+> scope of `specs/op-mediated-step-up/` (Base app and Base org first):
+>
+> - Section 2.3 and 2.4: step-up evidence is no longer bound to the target operation or resource and
+>   is no longer consumed. It is one fact, "an active re-authentication was performed in this RP
+>   session", carried as the `acr` value `https://visa.umaxica.app/acr/reauthentication` with its
+>   `auth_time`, and it is reusable for every sensitive operation of that RP session until
+>   `auth_time + 300 seconds` (exclusive, no skew allowance). It is not reusable in another RP
+>   session, RP or surface. A sign-in, however recent, never counts as step-up. Refresh can neither
+>   create a step-up event nor extend its deadline.
+> - Section 2.3: the 15 minute (`NORMAL`) and 5 minute (`ADVANCED`) maxima remain upper bounds;
+>   ordinary step-up uses 300 seconds in both modes. The method sets of the table are enforced on
+>   the server at Auth and at the OP before the class is issued.
+> - Section 2.2: deleting a passkey needs the ordinary step-up class obtained with any method the
+>   owner's current Security Mode allows (in `ADVANCED` that is a passkey); the two-passkey minimum
+>   and its concurrency requirement are a separate check and are never waived by a successful
+>   authentication.
+> - Section 5: the pending item on OIDC `acr` is decided for step-up only: the OP issues the class
+>   above when, and only when, an accepted step-up ceremony occurred, and RPs authorize
+>   step-up-protected operations from that class and `auth_time`. The existing `acr` values (`aal1`
+>   and the emergency context) and their meanings are unchanged; `normalize_acr` must not touch the
+>   new value.
+> - Section 2.5: the owner-initiated `ADVANCED` → `NORMAL` change is satisfied by the ordinary
+>   reusable step-up above (obtained with a passkey, because the owner is still in `ADVANCED`); the
+>   "purpose-limited, one-time" wording no longer applies. Revocation of every session and refresh
+>   token after the change is unchanged.
+> - Intentional policy change: for ordinary step-up the requirement that the credential used for the
+>   step-up is still accessible (today `ClientPasskeyPolicy#management_credential`) is removed,
+>   because the evidence carries no credential reference.
+> - Existing enforcement revocation keeps its meaning: a TOTP effect revokes in full every root
+>   whose own latest step-up was TOTP, where "latest" now spans the retained root columns and the OP
+>   commit facts of every grant the root owns, live or not, kept for the root's lifetime.
+> - Operation authorization stays with the owning application; step-up success removes only the
+>   step-up prerequisite.
+
 ## Work-unit numbering
 
 The audit numbers its work units `WU-1` to `WU-9`. Later design discussion kept `WU-1` and `WU-2`
@@ -16,17 +51,17 @@ from 3 to 9; they are never tracked as two items. This ADR uses `WU-N`.
 
 ## Cycle scope
 
-| Item | Subject                                     | Decision state                                                           | Implementation |
-| ---- | ------------------------------------------- | ------------------------------------------------------------------------ | -------------- |
-| WU-1 | CI repair                                   | Decided (section 1)                                                      | Not started    |
-| WU-2 | Security Mode, sign-in, step-up             | Core decided (section 2); recovery and ORG sign-up details Pending       | Not started    |
-| WU-3 | Credential change assurance, MFA toggle     | Deferred to the next cycle (section 3)                                   | Not started    |
-| WU-4 | ORG Emergency                               | Design intent decided (section 4); implementation deferred               | Not started    |
-| WU-5 | MFA reset and lockout                       | Deferred to the next cycle (section 3)                                   | Not started    |
-| WU-6 | AAL and step-up                             | AAL usage and `required_aal` retirement decided; OIDC `acr`/`amr` Pending | Not started    |
-| WU-7 | WebAuthn replay and race                    | Invariants and test-first approach decided (section 6)                   | Not started    |
-| WU-8 | OIDC refresh and freshness                  | Pending (section 7)                                                      | Not started    |
-| WU-9 | Ruby coverage                               | Deferred to a separate cycle (section 7)                                 | Not started    |
+| Item | Subject                                 | Decision state                                                            | Implementation |
+| ---- | --------------------------------------- | ------------------------------------------------------------------------- | -------------- |
+| WU-1 | CI repair                               | Decided (section 1)                                                       | Not started    |
+| WU-2 | Security Mode, sign-in, step-up         | Core decided (section 2); recovery and ORG sign-up details Pending        | Not started    |
+| WU-3 | Credential change assurance, MFA toggle | Deferred to the next cycle (section 3)                                    | Not started    |
+| WU-4 | ORG Emergency                           | Design intent decided (section 4); implementation deferred                | Not started    |
+| WU-5 | MFA reset and lockout                   | Deferred to the next cycle (section 3)                                    | Not started    |
+| WU-6 | AAL and step-up                         | AAL usage and `required_aal` retirement decided; OIDC `acr`/`amr` Pending | Not started    |
+| WU-7 | WebAuthn replay and race                | Invariants and test-first approach decided (section 6)                    | Not started    |
+| WU-8 | OIDC refresh and freshness              | Pending (section 7)                                                       | Not started    |
+| WU-9 | Ruby coverage                           | Deferred to a separate cycle (section 7)                                  | Not started    |
 
 ## 1. WU-1: CI architecture
 
@@ -71,10 +106,10 @@ from 3 to 9; they are never tracked as two items. This ADR uses `WU-N`.
 - APP and COM `ADVANCED` sign-in requires a passkey. APP social sign-in cannot bypass it.
 - Step-up method sets:
 
-  | Mode       | APP                        | COM                 | ORG          |
-  | ---------- | -------------------------- | ------------------- | ------------ |
-  | `NORMAL`   | Email OTP / Passkey / TOTP | Email OTP / Passkey | not used     |
-  | `ADVANCED` | Passkey                    | Passkey             | Passkey      |
+  | Mode       | APP                        | COM                 | ORG      |
+  | ---------- | -------------------------- | ------------------- | -------- |
+  | `NORMAL`   | Email OTP / Passkey / TOTP | Email OTP / Passkey | not used |
+  | `ADVANCED` | Passkey                    | Passkey             | Passkey  |
 
 - Maximum step-up validity: 15 minutes in `NORMAL`, 5 minutes in `ADVANCED`.
 - Step-up evidence is bound to the actor, the session, the purpose, the target operation and the
@@ -115,12 +150,12 @@ The following remain undecided; none may be inferred from an earlier draft:
 - The boundary between Operator approval and owner-held Identity management.
 - ORG sign-up: state machine, invitation acceptance, Recovery Key, and Entra completion conditions.
 
-**D-92/D-132 amendment (2026-10-23).** The previously pending handling of an `ADVANCED` actor
-with fewer than two active passkeys is decided for ORG: every Operator is `ADVANCED`; one active
-passkey may continue ordinary sign-in but is restricted to registering a second passkey and signing
-out until it exists; zero active passkeys cannot complete ordinary sign-in. APP/COM start in
-`NORMAL` and enter `ADVANCED` only by the owner's action. This decision does not decide the recovery
-workflow after every passkey is lost.
+**D-92/D-132 amendment (2026-10-23).** The previously pending handling of an `ADVANCED` actor with
+fewer than two active passkeys is decided for ORG: every Operator is `ADVANCED`; one active passkey
+may continue ordinary sign-in but is restricted to registering a second passkey and signing out
+until it exists; zero active passkeys cannot complete ordinary sign-in. APP/COM start in `NORMAL`
+and enter `ADVANCED` only by the owner's action. This decision does not decide the recovery workflow
+after every passkey is lost.
 
 Recovery proposals discussed earlier (24 hours with a Recovery Key, 72 hours without one) are not
 final. The 72 hour MFA reset accepted in `adr/mfa-reset-account-recovery.md` is not applied
@@ -129,10 +164,10 @@ mechanically to these undecided `ADVANCED` recovery cases.
 ## 3. WU-3 and WU-5: deferred
 
 WU-3 (credential change assurance and MFA toggle atomicity; audit IDs F02, F03, F04, MISC-0003) and
-WU-5 (MFA reset and lockout; audit IDs F08, F09) are deferred to the next cycle. This ADR sets no new
-rule for: write-time authorization of credential changes, MFA toggle atomicity, TOTP deletion and
-credential revocation, recovery after losing every method, the Recovery Key / no Recovery Key cases,
-lockout, unlock and re-registration, and multi-database consistency.
+WU-5 (MFA reset and lockout; audit IDs F08, F09) are deferred to the next cycle. This ADR sets no
+new rule for: write-time authorization of credential changes, MFA toggle atomicity, TOTP deletion
+and credential revocation, recovery after losing every method, the Recovery Key / no Recovery Key
+cases, lockout, unlock and re-registration, and multi-database consistency.
 
 The WU-2 rules in section 2 still apply. In particular, first passkey registration by a `NORMAL`
 Email-OTP-only owner (section 2.4) is not prohibited. The general safety principles of
@@ -207,26 +242,26 @@ optimistic lock or other) is not chosen before verification. Core replay safety 
 
 ## 7. WU-8 and WU-9
 
-- **WU-8 (Pending).** OIDC refresh, `prompt`, `max_age`, `auth_time` and RP session
-  synchronization. Existing refresh grant code is not evidence that every RP behaves correctly. This
-  ADR does not override separate design work on RP source-of-truth polling intervals, logout
-  synchronization or refresh token operation.
+- **WU-8 (Pending).** OIDC refresh, `prompt`, `max_age`, `auth_time` and RP session synchronization.
+  Existing refresh grant code is not evidence that every RP behaves correctly. This ADR does not
+  override separate design work on RP source-of-truth polling intervals, logout synchronization or
+  refresh token operation.
 - **WU-9 (Deferred).** Ruby coverage re-measurement and improvement move to a separate cycle;
   coverage thresholds, waivers and test targets are unchanged.
 
 ## Supersession
 
-| Earlier ADR | Superseded part | Replacement |
-| --- | --- | --- |
-| `adr/authentication-security-mode.md` | A4 and E1 (minimum of one passkey in `ADVANCED`) | Section 2.2: at least two |
-| `adr/authentication-security-mode.md` | E2 (delete P1 of two) | Section 2.2: two to one is refused; three to two only |
-| `adr/authentication-security-mode.md` | C3, the clause "never satisfies ... Persona/RP authorization" | Section 4.2–4.4; the scope question in 4.7 stays open |
-| `adr/authentication-security-mode.md` | F1–F5 (recovery cases, 24/72 hours) | Returned to Pending (sections 2.6, 3) |
-| `adr/authentication-security-mode.md` | G2 (ORG sign-up completion) | Returned to Pending (section 2.6) |
-| `adr/authentication-security-mode.md` | Open decision 2 (downgrade re-authentication) | Decided in section 2.5 |
-| `adr/mfa-reset-account-recovery.md` | The 2026-10-15 amendment adopting 24/72 hour `ADVANCED` recovery | Withdrawn; Pending (section 3). The base ADR is otherwise unchanged and not re-approved for all recovery cases |
-| `adr/authentication-assurance-level-boundaries.md` | AAL1/AAL2/AAL3 as runtime authorization boundaries; "authorization policy owns the required AAL" | Section 5: concrete requirements; AAL vocabulary for assessment only |
-| `adr/step-up-authentication-redesign.md` | Any runtime use of a required AAL level | Section 5 |
+| Earlier ADR                                        | Superseded part                                                                                  | Replacement                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `adr/authentication-security-mode.md`              | A4 and E1 (minimum of one passkey in `ADVANCED`)                                                 | Section 2.2: at least two                                                                                      |
+| `adr/authentication-security-mode.md`              | E2 (delete P1 of two)                                                                            | Section 2.2: two to one is refused; three to two only                                                          |
+| `adr/authentication-security-mode.md`              | C3, the clause "never satisfies ... Persona/RP authorization"                                    | Section 4.2–4.4; the scope question in 4.7 stays open                                                          |
+| `adr/authentication-security-mode.md`              | F1–F5 (recovery cases, 24/72 hours)                                                              | Returned to Pending (sections 2.6, 3)                                                                          |
+| `adr/authentication-security-mode.md`              | G2 (ORG sign-up completion)                                                                      | Returned to Pending (section 2.6)                                                                              |
+| `adr/authentication-security-mode.md`              | Open decision 2 (downgrade re-authentication)                                                    | Decided in section 2.5                                                                                         |
+| `adr/mfa-reset-account-recovery.md`                | The 2026-10-15 amendment adopting 24/72 hour `ADVANCED` recovery                                 | Withdrawn; Pending (section 3). The base ADR is otherwise unchanged and not re-approved for all recovery cases |
+| `adr/authentication-assurance-level-boundaries.md` | AAL1/AAL2/AAL3 as runtime authorization boundaries; "authorization policy owns the required AAL" | Section 5: concrete requirements; AAL vocabulary for assessment only                                           |
+| `adr/step-up-authentication-redesign.md`           | Any runtime use of a required AAL level                                                          | Section 5                                                                                                      |
 
 All other parts of these ADRs remain in force.
 

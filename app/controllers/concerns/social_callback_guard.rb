@@ -6,6 +6,8 @@ require "uri"
 module SocialCallbackGuard
   extend ActiveSupport::Concern
 
+  # The Auth App callback controller includes SocialAuth, AuthCeremonyContext, and SignInPathRefusal.
+
   STATE_TTL = 5.minutes
   SOCIAL_STATE_SESSION_KEY = :social_auth_state
   SOCIAL_STATE_STARTED_AT_SESSION_KEY = :social_auth_state_started_at
@@ -210,6 +212,7 @@ module SocialCallbackGuard
 
   def verify_social_callback_request!
     return if verified_social_callback_request?
+    return if performed?
 
     rejection = request.env["social_callback_guard.rejection"] || default_social_callback_rejection
     reject_social_callback!(**rejection)
@@ -219,13 +222,14 @@ module SocialCallbackGuard
     state = load_callback_state_data(provider)
 
     error = detect_callback_state_error(state, provider)
-    if error
-      clear_social_state!
-      return [false, error]
+    return [false, error] if error
+
+    unless social_login_callback_admission_matches_current_sid?
+      render_sign_in_phase_refusal!(reason_code: "wrong_binding")
+      return [false, "wrong_binding"]
     end
 
     unless SocialAuthCallbackStateStore.consume!(state: state[:expected], provider: provider)
-      clear_social_state!
       return [false, "server_state_reused"]
     end
 
@@ -234,6 +238,14 @@ module SocialCallbackGuard
   rescue StandardError
     clear_social_state!
     raise
+  end
+
+  def social_login_callback_admission_matches_current_sid?
+    return true unless current_social_auth_intent.to_s == "login"
+
+    expected_session_id = session[SocialAuth::SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY]
+    current_session = current_auth_ceremony_session
+    expected_session_id.present? && current_session.present? && current_session.id.to_s == expected_session_id.to_s
   end
 
   def load_callback_state_data(_provider)
@@ -278,6 +290,7 @@ module SocialCallbackGuard
     session.delete(SOCIAL_STATE_STARTED_AT_SESSION_KEY)
     session.delete(SOCIAL_STATE_USED_AT_SESSION_KEY)
     session.delete(SOCIAL_STATE_PROVIDER_SESSION_KEY)
+    session.delete(SocialAuth::SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY)
   end
 
   def evaluate_social_callback_request
@@ -347,7 +360,14 @@ module SocialCallbackGuard
   end
 
   def reject_social_callback!(reason:, provider:, details: {})
-    clear_social_state!
+    if superseded_social_callback_state?(reason:, provider:, details:)
+      # A callback can be in flight with a cookie snapshot older than the one
+      # another tab has already received. Do not let this refusal write that
+      # stale snapshot back over the browser's newer session cookie.
+      session.options[:skip] = true
+    else
+      clear_social_state!
+    end
     failure_redirect_path =
       if respond_to?(:social_auth_failure_redirect_path, true)
         social_auth_failure_redirect_path
@@ -364,6 +384,14 @@ module SocialCallbackGuard
       failure_redirect_path,
       status: :forbidden,
     )
+  end
+
+  def superseded_social_callback_state?(reason:, provider:, details:)
+    return false unless reason.to_s == "bad_state"
+    return false unless %w(state_mismatch provider_mismatch server_state_reused).include?(details[:state_reason].to_s)
+
+    callback_params = respond_to?(:params, true) ? params : request.parameters
+    SocialAuthCallbackStateStore.issued?(state: callback_params["state"].to_s, provider: provider)
   end
 
   def self.normalized_request_source(request)

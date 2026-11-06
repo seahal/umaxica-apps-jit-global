@@ -21,7 +21,9 @@ module OidcCallback
 
   # The callback is intentionally kept as one linear public boundary so the
   # verification order remains visible beside the D-59 contract.
-  # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Lint/NoReturnInBeginEndBlocks
+  # rubocop:disable Lint/NoReturnInBeginEndBlocks
+  public
+
   def show
     response.set_header("Cache-Control", "no-store")
     begin
@@ -55,71 +57,18 @@ module OidcCallback
     return render_callback_failure("token_response_invalid") unless token_response_complete?(token_response)
 
     id_token_result = verify_id_token!(token_response_value(token_response, :id_token))
-    return render_callback_failure("id_token_invalid") unless id_token_result.success?
+    return render_callback_failure("id_token_invalid", detail: id_token_result.detail) unless id_token_result.success?
 
-    authentication_event_at = authentication_event_at_from_id_token(id_token_result.payload)
-    return render_callback_failure("id_token_invalid") if authentication_event_at.blank?
-
-    # R5-WU17 cell process: the verified identity goes into the cell's own store; no canonical
-    # actor, OP grant or userinfo lookup is read from here.
-    return complete_rp_cell_callback!(id_token_result.payload, token_response) if rp_cell_process?
-
-    authoritative_resource =
-      begin
-        verified_access_token_resource_for_callback(token_response)
-      rescue ActiveRecord::RecordNotFound, ArgumentError, KeyError
-        return render_callback_failure("access_token_invalid")
-      rescue ActiveRecord::ActiveRecordError
-        return render_callback_failure("dependency_unavailable", status: :service_unavailable)
-      end
-
-    userinfo_reason, userinfo_status = callback_userinfo_failure(token_response, id_token_result)
-    return render_callback_failure(userinfo_reason, status: userinfo_status) if userinfo_reason
-
-    resource =
-      begin
-        provision_rp_account_from_id_token!(
-          id_token_result,
-          authoritative_resource: authoritative_resource,
-        )
-      rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid, ArgumentError, KeyError
-        return render_callback_failure("identity_resolution_failed")
-      rescue ActiveRecord::ActiveRecordError
-        return render_callback_failure("dependency_unavailable", status: :service_unavailable)
-      end
-    if oidc_rp_credentials_only?
-      store_oidc_rp_credentials!(token_response)
-      bind_oidc_rp_logout_session!(
-        id_token_result.payload,
-        id_token: token_response_value(token_response, :id_token),
-        refresh_token: token_response_value(token_response, :refresh_token),
-      )
-      return redirect_to(consume_oidc_pt, allow_other_host: false)
+    if authentication_event_at_from_id_token(id_token_result.payload).blank?
+      return render_callback_failure("id_token_invalid", detail: "authentication_event_at")
     end
+    return render_rp_callback_access_denied! unless rp_callback_access_allowed?(token_response)
 
-    # The RP's local session derives from a root login Base already
-    # established; it is an RP session, so it neither checks nor moves the
-    # root-login cooldown anchor.
-    login_result =
-      ActiveRecord::Base.connected_to(role: :writing) do
-        log_in(
-          resource, establishment: :rp_session, token_kind_id: "BROWSER_WEB", require_totp_check: false,
-                    audit_context: { oidc_client_id: oidc_client_id },
-                    authentication_event_at: authentication_event_at,
-        )
-      end
-    # No session-limit placeholder is issued at a full limit; the RP refuses.
-    if %i(session_limit_conflict session_limit_pending).include?(login_result[:status])
-      return render_oidc_session_limit_refusal(login_result.reverse_merge(http_status: :forbidden))
-    end
-
-    return render_callback_failure("identity_resolution_failed") unless login_result[:status] == :success
-
-    bind_oidc_rp_logout_session!(id_token_result.payload)
-
-    redirect_to(consume_oidc_pt, allow_other_host: false)
+    # Every RP commits the verified OIDC identity to its own cell. The callback never reads the OP
+    # grant, canonical account, or UserInfo endpoint to create or select an RP principal.
+    complete_rp_cell_callback!(id_token_result.payload, token_response)
   end
-  # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Lint/NoReturnInBeginEndBlocks
+  # rubocop:enable Lint/NoReturnInBeginEndBlocks
 
   private
 
@@ -154,7 +103,7 @@ module OidcCallback
 
   def validate_authorization_response_issuer!
     actual = params[:iss].to_s
-    expected = OidcIssuer.for_resource_type(oidc_resource_type).to_s
+    expected = OidcIssuer.for_resource_type(rp_cell_resource_type).to_s
     valid = actual.present? && actual.bytesize == expected.bytesize &&
       ActiveSupport::SecurityUtils.secure_compare(actual, expected)
     return if valid
@@ -170,7 +119,10 @@ module OidcCallback
     allowed_hosts =
       [hosts.visa_service.host, hosts.visa_corporate.host, hosts.visa_staff.host]
         .map { |host| host.to_s.downcase }
-    local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
+    local_port_value = ENV["PORT"]
+    return true if local_port_value.nil?
+
+    local_port = Integer(local_port_value, 10)
 
     !(
       uri.scheme == "http" &&
@@ -183,35 +135,21 @@ module OidcCallback
     true
   end
 
-  def oidc_userinfo_endpoint_requires_https?(userinfo_url)
-    return true unless Rails.env.local?
-
-    uri = URI.parse(userinfo_url)
-    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    allowed_hosts =
-      [hosts.visa_service.host, hosts.visa_corporate.host, hosts.visa_staff.host]
-        .map { |host| host.to_s.downcase }
-    local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
-
-    !(
-      uri.scheme == "http" &&
-      allowed_hosts.include?(uri.host.to_s.downcase) &&
-      uri.port == local_port &&
-      uri.path == "/oauth/userinfo" &&
-      uri.userinfo.blank? && uri.query.blank? && uri.fragment.blank?
-    )
-  rescue URI::InvalidURIError
-    true
-  end
-
-  def oidc_rp_credentials_only?
-    false
-  end
-
   # Same client and resource type as BrowserRpAuthentication's (both name the controller's own cell).
   def rp_cell_client_id = oidc_client_id
 
-  def rp_cell_resource_type = oidc_resource_type
+  def rp_cell_resource_type
+    client = OidcClientRegistry.find!(oidc_client_id)
+    OidcIssuer.resource_type_for_client(client)
+  end
+
+  def rp_callback_access_allowed?(_token_response)
+    true
+  end
+
+  def render_rp_callback_access_denied!
+    render_callback_failure("authorization_denied")
+  end
 
   def complete_rp_cell_callback!(id_token_payload, token_response)
     expiries = OidcRpBrowserCredentialContract.cookie_expiries_from_response(token_response)
@@ -230,17 +168,6 @@ module OidcCallback
     render_callback_failure("dependency_unavailable", status: :service_unavailable)
   end
 
-  # [reason, status] when the optional UserInfo check refuses, else nil.
-  def callback_userinfo_failure(token_response, id_token_result)
-    userinfo_result = verified_userinfo_claims_for_callback(token_response)
-    return unless userinfo_result
-    return ["dependency_unavailable", :service_unavailable] if userinfo_result.dependency_failure?
-    return ["userinfo_failed", :unprocessable_content] unless userinfo_result.success?
-    return if callback_subject_matches_userinfo?(id_token_result, userinfo_result)
-
-    ["subject_mismatch", :unprocessable_content]
-  end
-
   def store_oidc_rp_credentials!(token_response)
     access_token, refresh_token = OidcRpBrowserCredentialContract.require_token_response!(token_response)
     expiries = OidcRpBrowserCredentialContract.cookie_expiries_from_response(token_response)
@@ -256,17 +183,7 @@ module OidcCallback
   end
 
   def verify_id_token!(id_token)
-    return verify_rp_cell_id_token!(id_token) if rp_cell_process?
-
-    OidcIdTokenVerifier.call(
-      id_token: id_token,
-      client_id: oidc_client_id,
-      resource_type: oidc_resource_type,
-      expected_nonce: oidc_flow_value("nonce"),
-      expected_max_age: oidc_flow_value("max_age"),
-      issuer: OidcIssuer.for_resource_type(oidc_resource_type),
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(oidc_resource_type),
-    )
+    verify_rp_cell_id_token!(id_token)
   end
 
   # R5-WU17 cell process: the ID Token is verified against the OP's public JWKS for this exact
@@ -306,22 +223,10 @@ module OidcCallback
     "/"
   end
 
-  def render_oidc_session_limit_refusal(login_result)
-    if respond_to?(:render_sign_in_refusal, true)
-      return render_sign_in_refusal(
-        message: login_result[:message],
-        http_status: login_result[:http_status],
-      )
-    end
-
-    render plain: login_result[:message].presence || I18n.t("session_limit.login_limit_exceeded"),
-           status: login_result[:http_status].presence || :forbidden
-  end
-
   # D-153: expected abnormal endings land on GET /sign/interruption after cleanup; the reason is a
   # server-side reason code only. Dependency failures stay a 503 response.
-  def render_callback_failure(reason, status: :unprocessable_content)
-    log_callback_failure(reason: reason, status: status)
+  def render_callback_failure(reason, status: :unprocessable_content, detail: nil)
+    log_callback_failure(reason: reason, status: status, detail: detail)
     clear_oidc_session_state!
     @current_oidc_target_link_uri = nil
     if status == :service_unavailable
@@ -350,7 +255,7 @@ module OidcCallback
     log_callback_failure(reason: failure.reason, status: :unprocessable_content)
   end
 
-  def log_callback_failure(reason:, status:)
+  def log_callback_failure(reason:, status:, detail: nil)
     Rails.logger.info(
       JitLogEvent.format(
         "oidc.rp.callback.failed",
@@ -360,6 +265,7 @@ module OidcCallback
         request_id: request.request_id,
         status: Rack::Utils.status_code(status),
         reason: reason,
+        detail: detail,
       ),
     )
   end
@@ -383,11 +289,7 @@ module OidcCallback
   def token_response_complete?(token_response)
     return false unless token_response.is_a?(Hash)
 
-    required = %i(access_token id_token)
-    if oidc_rp_credentials_only?
-      required << :refresh_token
-      required.concat(%i(expires_in refresh_token_expires_in))
-    end
+    required = %i(access_token refresh_token id_token expires_in refresh_token_expires_in)
     required.all? { |key| token_response[key].presence || token_response[key.to_s].presence }
   end
 
@@ -403,14 +305,6 @@ module OidcCallback
 
   def token_exchange_failure_status(result)
     (token_exchange_failure_reason(result) == "dependency_unavailable") ? :service_unavailable : :unprocessable_content
-  end
-
-  def callback_subject_matches_userinfo?(id_token_result, userinfo_result)
-    expected = id_token_result.payload.to_h["sub"].to_s
-    actual = userinfo_result.claims.to_h["sub"].to_s
-    return false if expected.blank? || actual.blank? || expected.bytesize != actual.bytesize
-
-    ActiveSupport::SecurityUtils.secure_compare(expected, actual)
   end
 
   def clear_oidc_session_state!(pending_flows: false)
@@ -455,113 +349,7 @@ module OidcCallback
     @current_oidc_flow&.[](key)
   end
 
-  def bind_oidc_rp_logout_session!(payload, id_token: nil, refresh_token: nil)
-    sid = payload["sid"].to_s
-
-    if oidc_rp_credentials_only? && refresh_token.present?
-      bind_oidc_rp_grant_logout_token!(payload, id_token:, refresh_token:)
-      return
-    end
-    return unless oidc_callback_uuid_identifier?(sid)
-
-    token_record = @current_session
-    return unless token_record&.respond_to?(:update_columns)
-
-    updates = {}
-    updates[:oidc_sid] = sid if token_record.has_attribute?(:oidc_sid)
-    updates[:oidc_client_id] = oidc_client_id if token_record.has_attribute?(:oidc_client_id)
-    return if updates.blank?
-
-    token_record_connection_owner(token_record.class).connected_to(role: :writing) do
-      token_record.update!(**updates)
-    end
-  end
-
-  def bind_oidc_rp_grant_logout_token!(payload, id_token:, refresh_token:)
-    return if id_token.blank?
-
-    session_class =
-      case oidc_resource_type.to_s
-      when "operator" then OpOrgGrant
-      when "client" then OpAppGrant
-      else raise ArgumentError, "unsupported OIDC RP resource type"
-      end
-    public_id, verifier = session_class.parse_refresh_token(refresh_token)
-    return if public_id.blank? || verifier.blank?
-
-    connection =
-      case oidc_resource_type.to_s
-      when "operator" then OpBaseOrgRecord
-      else OpBaseAppRecord
-      end
-    connection.connected_to(role: :writing) do
-      session_record = session_class.lock.find_by(public_id:, oidc_client_id:)
-      return unless session_record&.authenticate_refresh_token(verifier)
-      return unless session_record.public_id.to_s == sid_from_payload(payload)
-
-      updates = {}
-      updates[:oidc_sid] = sid_from_payload(payload) if session_record.has_attribute?(:oidc_sid)
-      updates[:oidc_client_id] = oidc_client_id if session_record.has_attribute?(:oidc_client_id)
-      session_record.update!(**updates) if updates.any?
-      # WU-14: the latest verified ID Token of this grant is its end-session hint.
-      hint = session_record.association(:logout_hint).scope.lock.take
-      hint ? hint.update!(id_token:) : session_record.association(:logout_hint).klass.create!(
-        grant_id: session_record.id, id_token:,
-      )
-    end
-  end
-
-  def sid_from_payload(payload)
-    payload.fetch("sid").to_s
-  end
-
-  def oidc_resource_type
-    return rp_actor_resource_type if respond_to?(:rp_actor_resource_type, true)
-
-    OidcIssuer.resource_type_for_client(oidc_client)
-  end
-
-  def oidc_callback_uuid_identifier?(value)
-    /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.match?(
-      value.to_s,
-    )
-  end
-
-  def oidc_client
-    @oidc_client ||= OidcClientRegistry.find!(oidc_client_id)
-  end
-
   def oidc_client_id
     raise NotImplementedError, "controller must define oidc_client_id"
-  end
-
-  def provision_rp_account_from_id_token!(verification_result, authoritative_resource: nil)
-    payload = verification_result.respond_to?(:payload) ? verification_result.payload : verification_result
-    canonical_audience =
-      if verification_result.respond_to?(:canonical_audience)
-        verification_result.canonical_audience
-      else
-        oidc_client_id
-      end
-
-    provision_rp_account_from_id_token_payload!(
-      payload,
-      canonical_audience,
-      authoritative_resource: authoritative_resource,
-    )
-  end
-
-  def provision_rp_account_from_id_token_payload!(_payload, _canonical_audience, authoritative_resource: nil)
-    raise ArgumentError, "unused authoritative resource" if authoritative_resource
-
-    raise NotImplementedError, "controller must provision RP account"
-  end
-
-  def verified_access_token_resource_for_callback(_token_response)
-    nil
-  end
-
-  def verified_userinfo_claims_for_callback(_token_response)
-    nil
   end
 end

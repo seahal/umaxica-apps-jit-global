@@ -3,8 +3,7 @@
 require "test_helper"
 
 class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
-  self.fixture_table_names = []
-  fixtures :clients, :client_statuses, :client_visibilities
+  self.fixture_table_names = %w(clients client_statuses client_visibilities)
 
   test "a failure after deleting continuity rolls back the entire parent cohort" do
     now = Time.current
@@ -14,8 +13,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     )
     continuity, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
-      now: now - 9.days,
     )
+    continuity.update!(expires_at: now - 8.days)
     injected = 0
     subscriber =
       lambda do |_name, _start, _finish, _id, payload|
@@ -68,8 +67,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     )
     continuity, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-      now: now - 1.day,
     )
+    continuity.update!(expires_at: now - 1.day)
 
     IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
@@ -174,8 +173,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       )
       continuity, = ClientAuthCeremonySession.rotate_and_admit!(
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
-        now: cutoff - AuthCeremonySession::DEFAULT_TTL + Rational(microseconds, 1_000_000),
       )
+      continuity.update!(expires_at: cutoff + Rational(microseconds, 1_000_000))
       IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
       assert_equal microseconds.positive?, ClientStepUpCeremonyTransaction.exists?(parent.id)
@@ -195,8 +194,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       )
       continuity, = continuity_model.rotate_and_admit!(
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
-        now: now - 9.days,
       )
+      continuity.update!(expires_at: now - 8.days)
 
       IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 

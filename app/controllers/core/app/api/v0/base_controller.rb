@@ -28,10 +28,6 @@ module Core
 
           def core_actor_tld = :app
 
-          def core_resource_class = ::Client
-
-          def core_token_class = ::ClientToken
-
           def core_resource_type = "client"
         end
       end

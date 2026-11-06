@@ -35,6 +35,7 @@ class SignEmailRegistrationFlowTest < ActionDispatch::IntegrationTest
                 authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
@@ -42,6 +43,7 @@ class SignEmailRegistrationFlowTest < ActionDispatch::IntegrationTest
                        session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                       acr: rp_session.oidc_acr, amr: ["passkey"], auth_time: rp_now,
                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                        subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
@@ -59,50 +61,6 @@ class SignEmailRegistrationFlowTest < ActionDispatch::IntegrationTest
         end
       cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
     end
-    # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
-    passkey = @user.client_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
-    )
-    requirement = StepUpRequirement.new(
-      scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
-      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @user.public_id,
-      resource_ref: nil, tenant_ref: nil,
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-    )
-    issuance = BaseStepUpAdmissionIssuer.call!(
-      actor: @user,
-      token: @token,
-      requirement: requirement,
-      return_to: "/identity/emails/registration/new",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-      base_token: @token,
-    )
-    transaction = issuance.transaction
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    attached, raw_sid = ClientAuthCeremonySession.issue!
-    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
-    binding.confirm_base!(base_token: @token, browser_digest: binding.base_browser_digest)
-    BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
-      raw_auth_sid: raw_sid,
-    )
-    transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
-      user_verified: true,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
-    )
-    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
-      previous_raw_sid: raw_sid,
-    )
-    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
-    result = BaseAuthAdmissionCoordinator.issue_result!(
-      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
-    )
-    IdentityStepUpCeremonyFreshnessCommitter.call!(
-      actor: @user, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
-    )
     access_token = AuthenticationToken.encode(
       @user, host: @host, session_public_id: @token.public_id,
              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
@@ -129,6 +87,7 @@ class SignEmailRegistrationFlowTest < ActionDispatch::IntegrationTest
                 authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
@@ -136,6 +95,7 @@ class SignEmailRegistrationFlowTest < ActionDispatch::IntegrationTest
                        session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                       acr: rp_session.oidc_acr, amr: ["passkey"], auth_time: rp_now,
                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                        subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,

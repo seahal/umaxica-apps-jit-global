@@ -4,7 +4,7 @@
 #
 # The ceremony performs no JIT provisioning, so an operator can only sign in with
 # Entra after `provision` and then `activate` have both been run for them.
-# See docs/operations/entra-org-login-runbook.md.
+# See docs/runbooks/entra-org-login.md.
 change_state =
   lambda do |state|
     result = OperatorEntraIdentityActivation.call(operator_public_id: ENV.fetch("OPERATOR"), state: state)

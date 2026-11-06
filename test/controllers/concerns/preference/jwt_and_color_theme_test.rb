@@ -20,7 +20,7 @@ end
 
 class PreferenceOptionMappingTest < ActiveSupport::TestCase
   test "anonymous Preference JWT lifetime is 400 days" do
-    assert_equal 400.days, SecurityJwtPreferenceTokenCodec::ANONYMOUS_ACCESS_TOKEN_TTL
+    assert_equal 400.days, SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL
   end
 
   test "anonymous Preference browser cookies use the shared realm contract" do
@@ -32,40 +32,20 @@ class PreferenceOptionMappingTest < ActiveSupport::TestCase
 end
 
 class PreferenceJwtConfigurationTest < ActiveSupport::TestCase
-  test "jwt configuration reads the issuer from the environment and uses the fixed leeway" do
-    with_env(
-      "PREFERENCE_JWT_ACTIVE_KID" => "kid-1",
-      "PREFERENCE_JWT_ISSUER" => "jit-test",
-    ) do
-      assert_equal JitSecurityJwtRegistry.issuer("preference").current_kid,
-                   PreferenceJwtConfiguration.active_kid
-      assert_equal SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS,
-                   PreferenceJwtConfiguration.leeway_seconds
-      assert_equal "jit-test", PreferenceJwtConfiguration.issuer
-      expected = Rails.configuration.x.boot_config.fetch(:hosts).base_origins.map(&:host)
-      expected.concat(%w(app.localhost org.localhost com.localhost localhost))
-      expected.uniq!
+  test "preference realms use separate fixed issuers and audiences" do
+    { "preference_app" => "app", "preference_com" => "com", "preference_org" => "org" }.each do |issuer_id, audience|
+      issuer = JitSecurityJwtRegistry.issuer(issuer_id)
 
-      assert_equal expected,
-                   PreferenceJwtConfiguration.audiences
-    end
-  end
-
-  private
-
-  def with_env(vars)
-    original = {}
-    vars.each_key { |key| original[key] = ENV[key] }
-
-    vars.each do |key, value|
-      value.nil? ? ENV.delete(key) : ENV[key] = value
+      assert_equal [audience], issuer.audiences
+      assert_equal issuer.current_kid, PreferenceJwtConfiguration.active_kid(issuer_id)
+      assert_equal issuer.issuer, PreferenceJwtConfiguration.issuer_for(issuer_id)
     end
 
-    yield
-  ensure
-    original.each do |key, value|
-      value.nil? ? ENV.delete(key) : ENV[key] = value
+    assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+      PreferenceJwtConfiguration.issuer_for("preference")
     end
+    assert_equal SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS,
+                 PreferenceJwtConfiguration.leeway_seconds
   end
 end
 
@@ -79,6 +59,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
       public_id: "abcdefghijk01234567890",
       jti: SecureRandom.uuid,
       jwt_issuer_id: "preference_app",
+      issued_at: Time.current,
     )
 
     assert token
@@ -95,6 +76,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
       public_id: "abcdefghijk01234567890",
       jti: SecureRandom.uuid,
       jwt_issuer_id: "preference_app",
+      issued_at: Time.current,
     )
     claims = PreferenceToken.decode(token, host:, jwt_issuer_id: "preference_app")
 

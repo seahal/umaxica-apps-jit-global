@@ -1,4 +1,7 @@
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 
 // The passkey sign-in page: heading, the ceremony panel, and the way back out.
 import PasskeySignInPanel, { type PasskeySignInPanelProps } from "./PasskeySignInPanel";
@@ -9,6 +12,7 @@ export type PasskeySignInScreenProps = {
   description: string;
   panel: PasskeySignInPanelProps;
   back_link: SignInLink;
+  cancel?: CeremonyCancellationProps | null;
 };
 
 export default function PasskeySignInScreen({
@@ -16,24 +20,18 @@ export default function PasskeySignInScreen({
   description,
   panel,
   back_link: backLink,
+  cancel,
 }: PasskeySignInScreenProps) {
   return (
     <Page
       title={title}
+      up={backLink}
       description={description}
       width="narrow"
     >
       <PasskeySignInPanel {...panel} />
 
-      <p className="text-base">
-        {/* Document visit: leaving the ceremony returns to the method selection page. */}
-        <a
-          href={backLink.href}
-          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
-        >
-          {backLink.label}
-        </a>
-      </p>
+      {cancel ? <CeremonyCancellation {...cancel} /> : null}
     </Page>
   );
 }

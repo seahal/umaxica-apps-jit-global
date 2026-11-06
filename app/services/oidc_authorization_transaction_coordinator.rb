@@ -88,13 +88,13 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
         code_challenge_method: params.fetch(:code_challenge_method),
         oidc_prompt: OidcAuthorizeRequestResolver.normalize_prompt(params[:prompt]),
         oidc_max_age: OidcAuthorizeRequestResolver.normalize_max_age(params[:max_age]),
-        status: "pending",
+        status_id: OidcAuthorizationTransactionable::STATUS_PENDING,
       }
       time = model.database_now
       parents = model.where(facts).where("expires_at > ? AND login_challenge_expires_at > ?", time, time)
       bindings = BaseAuthAdmissionCoordinator.admission_binding_model(surface).where(
         authorization_transaction_id: parents.select(:id), base_token_id: base_token&.id,
-        retired_at: nil, redeemed_at: nil,
+        status_id: AuthAdmissionBinding::ACTIVE_STATUS_IDS,
       )
       if restart_of.present?
         original = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: restart_of)
@@ -120,15 +120,21 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
     public
 
     def find_by_login_challenge!(surface:, login_challenge:)
-      model_for(surface).find_by!(login_challenge: login_challenge)
+      model = model_for(surface)
+      model.connection_owner.connected_to(role: :writing) do
+        model.find_by!(login_challenge: login_challenge)
+      end
     end
 
     def find_by_transaction_id!(surface:, transaction_id:)
-      model_for(surface).find_by!(transaction_id: transaction_id)
+      model = model_for(surface)
+      model.connection_owner.connected_to(role: :writing) do
+        model.find_by!(transaction_id: transaction_id)
+      end
     end
 
     def register_result!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
-                         authentication_event_at: nil, now: nil)
+                         authentication_event_at: nil)
       transaction = find_by_login_challenge!(surface: surface, login_challenge: login_challenge)
       transaction = transaction.register_authentication!(
         actor_ref: actor.public_id,
@@ -136,13 +142,12 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
         auth_method: auth_method,
         acr: acr,
         authentication_event_at: authentication_event_at,
-        now: now,
       )
       Issuance.new(transaction: transaction)
     end
 
-    def consume!(surface:, login_challenge:, now: nil)
-      find_by_login_challenge!(surface: surface, login_challenge: login_challenge).consume!(now: now)
+    def consume!(surface:, login_challenge:)
+      find_by_login_challenge!(surface: surface, login_challenge: login_challenge).consume!
     end
 
     private :find_by_login_challenge!

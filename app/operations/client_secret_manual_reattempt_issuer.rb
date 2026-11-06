@@ -9,7 +9,7 @@ class ClientSecretManualReattemptIssuer
   class << self
     public
 
-    def call!(actor_context:, token:, predecessor:, purge_after:)
+    def call!(actor_context:, token:, predecessor:, purge_after:, step_up_evidence:)
       validate_input!(actor_context, token, predecessor, purge_after)
 
       AppZenithRecord.connected_to(role: :writing) do
@@ -22,7 +22,7 @@ class ClientSecretManualReattemptIssuer
                   raise Denied, "Secret reattempt device is unavailable"
                 end
 
-                create_or_return_successor!(actor_context, token, predecessor, device)
+                create_or_return_successor!(actor_context, token, predecessor, device, step_up_evidence)
               end
             end
           end
@@ -45,7 +45,7 @@ class ClientSecretManualReattemptIssuer
 
     end
 
-    def create_or_return_successor!(context, token, predecessor, device)
+    def create_or_return_successor!(context, token, predecessor, device, step_up_evidence)
       actor = context.subject
       raise Denied, "Secret reattempt actor is unavailable" unless actor.login_allowed?
 
@@ -62,14 +62,14 @@ class ClientSecretManualReattemptIssuer
       validate_predecessor!(actor, current, predecessor)
 
       now = Client.database_now
-      ensure_current_step_up!(actor, current, predecessor, now)
+      ensure_current_step_up!(actor, current, step_up_evidence)
       successor_attempt = predecessor.attempt_number + 1
       successor = find_successor(actor, predecessor, successor_attempt)
       return successor if successor
 
       ensure_predecessor_is_latest!(actor, predecessor)
       ensure_manual_secret_capacity!(actor, now)
-      create_successor!(context, actor, current, predecessor, successor_attempt, now)
+      create_successor!(context, actor, current, predecessor, successor_attempt, now, step_up_evidence)
     end
 
     def validate_predecessor!(actor, current, predecessor)
@@ -99,16 +99,10 @@ class ClientSecretManualReattemptIssuer
 
     end
 
-    def ensure_current_step_up!(actor, current, predecessor, now)
-      requirement = StepUpRequirement.new(
-        scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
-        purpose: "step_up", audience: "step_up:app", session_binding: current.public_id,
-        token_binding: current.public_id, require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: predecessor.public_id, tenant_ref: nil,
+    def ensure_current_step_up!(actor, current, step_up_evidence)
+      unless current.active_status?(ClientToken.database_now) && StepUpEvidenceVerifier.call(
+        evidence: step_up_evidence, actor: actor, token: current,
       )
-      unless current.active_status?(now) &&
-          StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret reattempt requires current scoped Step-Up"
       end
     end
@@ -119,8 +113,9 @@ class ClientSecretManualReattemptIssuer
             "twenty active Secrets prevent reattempt" if capacity.manual_count.zero?
     end
 
-    def create_successor!(context, actor, current, predecessor, successor_attempt, now)
-      deadline = [now + ClientSecretLifetimesValue.issuance_ttl, current.last_step_up_at + StepUpRequirement::DEFAULT_TTL].min.round(6)
+    def create_successor!(context, actor, current, predecessor, successor_attempt, now, step_up_evidence)
+      step_up_deadline = Time.at(step_up_evidence.auth_time + StepUpEvidenceValue::MAX_AGE_SECONDS).utc
+      deadline = [now + ClientSecretLifetimesValue.issuance_ttl, step_up_deadline].min.round(6)
       raise ArgumentError, "Secret reattempt expiry must advance the database timestamp" unless deadline > now
 
       successor = ClientSecretIssuance.create!(

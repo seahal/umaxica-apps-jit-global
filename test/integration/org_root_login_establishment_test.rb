@@ -4,6 +4,8 @@ require "test_helper"
 require "webauthn/fake_client"
 
 class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   teardown do
     TurnstileVerifierStub.enabled = false
     TurnstileVerifierStub.response = nil
@@ -32,12 +34,17 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     )
     credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
     operator.staff_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
+    # ORG ADVANCED Root sessions require two active Passkeys before other Base pages are reachable.
+    operator.staff_passkeys.create!(
+      webauthn_id: "org_root_step_up_#{SecureRandom.hex(16)}",
+      public_key: "org-root-step-up-public-key",
+      sign_count: 0,
+    )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     base_issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
     visa_issuer = JitSecurityJwtRegistry.surface("VISA_ORG")
     jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
     base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
     https!
     host!(base_host)
     get(base_org_sign_show_path(ri: "jp", pt: "/dashboard?ri=jp"))
@@ -76,14 +83,15 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
         case current_host
         when visa_host then self
         when auth_host then auth_browser
-        else raise "unexpected OIDC admission host: #{current_host.inspect}"
+        else raise RuntimeError, "unexpected OIDC admission host: #{current_host.inspect}"
         end
     end
 
-    raise "OIDC admission did not reach Auth" unless current_browser.equal?(auth_browser) &&
-      auth_browser.response.successful?
+    unless current_browser.equal?(auth_browser) && auth_browser.response.successful?
+      raise RuntimeError, "OIDC admission did not reach Auth"
+    end
 
-    raise "OIDC admission entry reference is missing" if entry_ref.blank?
+    raise RuntimeError, "OIDC admission entry reference is missing" if entry_ref.blank?
 
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
     flow = authorization_transaction_for_test(binding)
@@ -198,11 +206,28 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     target = URI.parse(auth_browser.response.location)
     callback_uri = nil
     host!(visa_host)
-    assert_difference(-> { OperatorToken.where(staff_id: operator.id).count }, 1) do
-      get(target.request_uri, headers: oidc_navigation_headers(visa_host))
-    end
+    token_count_before_resume = OperatorToken.where(staff_id: operator.id).count
+    get(target.request_uri, headers: oidc_navigation_headers(visa_host))
 
-    assert_response :see_other
+    assert_equal 200, response.status, response.body
+    continuation_form = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+    assert continuation_form, "Visa result GET must render its same-origin POST continuation"
+    continuation_fields =
+      continuation_form.css("input[type='hidden']").to_h do |input|
+        [input["name"], input["value"]]
+      end
+    post(
+      continuation_form["action"],
+      params: continuation_fields,
+      headers: oidc_navigation_headers(visa_host).merge(
+        "Origin" => OidcIssuer.absolute_url(visa_host),
+        "Sec-Fetch-Site" => "same-origin",
+      ),
+    )
+
+    assert_equal 303, response.status, response.body
+    assert_equal token_count_before_resume + 1, OperatorToken.where(staff_id: operator.id).count
     token = OperatorToken.find_by!(staff_id: operator.id)
 
     assert_equal AuthenticationContextValue::NORMAL_KEY, token.authentication_context
@@ -268,9 +293,11 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
           begin
             protocol_browser.host!(env.url.authority)
             protocol_browser.https!(env.url.scheme == "https")
+            request_headers = { "Accept" => "application/json" }
+            authorization = env.request_headers["Authorization"]
+            request_headers["Authorization"] = authorization if authorization.present?
             protocol_browser.get(
-              env.url.request_uri, headers: { "Authorization" => env.request_headers.fetch("Authorization"),
-                                              "Accept" => "application/json", },
+              env.url.request_uri, headers: request_headers,
             )
           ensure
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
@@ -290,7 +317,7 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
       end
     OutboundHttp::Connection.stub(
       :build, ->(**args) {
-        assert_equal visa_host, args.fetch(:url).host
+        assert_equal visa_host, URI(args.fetch(:url).to_s).host
         connection
       },
     ) do
@@ -305,11 +332,11 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
     transport.verify_stubbed_calls
     assert_no_difference(-> { OperatorSignInFlow.count }) do
+      host!(base_host)
       post(base_org_sign_show_path, params: { ri: "jp" })
     end
 
-    assert_response :redirect
-    assert_equal "/identity/passkeys/new", URI.parse(response.location).path
+    assert_response :forbidden
     get(base_org_identity_birthdate_path(ri: "jp"))
 
     assert_response :redirect
@@ -327,65 +354,28 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     gateway = URI.parse(response.location)
     jump_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     auth_location = jump_payload.fetch("url")
-    Rack::Utils.parse_query(URI.parse(auth_location).query).fetch("entry_ref")
-    auth_browser.get(auth_location)
-    3.times do |index|
-      sender = (index == 1) ? self : auth_browser
-      form = Nokogiri::HTML(sender.response.body).at_css("form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      sender.post(form["action"], params: fields, headers: (index == 1) ? base_headers : auth_headers)
+    auth_browser.get(auth_location, headers: oidc_navigation_headers(auth_host))
 
-      assert_equal 303, sender.response.status
-      next if index == 2
-
-      receiver = index.zero? ? self : auth_browser
-      receiver.get(URI.parse(sender.response.location).request_uri)
-    end
-    csrf = nil
-    auth_browser.get(new_auth_org_verification_passkey_path(ri: "jp"))
-    page = Nokogiri::HTML(auth_browser.response.body)
-    panel = JSON.parse(page.at_css("script[data-page='app']").text).fetch("props").fetch("panel")
-    auth_browser.post(
-      panel.fetch("options_url"), params: { "cf-turnstile-response" => "test-only" },
-                                  headers: { "X-CSRF-Token" => csrf }, as: :json,
-    )
-
-    assert_equal 200, auth_browser.response.status
-    options = auth_browser.response.parsed_body
-    assertion = fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 3)
-    auth_browser.post(
-      panel.fetch("verification_url"),
-      params: { credential: assertion, challenge_id: options.fetch("challenge_id") },
-      headers: { "X-CSRF-Token" => csrf }, as: :json,
-    )
-
-    assert_equal 200, auth_browser.response.status
-    assert_nil token.reload.last_step_up_at
-    auth_browser.get(auth_browser.response.parsed_body.fetch("redirect_url"))
-    handoff_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
-    auth_browser.post(
-      handoff_form["action"],
-      params: { authenticity_token: handoff_form.at_css('input[name="authenticity_token"]')["value"] },
-    )
+    assert_equal [303, "/ceremony_bindings"],
+                 [auth_browser.response.status, URI.parse(auth_browser.response.location).path]
+    auth_browser.get(auth_browser.response.location, headers: oidc_navigation_headers(auth_host))
 
     assert_equal 303, auth_browser.response.status
-    assert_nil auth_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-    assert_nil auth_browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-    target = URI.parse(auth_browser.response.location)
-    get(target.request_uri)
-    result_form = response.parsed_body.at_css("form")
-    fields = result_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: fields.fetch("transaction_ref"))
-    post(result_form["action"], params: fields, headers: base_headers)
+    confirmation = URI.parse(auth_browser.response.location)
+    step_up_binding_ref = confirmation.path.split("/").fetch(-2)
+    step_up_binding = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
+      surface: "org", reference: step_up_binding_ref,
+    )
 
-    assert_response :see_other
-    assert_equal "consumed", transaction.reload.status
-    assert_equal transaction.verified_at, token.reload.last_step_up_at
-    assert_equal "settings_birthdate", token.last_step_up_scope
+    assert_equal "step_up_handoff", step_up_binding.purpose
+    assert_predicate step_up_binding.base_token_id, :present?
+    get(confirmation.request_uri, headers: oidc_navigation_headers(base_host))
+
+    assert_response :bad_request
+    assert_predicate step_up_binding.reload, :attached?
+    assert_nil step_up_binding.base_confirmed_at
+    assert_nil token.reload.last_step_up_at
     assert_equal established_at, token.root_login_established_at
-    follow_redirect!
-
-    assert_response :success
     assert_equal 1, OperatorToken.where(staff_id: operator.id).count
   ensure
     OmniAuth.config.test_mode = previous_test_mode unless previous_test_mode.nil?

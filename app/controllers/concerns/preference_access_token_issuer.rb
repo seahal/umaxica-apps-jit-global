@@ -11,7 +11,7 @@ module PreferenceAccessTokenIssuer
   # everything except language). No item cookies, no refresh, no DBSC. The three share the com
   # domain scope and the 400-day lifetime from the writing clock.
   def prepare_anonymous_com_token(preference, payload, issued_at:)
-    unless SecurityJwtPreferenceTokenCodec.valid_anonymous_display_snapshot?(payload)
+    unless SecurityJwtPreferenceTokenCodec.valid_display_snapshot?(payload)
       raise PreferenceBase::ResolutionError, "invalid anonymous preference snapshot"
     end
 
@@ -54,7 +54,7 @@ module PreferenceAccessTokenIssuer
     cookies_to_issue.each do |name, value, httponly|
       options = anonymous_com_cookie_options(expires_at: expires_at, httponly: httponly).merge(value: value)
       header = Rack::Utils.set_cookie_header(name, options)
-      if header.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+      if header.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
         raise PreferenceBase::ResolutionError, "anonymous preference cookie exceeds size limit"
       end
     end
@@ -99,17 +99,6 @@ module PreferenceAccessTokenIssuer
   end
 
   def preference_jwt_issuer_id
-    return "preference_#{preference_realm_name}" if anonymous_preference_claim_shape?(preference_class)
-
-    namespace = preference_jwt_namespace
-    namespace ? "surface:#{namespace}" : "preference"
-  end
-
-  def preference_jwt_namespace
-    service, surface = controller_path.to_s.split("/", 3)
-    return unless %w(sign acme).include?(service)
-
-    namespace = "#{service.upcase}_#{surface.to_s.upcase}"
-    namespace if JitSecurityJwtRegistry::SURFACE_NAMESPACES.include?(namespace)
+    "preference_#{preference_realm_name}"
   end
 end

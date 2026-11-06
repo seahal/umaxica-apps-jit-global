@@ -7,15 +7,26 @@ class TelephoneSignUpOtpDeliveryGuard
     def call(flow:, telephone:, transaction:, generation:, destination:, code:)
       raise ArgumentError, "Telephone signup delivery requires a transport block" unless block_given?
 
+      with_current_delivery_context(flow:, telephone:, transaction:, destination:) do
+        transaction.deliver_telephone_otp!(generation: generation, code: code) { yield }
+      end
+    end
+
+    def authorize_for_enqueue?(flow:, telephone:, transaction:, generation:, destination:, code:)
+      with_current_delivery_context(flow:, telephone:, transaction:, destination:) do
+        transaction.telephone_otp_delivery_current?(generation: generation, code: code)
+      end
+    end
+
+    private
+
+    def with_current_delivery_context(flow:, telephone:, transaction:, destination:)
       owner, pending_status = components(flow, telephone, transaction)
       owner.with_lock do
         telephone.with_lock do
           flow.with_lock do
             session_ref = Digest::SHA256.hexdigest(
-              JSON.generate(
-                ["telephone_sign_up", flow.public_id,
-                 flow.nonce_digest,],
-              ),
+              JSON.generate(["telephone_sign_up", flow.public_id, flow.nonce_digest]),
             )
             transaction.with_lock do
               next false unless current_parent_and_source?(flow, telephone, owner, pending_status)
@@ -32,15 +43,12 @@ class TelephoneSignUpOtpDeliveryGuard
                   realm: transaction.surface,
                 ) == telephone.number_digest
 
-              transaction.deliver_telephone_otp!(generation: generation, code: code) { yield }
+              yield
             end
           end
         end
       end
-
     end
-
-    private
 
     def components(flow, telephone, transaction)
       case flow

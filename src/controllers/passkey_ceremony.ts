@@ -6,6 +6,7 @@
 // same, and it is the part that must not drift between the two.
 import { csrfToken } from "@/lib/csrf";
 import { readString } from "@/lib/payload";
+import { handleStepUpChallenge } from "@/lib/step_up_challenge";
 
 /**
  * Signals that the response was an authentication redirect and the page has been reloaded.
@@ -33,6 +34,10 @@ export async function postCeremonyJson(
   if (response.ok) {
     const payload: unknown = await response.json();
     return payload;
+  }
+
+  if (handleStepUpChallenge(response)) {
+    return CEREMONY_REDIRECTED;
   }
 
   const contentType = response.headers.get("content-type") ?? "";

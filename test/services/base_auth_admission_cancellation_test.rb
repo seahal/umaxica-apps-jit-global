@@ -56,6 +56,51 @@ class BaseAuthAdmissionCancellationTest < ActiveSupport::TestCase
     end
   end
 
+  test "issuing an OIDC cancellation reserves and cancels pending or authenticated parents atomically" do
+    [
+      [ClientOidcAuthorizationTransaction, "app", false],
+      [OperatorOidcAuthorizationTransaction, "org", true],
+    ].each do |transaction_class, surface, authenticated|
+      now = transaction_class.database_now
+      transaction = transaction_class.create_transaction!(
+        surface: surface,
+        intent: "sign_in",
+        client_id: "core-#{surface}-jp",
+        redirect_uri: "https://core.#{surface}.example.test/oidc/callback",
+        response_type: "code",
+        scope: "openid profile",
+        state: "cancel-state-#{surface}",
+        nonce: "cancel-nonce-#{surface}",
+        code_challenge: "cancel-challenge-#{surface}",
+        code_challenge_method: "S256",
+        login_challenge: "cancel-login-#{surface}",
+        login_challenge_expires_at: now + 5.minutes,
+        expires_at: now + 10.minutes,
+      )
+      if authenticated
+        transaction.register_authentication!(
+          actor_ref: "actor-#{surface}", session_ref: nil, auth_method: "passkey", acr: "aal1",
+          authentication_event_at: now,
+        )
+      end
+
+      issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(transaction: transaction)
+      retry_issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(transaction: transaction)
+      digest = BaseAuthAdmissionCoordinator.cancellation_handoff_digest(issuance.handoff)
+
+      assert_predicate issuance.transaction.reload, :canceled?, surface
+      assert_equal digest, issuance.transaction.cancellation_handoff_digest, surface
+      assert_equal issuance.reference, retry_issuance.reference, surface
+      assert_equal issuance.handoff, retry_issuance.handoff, surface
+      assert_equal issuance.transaction, BaseAuthAdmissionCoordinator.read_authorization_cancellation_handoff!(
+        handoff: issuance.handoff, surface: surface, transaction_ref: transaction.transaction_id,
+      ), surface
+      assert_raises(ArgumentError, surface) do
+        transaction.reload.finalize_base! { |_locked, _time| { status: :success, browser_session_ref: "late" } }
+      end
+    end
+  end
+
   test "base browser marker map keeps separate transaction entries behind one opaque locator" do
     store = BaseStepUpMarkerAdapter.new
     locator = SecureRandom.urlsafe_base64(32, padding: false)

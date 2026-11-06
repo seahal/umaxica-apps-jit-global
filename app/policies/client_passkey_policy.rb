@@ -53,33 +53,10 @@ class ClientPasskeyPolicy < ApplicationPolicy
   end
 
   def management_authorized?(token:, now:)
-    requirement = management_requirement(token: token)
-    device = ClientDeviceSession.find(token.device_session_id)
-    user.login_allowed? && token.active_status?(now) && device.usable? &&
-      device.current_refresh_token_id == token.id &&
-      StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied? &&
-      current_management_credential?(token, now)
-  end
+    return false unless user.is_a?(Client) && token.is_a?(ClientToken) && token.user_id == user.id
 
-  def management_credential(token:)
-    credentials =
-      case token.last_step_up_method
-      when "passkey" then user.client_passkeys.active.where.not(uv_verified_at: nil)
-      when "email_otp"
-        user.client_emails.effective_binding.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
-      when "totp"
-        user.client_totp_credentials.where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
-      else return nil
-      end
-    credentials.find_by(public_id: token.last_step_up_credential_ref)
-  end
-
-  private
-
-  def current_management_credential?(token, now)
-    credential = management_credential(token: token)
-    return false unless credential
-
-    credential.is_a?(ClientTotpCredential) ? credential.usable? : credential.accessible?(now)
+    device = ClientDeviceSession.find_by(id: token.device_session_id, user_id: user.id)
+    user.login_allowed? && token.active_status?(now) && device&.usable? &&
+      device.current_refresh_token_id == token.id
   end
 end

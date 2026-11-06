@@ -31,6 +31,13 @@ The Entra ID flow is sign-in only. No Operator record, `OperatorEntraIdentity` r
 the callback. If a matching pre-provisioned `OperatorEntraIdentity` does not exist, the callback
 fails. No JIT provisioning occurs.
 
+### No operator self-service link or unlink (owner decision 2026-11-04)
+
+An operator cannot create, link, or unlink an `OperatorEntraIdentity` through a self-service
+settings route. Auth retains only the Entra sign-in ceremony; Base ORG may display the current
+administrator-provisioned identity status as read-only information. Missing or inactive identity
+records continue to fail closed at sign-in.
+
 ### Stable lookup key: `tid + oid`
 
 The only Entra-side identity key used for auth lookup is the combination of:
@@ -144,10 +151,10 @@ Entra ID sign-in does not bypass local MFA. `AuthenticationBase#mfa_bypassed_for
 not treated as equivalent to local strong evidence of presence. Org's actor-known local completion
 stage is Passkey (or the existing restricted emergency/secret path where applicable); TOTP is
 app-only and is not an org enrollment, sign-in, or Step-Up method. Since 2026-09-09 the callback
-establishes no session at all, so the question is settled a stage earlier: the session is established
-by the actor-bound stage that follows, through the same `establish_signed_in_session!` path, with the
-same MFA gate. This keeps Entra ID at AAL1 unless and until an explicit trust policy is introduced
-for it.
+establishes no session at all, so the question is settled a stage earlier: the session is
+established by the actor-bound stage that follows, through the same `establish_signed_in_session!`
+path, with the same MFA gate. This keeps Entra ID at AAL1 unless and until an explicit trust policy
+is introduced for it.
 
 ### Scope of this ADR
 

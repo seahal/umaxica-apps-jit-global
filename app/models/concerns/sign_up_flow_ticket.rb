@@ -112,7 +112,7 @@ module SignUpFlowTicket
     parent = binding.association(:authorization_transaction).scope.take
     return if binding.redeemed? && !binding.retired? && binding.purpose == "authentication_handoff" &&
       binding.entry_intent == "sign_up" && ceremony&.active? && ceremony.admitted? &&
-      ceremony.admission_purpose == binding.purpose && parent && parent.status == "pending" &&
+      ceremony.admission_purpose == binding.purpose && parent&.pending? &&
       parent.expires_at > binding.class.database_now &&
       ceremony.authorization_transaction_ref == parent.transaction_id
 

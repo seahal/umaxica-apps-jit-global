@@ -26,7 +26,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
     row = I18n.with_locale(:ja) { presenter.present(activity) }
 
     assert_equal %i(occurred_at activity device source risk risk_rank), row.keys
-    assert_equal "Googleでサインイン", row.fetch(:activity)
+    assert_equal "Googleでログイン", row.fetch(:activity)
     assert_equal "Firefox / Linux", row.fetch(:device)
     assert_equal "場所を確認できません", row.fetch(:source)
     assert_equal "低", row.fetch(:risk)

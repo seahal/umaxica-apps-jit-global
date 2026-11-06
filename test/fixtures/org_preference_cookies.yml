@@ -23,8 +23,8 @@
 #  fk_rails_...  (preference_id => org_preferences.id)
 #
 one:
-  preference: one
+  preference_id: 1
   consented: true
 two:
-  preference: two
+  preference_id: 2
   consented: false

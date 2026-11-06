@@ -49,9 +49,9 @@ module EmailContactBinding
   def finalize_sign_up_binding!(flow:, session_nonce:)
     owner, transaction_model, status_key, pending_status, verified_status, realm =
       sign_up_binding_components(flow)
-    transaction_model.connection_owner.connected_to(role: :writing) do
-      flow.with_cycle_lock do
-        owner.with_lock do
+    owner.with_lock do
+      transaction_model.connection_owner.connected_to(role: :writing) do
+        flow.with_cycle_lock do
           with_lock do
             unless sign_up_parent_authorizes_binding?(flow, owner, session_nonce) &&
                 owner.active? && owner.access_enabled? && owner.accessible?(owner.class.database_now) &&
@@ -59,7 +59,12 @@ module EmailContactBinding
               raise ArgumentError, "Email signup binding authority is unavailable"
             end
 
-            session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+            session_ref = Digest::SHA256.hexdigest(
+              JSON.generate(
+                ["email_sign_up", flow.public_id,
+                 flow.nonce_digest,],
+              ),
+            )
             matches = transaction_model.where(
               surface: realm, operation: "sign_up", purpose: "sign_up", actor_ref: owner.public_id,
               session_ref: session_ref, email_candidate_ref: public_id, normalized_email_digest: address_digest,
@@ -95,9 +100,9 @@ module EmailContactBinding
   def mark_sign_up_verified!(flow:, session_nonce:, code:)
     owner, transaction_model, status_key, pending_status, verified_status, realm =
       sign_up_binding_components(flow)
-    transaction_model.connection_owner.connected_to(role: :writing) do
-      flow.with_cycle_lock do
-        owner.with_lock do
+    owner.with_lock do
+      transaction_model.connection_owner.connected_to(role: :writing) do
+        flow.with_cycle_lock do
           with_lock do
             now = flow.class.database_now
             unless sign_up_parent_matches?(flow, owner, session_nonce) &&
@@ -107,7 +112,12 @@ module EmailContactBinding
               raise ArgumentError, "Email signup verification authority is unavailable"
             end
 
-            session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+            session_ref = Digest::SHA256.hexdigest(
+              JSON.generate(
+                ["email_sign_up", flow.public_id,
+                 flow.nonce_digest,],
+              ),
+            )
             matches = transaction_model.where(
               surface: realm, operation: "sign_up", purpose: "sign_up", actor_ref: owner.public_id,
               session_ref: session_ref, email_candidate_ref: public_id, normalized_email_digest: address_digest,
@@ -167,7 +177,10 @@ module EmailContactBinding
   def sign_up_binding_components(flow)
     case [self, flow]
     in [ClientEmail, ClientSignUpFlow]
-      [Client.find(user_id), ClientEmailCeremonyTransaction, :user_email_status_id,
+      owner = Client.find(user_id)
+      raise ArgumentError, "Email signup owner does not match flow" unless flow.principal_id == owner.id
+
+      [owner, ClientEmailCeremonyTransaction, :user_email_status_id,
        ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, ClientEmailStatus::VERIFIED_WITH_SIGN_UP, "app",]
     else raise ArgumentError, "unsupported Email signup binding realm"
     end
@@ -187,7 +200,7 @@ module EmailContactBinding
   def sign_up_parent_authorizes_binding?(flow, owner, session_nonce)
     now = flow.class.database_now
     sign_up_parent_matches?(flow, owner, session_nonce) &&
-      flow.sign_up_checkpoint_pending? && flow.requirement_cleared?("otp") &&
+      flow.status_id == ClientSignUpFlowStatus::FINALIZING && flow.requirement_cleared?("otp") &&
       !flow.lapsed?(now) && flow.expires_at > now
   end
 
@@ -204,9 +217,8 @@ module EmailContactBinding
       in [ClientEmail, ClientEmailCeremonyTransaction] then user
       else raise ArgumentError, "unsupported Email registration ceremony realm"
       end
-    transaction.normalized_email_digest == address_digest && transaction.email_otp_verified_evidence?(
-      code: code, purpose: "credential_registration", actor_ref: owner.public_id, session_ref: session_ref,
-      operation: "registration", candidate_ref: public_id,
+    transaction.normalized_email_digest == address_digest && transaction.email_registration_otp_evidence?(
+      code: code, actor_ref: owner.public_id, session_ref: session_ref, candidate_ref: public_id,
     )
   end
 

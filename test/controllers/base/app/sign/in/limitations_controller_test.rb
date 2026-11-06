@@ -8,6 +8,7 @@ require "test_helper"
 # transaction (adr/root-login-establishment-boundary.md).
 class Visa::App::Sign::In::LimitationsControllerTest < ActionController::TestCase
   tests Visa::App::Sign::In::LimitationsController
+  self.fixture_table_names = []
 
   setup do
     reference_now = ClientSignInFlow.database_now
@@ -64,6 +65,20 @@ class Visa::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     get :show, params: { ri: "jp" }, session: { SessionLimitGate::GATE_SESSION_KEY => @gate }
 
     assert_response :success
+    page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+    props = page.fetch("props")
+
+    assert_equal "visa/app/sign/in/limitations/show", page.fetch("component")
+    assert_equal "Session limit", props.fetch("heading")
+    assert_equal "Revoke and continue", props.fetch("submit_label")
+    assert_equal "Cancel sign-in", props.fetch("cancel_label")
+    assert_not props.fetch("can_continue")
+    assert_equal "resolution_challenge", props.fetch("resolution").fetch("field")
+    assert_equal @issuance.challenge, props.fetch("resolution").fetch("value")
+    session_refs = props.fetch("sessions").map { |entry| entry.fetch("session_ref") }
+    selected_tokens = session_refs.map { |reference| SessionLimitResolutionTokenRef.find_client_token(reference) }
+
+    assert_equal @existing.map(&:id).sort, selected_tokens.map(&:id).sort
   end
 
   test "without the flow locator the page refuses, whatever the request names" do

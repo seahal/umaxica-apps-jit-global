@@ -6,6 +6,26 @@ require "test_helper"
 class AuthAdmissionBindingTest < ActiveSupport::TestCase
   fixtures :client_tokens
 
+  test "attachment and confirmation predicates follow lifecycle status in each realm" do
+    [ClientAuthAdmissionBinding, OperatorAuthAdmissionBinding].each do |binding_model|
+      expected = {
+        AuthAdmissionBinding::ISSUED_STATUS_ID => [false, false],
+        AuthAdmissionBinding::ATTACHED_STATUS_ID => [true, false],
+        AuthAdmissionBinding::BASE_CONFIRMED_STATUS_ID => [true, true],
+        AuthAdmissionBinding::REDEEMED_STATUS_ID => [true, true],
+        AuthAdmissionBinding::RETIRED_STATUS_ID => [false, false],
+        AuthAdmissionBinding::SWITCHED_STATUS_ID => [true, true],
+      }
+
+      expected.each do |status_id, (attached, confirmed)|
+        binding = binding_model.new(status_id: status_id)
+
+        assert_equal [attached, confirmed], [binding.attached?, binding.confirmed?],
+                     "#{binding_model.name} status #{status_id}"
+      end
+    end
+  end
+
   test "confirmation references require UUID version four at adjacent representable versions in every realm" do
     %w(app org).each do |surface|
       issuance = OidcTestEntry.issue!(
@@ -57,8 +77,12 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
 
         # The purpose/intent CHECK also rejects retired purposes before the parent CHECK.
         expected =
-          if constraint == "entry_intent"
+          case constraint
+          when "entry_intent"
             "admission_binding_entry_intent"
+          when "auth_proof_pair", "confirmation_requires_auth", "redemption_pair"
+            prefix = (surface == "app") ? "client" : "operator"
+            "#{prefix}_admission_binding_status_facts"
           else
             "admission_bindings_#{constraint}"
           end

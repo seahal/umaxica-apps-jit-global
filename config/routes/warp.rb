@@ -111,7 +111,7 @@ scope module: :warp, as: :warp do
   end
 
   # Corporate control-plane host. The com surface is anonymous and read-only: it keeps the
-  # landing, the settings shell, and the operational/static endpoints. It has no principal, no
+  # landing and the operational/static endpoints. It has no principal, no
   # credential or session boundary, and no OIDC relying-party route.
   constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_corporate.host,
                      "warp.com.localhost",].compact do
@@ -155,9 +155,6 @@ scope module: :warp, as: :warp do
       # Sitemap endpoint; keep fixed public path.
       resource :sitemap, only: :show, path: "sitemap.xml"
 
-      # Control-plane settings index.
-      resource :settings, only: :show
-
       # Browser CSP report sink; keep configured report-uri path.
       resource :csp_violation_report, only: :create, path: "csp-violation-report"
 
@@ -169,7 +166,6 @@ scope module: :warp, as: :warp do
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
     end
   end
-
 
   # Staff control-plane host.
   constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_staff.host, "warp.org.localhost"].compact do

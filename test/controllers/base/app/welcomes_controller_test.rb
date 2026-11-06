@@ -2,9 +2,12 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../support/rp_cell_session_helper"
 # require "helpers/global_test_support"
 
 class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
+  include RpCellSessionHelper
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @user = Client.create!(
@@ -12,81 +15,24 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
       visibility_id: ClientVisibility::USER,
     )
     @token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    host! @host
+    https!
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
+    _, _, @rp_session = sign_in_rp_cell("base-app-ww", actor: @user, root_token: @token)
+    candidate = BaseSelectorAuthority.new(
+      surface: :app, principal: @user, session: @rp_session,
+    ).selectable_candidates.fetch(0).fetch(:public)
+    selection = BaseSelectorAuthority.select(surface: :app, principal: @user, session: @rp_session, params: candidate)
+
+    assert_equal "selected", selection.fetch(:status)
   end
 
   test "A29-8: authenticated RP Welcome remains available while Sign In is blocked" do
     feature = FeatureFlags::REGISTRY.fetch(:sign_in_available_app).name
     previous_availability = Flipper.enabled?(feature)
     Flipper.disable(feature)
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
-    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
-
-    http_headers_0 =
-      begin
-        rp_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpAppGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpAppGrant.create!(
-              authentication_epoch: 0,
-              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "client",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "client",
-                                     ), client_id: rp_client.client_id,
-            )
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
     token_count = ClientToken.count
-    get(
-      base_app_welcome_url(ri: "jp", host: @host),
-      headers: http_headers_0,
-    )
+    get(base_app_welcome_url(ri: "jp", host: @host))
 
     assert_response :success
     assert_includes response.body, base_app_dashboard_path(ri: "jp")
@@ -133,7 +79,11 @@ end
 # follows only a path-target token issued by this browser session for this RP surface; an OP-side
 # Welcome gate, if present in the session, is not consulted.
 class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
+  include InertiaPageObject
+  include RpCellSessionHelper
+
   tests Base::App::WelcomesController
+  self.fixture_table_names = []
 
   DASHBOARD = "/dashboard?ri=jp"
   SESSION_NONCE = "welcome-return-target-nonce"
@@ -145,52 +95,15 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
       visibility_id: ClientVisibility::USER,
     )
     @token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
-    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
     @request.host = @host
-    begin
-      rp_host = @host
-      rp_token = @token
-      rp_client = OidcClientRegistry.find!("base-app-ww")
-      rp_key = [rp_client.client_id, rp_token.public_id]
-      @base_browser_rp_credentials ||= {}
-      if @base_browser_rp_credentials[rp_key] ||
-          (rp_token.currently_usable? &&
-            !(rp_token.device_session_id && OpAppGrant.exists?(
-              device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-            )))
-        unless @base_browser_rp_credentials[rp_key]
-          rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-          rp_now = Time.current
-          rp_session = OpAppGrant.create!(
-            authentication_epoch: 0,
-            client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-            oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-            refresh_token_expires_at: rp_now + 10.minutes,
-          )
-          rp_access = AuthenticationTokenService.encode(
-            @user, host: rp_host, resource_type: "client",
-                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                   subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
-          )
-          @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-        end
-        rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-        [
-          "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-          "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-        ]
-      else
-        []
-      end
-    end.each do |pair|
-      name, value = pair.split("=", 2)
-      @request.cookies[name] = Rack::Utils.unescape(value)
-    end
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
+    _, _, @rp_session = sign_in_rp_cell("base-app-ww", actor: @user, root_token: @token)
+    candidate = BaseSelectorAuthority.new(
+      surface: :app, principal: @user, session: @rp_session,
+    ).selectable_candidates.fetch(0).fetch(:public)
+    selection = BaseSelectorAuthority.select(surface: :app, principal: @user, session: @rp_session, params: candidate)
+
+    assert_equal "selected", selection.fetch(:status)
     @request.session[:app_sign_in_welcome] = {
       "remaining" => 5,
       "issued_at" => Time.current.to_i,
@@ -198,8 +111,6 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
       "sequence_id" => nil,
     }
     @request.session[:authentication_pt_nonce] = SESSION_NONCE
-    @request.headers["X-Inertia"] = "true"
-    @request.headers["X-Inertia-Version"] = InertiaRails.configuration.version
   end
 
   test "Next returns to the verified pre-sign-in page" do
@@ -230,7 +141,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
 
     assert_response :success
     assert_equal "/identity?ri=jp", begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -239,7 +150,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
 
     assert_response :success
     assert_equal DASHBOARD, begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -268,7 +179,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
     get :show, params: { ri: "jp", pt: "#{token[0...-2]}xx" }
 
     assert_equal DASHBOARD, begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -299,7 +210,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                          end, }
 
     assert_equal DASHBOARD, begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -330,7 +241,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                          end, }
 
     assert_equal DASHBOARD, begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -361,7 +272,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                          end, }
 
     assert_equal DASHBOARD, begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -391,7 +302,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
     get :show, params: { ri: "jp", pt: token }
 
     assert_equal DASHBOARD, begin
-      response.parsed_body.dig("props", "next_link", "href")
+      inertia_props.dig("next_link", "href")
     end
   end
 
@@ -424,7 +335,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
       get :show, params: { ri: "jp", pt: token }
 
       assert_equal expected, begin
-        response.parsed_body.dig("props", "next_link", "href")
+        inertia_props.dig("next_link", "href")
       end
     end
   end
@@ -457,12 +368,20 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                            end, }
 
       assert_equal DASHBOARD, begin
-        response.parsed_body.dig("props", "next_link", "href")
+        inertia_props.dig("next_link", "href")
       end
     end
   end
 
-  ["https://evil.example/", "//evil.example/x", "/\\evil.example", "", " ", "/a\u0000b"].each do |destination|
+  [
+    "https://evil.example/",
+    "https://evil.example.test/steal",
+    "//evil.example/x",
+    "/\\evil.example",
+    "",
+    " ",
+    "/a\u0000b",
+  ].each do |destination|
     test "a signed return target of #{destination.inspect} is not an internal path" do
       get :show, params: { ri: "jp",
                            pt: begin
@@ -490,7 +409,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                            end, }
 
       assert_equal DASHBOARD, begin
-        response.parsed_body.dig("props", "next_link", "href")
+        inertia_props.dig("next_link", "href")
       end
     end
   end
@@ -501,7 +420,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
 
       assert_response :success
       assert_equal DASHBOARD, begin
-        response.parsed_body.dig("props", "next_link", "href")
+        inertia_props.dig("next_link", "href")
       end
     end
   end
@@ -535,7 +454,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                          end, }
 
     assert_response :success
-    assert_equal "/identity?ri=jp", response.parsed_body.dig("props", "next_link", "href")
+    assert_equal "/identity?ri=jp", inertia_props.dig("next_link", "href")
   end
 
   test "the RP page does not read or mutate the OP Welcome gate" do
@@ -606,5 +525,4 @@ class Base::App::WelcomesControllerTest
     OperatorTokenBindingMethod.find_or_create_by!(id: OperatorTokenBindingMethod::LEGACY)
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
   end
-
 end

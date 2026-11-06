@@ -15,6 +15,11 @@ module Base
 
       # R5-WU14: the context is read and switched by its owner over HTTPS (approved contract).
       def show
+        if rp_org_session?
+          authorize!(current_operator, to: :show?)
+          return render_local_switcher_context
+        end
+
         result = relay_switcher(switcher_authority.switcher_context)
         return unless result
 
@@ -26,6 +31,8 @@ module Base
       end
 
       def update
+        return update_rp_switcher if rp_org_session?
+
         result = relay_switcher(switcher_authority.switch_context(switcher_params))
         return unless result
 
@@ -80,6 +87,50 @@ module Base
           access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
           persona: Actor.selection.account_public_id,
         )
+      end
+
+      def rp_org_session?
+        browser_rp_authenticated? && browser_rp_access_state.rp_session.instance_of?(RpBaseOrgSession)
+      end
+
+      def rp_org_session = browser_rp_access_state.rp_session
+
+      def render_local_switcher_context
+        context = BaseSwitcherAuthority.current(
+          surface: :org, principal: current_operator, session: rp_org_session,
+        )
+        respond_to do |format|
+          format.json { render json: context }
+          format.html { render inertia: "base/org/switchers/show", props: switcher_page_props(context) }
+        end
+      end
+
+      def update_rp_switcher
+        authorize!(current_operator, to: :update?)
+        BaseSwitcherAuthority.switch(
+          surface: :org, principal: current_operator, session: rp_org_session, params: switcher_params,
+        )
+        respond_to do |format|
+          format.json { render json: { status: "switched", next: base_org_dashboard_path(ri: params[:ri]) } }
+          format.html { redirect_to(base_org_dashboard_path(ri: params[:ri]), status: :see_other) }
+        end
+      rescue BaseSwitcherAuthority::InvalidSwitch => e
+        render_invalid_rp_switch(e)
+      end
+
+      def render_invalid_rp_switch(error)
+        context = BaseSwitcherAuthority.current(
+          surface: :org, principal: current_operator, session: rp_org_session,
+        )
+        respond_to do |format|
+          format.json do
+            render json: { status: "invalid_switch", error: error.message }, status: :unprocessable_content
+          end
+          format.html do
+            render inertia: "base/org/switchers/show", props: switcher_page_props(context, error: error.message),
+                   status: :unprocessable_content
+          end
+        end
       end
 
       def relay_switcher(result)

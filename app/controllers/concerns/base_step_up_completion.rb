@@ -58,6 +58,8 @@ module BaseStepUpCompletion
     )
     session[:inertia_clear_history] = true
     redirect_to(completion_redirect_target(finalized), status: :see_other, allow_other_host: false)
+  rescue IdentityPasskeyRegistrationFinalCommitter::TransactionConflict
+    render plain: I18n.t("errors.messages.invalid_request"), status: :service_unavailable
   rescue ActionController::BadRequest, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          IdentityStepUpCeremonyContract::Error,
          KeyError, ArgumentError => e
@@ -124,7 +126,7 @@ module BaseStepUpCompletion
   end
 
   def ensure_base_self_rp_refreshable!(transaction:, actor:)
-    return true unless %w(step_up reauthentication bootstrap credential_registration credential_change).include?(
+    return true unless %w(reauthentication bootstrap credential_registration credential_change).include?(
       transaction.purpose,
     )
 
@@ -141,7 +143,7 @@ module BaseStepUpCompletion
   end
 
   def reissue_base_self_rp_credentials!(actor:, transaction:)
-    return unless %w(step_up reauthentication).include?(transaction.purpose)
+    return unless transaction.purpose == "reauthentication"
 
     rp_session = browser_rp_access_state.rp_session
     return if base_self_rp_claims_reflect_transaction?(rp_session:, transaction:)

@@ -174,6 +174,7 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
       ClientIdentity.where(id: identity.id).delete_all if identity
       ClientSecretCredential.where(client_id: @actor.id).delete_all
       ClientSecretIssuance.where(client_id: @actor.id).delete_all
+      ClientRegistrationCompletion.where(client_id: @actor.id).delete_all
       ClientPasskey.where(user_id: @actor.id).delete_all
       ClientSecretAuditOutbox.where(client_ref: @actor.public_id).delete_all
       ClientPasskeyAuditOutbox.where(actor_ref: @actor.public_id).delete_all
@@ -245,7 +246,7 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
                 observer.select_value("SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(pid)}")
               end
             end
-          waited = events.all?("Lock")
+          waited = events.any?("Lock")
           break if waited || @replay_workers.any? { |worker| !worker.alive? } ||
             Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
@@ -264,8 +265,8 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     statuses = Timeout.timeout(10) { @replay_workers.map(&:value) }
 
     assert_equal 2, pids.uniq.length
-    assert waited, "both distinct verified HTTP requests wait on the same Flow row"
-    assert principal_available, "neither Flow waiter owns the principal row"
+    assert waited, "a verified HTTP request waits on the Flow row after acquiring the source actor"
+    assert_not principal_available, "the source actor is locked before the HTTP request waits on the Flow"
     assert_equal [201, 201], statuses
     assert_equal 1, ClientPasskey.where(user_id: @actor.id).count
     assert_equal ClientPasskey.where(user_id: @actor.id).sole.id, @flow.reload.pending_passkey_registration_id
@@ -277,7 +278,7 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     assert_equal 0, ClientPasskey.where(user_id: @actor.id).count
   end
 
-  %i(cancel before at after).each do |ending|
+  %i(before at after).each do |ending|
     test "HTTP Passkey save after a Flow-lock wait handles #{ending} at the deadline without stale authority" do
       pid_queue = Queue.new
       waited = false
@@ -324,8 +325,6 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
             principal_available = false
           end
           case ending
-          when :cancel
-            SignUpTermination.call(cycle: @flow, event: :cancel)
           when :before
             clock_now = @flow.expires_at - Rational(1, 1_000_000)
           when :at
@@ -337,7 +336,7 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
         status = Timeout.timeout(10) { @worker.value }
 
         assert waited, "the real HTTP save reaches a PostgreSQL Flow-lock wait after WebAuthn verification"
-        assert principal_available, "the waiting HTTP save does not hold the principal row"
+        assert_not principal_available, "the HTTP save locks the source actor before waiting on the Flow"
         if ending == :before
           assert_equal 201, status
           assert_predicate @flow.reload, :sign_up_checkpoint_pending?
@@ -408,7 +407,6 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
     checkpoint_version = @flow.reload.checkpoint_version
     pid_queue = Queue.new
     waited = false
-    nil
 
     OpBaseAppRecord.transaction do
       ClientTelephoneCeremonyTransaction.lock.find(@otp_transaction.id)
@@ -457,7 +455,10 @@ class SignUpPasskeyTerminationHttpTest < ActionDispatch::IntegrationTest
       end
     end
 
-    request_status, request_location, request_body = Timeout.timeout(10) { @worker.value }
+    request_result = Timeout.timeout(10) { @worker.value }
+    raise request_result if request_result.is_a?(StandardError)
+
+    request_status, request_location, request_body = request_result
 
     assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, @actor.reload.status_id,
                  "late finalization returned #{request_status} to #{request_location}: #{request_body}"

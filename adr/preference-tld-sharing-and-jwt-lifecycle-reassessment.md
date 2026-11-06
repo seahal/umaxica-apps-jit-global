@@ -8,18 +8,47 @@
 
 **Review horizon:** Approximately three months; no automatic acceptance or scheduled implementation
 
+## Amendment 2026-11-03: Preference display delivery through an API is rejected (owner decision)
+
+The owner rejected, completely, the design in which the frontend obtains or keeps Preference values
+through an API (alternative A, "Rails BFF", and alternative B, "Preference-specific TanStack Start
+BFF", in "Frontend delivery alternatives" below). Display values reach the frontend only through the
+server-rendered page and the JS-readable display cookies (`language` and `__Secure-experience`)
+defined by one.md D-54 and D-57; that is alternative C. No API serves as a cache or a read path of
+Preference values. The rest of this record stays Proposed — Decision Deferred.
+
+Routes in the current tree that read Preference values for the frontend through an API (source
+reading, 2026-11-03), to be removed in a later implementation change; nothing is removed by this
+amendment:
+
+| Route                              | Families                                                   | Current consumer                                                                                                                                                                                                                             |
+| ---------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v0/preferences/theme`    | Base app/com/org, Auth app/org, Core app/org, Warp app/org | `fetchStoredTheme` (`src/lib/theme.ts:192`), called by `src/components/chrome/ThemeControls.tsx:51`, `src/features/preferences/PreferenceSelect.tsx:155` and `src/controllers/theme_controller.ts:65` to read the stored theme after a write |
+| `GET /api/v0/preferences/cookie`   | Same as theme                                              | Cookie consent chrome                                                                                                                                                                                                                        |
+| `GET /api/v0/preferences/web_push` | Base app/com/org                                           | No frontend caller found                                                                                                                                                                                                                     |
+
+The owner also decided on 2026-11-03, for the same later implementation change:
+
+- `PATCH /api/v0/preferences/web_push` (Base app/com/org) is removed; it has no frontend caller.
+- `PATCH /api/v0/preferences/theme` and `PATCH /api/v0/preferences/cookie` on Auth, Core and Warp
+  are removed; D-54 lets only Base and Visa write Preference.
+- How the post-write theme confirmation and the chrome theme and consent controls work without these
+  routes is redesigned in the Preference redesign, including the remaining Base `PATCH` routes for
+  theme and cookie. Until that redesign is accepted, nothing is removed.
+
 ## Context and evidence boundary
 
 Preference holds user-selected display and usage settings. The database remains the durable source
 of truth; a dedicated signed Preference JWT transports a projection, and Rails exposes the effective
 request value through `Actor.preferences`.
 
-The designer explained in the 2026-10-11 discussion that Preference grew out of technical experiments
-with `auth_*` cookies. That explanation records design intent, not a motive established by Git.
-History independently establishes earlier signed Preference cookies, the January 2026 introduction
-of a seven-day access JWT with a 400-day refresh token, subsequent single-use rotation/replay
-handling, and March DBSC additions. It also shows a temporary unified setting implementation that
-was later removed. The [history and drift record](../evidence/2026-10-11-preference-architecture-history-and-drift.md)
+The designer explained in the 2026-10-11 discussion that Preference grew out of technical
+experiments with `auth_*` cookies. That explanation records design intent, not a motive established
+by Git. History independently establishes earlier signed Preference cookies, the January 2026
+introduction of a seven-day access JWT with a 400-day refresh token, subsequent single-use
+rotation/replay handling, and March DBSC additions. It also shows a temporary unified setting
+implementation that was later removed. The
+[history and drift record](../evidence/2026-10-11-preference-architecture-history-and-drift.md)
 contains revisions, inspected paths, classifications, and limitations.
 
 These mechanisms now give low-sensitivity UX state a credential lifecycle resembling authentication.
@@ -27,15 +56,16 @@ Whether Preference still needs dedicated refresh and device binding is the quest
 this does not reopen authentication's security contract.
 
 Current Preference credentials are host-only. Base changes therefore do not directly supply the
-canonical credential to sibling hosts. Registrable-domain-scoped display mirrors already cross hosts, but are not
-the database source of truth. The desired sharing boundary is each **registrable domain**:
-`umaxica.app`, `umaxica.com`, and `umaxica.org`, independently. “TLD sharing” in the filename is
-historical shorthand: no cookie is to be scoped to the public suffix `.app`, `.com`, or `.org`.
+canonical credential to sibling hosts. Registrable-domain-scoped display mirrors already cross
+hosts, but are not the database source of truth. The desired sharing boundary is each **registrable
+domain**: `umaxica.app`, `umaxica.com`, and `umaxica.org`, independently. “TLD sharing” in the
+filename is historical shorthand: no cookie is to be scoped to the public suffix `.app`, `.com`, or
+`.org`.
 
 ## Requirements and invariants to preserve
 
-The following are the designer's stated requirements for the eventual redesign, consistent with
-the existing separation of Preference from security authority:
+The following are the designer's stated requirements for the eventual redesign, consistent with the
+existing separation of Preference from security authority:
 
 - The Preference DB MUST remain the source of truth. `app`, `com`, and `org` MUST remain independent
   Preference domains, with their corresponding shared and actor-local ownership boundaries.
@@ -44,9 +74,11 @@ the existing separation of Preference from security authority:
 - The Preference JWT MUST remain inaccessible to JavaScript. Its transport MUST use Secure and
   HttpOnly cookies. Display JSON/cookies MUST exclude JWTs and other credentials.
 - Preference MUST remain display/usage state. It MUST provide no authentication, authorization,
-  identity verification, age verification, AAL, user-presence, tenant selection, or permission proof.
+  identity verification, age verification, AAL, user-presence, tenant selection, or permission
+  proof.
 - Rails MUST retain `Actor.preferences`. Server-side resolution and frontend presentation delivery
-  MUST remain separate. A Rails resolver MUST be usable directly without Rails calling its own HTTP API.
+  MUST remain separate. A Rails resolver MUST be usable directly without Rails calling its own HTTP
+  API.
 - GET/HEAD MUST remain non-issuing: no JWT creation, replacement, refresh, or lifetime extension.
   Confirmed invalid-cookie detachment remains distinct from issuance; system failures remain errors.
 - `auth_*`, RP, OIDC, browser/session issuance and security control order remain outside scope.
@@ -57,9 +89,9 @@ the existing separation of Preference from security authority:
 ## Direction under consideration
 
 The discussion favors retiring Preference-only refresh and DBSC and centering the transport on one
-JWT. Base would update the DB and alone sign/issue that JWT. Warp, Core, Auth and other approved Rails
-consumers would validate with public keys and use a shared direct resolver. Domain-scoped HttpOnly
-transport would distribute the projection within the matching registrable domain.
+JWT. Base would update the DB and alone sign/issue that JWT. Warp, Core, Auth and other approved
+Rails consumers would validate with public keys and use a shared direct resolver. Domain-scoped
+HttpOnly transport would distribute the projection within the matching registrable domain.
 
 The intended retirement names are `feel_refresh` and `feel_dbsc`. The inspected local code still
 writes `preference_access`, `preference_refresh`, and `preference_dbsc` (secure contexts add
@@ -76,37 +108,37 @@ provide immediate propagation to open tabs, cached representations or retained t
 
 The current constants are seven days for access and 400 days for refresh. A 400-day JWT became a
 leading candidate in this discussion because removing refresh would otherwise shorten anonymous
-continuity to the current access lifetime. **400 days is not a decision or an approved risk acceptance.**
-Cookie retention is also subject to browser deletion and storage policy; a nominal expiry is not a
-promise that an anonymous user retains a recoverable identifier.
+continuity to the current access lifetime. **400 days is not a decision or an approved risk
+acceptance.** Cookie retention is also subject to browser deletion and storage policy; a nominal
+expiry is not a promise that an anonymous user retains a recoverable identifier.
 
-| Question | Current observation | Decision needed before implementation |
-| --- | --- | --- |
-| JWT `exp` versus cookie expiry | Codec computes integer `iat + 7 days`; issuer separately computes cookie expiry from a later clock read. | Use a defined issuance instant and absolute expiry; specify `Expires`/`Max-Age`, clock skew, inclusive boundary, and browser retention limits. A cookie cannot extend JWT validity. |
-| DB `discard_at` versus JWT | `expires_at` aliases `discard_at`; bootstrap/rotation use 400 days, retirement sets it to now, and default infinity exists. Access issuance is not capped to the row's remaining life. | Define DB lifetime independently from transport validity, finite/infinite legacy treatment, and behavior when the row ends before the JWT. No automatic row-life extension is approved. |
-| Base settings change | HTML and browser writes reissue access today; specialized APIs and adoption have different lifecycle paths. | Define explicit Base mutation/issuance transactions, generation and `jti` semantics, response failure, parallel-tab ordering, reset and safe sign-out copying. Determine how an already-open consumer learns of a change. |
-| No non-Base issuance | Shared issuer/codec/key registry are reachable from multiple Rails families today. | Enforce writer capability and private-key provisioning at the process/deployment boundary, including login/sign-out integration, and prove consumers can boot with public keys only. A namespace convention alone is insufficient. |
-| Anonymous expiry | Existing refresh can resolve a DB row without issuing on GET; there is no approved replacement recovery channel. | Decide what the visitor sees and loses after expiry/deletion and whether re-selection is acceptable. A retained DB row without a valid browser reference does not restore continuity. No hidden refresh, grace token or new `continuity` mechanism is proposed. |
-| Revocation at offline readers | Signature/claims verification does not check current row retirement or current generation. | Decide permissible stale duration after update/reset/sign-out, whether all consumers have an online check, and how offline Edge behaves. Cookie deletion removes one browser copy, not a stolen JWT or another cached representation. |
-| Old signing public keys | A helper expresses TTL plus one-hour JWKS and one-hour CDN allowances; no concrete Preference key-retention deployment was verified. | Retain verification keys from the last issuance under a key through the maximum accepted lifetime plus defined skew/distribution/cache allowances. For a 400-day candidate this is roughly 400 days plus margins, not the present seven-day assumption. Emergency compromise retirement is a separate decision. |
-| Theft/reuse | HttpOnly prevents direct JS reads, not transmission to every matching server; DBSC currently binds refresh paths, not every access-JWT read. | Explicitly accept or reject long-lived display disclosure, replay, linkability, stale consent/display and possible Preference-write capability. Define reset/revocation remedies and consumer boundaries; no authentication or age authority may follow from possession. |
+| Question                       | Current observation                                                                                                                                                                    | Decision needed before implementation                                                                                                                                                                                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JWT `exp` versus cookie expiry | Codec computes integer `iat + 7 days`; issuer separately computes cookie expiry from a later clock read.                                                                               | Use a defined issuance instant and absolute expiry; specify `Expires`/`Max-Age`, clock skew, inclusive boundary, and browser retention limits. A cookie cannot extend JWT validity.                                                                                                                             |
+| DB `discard_at` versus JWT     | `expires_at` aliases `discard_at`; bootstrap/rotation use 400 days, retirement sets it to now, and default infinity exists. Access issuance is not capped to the row's remaining life. | Define DB lifetime independently from transport validity, finite/infinite legacy treatment, and behavior when the row ends before the JWT. No automatic row-life extension is approved.                                                                                                                         |
+| Base settings change           | HTML and browser writes reissue access today; specialized APIs and adoption have different lifecycle paths.                                                                            | Define explicit Base mutation/issuance transactions, generation and `jti` semantics, response failure, parallel-tab ordering, reset and safe sign-out copying. Determine how an already-open consumer learns of a change.                                                                                       |
+| No non-Base issuance           | Shared issuer/codec/key registry are reachable from multiple Rails families today.                                                                                                     | Enforce writer capability and private-key provisioning at the process/deployment boundary, including login/sign-out integration, and prove consumers can boot with public keys only. A namespace convention alone is insufficient.                                                                              |
+| Anonymous expiry               | Existing refresh can resolve a DB row without issuing on GET; there is no approved replacement recovery channel.                                                                       | Decide what the visitor sees and loses after expiry/deletion and whether re-selection is acceptable. A retained DB row without a valid browser reference does not restore continuity. No hidden refresh, grace token or new `continuity` mechanism is proposed.                                                 |
+| Revocation at offline readers  | Signature/claims verification does not check current row retirement or current generation.                                                                                             | Decide permissible stale duration after update/reset/sign-out, whether all consumers have an online check, and how offline Edge behaves. Cookie deletion removes one browser copy, not a stolen JWT or another cached representation.                                                                           |
+| Old signing public keys        | A helper expresses TTL plus one-hour JWKS and one-hour CDN allowances; no concrete Preference key-retention deployment was verified.                                                   | Retain verification keys from the last issuance under a key through the maximum accepted lifetime plus defined skew/distribution/cache allowances. For a 400-day candidate this is roughly 400 days plus margins, not the present seven-day assumption. Emergency compromise retirement is a separate decision. |
+| Theft/reuse                    | HttpOnly prevents direct JS reads, not transmission to every matching server; DBSC currently binds refresh paths, not every access-JWT read.                                           | Explicitly accept or reject long-lived display disclosure, replay, linkability, stale consent/display and possible Preference-write capability. Define reset/revocation remedies and consumer boundaries; no authentication or age authority may follow from possession.                                        |
 
-Removing DBSC removes binding protection where it currently applies. It would be misleading to
-claim it currently protects every JWT presentation. Removing refresh also removes rotation/replay
+Removing DBSC removes binding protection where it currently applies. It would be misleading to claim
+it currently protects every JWT presentation. Removing refresh also removes rotation/replay
 machinery; it does not remove the need to define the row and projection lifecycles.
 
 ## Frontend delivery alternatives — no selection
 
-| Alternative | Candidate use | Boundary questions and tradeoffs |
-| --- | --- | --- |
-| A. Rails BFF | An approved Rails family verifies the JWT, resolves Preference directly, and returns a small validated display JSON representation. | Define fields, staleness, error/cache behavior, request-local overlays and read-only consumers. Existing host-local theme/consent APIs write and issue tokens; they are not already the proposed read-only Base-issued design. |
-| B. Preference-specific TanStack Start BFF | Consider a dedicated API entrypoint for Info/Docs/News/Help where no browser-facing Rails Preference BFF is exposed. | Define route ownership, credential admission and isolation from public content SSR/API clients; reconcile zero-cookie restrictions explicitly. This would change an existing boundary and requires approval, not generic cookie forwarding. |
-| C. JS-readable display cookies | Consider existing short display projections such as `ct`, `tz`, `cu`, `df`, `tf`, `mo`, `dn`, and `ps`. | These are neither source of truth nor credentials. Define tamper validation, precedence, partial updates, generation skew, cache selection and safe recovery. Rails runtime authority remains separate. |
+| Alternative                               | Candidate use                                                                                                                       | Boundary questions and tradeoffs                                                                                                                                                                                                            |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Rails BFF                              | An approved Rails family verifies the JWT, resolves Preference directly, and returns a small validated display JSON representation. | Define fields, staleness, error/cache behavior, request-local overlays and read-only consumers. Existing host-local theme/consent APIs write and issue tokens; they are not already the proposed read-only Base-issued design.              |
+| B. Preference-specific TanStack Start BFF | Consider a dedicated API entrypoint for Info/Docs/News/Help where no browser-facing Rails Preference BFF is exposed.                | Define route ownership, credential admission and isolation from public content SSR/API clients; reconcile zero-cookie restrictions explicitly. This would change an existing boundary and requires approval, not generic cookie forwarding. |
+| C. JS-readable display cookies            | Consider existing short display projections such as `ct`, `tz`, `cu`, `df`, `tf`, `mo`, `dn`, and `ps`.                             | These are neither source of truth nor credentials. Define tamper validation, precedence, partial updates, generation skew, cache selection and safe recovery. Rails runtime authority remains separate.                                     |
 
 A/B/C and their combination are **Open**. JWTs remain HttpOnly under every alternative. Current
 mirror cookies mean C is partly an existing implementation, but re-adopting it as a deliberate
-frontend contract changes its scope, guarantees and precedence rather than introducing cookies
-from nothing.
+frontend contract changes its scope, guarantees and precedence rather than introducing cookies from
+nothing.
 
 Core's [accepted TanStack boundary](tanstack-start-zero-cookie-ui-origin-boundary.md) excludes
 Cookie/Set-Cookie and credential-based personalization from the UI origin. It explicitly approves
@@ -122,21 +154,23 @@ Global no-credential-personalization wording. Deployment and newer local Edge wo
 Unverified. Reconcile this evidence before selecting B.
 
 The designer reports a separately requested removal of Edge's `language` cookie dependency. The
-inspected remote feature still reads it in Core, and surviving dev/net apex detectors disable
-cookie writes while retaining reads. Public display-locale helpers also remain, with public route
-integration deferred in Edge ADR 019. This investigation does not restore or authorize that dependency.
+inspected remote feature still reads it in Core, and surviving dev/net apex detectors disable cookie
+writes while retaining reads. Public display-locale helpers also remain, with public route
+integration deferred in Edge ADR 019. This investigation does not restore or authorize that
+dependency.
 
 ## Sharing, signing and security review
 
-Domain-scoped transport sends the cookie to more sibling hosts. Inventory every recipient,
-including public/asset/third-party-managed hosts, logs, upstream proxies and Edge dispatch before
-approving scope. HttpOnly does not prevent those servers from receiving the JWT. Same-site sibling
-origins remain separate trust boundaries; CSRF, Origin and Fetch Metadata protections must survive.
+Domain-scoped transport sends the cookie to more sibling hosts. Inventory every recipient, including
+public/asset/third-party-managed hosts, logs, upstream proxies and Edge dispatch before approving
+scope. HttpOnly does not prevent those servers from receiving the JWT. Same-site sibling origins
+remain separate trust boundaries; CSRF, Origin and Fetch Metadata protections must survive.
 
 The current `__Host-` prefix is incompatible with a `Domain` attribute. A `__Secure-` name could
 permit domain scope but would not preserve host-only injection protection. Final naming, duplicate
-host/domain cookie precedence, legacy cleanup and subdomain injection defenses remain Open.
-The browser constraints are documented by [MDN Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
+host/domain cookie precedence, legacy cleanup and subdomain injection defenses remain Open. The
+browser constraints are documented by
+[MDN Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
 
 Current shared Rails code requires and exposes Preference private-key material through the registry
 and can issue outside Base. The desired physical separation needs evidence of process credentials,
@@ -167,25 +201,25 @@ Before accepting mixed generations, specify:
   handling of stale responses. Recovery cannot become GET issuance or a hidden refresh mechanism.
 - Safe failure: validated bounded display defaults or explicit errors as appropriate, no persistence
   from mirrors, and no consent/security grant from missing, stale or contradictory data.
-- Cache behavior: display JSON, SSR, browser HTTP cache, service workers and back/forward history after
-  change/reset/sign-out. Existing browser APIs use `no-store`; Core/Warp are excluded from Global's
-  default, so family-specific evidence is required. No cache purge or browser-history guarantee has
-  been demonstrated in this session.
+- Cache behavior: display JSON, SSR, browser HTTP cache, service workers and back/forward history
+  after change/reset/sign-out. Existing browser APIs use `no-store`; Core/Warp are excluded from
+  Global's default, so family-specific evidence is required. No cache purge or browser-history
+  guarantee has been demonstrated in this session.
 
 ## Relationship to existing decisions
 
 This record supersedes **none** of the following. Supersession requires the final approved decision.
 
-| Record | Current relationship |
-| --- | --- |
-| [Preference scope and persistent-state separation](preference-scope-and-browser-persistent-state-separation.md) | Preserve display/usage scope and reserved `continuity`; despite an inconsistent index listing, its body is Accepted and contains no supersession notice. |
-| [Soft bubble doctrine](preference-soft-bubble-doctrine.md), [Actor facade](actor-current-facade.md) | Preserve domain/DB separation and facade; authority and hydration amendments supersede historical Sign/IdP and auth `prf` wording. |
-| [Cookie scope](cookie-domain-scope-by-surface.md), [browser family capability](preference-browser-transport-family-capability.md) | Current host-only transport and family-local APIs remain governing. Domain sharing/Base-only issuance would require explicit scoped replacement. |
-| [Invalid browser credential recovery](invalid-browser-credential-recovery.md) | Preserve failure taxonomy, non-issuing GET/HEAD recovery and concurrency guarantees. Its predecessor is Superseded. |
-| [TanStack zero-cookie UI](tanstack-start-zero-cookie-ui-origin-boundary.md) | Preserve Core's UI/Rails boundary; future API ownership changes need an explicit decision. |
-| [Theme contract](theme-preference-cookie-and-param-contract.md), [localization flow](localization-preference-flow.md) | Keep stable keys and request overlay separation. Theme API mirror-read drift is recorded, not endorsed. |
-| [Re-login record recency](preference-relogin-reconciliation-record-recency.md) | Still marked Accepted; current per-key implementation/docs conflict. Resolve that governance drift independently of TTL selection. |
-| [Default no-store](global-and-publishing-default-no-store-policy.md) | Applies to its declared roots; does not establish caching safety for every consumer. |
+| Record                                                                                                                            | Current relationship                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Preference scope and persistent-state separation](preference-scope-and-browser-persistent-state-separation.md)                   | Preserve display/usage scope and reserved `continuity`; despite an inconsistent index listing, its body is Accepted and contains no supersession notice. |
+| [Soft bubble doctrine](preference-soft-bubble-doctrine.md), [Actor facade](actor-current-facade.md)                               | Preserve domain/DB separation and facade; authority and hydration amendments supersede historical Sign/IdP and auth `prf` wording.                       |
+| [Cookie scope](cookie-domain-scope-by-surface.md), [browser family capability](preference-browser-transport-family-capability.md) | Current host-only transport and family-local APIs remain governing. Domain sharing/Base-only issuance would require explicit scoped replacement.         |
+| [Invalid browser credential recovery](invalid-browser-credential-recovery.md)                                                     | Preserve failure taxonomy, non-issuing GET/HEAD recovery and concurrency guarantees. Its predecessor is Superseded.                                      |
+| [TanStack zero-cookie UI](tanstack-start-zero-cookie-ui-origin-boundary.md)                                                       | Preserve Core's UI/Rails boundary; future API ownership changes need an explicit decision.                                                               |
+| [Theme contract](theme-preference-cookie-and-param-contract.md), [localization flow](localization-preference-flow.md)             | Keep stable keys and request overlay separation. Theme API mirror-read drift is recorded, not endorsed.                                                  |
+| [Re-login record recency](preference-relogin-reconciliation-record-recency.md)                                                    | Still marked Accepted; current per-key implementation/docs conflict. Resolve that governance drift independently of TTL selection.                       |
+| [Default no-store](global-and-publishing-default-no-store-policy.md)                                                              | Applies to its declared roots; does not establish caching safety for every consumer.                                                                     |
 
 ## Decision status and next decision gate
 

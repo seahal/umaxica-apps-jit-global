@@ -78,8 +78,9 @@ module Auth
       before_action :reset_flash
       before_action :set_preferences_cookie
       before_action :resolve_param_context
-      before_action :enforce_admission_curfew!
+      # Refuse blocked entry before curfew handling can cancel its admitted attempt.
       before_action :enforce_sign_entry_sentry!
+      before_action :enforce_admission_curfew!
       before_action :set_region
       before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor

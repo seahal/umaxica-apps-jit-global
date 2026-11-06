@@ -116,8 +116,9 @@ class ClientTelephone < AppPrincipalRecord
 
   def sign_up_parent_matches?(flow, session_nonce)
     session_nonce.is_a?(String) && session_nonce.valid_encoding? && session_nonce.encoding.ascii_compatible? &&
-      session_nonce.present? && flow.nonce_matches?(session_nonce) && flow.sign_up_checkpoint_pending? &&
-      flow.step == "checkpoint" && flow.expires_at > flow.class.database_now &&
+      session_nonce.present? && flow.nonce_matches?(session_nonce) &&
+      flow.status_id == ClientSignUpFlowStatus::FINALIZING &&
+      flow.step == "finalizing" && flow.expires_at > flow.class.database_now &&
       !flow.lapsed?(flow.class.database_now) &&
       flow.entry_method == "telephone" && flow.pending_contact_type == "telephone" &&
       flow.pending_contact_id == id && flow.principal_id == user_id && flow.requirement_cleared?(:otp)

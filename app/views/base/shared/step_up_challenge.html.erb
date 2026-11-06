@@ -1,0 +1,12 @@
+<% content_for :page_title, t("auth.step_up.challenge.title") %>
+<div class="ui-page ui-page--narrow">
+  <header class="flex flex-col gap-3">
+    <h1 class="min-w-0 wrap-anywhere text-2xl leading-snug font-semibold text-balance text-fg sm:text-3xl">
+      <%= t("auth.step_up.challenge.title") %>
+    </h1>
+    <p class="ui-prose text-base text-pretty text-fg-muted">
+      <%= t("auth.step_up.challenge.description") %>
+    </p>
+  </header>
+  <p><%= link_to t("actions.continue"), entry_path %></p>
+</div>

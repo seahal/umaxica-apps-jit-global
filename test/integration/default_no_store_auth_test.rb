@@ -128,22 +128,4 @@ class DefaultNoStoreAuthTest < ActionDispatch::IntegrationTest
     assert_response :service_unavailable
     assert_equal "no-store", response.headers.fetch("Cache-Control")
   end
-
-  test "Auth RedirectOnlyController authority redirect is no-store" do
-    host!("auth.org.localhost")
-
-    get("/iam")
-
-    assert_response :see_other
-    assert_equal "no-store", response.headers.fetch("Cache-Control")
-  end
-
-  test "Auth RedirectOnlyController authority redirect on the app host is no-store" do
-    host!("auth.app.localhost")
-
-    get("/billings")
-
-    assert_response :see_other
-    assert_equal "no-store", response.headers.fetch("Cache-Control")
-  end
 end

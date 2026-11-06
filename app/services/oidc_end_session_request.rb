@@ -30,7 +30,7 @@ class OidcEndSessionRequest < ApplicationService
     return invalid_request("post_logout_redirect_uri is invalid") if invalid_no_hint_redirect_uri?
     return handle_logout_request if param_present?(:logout_request)
 
-    success(source: SOURCE_NO_HINT, requires_confirmation: true)
+    handle_no_hint
   end
 
   private
@@ -92,6 +92,24 @@ class OidcEndSessionRequest < ApplicationService
       client: client,
       client_id: client.client_id,
       legacy_ri: logout_request[:ri],
+    )
+  end
+
+  def handle_no_hint
+    redirect_uri = param(:post_logout_redirect_uri).presence
+    return success(source: SOURCE_NO_HINT, requires_confirmation: true) unless redirect_uri
+
+    client = OidcClientRegistry.find(param(:client_id))
+    return invalid_request("client_id is invalid") unless client
+
+    success(
+      source: SOURCE_NO_HINT,
+      client: client,
+      client_id: client.client_id,
+      post_logout_redirect_uri: redirect_uri,
+      state: param(:state).presence,
+      ui_locales: param(:ui_locales).presence,
+      requires_confirmation: true,
     )
   end
 

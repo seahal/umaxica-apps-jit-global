@@ -38,11 +38,11 @@ class AuthStaffTest < ActiveSupport::TestCase
       @session = {}
     end
 
-    def sign_org_edge_v0_token_dbsc_path
+    def visa_org_edge_v0_token_dbsc_path
       "/edge/v0/token/dbsc"
     end
 
-    def sign_app_edge_v0_token_dbsc_path
+    def visa_app_edge_v0_token_dbsc_path
       "/edge/v0/token/dbsc"
     end
   end

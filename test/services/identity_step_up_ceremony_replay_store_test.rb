@@ -8,7 +8,6 @@ class IdentityStepUpCeremonyReplayStoreTest < ActiveSupport::TestCase
   test "for returns a store for each known surface" do
     assert_kind_of IdentityStepUpCeremonyReplayStore, IdentityStepUpCeremonyReplayStore.for(:app)
     assert_kind_of IdentityStepUpCeremonyReplayStore, IdentityStepUpCeremonyReplayStore.for(:org)
-
   end
 
   test "for raises when the surface is invalid" do

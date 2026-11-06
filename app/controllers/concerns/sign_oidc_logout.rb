@@ -68,7 +68,9 @@ module SignOidcLogout
     device = current_session&.device_session_record
     hinted = @oidc_end_session_request.source == OidcEndSessionRequest::SOURCE_ID_TOKEN_HINT
     return render_oidc_end_session_forbidden if hinted && !device&.usable?
-    return render_oidc_already_signed_out unless device&.usable?
+    unless device&.usable?
+      return complete_no_hint_logout_without_op_session!(@oidc_end_session_request)
+    end
 
     grant = oidc_logout_hint_grant(@oidc_end_session_request, device) if hinted
     return render_oidc_end_session_forbidden if hinted && !grant
@@ -139,7 +141,7 @@ module SignOidcLogout
     end
 
     clear_oidc_logout_browser!
-    if result.grant_public_id.present? && result.post_logout_redirect_uri.present?
+    if result.post_logout_redirect_uri.present?
       redirect_to_jump_url(post_logout_redirect_uri_with_state(result), strict: true, status: :see_other)
     else
       issue_sign_out_notice!
@@ -156,6 +158,19 @@ module SignOidcLogout
     Actor.clear
     reset_session_and_clear_inertia_history!
     session[OIDC_LOGOUT_COMPLETED_SESSION_KEY] = true
+  end
+
+  def complete_no_hint_logout_without_op_session!(result)
+    return render_oidc_already_signed_out unless
+      result.source == OidcEndSessionRequest::SOURCE_NO_HINT && result.post_logout_redirect_uri.present?
+
+    clear_oidc_logout_browser!
+    redirect_to_jump_url(
+      post_logout_redirect_uri_with_state(result), strict: true, status: :see_other,
+    )
+  rescue CommonRedirect::JumpRedirectFailure, JumpRtConfigurationError => e
+    log_oidc_logout_failure("no_hint_return_unavailable", e)
+    render_oidc_already_signed_out
   end
 
   def persisted_oidc_device_state(device)

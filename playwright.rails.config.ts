@@ -9,7 +9,16 @@ if (inheritedEnvironment !== undefined && inheritedEnvironment !== "test") {
   throw new Error("Rails E2E refuses RAILS_ENV other than test");
 }
 const runId = `rails-e2e-${randomUUID()}`;
+const secretKeyBase = randomBytes(64).toString("hex");
 const chromiumExecutablePath = process.env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"];
+
+// Share the isolated server credentials with browser-side fixture setup subprocesses.
+process.env["RAILS_ENV"] = "test";
+process.env["RACK_ENV"] = "test";
+process.env["SECRET_KEY_BASE"] = secretKeyBase;
+process.env["UMAXICA_RUNTIME_ROLE"] = "shared";
+process.env["VALKEY_NAMESPACE_RUN_ID"] = runId;
+process.env["VALKEY_NAMESPACE_WORKER_ID"] = "browser";
 
 export default defineConfig({
   testDir: "./e2e/rails",
@@ -56,7 +65,7 @@ export default defineConfig({
       RACK_ENV: "test",
       RAILS_BROWSER_E2E: "1",
       UMAXICA_RUNTIME_ROLE: "shared",
-      SECRET_KEY_BASE: randomBytes(64).toString("hex"),
+      SECRET_KEY_BASE: secretKeyBase,
       VITE_RUBY_MODE: "test",
       VITE_RUBY_PUBLIC_OUTPUT_DIR: "vite-e2e-test",
       VITE_RUBY_BUILD_CACHE_DIR: "tmp/cache/vite-e2e",

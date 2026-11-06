@@ -29,7 +29,10 @@ class StepUpEmailDeliveryReleaseRaceTest < ActiveSupport::TestCase
       scope: transaction.required_scope, return_to: transaction.return_to,
       status: "PENDING", discard_at: transaction.expires_at,
     )
-    generation = record.issue_bound_email_code!(transaction: transaction, credential_ref: email.public_id, code: "012345")
+    generation = record.issue_bound_email_code!(
+      transaction: transaction, credential_ref: email.public_id,
+      code: "012345",
+    )
     ciphertext = OutboundSensitivePayload.encrypt_email_otp("012345")
     sending = Queue.new
     proceed = Queue.new
@@ -37,45 +40,51 @@ class StepUpEmailDeliveryReleaseRaceTest < ActiveSupport::TestCase
     released = Queue.new
     delivery = release = nil
     original_with = Email::App::OtpMailer.method(:with)
-    paused_with = lambda do |**arguments|
-      sending << true
-      proceed.pop
-      original_with.call(**arguments)
-    end
+    paused_with =
+      lambda do |**arguments|
+        sending << true
+        proceed.pop
+        original_with.call(**arguments)
+      end
 
     Email::App::OtpMailer.stub(:with, paused_with) do
-      delivery = Thread.new do
-        IdentityStepUpEmailDeliveryRecorder.call!(
-          credential: ClientEmail.find(email.id), transaction_ref: transaction.transaction_id,
-          generation: generation, encrypted_code: ciphertext,
-        )
-      ensure
-        ActiveRecord::Base.connection_handler.clear_active_connections!
-      end
+      delivery =
+        Thread.new do
+          IdentityStepUpEmailDeliveryRecorder.call!(
+            credential: ClientEmail.find(email.id), transaction_ref: transaction.transaction_id,
+            generation: generation, encrypted_code: ciphertext,
+          )
+        ensure
+          ActiveRecord::Base.connection_handler.clear_active_connections!
+        end
       Timeout.timeout(10) { sending.pop }
-      release = Thread.new do
-        ClientEmail.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
-          release_ready << connection.select_value("SELECT pg_backend_pid()").to_i
-          ClientEmail.find(email.id).release_binding!
-          released << true
-        end
-      ensure
-        ActiveRecord::Base.connection_handler.clear_active_connections!
-      end
-      pid = Timeout.timeout(10) { release_ready.pop }
-      blocked = Timeout.timeout(5) do
-        loop do
-          break false unless released.empty?
-
-          waiting = ClientEmail.uncached do
-            ClientEmail.lease_connection.select_value("SELECT cardinality(pg_blocking_pids(#{Integer(pid)})) > 0")
+      release =
+        Thread.new do
+          ClientEmail.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+            release_ready << connection.select_value("SELECT pg_backend_pid()").to_i
+            ClientEmail.find(email.id).release_binding!
+            released << true
           end
-          break true if waiting
-
-          Thread.pass
+        ensure
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
-      end
+      pid = Timeout.timeout(10) { release_ready.pop }
+      blocked =
+        Timeout.timeout(5) do
+          loop do
+            break false unless released.empty?
+
+            waiting =
+              ClientEmail.uncached do
+                ClientEmail.lease_connection.select_value("SELECT cardinality(pg_blocking_pids(#{Integer(pid)})) > 0")
+              end
+            break true if waiting
+
+            Thread.pass
+          end
+        end
       proceed << true
+
       assert blocked
       assert Timeout.timeout(10) { delivery.value }
       assert Timeout.timeout(10) { release.value }
@@ -90,13 +99,37 @@ class StepUpEmailDeliveryReleaseRaceTest < ActiveSupport::TestCase
     proceed << true if proceed
     delivery&.join(10)
     release&.join(10)
-    record&.delete
-    transaction&.delete
-    device&.update!(current_refresh_token_id: nil)
-    token&.delete
-    device&.delete
-    email&.delete
-    actor&.delete
+    if token
+      OpBaseAppRecord.connected_to(role: :writing) do
+        token_ids = [token.id]
+        ClientStepUpSession.where(user_token_id: token_ids).delete_all
+        ClientStepUpCeremonyTransaction.where(id: transaction&.id).delete_all if transaction
+        OpAppGrant.where(client_token_id: token_ids).delete_all
+        ClientDeviceSession.where(id: device&.id).update_all(current_refresh_token_id: nil) if device
+        ClientToken.where(id: token_ids).delete_all
+        ClientDeviceSession.where(id: device&.id).delete_all if device
+      end
+    end
+    if actor
+      AppZenithRecord.connected_to(role: :writing) do
+        ClientEmail.where(id: email&.id).delete_all if email
+        ClientAccount.where(user_id: actor.id).delete_all
+        ClientAuthorityLock.where(client_id: actor.id).delete_all
+        Client.where(id: actor.id).delete_all
+      end
+    end
+    if token
+      OpBaseAppRecord.connected_to(role: :writing) do
+        assert_not ClientStepUpSession.exists?(user_token_id: token.id)
+        assert_not ClientToken.exists?(id: token.id)
+        assert_not ClientDeviceSession.exists?(id: device.id) if device
+      end
+    end
+    if actor
+      AppZenithRecord.connected_to(role: :writing) do
+        assert_not Client.exists?(id: actor.id)
+      end
+    end
     ActionMailer::Base.deliveries.clear
   end
 end

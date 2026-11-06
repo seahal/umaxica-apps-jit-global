@@ -29,7 +29,12 @@ module Base
         private
 
         def finalize_completion_transaction!(actor:, token:, transaction:, result_reference:)
-          return super if %w(step_up reauthentication).include?(transaction.purpose)
+          if transaction.purpose == "step_up"
+            raise BaseAuthAdmissionCoordinator::Denied.new(
+              "ordinary step-up uses the OP callback", code: "invalid_admission",
+            )
+          end
+          return super if transaction.purpose == "reauthentication"
 
           unless %w(bootstrap credential_registration).include?(transaction.purpose) &&
               transaction.method == "passkey"
@@ -41,6 +46,7 @@ module Base
           IdentityPasskeyRegistrationFinalCommitter.call!(
             actor: actor, token: token, transaction: transaction, result_reference: result_reference,
             ip_address: request.remote_ip, user_agent: request.user_agent,
+            step_up_evidence: (current_step_up_evidence if transaction.purpose == "credential_registration"),
           )
           transaction.reload
         rescue IdentityPasskeyCeremonyContract::Error

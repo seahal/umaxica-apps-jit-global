@@ -52,6 +52,7 @@ module Auth
         rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
         before_action :reject_social_sign_in_callback_while_authenticated!, only: :omniauth
         before_action :verify_social_callback_request!, only: [:omniauth], raise: false
+        before_action :reject_social_failure_callback_for_wrong_admission!, only: :failure
 
         # Allow unauthenticated access for login intent
         # For link intent, auth is checked in prepare_social_auth_intent!
@@ -74,6 +75,7 @@ module Auth
 
           intent = current_social_auth_intent
           Rails.logger.debug(JitLogEvent.format("sign.social.omniauth.processing_callback", intent: intent))
+          social_ri = current_social_auth_ri
           result = process_social_auth_callback(callback_result)
           return if performed?
 
@@ -92,9 +94,11 @@ module Auth
             user,
             intent.presence || "login",
             SocialIdentifiable.normalize_provider(auth.provider).humanize,
-            result.identity,
             existing_account: result.existing_account,
             pt: result.pt,
+            entry: result.entry,
+            ri: social_ri,
+            signup_required: result.signup_required?,
           )
         end
 
@@ -175,6 +179,14 @@ module Auth
           reject_new_sign_in_if_authenticated!
         end
 
+        def reject_social_failure_callback_for_wrong_admission!
+          return unless current_social_auth_intent.to_s == "login"
+          return if session[SocialAuth::SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY].blank?
+          return if social_login_callback_admission_matches_current_sid?
+
+          render_sign_in_phase_refusal!(reason_code: "wrong_binding")
+        end
+
         def verified_external_authentication_callback(auth)
           provider = SocialIdentifiable.normalize_provider(params[:provider])
           operation = current_social_auth_intent.presence || "login"
@@ -230,9 +242,8 @@ module Auth
           )
         end
 
-        def handle_successful_auth(user, intent, provider_name, identity, existing_account: nil, pt: nil,
-                                   entry: nil)
-          _ = entry
+        def handle_successful_auth(user, intent, provider_name, existing_account:, pt:, entry:, ri:,
+                                   signup_required:)
           Rails.logger.debug(
             JitLogEvent.format(
               "sign.social.omniauth.handle_successful_auth",
@@ -245,8 +256,12 @@ module Auth
           when "link"
             handle_link_intent(provider_name)
           when "login"
-            if user.blank? && identity.blank?
-              handle_pending_social_sign_up_intent(provider_name, pt: pt)
+            if signup_required
+              unless entry == "sign_up"
+                raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+              end
+
+              handle_pending_social_sign_up_intent(pt:, entry:, ri:)
               return
             end
 
@@ -257,34 +272,67 @@ module Auth
           end
         end
 
-        def handle_pending_social_sign_up_intent(_provider_name, pt: nil)
+        def handle_pending_social_sign_up_intent(pt:, entry:, ri:)
           callback_result = @external_authentication_callback_result
           unless callback_result.is_a?(ExternalAuthentication::CallbackResult) && callback_result.verified?
             raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
           end
+          raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") unless entry == "sign_up"
 
           provider = callback_result.principal.provider
-
-          with_pending_social_sign_up_lock(provider, callback_result.principal.subject) do
-            # WU-05c (R2-A): the sign-up entry created the attempt's one Flow; the callback never creates one.
-            cycle = current_social_sign_up_flow
-            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") if cycle.nil?
-
-            store_pending_social_signup_evidence!(cycle, callback_result)
-            if cycle.step == "checkpoint"
-              return redirect_pending_social_signup_confirmation(provider, pt: pt)
-            end
-
-            advance_pending_social_sign_up_flow!(cycle)
-          end
+          cycle = create_pending_social_sign_up_flow!(provider:, callback_result:, ri:)
+          session[:auth_app_up_sequence_id] = cycle.public_id
 
           redirect_to(
             public_send(
               :"auth_app_sign_up_guard_#{provider}_path",
-              ri: params[:ri].presence || current_social_auth_ri,
+              ri: RequestContextContract.normalize_region(ri || params[:ri]),
               pt: pt.presence,
             ),
           )
+        rescue SignUpCycleLocator::OwnershipMismatch
+          raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+        end
+
+        def create_pending_social_sign_up_flow!(provider:, callback_result:, ri:)
+          with_pending_social_sign_up_lock(provider, callback_result.principal.subject) do
+            ceremony = admitted_auth_ceremony_session
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") unless ceremony
+
+            sign_up_flow_locator.create_for_admission!(
+              admission_binding: auth_sign_up_admission_binding!,
+              ceremony_session: ceremony,
+              entry_method: provider,
+              social_provider: provider,
+              return_to: auth_app_sign_up_path(ri: RequestContextContract.normalize_region(ri)),
+              reject_prior_flow: true,
+            ) do |flow|
+              record_pending_social_signup_callback!(flow, ceremony, callback_result)
+            end
+          end
+        end
+
+        def record_pending_social_signup_callback!(flow, ceremony, callback_result)
+          # AdmissionBinding -> Ceremony is the same lock order used by cancellation.
+          # Recheck after obtaining both locks so a callback cannot revive a canceled attempt.
+          ceremony.with_lock do
+            decision_time = ceremony.class.database_now
+            unless ceremony.active?(now: decision_time) && ceremony.admission_purpose == "authentication_handoff" &&
+                auth_ceremony_matches_intent?("sign_up") && !ceremony.authentication_evidence_recorded?
+              raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+            end
+
+            start_result = SignUpStateMachine.call(
+              ticket: flow,
+              event: :start_social_callback,
+              actor_context: Actor.authn,
+            )
+            raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless
+              start_result.status == :advanced
+
+            store_pending_social_signup_evidence!(flow, callback_result)
+            advance_pending_social_sign_up_flow!(flow)
+          end
         end
 
         def with_pending_social_sign_up_lock(provider, uid, &)
@@ -462,13 +510,6 @@ module Auth
           )
           redirect_to(
             auth_app_sign_in_path(ri: params[:ri].presence || current_social_auth_ri),
-          )
-        end
-
-        # E1 (WU-24h): the Flow is the one bound to this admission; the locator is only a hint.
-        def current_social_sign_up_flow
-          sign_up_flow_locator.current(
-            admission_binding: auth_sign_up_admission_binding!, ceremony_session: admitted_auth_ceremony_session,
           )
         end
 

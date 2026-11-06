@@ -120,7 +120,7 @@ module SignEmailRegistrationFlow
     case result.status
     when :issued
       deliver_registration_email_otp!(code: result.code, transaction: result.transaction)
-    when :rate_limited, :locked, :unavailable
+    when :registered_destination, :rate_limited, :locked, :unavailable
       # A retained proof must remain available to the original verification retry.
     else
       raise IdentityEmailCeremonyContract::Error, "unsupported registration resend result"

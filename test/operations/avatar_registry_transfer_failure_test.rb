@@ -31,6 +31,8 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
         end
       source = BaseSelectorBootstrapAuthority.call(surface: source_surface.to_sym, principal: source_actor)
       target = BaseSelectorBootstrapAuthority.call(surface: target_surface.to_sym, principal: target_actor)
+      source_token, source_evidence = step_up_for(source_actor, source_surface)
+      target_token, target_evidence = step_up_for(target_actor, target_surface)
       avatar =
         case source_surface
         when "app" then source.avatar
@@ -54,6 +56,8 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
           ["avatar_transfer", source_surface, source_actor.public_id, source.account.public_id,
            avatar.public_id, target_surface, target.collective.public_id,].join("\0"),
         ),
+        step_up_token: source_token,
+        step_up_evidence: source_evidence,
       )
       before_reservation = reservation.attributes
       before_legacy = avatar.avatar_ownership_periods.order(:id).map(&:attributes)
@@ -77,6 +81,7 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
           AvatarOwnershipTransfers::RegistryAcceptOperation.call(
             actor: target_actor, surface: target_surface, subject_public_id: target.account.public_id,
             reservation_public_id: reservation.public_id,
+            step_up_token: target_token, step_up_evidence: target_evidence,
           )
         end
       end
@@ -92,6 +97,7 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
       accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
         actor: target_actor, surface: target_surface, subject_public_id: target.account.public_id,
         reservation_public_id: reservation.public_id,
+        step_up_token: target_token, step_up_evidence: target_evidence,
       )
 
       assert_equal "accepted", accepted.state
@@ -107,5 +113,42 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
       assert_equal committed, replay.attributes
       assert_equal period_counts, [avatar.enterprise_ownership_periods.count, avatar.bureau_ownership_periods.count]
     end
+  end
+
+  private
+
+  def step_up_for(actor, surface)
+    app = surface == "app"
+    token_class = app ? ClientToken : OperatorToken
+    grant_class = app ? OpAppGrant : OpOrgGrant
+    record_class = app ? OpBaseAppRecord : OpBaseOrgRecord
+    client = OidcClientRegistry.find!("base-#{surface}-ww")
+    now = record_class.database_now
+    owner_key = app ? :user : :staff
+    token = token_class.create!(
+      :authentication_epoch => actor.authentication_epoch,
+      owner_key => actor,
+      :root_login_established_at => now,
+      :discard_at => now + 1.hour,
+      **(app ? {} : { authentication_context: AuthenticationContextValue::NORMAL_KEY }),
+    )
+    token.rotate_refresh_token!(now:)
+    device = token.device_session_record!
+    auth_time = now.to_time.to_i - 1
+    grant_owner = app ? :client_token : :operator_token
+    grant = grant_class.create!(
+      :authentication_epoch => token.authentication_epoch, grant_owner => token,
+      :device_session_id => device.id, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
+      :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16),
+      :oidc_auth_time => Time.at(auth_time).utc, :oidc_acr => StepUpEvidenceResolver::STEP_UP_ACR,
+      :oidc_amr => JSON.generate(["passkey"]), :refresh_token_expires_at => now + 1.hour,
+    )
+    grant.issue_refresh_token!(now:)
+    evidence = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time:, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: app ? "client" : "operator"),
+      client_id: client.client_id, aud: [client.aud], jti: grant.oidc_jti,
+    )
+    [token, evidence]
   end
 end

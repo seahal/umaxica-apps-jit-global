@@ -22,6 +22,7 @@ import {
   passkeysSupported,
 } from "@/features/auth/passkeys/webauthn";
 import { readNonEmptyString, readObject, readString } from "@/lib/payload";
+import { handleStepUpChallenge } from "@/lib/step_up_challenge";
 
 import { csrfToken } from "./csrf";
 
@@ -52,6 +53,10 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 }
 
 async function readFailure(response: Response, fallback: string): Promise<Error | null> {
+  if (handleStepUpChallenge(response)) {
+    return null;
+  }
+
   /* v8 ignore next -- fetch always supplies a Headers object */
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {

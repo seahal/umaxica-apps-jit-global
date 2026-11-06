@@ -1,9 +1,9 @@
 # Sign-Up Sequence
 
-> **Current scope:** COM authentication and Visitor sign-up have been retired. APP sign-up remains
-> active; ORG invitation creation currently refuses new invitations. The route inventories and
-> implementation descriptions below include historical COM material and require reconciliation
-> before they can be used as a current route or lifecycle reference. See
+> **Current scope:** APP sign-up and ORG operator lifecycle routes are active. COM authentication
+> and Visitor sign-up have been retired. The COM sections below are retained historical material;
+> their routes and lifecycle descriptions are not current contracts. ORG invitation provisioning
+> currently refuses new invitations. See
 > [Sign-Up Eligibility Policy](../policy/signup-eligibility.md) for the current birthdate rule.
 
 ## Effective admission intent
@@ -12,17 +12,17 @@ At issuance, `AuthEntryIntentResolver` selects Sign In for an ordinary OIDC requ
 OP's persisted `prompt=create`, or the explicit Switch target when switching. The Binding stores the
 resulting immutable `entry_intent` as `sign_in` or `sign_up`. Re-verification purposes store the
 explicit value `not_applicable`; every realm's database rejects a missing intent or a purpose/intent
-mismatch. Auth entry GETs, confirmed GET redemption, admitted ceremony checks and Base's confirmation return
-target use the same resolver and retained fact. Changing a route or browser parameter cannot change
-the selected intent; wrong-intent entry refuses before consumption.
+mismatch. Auth entry GETs, confirmed GET redemption, admitted ceremony checks and Base's
+confirmation return target use the same resolver and retained fact. Changing a route or browser
+parameter cannot change the selected intent; wrong-intent entry refuses before consumption.
 
 Every Binding stores an immutable, required `curfew_at` from its OP writer's issuance clock plus 30
 minutes, without a database default. A Switch requires the original redeemed/cancelled Binding and
 copies that deadline; repeated Switches never extend it. Switch handoff issuance refuses a missing
 deadline and refuses at or after that deadline, using the OP database clock. Handoff receipt also
-checks its expiry against that clock. The short-lived acceptance expiry is a
-separate fact. An APP sign-up Flow's expiry is capped at its Binding's curfew when the Flow is
-created. This cap alone does not establish an end-to-end deadline for every ceremony consumer.
+checks its expiry against that clock. The short-lived acceptance expiry is a separate fact. An APP
+sign-up Flow's expiry is capped at its Binding's curfew when the Flow is created. This cap alone
+does not establish an end-to-end deadline for every ceremony consumer.
 
 APP Social results also resolve their Flow through the required `auth_admission_binding_id`. The
 signed result's session reference must identify a redeemed sign-up Binding that owns that Flow.
@@ -34,75 +34,71 @@ Social receiver until WU-05 replaces that transport with shared Finalization.
 
 ## Contact entry validation and replacement
 
-APP email and telephone entry POSTs accept consent only as the checkbox value `"1"` or the
-JSON boolean `true`. Missing, null, empty, unchecked and unsupported values are rejected with the
+APP email and telephone entry POSTs accept consent only as the checkbox value `"1"` or the JSON
+boolean `true`. Missing, null, empty, unchecked and unsupported values are rejected with the
 existing validation response. Telephone entry requires both policy and MFA-use consent. This
 request-boundary normalization preserves the shared contact models' other creation workflows.
 
 Sign-up entry is fail-closed (D-177). While the browser's admitted attempt is nonterminal (including
 past its deadline) or terminal with cleanup pending, failed or past its retry cap, a second entry
 submit is refused with the contact-held copy (422) and changes nothing: the earlier flow, browser
-locator, pending contact, principal and proof stay as they are and no OTP is queued. Controllers never
-end or clean an earlier attempt to admit a new one. A new attempt after release starts from a new
-Base admission; a session hint naming the released attempt of an earlier admission is then dropped.
+locator, pending contact, principal and proof stay as they are and no OTP is queued. Controllers
+never end or clean an earlier attempt to admit a new one. A new attempt after release starts from a
+new Base admission; a session hint naming the released attempt of an earlier admission is then
+dropped.
 
-`RetentionPurgeJob` reports stuck APP registrations after its cleanup and retention work using
-the read-only `SignUpStuckRegistrationReportQuery`. The structured event contains the surface, case,
+`RetentionPurgeJob` reports stuck APP registrations after its cleanup and retention work using the
+read-only `SignUpStuckRegistrationReportQuery`. The structured event contains the surface, case,
 count and public identifiers, never contact values. A report failure is logged without stopping the
-job. The report itself never releases a registration, and no operator command inspects or retries
-a sign-up attempt by hand (D-196); the
-[stuck registration runbook](../operations/stuck-sign-up-registration-runbook.md) describes the
-escalation. Retention preserves a non-completed terminal Flow until its artifact cleanup completes.
-An unfinished principal/contact whose Flow is missing has no safe existing release entry point and
+job. The report itself never releases a registration, and no operator command inspects or retries a
+sign-up attempt by hand (D-196); the
+[stuck registration runbook](../runbooks/stuck-sign-up-registration.md) describes the escalation.
+Retention preserves a non-completed terminal Flow until its artifact cleanup completes. An
+unfinished principal/contact whose Flow is missing has no safe existing release entry point and
 remains held for escalation. ORG has no matching status and cleanup attempt schema, so it is outside
 this report.
 
-APP sign-up accepts a birthdate before the service date. Today and future dates are refused with
-422 without persisting the birthdate; an under-age HALTED branch is no longer part of the policy.
+APP sign-up accepts a birthdate before the service date. Today and future dates are refused with 422
+without persisting the birthdate; an under-age HALTED branch is no longer part of the policy.
 
-The reason completed App/Com registration enters the canonical Sign In admission before session
-issuance is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md)
-and [ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md). That system handoff is distinct from
+The reason completed APP registration enters the canonical Sign In admission before session issuance
+is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md) and
+[ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md). That system handoff is distinct from
 user-initiated Sign In/Sign Up switching.
 
-APP/COM artifact cleanup requires a terminal Flow. It locks that Flow before locking and re-reading
-the principal on its Zenith writer. Only a still-unfinished registration is eligible: APP checks the
-pending principal and contact; COM currently checks the pending contact. Registered principals are
-preserved. Contact retirement, pending Passkey deletion, audit outbox facts and principal retention
-share one principal transaction, with the principal written last. If any write fails, all those
-changes roll back and the OP cleanup fact remains retryable. The principal transaction and OP Flow
-transaction are separate database commits; retries re-evaluate the principal facts. APP telephone
-Passkey saving and its Secret reservation, delivery, completion and termination take the same
-Flow-before-principal lock order so they cannot deadlock with cleanup across databases.
+APP artifact cleanup requires a terminal Flow. It locks that Flow before locking and re-reading the
+principal on its Zenith writer. Only a still-unfinished registration is eligible: APP checks the
+pending principal and contact. Registered principals are preserved. Contact retirement, pending
+Passkey deletion, audit outbox facts and principal retention share one principal transaction, with
+the principal written last. If any write fails, all those changes roll back and the OP cleanup fact
+remains retryable. The principal transaction and OP Flow transaction are separate database commits;
+retries re-evaluate the principal facts. APP telephone Passkey saving and its Secret reservation,
+delivery, completion and termination take the same Flow-before-principal lock order so they cannot
+deadlock with cleanup across databases. Retired COM cleanup implementations are outside the active
+route and lifecycle contract described here.
 
 > **Authority boundary:** `acme/www` is the Session, Token, Account, Preference, Authorization, and
 > downstream-token Authority. `sign/id` is ceremony-only. Existing sign-side physical tables/models
 > do not imply sign-side authority. Do not use this document to reintroduce sign-side sessions,
 > refresh, preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
 
-> **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
-> vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
-> `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
-> `adr/idp-flow-lifecycle-vocabulary.md`; it is not implemented yet.
-
-This document records the sign-up routing sequence for the `app` and `com` sign surfaces, and the
-operator acquisition/lifecycle routing sequence for `org`. The `app` telephone and `com` telephone
-flows are now driven by `ClientSignUpFlow` / `VisitorSignUpFlow` tickets and `SignUpStateMachine`;
-the flow ticket is the source of truth for pending actor identity and contact tracking. Legacy
-per-surface session keys for pending actor ID have been removed.
+This document records the active APP sign-up and ORG operator acquisition/lifecycle routes. The
+retired COM Email and Telephone sections are historical implementation notes only. Active APP
+sign-up progression is driven by `ClientSignUpFlow` and `SignUpStateMachine`; the flow ticket is the
+source of truth for pending actor identity and contact tracking. Legacy per-surface session keys for
+pending actor ID have been removed. Lifecycle terms follow
+`adr/authentication-state-machine-normalization.md`.
 
 The public sign-up route vocabulary is frozen. This document tracks the accepted paths and the
 authority boundary migration target; it does not authorize changing `/sign/up/*` or `/social/*`
 paths.
 
-`org` is excluded from the six app/com user-facing sign-up routes below. It has
-invitation/provisioning entry points and operator lifecycle requests, not a normal end-user sign-up
-flow.
+`org` is excluded from the four active APP user-facing sign-up routes below. It has invitation and
+provisioning entry points and operator lifecycle requests, not a normal end-user sign-up flow.
 
-Org/operator signup checkpoint cancellation is intentionally not implemented as part of the app/com
-checkpoint flow. Future org work may reuse the sign-up cycle lifecycle predicates, but operator
-acquisition must continue to follow the org invitation and lifecycle-request boundaries until a
-separate ADR changes that policy.
+Org/operator acquisition and lifecycle-request cancellation are outside the APP sign-up checkpoint
+flow. Operator acquisition continues to follow the ORG invitation and lifecycle-request boundaries
+until a separate ADR changes that policy.
 
 ## Current Route Inventory
 
@@ -112,11 +108,6 @@ separate ADR changes that policy.
 2. Telephone sign-up.
 3. Google social sign-up.
 4. Apple social sign-up.
-
-`com` has two sign-up entry paths:
-
-1. Email sign-up.
-2. Telephone sign-up.
 
 `org` has two operator acquisition/lifecycle paths:
 
@@ -134,24 +125,23 @@ separate ADR changes that policy.
 
 Current surface terminology and inventory:
 
-| Surface | Term                                           | Actor/resource                                         | Identifier                                                            | Credential setup                                                                                            | Challenge                                                                          | Verification                                                                         | Session/token                                                                       | Chronicle/audit                        | Routes/controllers/views/tests                                                                                                                          |
-| ------- | ---------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`   | User/client registration                       | `Client`, contact identifiers, app social identities   | Email, telephone, Google provider assertion, Apple provider assertion | Birthdate checkpoint, passkey checkpoint, passcode checkpoint, and social identity binding where applicable | Sign-up checkpoint requirements; provider callback state validation for app social | Email/telephone OTP verification and checkpoint completion before durable completion | Post-finalization handoff enters the app sign-in/session sequence                   | Client sign-up chronicle/audit events  | `config/routes/auth.rb` app `sign/up` and `social`; `app/controllers/sign/app/sign/up/**`; app social callback controllers/views/tests                  |
-| `com`   | Public/corporate visitor entry or inquiry flow | `Visitor`, visitor contact identifiers                 | Email, telephone                                                      | Birthdate checkpoint, passkey checkpoint, passcode checkpoint                                               | Sign-up checkpoint requirements                                                    | Email/telephone OTP verification and checkpoint completion before durable completion | Post-finalization handoff enters the com sign-in/session sequence                   | Visitor sign-up chronicle/audit events | `config/routes/auth.rb` com `sign/up`; `app/controllers/sign/com/sign/up/**`; com sign-up/no-social tests                                               |
-| `org`   | Operator acquisition / staff onboarding        | `Operator`, invitation and lifecycle request resources | Invitation token or lifecycle request context                         | Passkey and secret credential setup through staff onboarding or signed-in settings where implemented        | No public social sign-up challenge                                                 | Invitation/lifecycle approval and local credential setup boundaries                  | Operator session is established only through org sign-in after local authentication | Operator chronicle/audit events        | `config/routes/auth.rb` org `sign/up/invitations` and settings lifecycle request routes; `app/controllers/sign/org/up/**`; org sign-up/onboarding tests |
+| Surface | Term                                    | Actor/resource                                         | Identifier                                                            | Credential setup                                                                                            | Challenge                                                                          | Verification                                                                         | Session/token                                                                       | Chronicle/audit                       | Routes/controllers/views/tests                                                                                                                          |
+| ------- | --------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`   | User/client registration                | `Client`, contact identifiers, app social identities   | Email, telephone, Google provider assertion, Apple provider assertion | Birthdate checkpoint, passkey checkpoint, passcode checkpoint, and social identity binding where applicable | Sign-up checkpoint requirements; provider callback state validation for app social | Email/telephone OTP verification and checkpoint completion before durable completion | Post-finalization handoff enters the app sign-in/session sequence                   | Client sign-up chronicle/audit events | `config/routes/auth.rb` app `sign/up` and `social`; `app/controllers/sign/app/sign/up/**`; app social callback controllers/views/tests                  |
+| `org`   | Operator acquisition / staff onboarding | `Operator`, invitation and lifecycle request resources | Invitation token or lifecycle request context                         | Passkey and secret credential setup through staff onboarding or signed-in settings where implemented        | No public social sign-up challenge                                                 | Invitation/lifecycle approval and local credential setup boundaries                  | Operator session is established only through org sign-in after local authentication | Operator chronicle/audit events       | `config/routes/auth.rb` org `sign/up/invitations` and settings lifecycle request routes; `app/controllers/sign/org/up/**`; org sign-up/onboarding tests |
 
-The app/com sign-up checkpoint owns required registration setup before durable account finalization.
-Birthdate is a sign-up checkpoint requirement for app/com end-user registration.
+The APP sign-up checkpoint owns required registration setup before durable account finalization.
+Birthdate is a sign-up checkpoint requirement for APP end-user registration.
 
-Email and telephone OTP verification is bound to the surface-local sign-up ticket. The app and com
-controllers pass the ticket `public_id` as the ceremony nonce, and `SignOtpCeremony` rejects a
-missing or mismatched nonce before looking up or consuming the contact OTP. The ticket and signed
-flow context, rather than a request-supplied contact identifier, remain authoritative for the
-checkpoint transition.
+Email and telephone OTP verification is bound to the APP sign-up ticket. APP controllers pass the
+`ClientSignUpFlow` `public_id` as the ceremony nonce, and `SignOtpCeremony` rejects a missing or
+mismatched nonce before looking up or consuming the contact OTP. The ticket and signed flow context,
+rather than a request-supplied contact identifier, remain authoritative for the checkpoint
+transition.
 
 ## Shared Completion Boundary
 
-All sign-up routes converge on the shared sign-up finalization boundary:
+All active APP sign-up routes converge on the shared sign-up finalization boundary:
 
 - `finalize_sign_up_from_checkpoint!` is the sign-up completion gate.
 - `IdentityGraphProvisioner.call!` runs inside that boundary before handoff.
@@ -196,13 +186,19 @@ between sign-up and sign-in by whether the provider identity is already register
 - A registered Google or Apple identity must not be routed through the sign-up sequence again as a
   new registration. The sign-up path is only for unknown provider identities or incomplete
   registration setup that still needs checkpoint completion.
+- After a provider callback verifies an identity that conflicts with the attempted entry, the APP
+  response gives guidance for a fresh entry: registered identity at sign-up, or unknown identity at
+  sign-in. This is a 400 guidance page with a clean Base sign-in link; it does not resume the
+  rejected attempt, create an account or authenticated evidence, or retain the old social callback
+  state. Other sign-path callback refusals keep the uniform response, and Email/Telephone OTP entry
+  does not disclose whether the submitted contact is registered.
 - An account that still lacks required sign-up data, including birthdate, is not a complete
   registered social-login account for login purposes. It must be returned to the sign-up checkpoint
   before any authenticated login session is issued.
 
 ## Common Post-Finalization Handoff
 
-All `app` and target `com` sign-up paths share the same post-finalization routing rule:
+All active APP sign-up paths share the same post-finalization routing rule:
 
 1. Complete sign-up finalization.
 2. Enter the existing sign-in boundary in the same Rails action/request.
@@ -413,9 +409,12 @@ Current gate status:
 - Any future refactor should keep the OTP controller focused on OTP ceremony and checkpoint
   progression only.
 
-### Com Email
+### Historical COM Email Sign-Up (Retired)
 
-Target state-machine path:
+> This section describes the retired Visitor registration flow. It is preserved for historical
+> context and does not describe an active route or an approved implementation target.
+
+Recorded historical design (not an implementation target):
 
 - Entry: `GET /sign/up/email/new`
   - Start or resume the com sign-up sequence.
@@ -475,7 +474,7 @@ Target state-machine path:
     session issuance, and welcome handling, continue to the safe `rt` return path when present;
     otherwise continue to `/dashboard`.
 
-Current path:
+Recorded historical path:
 
 1. `GET /sign/up/email/new` renders the email sign-up form.
 2. `POST /sign/up/email` validates Turnstile, validates email params, creates or resumes pending
@@ -613,22 +612,24 @@ Current path (state-machine implementation):
 
 ## App Social
 
-App social sign-up uses the same social entry and callback as social sign-in. A missing provider
-identity creates a new client account.
+App social sign-up uses the same Google/Apple provider and callback boundary as social sign-in. A
+provider-start POST stores callback state, provider and, for Apple, a nonce; it creates no Flow and
+records no authentication evidence. A verified successful callback may create the one Flow for the
+admitted sign-up Binding and advance it to checkpoint pending.
 
 ### App Google
 
 Expected state-machine path:
 
-- Entry: `GET /sign/up/new` or `GET /sign/up`
+- Entry: `GET /sign/up`
   - User chooses Google from the app sign-up surface.
-  - The sequence starts before leaving the application for the provider.
+  - The admitted first page remains unadvanced until the verified provider callback.
 
-- Social start: `GET /social/google/sign/up`
-  - Store sign-up intent, provider, region, sanitized `rt`, and callback state in the server-side
-    session.
-  - Redirect to `/social/google/callback`.
-  - Do not encode application routing decisions into OAuth `state`; keep OAuth `state` dedicated to
+- Social start: `POST /social/google/registration`
+  - Recheck the admitted sign-up intent and sign-up availability.
+  - Store the provider entry and callback state in the server-side session. Create no Flow and
+    record no Auth evidence.
+  - Continue through the OmniAuth request phase to Google. OAuth `state` remains dedicated to
     callback integrity.
 
 - Provider redirect: Google
@@ -637,11 +638,23 @@ Expected state-machine path:
 
 - Social callback: `GET /social/google/callback`
   - Verify the social callback request.
-  - Validate the stored social auth state.
+  - Validate the stored callback state and verified provider assertion.
   - Normalize the provider to Google.
-  - If the Google identity already belongs to an account, leave sign-up and continue as sign-in.
-  - If the identity is new, create the pending `Client` and link the Google identity.
-  - Move the sign-up sequence toward guardrail/checkpoint.
+  - Refuse a subject that is not eligible for the admitted Sign Up; any verified-subject guidance
+    starts a fresh Base `/sign` request and does not reuse this attempt.
+  - Lock the Admission Binding, then the Auth Ceremony. Recheck the live sign-up admission, Cancel,
+    existing Flow and evidence before creating the Flow and recording callback evidence.
+  - Advance the Flow to checkpoint pending. The Client and identity are finalized only through the
+    later checkpoint path.
+
+- Back and restart before callback
+  - `GET /sign/up` remains the first page because no Flow exists yet. Cancel, Switch and other
+    available sign-up methods remain available.
+  - A new provider POST consumes the previous callback state in its current server-side session and
+    replaces provider/state/nonce. Once that consumption commits, the old callback is refused. A
+    concurrent provider start from a stale signed-cookie session has no persisted Admission
+    generation binding yet; its ordering remains unverified. An Email, Telephone or other social
+    Flow already bound to the admission prevents social callback Flow creation.
 
 - Sign-up guard: `GET /sign/up/guard`
   - This is the sign-up stop point for sequence-level rejection such as policy blocks, retry
@@ -684,16 +697,16 @@ Expected state-machine path:
 
 Expected state-machine path:
 
-- Entry: `GET /sign/up/new` or `GET /sign/up`
+- Entry: `GET /sign/up`
   - User chooses Apple from the app sign-up surface.
-  - The sequence starts before leaving the application for the provider.
-  - Apple sign-up is app-only; `com` and `org` must not offer it.
+  - The admitted first page remains unadvanced until the verified provider callback.
+  - Apple sign-up is APP-only. ORG does not offer it; COM authentication is retired.
 
-- Social start: `GET /social/apple/sign/up`
-  - Store sign-up intent, provider, region, sanitized `rt`, and callback state in the server-side
-    session.
-  - Redirect to `/social/apple/callback`.
-  - Do not encode application routing decisions into OAuth `state`; keep OAuth `state` dedicated to
+- Social start: `POST /social/apple/registration`
+  - Recheck the admitted sign-up intent and sign-up availability.
+  - Store the provider entry, Apple nonce and callback state in the server-side session. Create no
+    Flow and record no Auth evidence.
+  - Continue through the OmniAuth request phase to Apple. OAuth `state` remains dedicated to
     callback integrity.
 
 - Provider redirect: Apple
@@ -702,11 +715,23 @@ Expected state-machine path:
 
 - Social callback: `GET /social/apple/callback`
   - Verify the social callback request.
-  - Validate the stored social auth state.
+  - Validate the stored callback state and verified provider assertion.
   - Normalize the provider to Apple.
-  - If the Apple identity already belongs to an account, leave sign-up and continue as sign-in.
-  - If the identity is new, create the pending `Client` and link the Apple identity.
-  - Move the sign-up sequence toward guardrail/checkpoint.
+  - Refuse a subject that is not eligible for the admitted Sign Up; any verified-subject guidance
+    starts a fresh Base `/sign` request and does not reuse this attempt.
+  - Lock the Admission Binding, then the Auth Ceremony. Recheck the live sign-up admission, Cancel,
+    existing Flow and evidence before creating the Flow and recording callback evidence.
+  - Advance the Flow to checkpoint pending. The Client and identity are finalized only through the
+    later checkpoint path.
+
+- Back and restart before callback
+  - `GET /sign/up` remains the first page because no Flow exists yet. Cancel, Switch and other
+    available sign-up methods remain available.
+  - A new provider POST consumes the previous callback state in its current server-side session and
+    replaces provider/state/nonce. Once that consumption commits, the old callback is refused. A
+    concurrent provider start from a stale signed-cookie session has no persisted Admission
+    generation binding yet; its ordering remains unverified. An Email, Telephone or other social
+    Flow already bound to the admission prevents social callback Flow creation.
 
 - Sign-up guard: `GET /sign/up/guard`
   - This is the sign-up stop point for sequence-level rejection such as policy blocks, retry
@@ -747,27 +772,32 @@ Expected state-machine path:
 
 Current path:
 
-1. `GET /social/:provider/sign/in` and `GET /social/:provider/sign/up` store social intent,
-   provider, entry, region, and sanitized `rt` in session.
-2. The controller redirects to `/social/:provider/callback`.
-3. The provider redirects back to `/social/:provider/callback`.
-4. The callback verifies the social callback request and validates social auth session state.
-5. A missing social identity creates a new `Client` with `UNVERIFIED_WITH_SIGN_UP` status defaults.
-6. The social identity is created and linked.
-7. A social sign-up audit entry is written.
-8. The client is signed in through the normal social login path.
-9. New and existing accounts both call the sign-in post-authentication sequence.
-10. Target behavior is that guardrail, checkpoint, and selector are evaluated before session
-    issuance, then the actor reaches welcome/`rt` or dashboard according to the sign-in sequence.
+1. `GET /sign/up` renders the admitted first page without creating a Flow.
+2. `POST /social/{google,apple}/registration` rechecks the sign-up admission and availability,
+   stores callback state/provider/nonce, and begins the provider request without advancing the Flow.
+3. Back before callback returns to `/sign/up` with Cancel, Switch and other available methods. A new
+   provider POST consumes the previous callback state in its current server-side session and
+   replaces the current state/provider/nonce. Concurrent provider starts from stale signed-cookie
+   sessions are not yet serialized by a persisted Admission generation.
+4. The provider callback verifies callback state, provider and assertion before sign-up Flow
+   creation.
+5. Under the Admission Binding lock followed by the Auth Ceremony lock, it rechecks active sign-up
+   intent, cancellation, existing Flow and authentication evidence.
+6. A successful callback creates one Flow, records provider evidence and advances to checkpoint
+   pending in the owning transaction. An existing Email/Telephone/social Flow or canceled ceremony
+   refuses without creating another Flow.
+7. Client creation and identity linking remain owned by the later checkpoint/finalization path.
 
-## Com Telephone
+## Historical COM Telephone Sign-Up (Retired)
 
-Com telephone sign-up should be rebuilt to match the app telephone sequence shape. It verifies
-telephone ownership first, then moves into the sign-up checkpoint. The checkpoint owns required
-setup such as passkey and passcode registration; the telephone OTP route should not finalize the
-account directly.
+> This section describes the retired Visitor registration flow. It is preserved for historical
+> context and does not describe an active route or an approved implementation target.
 
-Target state-machine path:
+The retired COM design proposed a telephone-ownership step followed by a sign-up checkpoint for
+passkey and passcode setup. This proposal is historical and does not authorize restoring the COM
+registration route.
+
+Recorded historical design (not an implementation target):
 
 - Entry: `GET /sign/up/telephone/new`
   - Start or resume the com sign-up sequence.
@@ -847,7 +877,7 @@ Target state-machine path:
     session issuance, and welcome handling, continue to the safe `rt` return path when present;
     otherwise continue to `/dashboard`.
 
-Current path:
+Recorded historical path:
 
 1. `GET /sign/up/telephone/new` renders the telephone form.
 2. `POST /sign/up/telephone` validates Turnstile and telephone params, creates a pending `Visitor`
@@ -874,18 +904,18 @@ Current path:
 
 ## Org Operator Acquisition And Lifecycle
 
-Org is not an app/com-style public sign-up surface. A public org request must not create an
-`Operator` directly. Operator creation, mutation, and withdrawal are controlled lifecycle events.
+ORG is not a public self-registration surface. A public org request must not create an `Operator`
+directly. Operator creation, mutation, and withdrawal are controlled lifecycle events.
 
 ### Withdrawn Google Gateway Exception
 
-The 2026-06-02 temporary Google gateway exception for `org` and `com` is withdrawn. Org signup must
-not create an operator through an external social provider, and com signup must not create a visitor
-through an external social provider.
+The 2026-06-02 temporary Google gateway exception for `org` and `com` is withdrawn. ORG signup must
+not create an operator through an external social provider. COM authentication and Visitor sign-up
+are retired; this document does not authorize restoring them.
 
 - Org remains an invitation and operator-lifecycle surface, not a public social self-registration
   surface.
-- Com remains an email/telephone local registration surface, not a social registration surface.
+- COM authentication and Visitor registration remain retired.
 - The app Google and Apple social signup sequence remains unchanged.
 - Any future org/com social provider work requires a new accepted ADR.
 
@@ -897,16 +927,16 @@ Target path:
   - Render an org sign-up unavailable or recruiting guidance page.
   - Do not create an `Operator`.
   - Do not create an authenticated org session.
-  - Link the external candidate to the com/corporate contact or recruiting intake surface.
+  - Link the external candidate to the corporate contact or recruiting intake surface.
 
 - Optional guardrail: `GET /sign/up/guard`
   - This is only for an org acquisition sequence that must stop with a plain-text message.
   - It must not become public self-service operator registration.
   - Direct access without valid sequence state must be rejected.
 
-- Com/corporate intake
-  - The candidate submits an inquiry, contact request, or future direct-message intake on the com
-    side.
+- Corporate intake
+  - The candidate submits an inquiry, contact request, or future direct-message intake through the
+    corporate contact surface.
   - The intake record is reviewed operationally.
   - If the candidate should become an operator, an existing operator starts an operator lifecycle
     request.
@@ -915,7 +945,7 @@ Current path:
 
 1. `GET /sign/up` is handled by `Auth::Org::Sign::UpsController#show`.
 2. The view renders recruiting guidance.
-3. The recruiting link currently points to the corporate/com root.
+3. The recruiting link currently points to the corporate root.
 4. No `Operator` is created.
 5. No org authentication session is issued.
 
@@ -967,8 +997,9 @@ Target decision:
 
 ## Implemented State-Machine Notes
 
-- App/com sign-up progression is carried by `ClientSignUpFlow` and `VisitorSignUpFlow` tickets, not
-  by credential-specific session state as the source of truth.
+- Active APP sign-up progression is carried by `ClientSignUpFlow` tickets, not by
+  credential-specific session state as the source of truth. Retired Visitor flow records are not
+  active routes.
 - `SignUpStateMachine` owns one-way progression through contact/social verification, the required
   guardrail for email/telephone flows, checkpoint, finalization, sign-in handoff, and completion.
   `CONTACT_VERIFIED` cannot enter `CHECKPOINT_PENDING` directly; the state machine and policies
@@ -977,8 +1008,8 @@ Target decision:
 - The checkpoint records compact cleared requirements. Email/telephone OTP and social confirmation
   are recorded as prior cleared gates; checkpoint-visible setup still owns birthdate, passkey, and
   passcode requirements before durable finalization.
-- App/com email and telephone sign-up finalize only from the checkpoint after required items are
-  clear. Telephone OTP success never finalizes registration or issues a session by itself.
+- APP Email and Telephone sign-up finalize only from the checkpoint after required items are clear.
+  Telephone OTP success never finalizes registration or issues a session by itself.
 - App social sign-up treats unknown provider identities as pending evidence until explicit
   confirmation and birthdate checkpoint completion. Existing provider identities follow sign-in, not
   sign-up.
@@ -991,8 +1022,8 @@ Target decision:
 
 ## Delivered current sequence (2026-10-06)
 
-The current sign-up sequence uses the owning flow's state reference and named transitions. Contact
-OTP, checkpoint and social evidence are bound to the actor, candidate, flow and browser;
+The current APP sign-up sequence uses the owning flow's state reference and named transitions.
+Contact OTP, checkpoint and social evidence are bound to the actor, candidate, flow and browser;
 finalization enters ordinary sign-in admission and completes at session issuance. Cancellation and
-expiry retain terminal facts and clean only artifacts owned by that flow. The old “future canonical
-vocabulary” notice above is superseded by `adr/authentication-state-machine-normalization.md`.
+expiry retain terminal facts and clean only artifacts owned by that flow. Lifecycle terms follow
+`adr/authentication-state-machine-normalization.md`.

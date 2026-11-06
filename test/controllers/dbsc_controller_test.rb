@@ -17,17 +17,17 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     @jwk = JWT::JWK.new(@ec_key, use: "sig", kid: SecureRandom.uuid)
   end
 
-  test "Sign::App: returns unauthorized when no token record exists" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: returns unauthorized when no token record exists" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_SESSION_ID => %("fake-session-id") }
 
     assert_response :unauthorized
   end
 
-  test "Sign::App: handles registration with valid proof" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: handles registration with valid proof" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -47,11 +47,11 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     proof = generate_dbsc_proof(
       challenge: token.dbsc_challenge,
-      audience: sign_app_edge_v0_token_dbsc_url,
+      audience: visa_app_edge_v0_token_dbsc_url,
       jwk: @jwk.export,
     )
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :created
@@ -68,8 +68,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.dbsc_challenge
   end
 
-  test "Sign::App: handles registration failure with invalid proof" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: handles registration failure with invalid proof" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -87,7 +87,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_RESPONSE => "invalid-proof" }
 
     assert_response :unprocessable_content
@@ -96,8 +96,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_predicate response_body["error_code"], :present?
   end
 
-  test "Sign::App: handles registration failure without challenge" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: handles registration failure without challenge" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -115,19 +115,19 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     proof = generate_dbsc_proof(
       challenge: "any-challenge",
-      audience: sign_app_edge_v0_token_dbsc_url,
+      audience: visa_app_edge_v0_token_dbsc_url,
       jwk: @jwk.export,
     )
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :unprocessable_content
     assert_equal "missing_challenge", response.parsed_body["error_code"]
   end
 
-  test "Sign::App: handles refresh challenge when proof is missing" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: handles refresh challenge when proof is missing" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -145,7 +145,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("session-abc") }
 
     assert_response :forbidden
@@ -157,8 +157,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.dbsc_challenge, :present?
   end
 
-  test "Sign::App: handles refresh verification failure" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: handles refresh verification failure" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -176,7 +176,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: {
            AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("session-abc"),
            AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => "invalid-proof",
@@ -186,8 +186,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_predicate response.parsed_body["error_code"], :present?
   end
 
-  test "Sign::App: handles successful refresh verification" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: handles successful refresh verification" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -210,14 +210,14 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     # For verification, do NOT include JWK in header (security requirement)
     proof = JWT.encode(
       { "jti" => token.dbsc_challenge,
-        "aud" => sign_app_edge_v0_token_dbsc_url,
+        "aud" => visa_app_edge_v0_token_dbsc_url,
         "iat" => Time.current.to_i, },
       @ec_key,
       "ES256",
       { "typ" => "dbsc+jwt" }, # No jwk header
     )
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: {
            AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("session-abc"),
            AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => DbscHeaderSerializer.string(proof),
@@ -231,8 +231,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.dbsc_challenge
   end
 
-  test "Sign::App: returns unauthorized when bound record does not exist" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: returns unauthorized when bound record does not exist" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     token = ClientToken.create!(
@@ -250,23 +250,23 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     # Execute with session ID but record not bound to DBSC (no dbsc_session_id)
     # An unregistered session is refused without issuing a challenge.
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("session-abc") }
 
     assert_response :forbidden
   end
 
-  test "Sign::Org: returns unauthorized when no token record exists" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: returns unauthorized when no token record exists" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("fake-session-id") }
 
     assert_response :unauthorized
   end
 
-  test "Sign::Org: handles registration with valid proof" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: handles registration with valid proof" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -286,11 +286,11 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     proof = generate_dbsc_proof(
       challenge: token.dbsc_challenge,
-      audience: sign_org_edge_v0_token_dbsc_url,
+      audience: visa_org_edge_v0_token_dbsc_url,
       jwk: @jwk.export,
     )
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :created
@@ -307,8 +307,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.dbsc_challenge
   end
 
-  test "Sign::Org: handles registration failure with invalid proof" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: handles registration failure with invalid proof" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -326,7 +326,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_RESPONSE => "invalid-proof" }
 
     assert_response :unprocessable_content
@@ -335,8 +335,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_predicate response_body["error_code"], :present?
   end
 
-  test "Sign::Org: handles registration failure without challenge" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: handles registration failure without challenge" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -354,19 +354,19 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     proof = generate_dbsc_proof(
       challenge: "any-challenge",
-      audience: sign_org_edge_v0_token_dbsc_url,
+      audience: visa_org_edge_v0_token_dbsc_url,
       jwk: @jwk.export,
     )
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :unprocessable_content
     assert_equal "missing_challenge", response.parsed_body["error_code"]
   end
 
-  test "Sign::Org: handles refresh challenge when proof is missing" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: handles refresh challenge when proof is missing" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -384,7 +384,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_SESSION_ID => %("session-abc") }
 
     assert_response :forbidden
@@ -395,8 +395,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.dbsc_challenge, :present?
   end
 
-  test "Sign::Org: handles refresh verification failure" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: handles refresh verification failure" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -414,7 +414,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: {
            AuthIoKeys::Headers::DBSC_SESSION_ID => %("session-abc"),
            AuthIoKeys::Headers::DBSC_RESPONSE => "invalid-proof",
@@ -424,8 +424,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_predicate response.parsed_body["error_code"], :present?
   end
 
-  test "Sign::Org: handles successful refresh verification" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: handles successful refresh verification" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -448,14 +448,14 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     # For verification, do NOT include JWK in header (security requirement)
     proof = JWT.encode(
       { "jti" => token.dbsc_challenge,
-        "aud" => sign_org_edge_v0_token_dbsc_url,
+        "aud" => visa_org_edge_v0_token_dbsc_url,
         "iat" => Time.current.to_i, },
       @ec_key,
       "ES256",
       { "typ" => "dbsc+jwt" }, # No jwk header
     )
 
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: {
            AuthIoKeys::Headers::DBSC_SESSION_ID => %("session-abc"),
            AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof),
@@ -469,8 +469,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.dbsc_challenge
   end
 
-  test "Sign::Org: returns unauthorized when bound record does not exist" do
-    host! ENV.fetch("PRIVATE_AUTH_STAFF_URL")
+  test "Visa::Org: returns unauthorized when bound record does not exist" do
+    host! ENV.fetch("PRIVATE_VISA_STAFF_URL")
 
     staff = operators(:one)
     token = OperatorToken.create!(
@@ -488,14 +488,14 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     # Execute with session ID but record not bound to DBSC (no dbsc_session_id)
     # An unregistered session is refused without issuing a challenge.
-    post sign_org_edge_v0_token_dbsc_path,
+    post visa_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_SESSION_ID => %("session-abc") }
 
     assert_response :forbidden
   end
 
-  test "Sign::App: token_from_refresh_cookie returns nil when parsing fails" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  test "Visa::App: token_from_refresh_cookie returns nil when parsing fails" do
+    host! ENV.fetch("PRIVATE_VISA_SERVICE_URL")
 
     user = clients(:one)
     ClientToken.create!(
@@ -511,7 +511,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = "invalid-token-format"
 
-    post sign_app_edge_v0_token_dbsc_path,
+    post visa_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_RESPONSE => "some-proof" }
 
     assert_response :unprocessable_content

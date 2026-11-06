@@ -5,7 +5,7 @@ module AvatarOwnershipTransfers
   class RegistryRequestOperation < Operation
     def initialize(actor:, surface:, subject_public_id:, avatar_public_id:, target_surface:,
                    target_collective_public_id:, idempotency_key:, request_fingerprint:,
-                   requested_at: Avatar.database_now, step_up_token: nil, step_up_requirement: nil)
+                   requested_at: Avatar.database_now, step_up_token: nil, step_up_evidence: nil)
       super()
       @actor = actor
       @surface = surface.to_s
@@ -17,16 +17,13 @@ module AvatarOwnershipTransfers
       @request_fingerprint = request_fingerprint.to_s
       @requested_at = requested_at
       @step_up_token = step_up_token
-      @step_up_requirement = step_up_requirement
+      @step_up_evidence = step_up_evidence
     end
 
     public
 
     def call
-      validate_step_up_context!(
-        actor: actor, surface: surface, scope: "avatar_transfer_request",
-        token: step_up_token, requirement: step_up_requirement,
-      )
+      validate_step_up_context!(actor: actor, token: step_up_token, evidence: step_up_evidence)
       validate_idempotency_key!
       validate_request_fingerprint!
       replay = replay_existing_reservation
@@ -50,7 +47,7 @@ module AvatarOwnershipTransfers
 
     attr_reader :actor, :surface, :subject_public_id, :avatar_public_id,
                 :target_surface, :target_collective_public_id, :idempotency_key,
-                :request_fingerprint, :requested_at, :step_up_token, :step_up_requirement
+                :request_fingerprint, :requested_at, :step_up_token, :step_up_evidence
 
     def create_reservation!(avatar:, observed_owner:, observed_concrete_owner:)
       result = nil
@@ -84,7 +81,9 @@ module AvatarOwnershipTransfers
             source_ownership_period_id: concrete_owner.id,
             requested_at: requested_at,
           )
-          consume_step_up!(step_up_token, step_up_requirement) if result.previously_new_record?
+          if result.previously_new_record?
+            verify_step_up!(actor:, token: step_up_token, evidence: step_up_evidence)
+          end
         end
       end
       result

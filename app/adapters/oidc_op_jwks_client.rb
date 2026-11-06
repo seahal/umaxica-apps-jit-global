@@ -221,13 +221,14 @@ class OidcOpJwksClient
   end
 
   def fetch_from_network
+    url = OutboundHttp::LocalBackChannel.url(jwks_uri.to_s)
     connection = OutboundHttp::Connection.build(
-      url: jwks_uri,
+      url: url,
       open_timeout: OPEN_TIMEOUT,
       read_timeout: READ_TIMEOUT,
-      require_https: true,
+      require_https: OutboundHttp::LocalBackChannel.require_https?(url),
     )
-    response = connection.get(jwks_uri)
+    response = connection.get(url)
     raise FetchError, "OP JWKS request failed" unless response.success?
     raise FetchError, "OP JWKS response is too large" if response.body.to_s.bytesize > MAXIMUM_RESPONSE_BYTES
 

@@ -85,19 +85,41 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    ClientToken.find_by!(public_id: http_headers_1.fetch("X-TEST-SESSION-PUBLIC-ID"))
+      .update!(authentication_event_at: Time.current)
+    get visa_app_oauth_authorization_url(host: host, **authorize_params), headers: http_headers_1
+
+    assert_response :success
+    continuation = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+    assert continuation, "a sufficient existing session must use the signed POST continuation"
+    continuation_fields = continuation.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    token_count_before_silent_sso = ClientToken.where(user_id: user.id).count
+    post continuation["action"], params: continuation_fields, headers: http_headers_1.merge(
+      "Origin" => "https://#{host}",
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "same-origin",
+    )
+
+    assert_response :see_other
+    assert_equal token_count_before_silent_sso, ClientToken.where(user_id: user.id).count
+    assert_includes jump_rt_url_from_location_for_test(response.location),
+                    OidcClientRegistry.find!("core-app-jp").redirect_uris.first
+
+    reset!
+    host!(host)
+    https!
+    transaction_count = ClientOidcAuthorizationTransaction.count
     get visa_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "login")),
         headers: http_headers_1
 
-    assert_response :success
-    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-
-    assert_not_nil form
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    assert_difference("ClientOidcAuthorizationTransaction.count", 1) do
-      post form["action"], params: fields, headers: http_headers_1.merge("Origin" => "http://#{host}")
-    end
     assert_response :see_other
-    assert_predicate response.location, :present?
+    sentry = URI.parse(jump_rt_url_from_location_for_test(response.location))
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), sentry.host
+    assert_equal "/sign/in/sentry", sentry.path
+    assert_equal transaction_count + 1, ClientOidcAuthorizationTransaction.count
   end
 
   test "stale max_age with an existing session starts a fresh ceremony" do
@@ -166,19 +188,16 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    transaction_count = ClientOidcAuthorizationTransaction.count
     get visa_app_oauth_authorization_url(host: host, **authorize_params.merge(max_age: "60")),
         headers: http_headers_0
 
-    assert_response :success
-    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-
-    assert_not_nil form
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    assert_difference("ClientOidcAuthorizationTransaction.count", 1) do
-      post form["action"], params: fields, headers: http_headers_0.merge("Origin" => "http://#{host}")
-    end
     assert_response :see_other
-    assert_predicate response.location, :present?
+    sentry = URI.parse(jump_rt_url_from_location_for_test(response.location))
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), sentry.host
+    assert_equal "/sign/in/sentry", sentry.path
+    assert_equal transaction_count + 1, ClientOidcAuthorizationTransaction.count
   end
 
   test "org anonymous prompt=none returns login_required" do

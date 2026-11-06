@@ -14,11 +14,16 @@ module Visa
         public
 
         def show
+          return render_step_up_callback_continuation! if step_up_callback_request?
+
           validate_authorization_start_parameters!
           validate_authorization_request!
+          return if dispatch_o9_sensitive_admission!
 
-          if authorization_session_sufficient?
-            issue_authorization_code!(current_client)
+          if @validated_client.step_up_requested
+            start_oidc_step_up_authorization!
+          elsif authorization_session_sufficient?
+            render_silent_sso_continuation!
           elsif prompt_none_requested?
             redirect_login_required!
           else
@@ -28,6 +33,9 @@ module Visa
           render_unsupported_prompt!(e)
         rescue OidcAuthorizeRequestResolver::RequestError => e
           redirect_authorization_request_error!(e)
+        rescue VisaSensitiveAdmissionDispatcher::InvalidRequest
+          render json: { error: "invalid_request", error_description: "invalid authorization request" },
+                 status: :bad_request
         # OidcAuthorizeRequestResolver raises ArgumentError with spec-level request
         # descriptions ("scope must include openid", "state is required"), and the registry
         # errors are equally spec-defined. RFC 6749 section 4.1.2.1 expects these in

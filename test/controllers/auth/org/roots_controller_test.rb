@@ -117,7 +117,6 @@ class Auth::Org::RootsControllerTest < ActionDispatch::IntegrationTest
       end
     "surface:#{service}_#{surface}"
   end
-
 end
 
 # DAMP auth header helpers for this test class.

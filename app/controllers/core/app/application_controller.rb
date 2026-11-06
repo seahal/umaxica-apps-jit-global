@@ -107,7 +107,6 @@ module Core
       end
 
       private
-
     end
   end
 end

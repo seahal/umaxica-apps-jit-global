@@ -13,7 +13,6 @@ class BranchCoverageBatch11HighImpactTest < ActionDispatch::IntegrationTest
     controller
   end
 
-
   test "sign up state machine invalid arms" do
     email_ticket = ClientSignUpFlow.new(
       step: "start",

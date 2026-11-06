@@ -162,6 +162,9 @@ module PreferenceBase
 
   def create_preference_association!(preference, record_class, attributes)
     record_class.find_or_create_by!(preference_id: preference.id) do |record|
+      # Reuse the loaded parent: with only the foreign key, each child's required belongs_to
+      # validation re-selects the same preference row (N+1).
+      record.preference = preference
       record.assign_attributes(attributes)
     end
   end
@@ -254,7 +257,7 @@ module PreferenceBase
   end
 
   def create_audit_log(event_id:, context:, expires_at: nil)
-    expires_at_value = expires_at || SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_ACCESS_TOKEN_TTL.from_now
+    expires_at_value = expires_at || SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_TTL.from_now
     normalized_event_id = normalize_preference_audit_event_id(event_id)
 
     ChronicleRecord.connected_to(role: :writing) do

@@ -4,6 +4,8 @@
 require "test_helper"
 
 class SignEntrySentryResolverTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   class StubFlipper
     def initialize(values)
       @values = values

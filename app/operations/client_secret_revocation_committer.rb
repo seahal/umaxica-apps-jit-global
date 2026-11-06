@@ -8,7 +8,7 @@ class ClientSecretRevocationCommitter
   class << self
     public
 
-    def call!(actor_context:, token:, credential:, purge_after:)
+    def call!(actor_context:, token:, credential:, purge_after:, step_up_evidence: nil)
       unless purge_after.is_a?(ActiveSupport::Duration) && purge_after.value.finite? && purge_after.value.positive?
         raise ArgumentError, "Secret retirement requires an explicit positive finite retention duration"
       end
@@ -17,7 +17,7 @@ class ClientSecretRevocationCommitter
 
       AppZenithRecord.connected_to(role: :writing) do
         actor_context.subject.with_lock(requires_new: true) do
-          revoke!(actor_context, token, credential, purge_after)
+          revoke!(actor_context, token, credential, purge_after, step_up_evidence)
         end
       end
     rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
@@ -36,7 +36,7 @@ class ClientSecretRevocationCommitter
       end
     end
 
-    def revoke!(context, token, credential, purge_after)
+    def revoke!(context, token, credential, purge_after, step_up_evidence)
       actor = context.subject
       raise Denied, "Secret revocation actor is unavailable" unless actor.login_allowed?
 
@@ -51,7 +51,7 @@ class ClientSecretRevocationCommitter
 
       now = ClientSecretCredential.database_now
       if owned.revoked_at && owned.lapsed?(now)
-        authorize_session!(actor, token, owned, consume: false)
+        authorize_session!(actor, token, evidence: step_up_evidence)
         return owned
       end
 
@@ -63,49 +63,44 @@ class ClientSecretRevocationCommitter
       purge_at = (now + purge_after).round(6)
       raise ArgumentError, "Secret retention must advance the database timestamp" unless purge_at > now
 
-      authorize_session!(actor, token, owned, consume: true)
+      authorize_session!(actor, token, evidence: step_up_evidence)
       owned.commit_management_revocation!(actor_context: context, at: now, purge_at: purge_at)
     rescue ClientSecretCredential::InvalidTransition, TokenStatusManagement::StepUpEvidenceUnavailable => e
       raise Denied, e.message
     end
 
-    def authorize_session!(actor, token, credential, consume:)
+    def authorize_session!(actor, token, evidence:)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           device = token.device_session_record!
           device.with_lock do
             raise Denied, "Secret revocation device is unavailable" unless device.usable? && device.user_id == actor.id
 
-            session, requirement = verify_session!(actor, token, credential)
+            session = verify_session!(actor, token)
             unless session.device_session_id == device.id && device.current_refresh_token_id == session.id
               raise Denied, "Secret revocation session binding changed"
             end
 
-            session.consume_step_up_evidence!(requirement: requirement) if consume
+            verify_step_up!(actor, session, evidence)
           end
         end
       end
     end
 
-    def verify_session!(actor, token, credential)
+    def verify_session!(actor, token)
       current = ClientToken.lock.find_by(id: token.id, user_id: actor.id, public_id: token.public_id)
       raise Denied, "Secret revocation session is unavailable" unless current
 
       now = ClientToken.database_now
-      requirement = StepUpRequirement.new(
-        scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: current.public_id, token_binding: current.public_id, require_session_binding: true,
-        ttl: StepUpRequirement::DEFAULT_TTL,
-        actor_ref: actor.public_id, resource_ref: credential.public_id, tenant_ref: nil,
-      )
-      unless current.active_status?(now) &&
-          StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
-        raise Denied, "Secret revocation requires current scoped Step-Up"
-      end
+      raise Denied, "Secret revocation session is unavailable" unless current.active_status?(now)
 
-      [current, requirement]
+      current
+    end
+
+    def verify_step_up!(actor, token, evidence)
+      return if StepUpEvidenceVerifier.call(evidence:, actor:, token:)
+
+      raise TokenStatusManagement::StepUpEvidenceUnavailable, "Secret revocation requires current Step-Up"
     end
   end
 end

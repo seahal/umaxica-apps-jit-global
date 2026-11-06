@@ -23,6 +23,19 @@ module BrowserNavigationRequest
     browser_navigation_request? && request.headers["Sec-Fetch-Dest"].to_s == "document"
   end
 
+  # Browser-set Fetch Metadata only: distinguishes a service-worker re-fetch from another refusal.
+  def log_invalid_admission_navigation
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "auth.admission.navigation_refused",
+        request_id: request.request_id,
+        method: request.request_method,
+        sec_fetch_mode: request.headers["Sec-Fetch-Mode"],
+        sec_fetch_dest: request.headers["Sec-Fetch-Dest"],
+      ),
+    )
+  end
+
   # A request that declares a destination other than a top-level document (for example `iframe`).
   # A missing header is not a framed destination: the caller decides (owner, 2026-10-27, D-197: the
   # Visa confirmation then renders its non-consuming form).

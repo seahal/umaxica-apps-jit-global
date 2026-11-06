@@ -41,8 +41,12 @@ class ApplicationHelperTest < ActionView::TestCase
   end
 
   test "theme_cookie_value maps the Preference theme codes and names" do
-    { "dr" => "dark", "dark" => "dark", "li" => "light", "light" => "light",
-      "sy" => "system", "system" => "system", }.each do |value, expected|
+    { "dr" => "dark",
+      "dark" => "dark",
+      "li" => "light",
+      "light" => "light",
+      "sy" => "system",
+      "system" => "system", }.each do |value, expected|
       assert_equal expected, theme_cookie_value(value), value
     end
   end

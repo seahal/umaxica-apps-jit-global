@@ -22,6 +22,7 @@ module Base
           # Object-level authorization (ActionPolicy): registering a telephone is a fresh-record action
           # for the authenticated operator, so gate by actor type. Each step builds/looks up the record
           # for current_operator. Verification/turnstile guards remain on the flow.
+          before_action :refuse_root_token_feature_in_rp_cell!, only: %i(create update)
           before_action :authorize_telephone_registration!, only: %i(new create edit update)
 
           public
@@ -174,6 +175,7 @@ module Base
                 browser_nonce: base_admission_browser_nonce, code: submitted_code,
                 requirement: OperatorTelephonePolicy.new(@staff_telephone, user: current_operator)
                   .credential_registration_requirement(token: current_session_token),
+                step_up_evidence: current_step_up_evidence,
               )
               unless finalized == :finalized
                 reset_registration_session!

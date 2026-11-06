@@ -4,12 +4,18 @@
 module OidcAuthorizationTransactionable
   extend ActiveSupport::Concern
 
-  STATUS_PENDING = "pending"
-  STATUS_AUTHENTICATED = "authenticated"
-  STATUS_CONSUMED = "consumed"
-  # D09: a user Cancel on the first Sign In/Up page; terminal, reached only from pending.
-  STATUS_CANCELED = "canceled"
-  STATUSES = [STATUS_PENDING, STATUS_AUTHENTICATED, STATUS_CONSUMED, STATUS_CANCELED].freeze
+  STATUS_PENDING = 10
+  STATUS_AUTHENTICATED = 20
+  STATUS_CONSUMED = 30
+  # D09: a user Cancel before authorization finalization; terminal from pending or authenticated.
+  STATUS_CANCELED = 90
+  STATUS_IDS = [STATUS_PENDING, STATUS_AUTHENTICATED, STATUS_CONSUMED, STATUS_CANCELED].freeze
+  STATUS_NAMES = {
+    STATUS_PENDING => "pending",
+    STATUS_AUTHENTICATED => "authenticated",
+    STATUS_CONSUMED => "consumed",
+    STATUS_CANCELED => "canceled",
+  }.freeze
   CANCELLATION_HANDOFF_REFERENCE = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   CANCELLATION_HANDOFF_DIGEST = /\A[0-9a-f]{64}\z/
   RETENTION_PERIOD = 15.minutes
@@ -19,9 +25,9 @@ module OidcAuthorizationTransactionable
   included do
     class_attribute :oidc_authorization_surface_name, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
 
-    scope :pending, -> { where(status: STATUS_PENDING) }
-    scope :authenticated, -> { where(status: STATUS_AUTHENTICATED) }
-    scope :consumed, -> { where(status: STATUS_CONSUMED) }
+    scope :pending, -> { where(status_id: STATUS_PENDING) }
+    scope :authenticated, -> { where(status_id: STATUS_AUTHENTICATED) }
+    scope :consumed, -> { where(status_id: STATUS_CONSUMED) }
     scope :active_at, ->(time) { where(arel_table[:expires_at].gt(time)) }
     scope :purgeable_at, lambda { |time, retention_period: RETENTION_PERIOD|
       where(arel_table[:expires_at].lteq(time - retention_period))
@@ -29,14 +35,14 @@ module OidcAuthorizationTransactionable
 
     validates :transaction_id, :surface, :intent, :client_id, :redirect_uri, :response_type, :scope, :state,
               :nonce, :code_challenge, :code_challenge_method, :login_challenge, :login_challenge_expires_at,
-              :expires_at, :status, presence: true
+              :expires_at, :status_id, presence: true
     validates :surface, inclusion: { in: %w(app org) }
     validates :intent, inclusion: { in: %w(authentication sign_in sign_up invitation reauthentication step_up) }
     validates :response_type, inclusion: { in: ["code"] }
     validates :oidc_prompt, inclusion: { in: OidcAuthorizeRequestResolver::SUPPORTED_PROMPTS }, allow_nil: true
     validates :oidc_max_age, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
     validates :code_challenge_method, inclusion: { in: ["S256"] }
-    validates :status, inclusion: { in: STATUSES }
+    validates :status_id, inclusion: { in: STATUS_IDS }
     validates :transaction_id, uniqueness: true
     validates :login_challenge, uniqueness: true
     validate :transaction_surface_matches_class
@@ -112,7 +118,7 @@ module OidcAuthorizationTransactionable
         login_challenge: login_challenge.to_s,
         login_challenge_expires_at: login_challenge_expires_at,
         expires_at: expires_at,
-        status: STATUS_PENDING,
+        status_id: STATUS_PENDING,
         created_at: decision_time,
         updated_at: decision_time,
       }
@@ -135,19 +141,47 @@ module OidcAuthorizationTransactionable
 
   public
 
+  def status_name
+    STATUS_NAMES.fetch(status_id) do
+      raise ArgumentError, "unknown OIDC authorization transaction status: #{status_id.inspect}"
+    end
+  end
+
+  def pending?
+    status_id == STATUS_PENDING
+  end
+
   def authenticated?
-    status == STATUS_AUTHENTICATED
+    status_id == STATUS_AUTHENTICATED
   end
 
   def consumed?
-    status == STATUS_CONSUMED
+    status_id == STATUS_CONSUMED
   end
 
   def canceled?
-    status == STATUS_CANCELED
+    status_id == STATUS_CANCELED
   end
 
-  # Binds the encrypted Auth-to-Base cancellation handoff to this pending parent. Re-binding the
+  def base_finalized?
+    base_finalized_at.present? && browser_session_ref.present?
+  end
+
+  def cancellation_handoff_available?(now: nil)
+    now ||= self.class.database_now
+    available_state =
+      case status_id
+      when STATUS_PENDING, STATUS_AUTHENTICATED
+        !base_finalized?
+      when STATUS_CANCELED
+        !base_finalized? && cancellation_handoff_ref.present? && cancellation_handoff_ciphertext.present?
+      else
+        false
+      end
+    available_state && !expired?(now: now)
+  end
+
+  # Binds the encrypted Auth-to-Base cancellation handoff to this unfinalized parent. Re-binding the
   # same handoff is idempotent; a different one is refused.
   def prepare_cancellation_handoff!(reference:, ciphertext:)
     unless reference.is_a?(String) && reference.match?(CANCELLATION_HANDOFF_REFERENCE) &&
@@ -159,8 +193,8 @@ module OidcAuthorizationTransactionable
       self.class.transaction do
         locked = self.class.lock.find(id)
         decision_time = self.class.database_now
-        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
-        raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
+        raise ArgumentError, "authorization transaction is not cancellable" unless
+          locked.cancellation_handoff_available?(now: decision_time)
 
         if locked.cancellation_handoff_ref.present?
           return locked if locked.cancellation_handoff_ref == reference &&
@@ -178,9 +212,8 @@ module OidcAuthorizationTransactionable
     end
   end
 
-  # Commits the Cancel. Only a pending parent with a bound handoff can be canceled, so a parent that
-  # already authenticated or was consumed never turns into a cancellation, and a later
-  # authentication result for a canceled parent is refused by register_authentication!.
+  # Commits Cancel while the authorization parent is pending or authenticated but not finalized.
+  # A later authentication result for a canceled parent is refused by register_authentication!.
   def cancel!(cancellation_handoff_digest:)
     unless cancellation_handoff_digest.is_a?(String) && cancellation_handoff_digest.match?(CANCELLATION_HANDOFF_DIGEST)
       raise ArgumentError, "invalid cancellation handoff digest"
@@ -196,12 +229,12 @@ module OidcAuthorizationTransactionable
         end
 
         decision_time = self.class.database_now
-        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
-        raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
+        raise ArgumentError, "authorization transaction is not cancellable" unless
+          locked.cancellation_handoff_available?(now: decision_time)
         raise ArgumentError, "cancellation handoff is not bound" if locked.cancellation_handoff_ref.blank?
 
         locked.update!(
-          status: STATUS_CANCELED, canceled_at: decision_time,
+          status_id: STATUS_CANCELED, canceled_at: decision_time,
           cancellation_handoff_digest: cancellation_handoff_digest, updated_at: decision_time,
         )
         locked
@@ -220,24 +253,28 @@ module OidcAuthorizationTransactionable
   # PostgreSQL records the current result generation and digest before the raw
   # result is placed in Valkey. Valkey is transport only; a failed issue can be
   # retried with a newer generation without changing actor authentication data.
-  def prepare_result_delivery!(result_digest:, ttl: RESULT_TTL, now: nil)
+  def prepare_result_delivery!(result_digest:, ttl: RESULT_TTL, expires_at_cap: nil)
     raise ArgumentError, "result digest is required" if result_digest.to_s.blank?
 
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        decision_time = now || self.class.database_now
+        decision_time = self.class.database_now
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
         raise ArgumentError,
               "authorization login challenge expired" if locked.login_challenge_expired?(now: decision_time)
         raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated?
         raise ArgumentError, "authorization result is already finalized" if locked.base_finalized_at.present?
+        if expires_at_cap && expires_at_cap <= decision_time
+          raise ArgumentError, "authorization result lifetime expired"
+        end
 
         generation = locked.result_generation.to_i + 1
         locked.update!(
           result_generation: generation,
           result_digest: result_digest.to_s,
-          result_expires_at: [decision_time + ttl, locked.expires_at, locked.login_challenge_expires_at].min,
+          result_expires_at: [decision_time + ttl, locked.expires_at, locked.login_challenge_expires_at,
+                              expires_at_cap,].compact.min,
           result_consumed_at: nil,
           updated_at: decision_time,
         )
@@ -261,21 +298,21 @@ module OidcAuthorizationTransactionable
   # Base finalization is serialized by the surface-local transaction row. The
   # block performs the surface-specific Browser Session operation and returns a
   # successful browser_session_ref. Retries reuse the persisted reference.
-  def finalize_base!(result_generation: nil, now: nil)
+  def finalize_base!(result_generation: nil)
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        decision_time = now || self.class.database_now
+        decision_time = self.class.database_now
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
-        raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated? ||
-          locked.base_finalized_at.present?
+        raise ArgumentError, "authorization transaction is not authenticated" unless
+          locked.authenticated? || (locked.consumed? && locked.base_finalized?)
         if result_generation.present? && locked.result_generation.to_i != Integer(result_generation)
           raise ArgumentError, "authorization result generation is stale"
         end
 
         result = yield(locked, decision_time)
         if result.is_a?(Hash) && result[:status] == :success && result[:browser_session_ref].present? &&
-            locked.base_finalized_at.blank?
+            !locked.base_finalized?
           browser_session_ref = result[:browser_session_ref].to_s
           raise ArgumentError, "browser session reference is required" if browser_session_ref.blank?
 
@@ -283,7 +320,7 @@ module OidcAuthorizationTransactionable
             browser_session_ref: browser_session_ref,
             result_consumed_at: decision_time,
             base_finalized_at: decision_time,
-            status: STATUS_CONSUMED,
+            status_id: STATUS_CONSUMED,
             consumed_at: decision_time,
             updated_at: decision_time,
           )
@@ -296,12 +333,11 @@ module OidcAuthorizationTransactionable
   # The durable authorization grant is redeemed in the same surface ticket
   # database as the RP Session. A Valkey code is transport cleanup, not the
   # correctness authority for this one-time transition.
-  def claim_authorization_grant!(now: nil)
+  def claim_authorization_grant!
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        decision_time = now || self.class.database_now
-        locked.claim_authorization_grant_locked!(now: decision_time)
+        locked.claim_authorization_grant_locked!
       end
     end
   end
@@ -309,18 +345,19 @@ module OidcAuthorizationTransactionable
   # The caller must already hold a row lock in the surface ticket database.
   # Keeping this primitive separate lets token exchange claim the durable grant
   # in the same transaction that creates the RP Session.
-  def claim_authorization_grant_locked!(now:)
-    raise ArgumentError, "authorization transaction expired" if expired?(now: now)
-    raise ArgumentError, "authorization transaction is not finalized" if base_finalized_at.blank?
+  def claim_authorization_grant_locked!
+    decision_time = self.class.database_now
+    raise ArgumentError, "authorization transaction expired" if expired?(now: decision_time)
+    raise ArgumentError, "authorization transaction is not finalized" unless consumed? && base_finalized?
 
     return false if authorization_grant_redeemed_at.present?
 
-    update!(authorization_grant_redeemed_at: now, updated_at: now)
+    update!(authorization_grant_redeemed_at: decision_time, updated_at: decision_time)
     true
   end
 
   def authorize_params
-    {
+    params = {
       response_type: response_type,
       client_id: client_id,
       redirect_uri: redirect_uri,
@@ -332,21 +369,22 @@ module OidcAuthorizationTransactionable
       prompt: oidc_prompt,
       max_age: oidc_max_age,
     }.compact
+    params[:claims] = OidcAuthorizeRequestResolver::STEP_UP_CLAIMS if intent == "step_up"
+    params
   end
 
-  def register_authentication!(actor_ref:, session_ref:, auth_method:, acr:, authentication_event_at: nil,
-                               now: nil)
+  def register_authentication!(actor_ref:, session_ref:, auth_method:, acr:, authentication_event_at: nil)
     raise ArgumentError, "authentication event time is required" if authentication_event_at.blank?
 
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        decision_time = now || self.class.database_now
+        decision_time = self.class.database_now
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
         raise ArgumentError, "authorization transaction expired" if locked.login_challenge_expired?(
           now: decision_time,
         )
-        raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
+        raise ArgumentError, "authorization transaction is not pending" unless locked.pending?
 
         locked.update!(
           actor_ref: actor_ref.to_s,
@@ -354,7 +392,7 @@ module OidcAuthorizationTransactionable
           auth_method: auth_method.to_s,
           acr: acr.to_s.presence || "aal1",
           authenticated_at: authentication_event_at,
-          status: STATUS_AUTHENTICATED,
+          status_id: STATUS_AUTHENTICATED,
           updated_at: decision_time,
         )
         locked
@@ -362,18 +400,18 @@ module OidcAuthorizationTransactionable
     end
   end
 
-  def consume!(now: nil)
+  def consume!
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        decision_time = now || self.class.database_now
+        decision_time = self.class.database_now
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
         raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated?
         raise ArgumentError, "authorization transaction already consumed" if locked.consumed?
 
         locked.update!(
           consumed_at: decision_time,
-          status: STATUS_CONSUMED,
+          status_id: STATUS_CONSUMED,
           updated_at: decision_time,
         )
         locked

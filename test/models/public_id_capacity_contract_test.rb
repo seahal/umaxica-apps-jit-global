@@ -72,7 +72,14 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
               jti: SecureRandom.uuid, last_issued_at: Time.current,
               last_issued_expires_at: 400.days.from_now,
             )
-          else model.create!
+          when "AppPreference", "OrgPreference"
+            issued_at = model.database_now
+            model.create!(
+              jti: SecureRandom.uuid, last_issued_at: issued_at,
+              last_issued_expires_at: issued_at + 400.days,
+            )
+          else
+            raise ArgumentError, "unsupported public identity capacity target: #{model.name}"
           end
         long_value = "a" * 22
 

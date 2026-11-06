@@ -10,7 +10,25 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
   setup do
     @staff = operators(:one)
     @token = OperatorToken.create!(authentication_epoch: 0, staff: @staff)
-    grant_step_up!
+    now = OperatorToken.database_now
+    @token.device_session_record!
+    @token.update!(root_login_established_at: now, established_authentication_method: "passkey")
+    @token.rotate_refresh_token!(now:)
+    oidc_client = OidcClientRegistry.find!("base-org-ww")
+    @step_up_grant = OpOrgGrant.create!(
+      authentication_epoch: @token.authentication_epoch, operator_token: @token,
+      oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.at(now.to_i).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR, oidc_amr: JSON.generate(["passkey"]),
+      refresh_token_expires_at: now + 1.hour,
+    )
+    @step_up_grant.issue_refresh_token!(now:)
+    @step_up_evidence = StepUpEvidenceValue.new(
+      acr: @step_up_grant.oidc_acr, amr: ["passkey"], auth_time: now.to_i, sid: @step_up_grant.public_id,
+      sub: OidcSubject.for(@staff, resource_type: "operator"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: @step_up_grant.oidc_jti,
+    )
+    @root_authentication_state = @token.attributes.slice(:root_login_established_at, :established_authentication_method)
     OperatorEmail.create!(
       staff: @staff,
       address: "secret_credential-test-#{SecureRandom.hex(4)}@example.com",
@@ -21,19 +39,25 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
   test "creates secret_credential with auto-generated raw secret_credential" do
     params = { name: "api-key-1", enabled: true }
 
-    result = create_secret(params)
+    result = OperatorSecretCredentialsCreate.call(
+      actor: @staff, staff: @staff, params: params,
+      step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
+    )
 
     assert_predicate result.secret_credential, :persisted?
     assert_predicate result.raw_secret_credential, :present?
     assert_equal "api-key-1", result.secret_credential.name
     assert_predicate result.secret_credential, :active?
-    assert_nil @token.reload.last_step_up_at
+    assert_equal @root_authentication_state, @token.reload.attributes.slice(*@root_authentication_state.keys)
   end
 
   test "creates secret_credential with enabled=false as revoked" do
     params = { name: "disabled-key", enabled: false }
 
-    result = create_secret(params)
+    result = OperatorSecretCredentialsCreate.call(
+      actor: @staff, staff: @staff, params: params,
+      step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
+    )
 
     assert_predicate result.secret_credential, :revoked?
   end
@@ -41,56 +65,53 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
   test "strips whitespace from name parameter" do
     params = { name: "  test-name-with-spaces  ", enabled: true }
 
-    result = create_secret(params)
+    result = OperatorSecretCredentialsCreate.call(
+      actor: @staff, staff: @staff, params: params,
+      step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
+    )
 
     assert_equal "test-name-with-spaces", result.secret_credential.name
   end
 
-  test "a failed creation retains Step-Up" do
-    assert_raises(ActiveRecord::RecordInvalid) { create_secret({ name: "", enabled: true }) }
-    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
+  test "a failed creation leaves the same OP event available for a valid retry" do
+    assert_raises(ActiveRecord::RecordInvalid) do
+      OperatorSecretCredentialsCreate.call(
+        actor: @staff, staff: @staff, params: { name: "", enabled: true },
+        step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
+      )
+    end
+
+    assert_equal @root_authentication_state, @token.reload.attributes.slice(*@root_authentication_state.keys)
+    result = OperatorSecretCredentialsCreate.call(
+      actor: @staff, staff: @staff, params: { name: "retry", enabled: true },
+      step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
+    )
+
+    assert_predicate result.secret_credential, :active?
   end
 
   test "a reserved operator cannot create a Secret with previously valid Step-Up" do
     @staff.update!(status_id: OperatorStatus::RESERVED)
-    requirement = StepUpRequirement.new(
-      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
-    )
-
     assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
       assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
         OperatorSecretCredentialsCreate.call(
           actor: @staff, staff: @staff, params: { name: "blocked", enabled: true },
-          step_up_token: @token, step_up_requirement: requirement, step_up_bootstrap: false,
+          step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
         )
       end
     end
-    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
   end
 
   test "a revoked device cannot create a Secret with previously valid Step-Up" do
     @token.device_session_record!.revoke!
-    requirement = StepUpRequirement.new(
-      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
-    )
-
     assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
       assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
         OperatorSecretCredentialsCreate.call(
           actor: @staff, staff: @staff, params: { name: "blocked", enabled: true },
-          step_up_token: @token, step_up_requirement: requirement, step_up_bootstrap: false,
+          step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
         )
       end
     end
-    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
   end
 
   test "a superseded token cannot create a Secret with previously valid Step-Up" do
@@ -98,23 +119,14 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
     replacement = operator_tokens(:one)
     replacement.update!(device_session_id: device.id)
     device.update!(current_refresh_token_id: replacement.id)
-    requirement = StepUpRequirement.new(
-      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
-    )
-
     assert_no_difference ["OperatorSecretCredential.count", "OperatorChronicle.count"] do
       assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
         OperatorSecretCredentialsCreate.call(
           actor: @staff, staff: @staff, params: { name: "blocked", enabled: true },
-          step_up_token: @token, step_up_requirement: requirement, step_up_bootstrap: false,
+          step_up_token: @token, step_up_evidence: @step_up_evidence, step_up_bootstrap: false,
         )
       end
     end
-    assert_equal "settings_secret_credential", @token.reload.last_step_up_scope
   end
 
   test "bootstrap creates a Secret for an eligible operator with a current session" do
@@ -123,7 +135,7 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
 
     result = OperatorSecretCredentialsCreate.call(
       actor: operator, staff: operator, params: { name: "bootstrap", enabled: true },
-      step_up_token: token, step_up_requirement: nil, step_up_bootstrap: true,
+      step_up_token: token, step_up_evidence: nil, step_up_bootstrap: true,
     )
 
     assert_predicate result.secret_credential, :active?
@@ -139,7 +151,7 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
       assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
         OperatorSecretCredentialsCreate.call(
           actor: operator, staff: operator, params: { name: "blocked bootstrap", enabled: true },
-          step_up_token: token, step_up_requirement: nil, step_up_bootstrap: true,
+          step_up_token: token, step_up_evidence: nil, step_up_bootstrap: true,
         )
       end
     end
@@ -155,38 +167,9 @@ class StaffSecretCredentialsCreateTest < ActiveSupport::TestCase
       assert_raises(TokenStatusManagement::StepUpEvidenceUnavailable) do
         OperatorSecretCredentialsCreate.call(
           actor: operator, staff: operator, params: { name: "standby bootstrap", enabled: true },
-          step_up_token: token, step_up_requirement: nil, step_up_bootstrap: true,
+          step_up_token: token, step_up_evidence: nil, step_up_bootstrap: true,
         )
       end
     end
-  end
-
-  private
-
-  def create_secret(params)
-    OperatorSecretCredentialsCreate.call(
-      actor: @staff, staff: @staff, params: params,
-      step_up_token: @token, step_up_requirement: step_up_requirement, step_up_bootstrap: false,
-    )
-  end
-
-  def grant_step_up!
-    @token.update!(
-      last_step_up_at: OperatorToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
-      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
-    )
-  end
-
-  def step_up_requirement
-    StepUpRequirement.new(
-      scope: "settings_secret_credential", step_up_required: true, allowed_methods: [:passkey],
-      phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, purpose: "step_up", audience: "step_up:org",
-      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
-      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: @staff.public_id, resource_ref: nil, tenant_ref: nil,
-    )
   end
 end

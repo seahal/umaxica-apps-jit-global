@@ -40,12 +40,12 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
           status_id: OperatorPreferenceStatus::ACTIVE,
           explicit_fields: %w(theme language region date_format time_format currency),
         )
-        actor_preference.create_operator_preference_theme!(option_id: OperatorPreferenceThemeOption::DARK)
-        actor_preference.create_operator_preference_language!(option_id: OperatorPreferenceLanguageOption::EN)
-        actor_preference.create_operator_preference_region!(option_id: OperatorPreferenceRegionOption::US)
-        actor_preference.create_operator_preference_date_format!(option_id: OperatorPreferenceDateFormatOption::US)
-        actor_preference.create_operator_preference_time_format!(option_id: OperatorPreferenceTimeFormatOption::HOUR_12)
-        actor_preference.create_operator_preference_currency!(option_id: OperatorPreferenceCurrencyOption::USD)
+        OperatorPreferenceTheme.create!(preference_id: actor_preference.id, option_id: OperatorPreferenceThemeOption::DARK)
+        OperatorPreferenceLanguage.create!(preference_id: actor_preference.id, option_id: OperatorPreferenceLanguageOption::EN)
+        OperatorPreferenceRegion.create!(preference_id: actor_preference.id, option_id: OperatorPreferenceRegionOption::US)
+        OperatorPreferenceDateFormat.create!(preference_id: actor_preference.id, option_id: OperatorPreferenceDateFormatOption::US)
+        OperatorPreferenceTimeFormat.create!(preference_id: actor_preference.id, option_id: OperatorPreferenceTimeFormatOption::HOUR_12)
+        OperatorPreferenceCurrency.create!(preference_id: actor_preference.id, option_id: OperatorPreferenceCurrencyOption::USD)
       end
       tenant = ExternalAuthentication::ProviderRegistry.tenant_id("entra")
       audience = ExternalAuthentication::ProviderRegistry.audience("entra")
@@ -369,35 +369,88 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
         "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
       }
-      actor_preference_state_before_visa = if actor_preference
-                                             [
-                                               actor_preference.reload.attributes,
-                                               [
-                                                 OperatorPreferenceLanguage,
-                                                 OperatorPreferenceTimezone,
-                                                 OperatorPreferenceRegion,
-                                                 OperatorPreferenceTheme,
-                                                 OperatorPreferenceCurrency,
-                                                 OperatorPreferenceDateFormat,
-                                                 OperatorPreferenceTimeFormat,
-                                                 OperatorPreferenceMotion,
-                                                 OperatorPreferenceDensity,
-                                                 OperatorPreferencePageSize,
-                                               ].map do |child_class|
-                                                 child_class.find_by(preference_id: actor_preference.id)&.attributes
-                                               end,
-                                             ]
-                                           end
+      actor_preference_state_before_visa =
+        if actor_preference
+          [
+            actor_preference.reload.attributes,
+            [
+              OperatorPreferenceLanguage,
+              OperatorPreferenceTimezone,
+              OperatorPreferenceRegion,
+              OperatorPreferenceTheme,
+              OperatorPreferenceCurrency,
+              OperatorPreferenceDateFormat,
+              OperatorPreferenceTimeFormat,
+              OperatorPreferenceMotion,
+              OperatorPreferenceDensity,
+              OperatorPreferencePageSize,
+            ].map do |child_class|
+              child_class.find_by(preference_id: actor_preference.id)&.attributes
+            end,
+          ]
+        end
+      browser.get(result.request_uri, headers: visa_result_headers)
+
+      assert_equal 200, browser.response.status
+      continuation_form = Nokogiri::HTML(browser.response.body).at_css("form#visa-authorization-continuation-form")
+
+      assert continuation_form, "Visa result GET must render a POST continuation"
+      continuation_fields =
+        continuation_form.css("input[type='hidden']").to_h do |input|
+          [input["name"], input["value"]]
+        end
+      continuation_headers = visa_result_headers.merge(
+        "Origin" => "https://#{visa_host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+      )
+      if outcome == :complete
+        before_parent = parent.reload.attributes
+        browser.post(
+          continuation_form["action"], params: continuation_fields.except("authenticity_token"),
+                                       headers: continuation_headers,
+        )
+
+        assert_equal 422, browser.response.status
+        assert_equal before_parent, parent.reload.attributes
+        assert_equal 0, OperatorToken.where(staff_id: actor.id).count
+
+        browser.post(
+          continuation_form["action"], params: continuation_fields, headers: continuation_headers.merge(
+            "Origin" => "https://attacker.example", "Sec-Fetch-Site" => "cross-site",
+          ),
+        )
+
+        assert_equal 422, browser.response.status
+        assert_equal before_parent, parent.reload.attributes
+        assert_equal 0, OperatorToken.where(staff_id: actor.id).count
+      end
       if outcome == :preference_failure
-        PreferenceToken.stub(:encode, nil) { browser.get(result.request_uri, headers: visa_result_headers) }
+        PreferenceToken.stub(:encode, nil) do
+          browser.post(continuation_form["action"], params: continuation_fields, headers: continuation_headers)
+        end
+
+        assert_equal 503, browser.response.status
+        assert_equal "temporarily_unavailable", browser.response.parsed_body.fetch("error")
+        assert_nil browser.cookies[PreferenceCookieName.anonymous_jwt]
+        assert_withheld("Preference failure must leave the finalized Visa root intact") {
+          parent.reload.base_finalized?
+        }
+        assert_equal 1, OperatorToken.where(staff_id: actor.id).count
+        root = OperatorToken.find_by!(public_id: parent.reload.browser_session_ref)
+
+        assert_equal actor.id, root.staff_id
+        assert_equal "passkey", root.established_authentication_method
+        next
       else
-        browser.get(result.request_uri, headers: visa_result_headers)
+        browser.post(continuation_form["action"], params: continuation_fields, headers: continuation_headers)
       end
 
       assert_equal 303, browser.response.status
-      assert_nil browser.cookies[PreferenceCookieName.anonymous_jwt] if outcome == :preference_failure
       if actor_preference
         preference_token = browser.cookies[PreferenceCookieName.anonymous_jwt]
+
         assert_predicate preference_token, :present?
         preference_claims = PreferenceToken.decode(
           preference_token, host: visa_host, jwt_issuer_id: "preference_org",
@@ -409,7 +462,8 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         assert_equal "us", preference_claims.fetch("preferences").fetch("date_format")
         assert_equal "12", preference_claims.fetch("preferences").fetch("time_format")
         assert_equal "usd", preference_claims.fetch("preferences").fetch("currency")
-        assert_equal OrgPreferenceRegionOption::JP, anonymous_preference.org_preference_region.option_id
+        assert_equal OrgPreferenceRegionOption::JP,
+                     OrgPreferenceRegion.find_by!(preference_id: anonymous_preference.id).option_id
         actor_preference_state_after_visa = [
           actor_preference.reload.attributes,
           [
@@ -427,6 +481,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
             child_class.find_by(preference_id: actor_preference.id)&.attributes
           end,
         ]
+
         assert_equal actor_preference_state_before_visa, actor_preference_state_after_visa
       end
       completion = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
@@ -449,6 +504,20 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
           "Origin" => "https://#{visa_host}",
           "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
           "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+        },
+      )
+
+      assert_equal 200, browser.response.status
+      replay_form = Nokogiri::HTML(browser.response.body).at_css("form#visa-authorization-continuation-form")
+
+      assert replay_form, "a replayable result GET must render a fresh POST continuation"
+      replay_fields = replay_form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+      browser.post(
+        replay_form["action"], params: replay_fields, headers: {
+          "Origin" => "https://#{visa_host}",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "same-origin",
         },
       )
 

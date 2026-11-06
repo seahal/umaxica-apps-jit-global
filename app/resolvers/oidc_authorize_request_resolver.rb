@@ -17,6 +17,10 @@ class OidcAuthorizeRequestResolver < ApplicationService
     def initialize(message) = super(message, error: "invalid_scope")
   end
 
+  class UnmetAuthenticationRequirements < RequestError
+    def initialize(message) = super(message, error: "unmet_authentication_requirements")
+  end
+
   # Unsupported or combined `prompt` values: a direct HTTP 400 from the OP, never redirected
   # (Prompt Create 1.0 4.1, D-148).
   class UnsupportedPrompt < ArgumentError; end
@@ -28,8 +32,17 @@ class OidcAuthorizeRequestResolver < ApplicationService
   }.freeze
   # RFC 7636 4.2: an S256 challenge is BASE64URL(SHA-256) without padding.
   CODE_CHALLENGE_PATTERN = /\A[A-Za-z0-9_-]{43}\z/
+  STEP_UP_ACR = "https://visa.umaxica.app/acr/reauthentication".freeze
+  STEP_UP_SCOPE = "oidc_authorization".freeze
+  STEP_UP_RETURN_TO = "/oauth/authorize".freeze
+  STEP_UP_CLAIMS = JSON.generate(
+    "id_token" => {
+      "acr" => { "essential" => true, "value" => STEP_UP_ACR },
+      "auth_time" => { "essential" => true },
+    },
+  ).freeze
 
-  ValidatedRequest = Data.define(:client, :scope, :prompt, :max_age)
+  ValidatedRequest = Data.define(:client, :scope, :prompt, :max_age, :step_up_requested)
 
   class << self
     public
@@ -90,7 +103,10 @@ class OidcAuthorizeRequestResolver < ApplicationService
     max_age = normalize_max_age!
     validate_state_and_nonce!
     validate_resource!
-    ValidatedRequest.new(client: client, scope: scope, prompt: prompt, max_age: max_age)
+    step_up_requested = validate_claims_request!
+    ValidatedRequest.new(
+      client: client, scope: scope, prompt: prompt, max_age: max_age, step_up_requested: step_up_requested,
+    )
   end
 
   private
@@ -136,6 +152,60 @@ class OidcAuthorizeRequestResolver < ApplicationService
     return if resource.blank?
 
     raise RequestError.new("resource is not active", error: "access_denied") unless resource&.active?
+  end
+
+  def validate_claims_request!
+    claims_present = params.key?(:claims)
+    acr_values_present = params.key?(:acr_values)
+    return false unless claims_present || acr_values_present
+
+    claims = parse_claims_request!(params[:claims]) if claims_present
+    acr_values = parse_acr_values!(params[:acr_values]) if acr_values_present
+    if claims_present && acr_values_present && acr_values != [STEP_UP_ACR]
+      raise RequestError, "acr_values conflicts with the essential acr claim"
+    end
+    if claims_present && claims == :unsupported
+      raise UnmetAuthenticationRequirements, "requested authentication class is not supported"
+    end
+    raise RequestError, "acr_values requires the canonical claims request" unless claims_present
+    raise RequestError, "claims must request the canonical step-up class" unless claims == :step_up
+
+    true
+  end
+
+  def parse_claims_request!(value)
+    raise RequestError, "claims must be a JSON object" unless value.is_a?(String) && value.present?
+
+    parsed = JSON.parse(value)
+    return :step_up if parsed == JSON.parse(STEP_UP_CLAIMS)
+    return :unsupported if unsupported_essential_acr_claim?(parsed)
+
+    raise RequestError, "claims must request essential acr and auth_time"
+  rescue JSON::ParserError
+    raise RequestError, "claims must be valid JSON"
+  end
+
+  def unsupported_essential_acr_claim?(claims)
+    return false unless claims.is_a?(Hash)
+
+    id_token = claims["id_token"]
+    return false unless id_token.is_a?(Hash)
+
+    acr = id_token["acr"]
+    auth_time = id_token["auth_time"]
+    return false unless acr.is_a?(Hash) && acr["essential"] == true && auth_time == { "essential" => true }
+
+    requested_value = acr["value"]
+    requested_value.is_a?(String) && requested_value.present? && requested_value != STEP_UP_ACR
+  end
+
+  def parse_acr_values!(value)
+    raise RequestError, "acr_values must be a non-empty string" unless value.is_a?(String) && value.present?
+
+    values = value.split
+    raise RequestError, "acr_values must contain one value" unless values.one?
+
+    values
   end
 
   def validate_scope_allowlist!(client)

@@ -94,9 +94,22 @@ class IdentityStepUpCeremonyTransactionPurger
         .where(model.arel_table[:purge_eligible_at].lteq(now))
     elsif [ClientAuthCeremonySession, OperatorAuthCeremonySession].include?(model)
       expired = relation.where(model.arel_table[:expires_at].lteq(cutoff))
-      %i(completed_at cancelled_at revoked_at).reduce(expired) do |scope, column|
-        scope.where(model.arel_table[column].eq(nil).or(model.arel_table[column].lteq(cutoff)))
-      end
+      active = model.arel_table[:status_id].in(AuthCeremonySession::ACTIVE_STATUS_IDS)
+      completed = model.arel_table[:status_id].eq(AuthCeremonySession::STATUS_COMPLETED)
+        .and(model.arel_table[:completed_at].lteq(cutoff))
+      cancelled = model.arel_table[:status_id].in(
+        [
+          AuthCeremonySession::STATUS_CANCELLED_BEFORE_PROGRESS,
+          AuthCeremonySession::STATUS_CANCELLED_AFTER_PROGRESS,
+        ],
+      ).and(model.arel_table[:cancelled_at].lteq(cutoff))
+      revoked = model.arel_table[:status_id].in(
+        [
+          AuthCeremonySession::STATUS_REPLACED,
+          AuthCeremonySession::STATUS_REVOKED,
+        ],
+      ).and(model.arel_table[:revoked_at].lteq(cutoff))
+      expired.where(active.or(completed).or(cancelled).or(revoked))
     elsif [ClientPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
            ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
            IdentityPasskeyCeremonyCandidate,

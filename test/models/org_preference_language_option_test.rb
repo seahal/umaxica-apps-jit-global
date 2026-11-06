@@ -24,7 +24,10 @@ class OrgPreferenceLanguageOptionTest < ActiveSupport::TestCase
 
   test "has many org_preference_languages" do
     option = OrgPreferenceLanguageOption.create!(id: 99)
-    preference = OrgPreference.create!
+    preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     language = OrgPreferenceLanguage.create!(preference: preference, option: option)
 
     assert_includes option.org_preference_languages, language
@@ -51,7 +54,10 @@ class OrgPreferenceLanguageOptionTest < ActiveSupport::TestCase
 
   test "restricts deletion when associated records exist" do
     option = OrgPreferenceLanguageOption.create!(id: 99)
-    preference = OrgPreference.create!
+    preference = OrgPreference.create!(
+      jti: SecureRandom.uuid, last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
+    )
     OrgPreferenceLanguage.create!(preference: preference, option: option)
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

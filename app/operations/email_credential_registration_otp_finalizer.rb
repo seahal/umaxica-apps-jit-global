@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class EmailCredentialRegistrationOtpFinalizer
+  class DependencyFailure < StandardError; end
+
   class << self
     public
 
@@ -8,17 +10,18 @@ class EmailCredentialRegistrationOtpFinalizer
       new(**arguments).call!
     end
 
-    def bootstrap_receipt_pending?(**arguments)
-      new(**arguments).bootstrap_receipt_pending?
+    def bootstrap_receipt_recoverable?(**arguments)
+      new(**arguments).bootstrap_receipt_recoverable?
     end
   end
 
   public
 
   def initialize(actor:, actor_context:, token:, email:, transaction:, browser_nonce:, requirement:, code:,
-                 bootstrap_transaction: nil)
+                 step_up_evidence: nil, bootstrap_transaction: nil)
     @actor, @actor_context, @token, @email = actor, actor_context, token, email
     @transaction, @browser_nonce, @requirement, @code = transaction, browser_nonce, requirement, code
+    @step_up_evidence = step_up_evidence
     @bootstrap_transaction = bootstrap_transaction
     @surface, @policy_model, @audit_model =
       case [actor, token, email, transaction]
@@ -32,61 +35,61 @@ class EmailCredentialRegistrationOtpFinalizer
     return :unavailable unless browser_nonce.is_a?(String) && browser_nonce.encoding.ascii_compatible? &&
       browser_nonce.valid_encoding? && browser_nonce.match?(/\A[A-Za-z0-9_-]{43}\z/)
 
-    transaction.class.connection_owner.connected_to(role: :writing) do
-      transaction.class.transaction do
-        committed = with_original_locks { finalize_source! }
-        return :unavailable unless committed
+    finalize =
+      lambda do
+        actor.class.connection_class_for_self.connected_to(role: :writing) do
+          actor.with_lock do
+            next :unavailable unless actor.active?
 
-        if bootstrap_transaction && !bootstrap_transaction.consumed?
-          bootstrap_transaction.consume_email_registration!(registered_credential_ref: email.public_id)
+            email.with_lock do
+              case consume_ticket_result!
+              when :committed
+                :finalized
+              when :consumed
+                unless finalize_source!
+                  raise IdentityEmailCeremonyContract::Error,
+                        "Email Source finalization refused after Ticket consumption"
+                end
+
+                :finalized
+              else
+                :unavailable
+              end
+            end
+          end
         end
-        transaction.consume_registration_result! unless transaction.consumed?
-        :finalized
       end
+
+    if actor.is_a?(Client) && email.user_id == actor.id
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: email, owner: actor, &finalize)
+    else
+      finalize.call
     end
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished => e
+    raise DependencyFailure, "Email registration storage is unavailable: #{e.class}"
   end
 
-  def bootstrap_receipt_pending?
+  def bootstrap_receipt_recoverable?
     return false unless bootstrap_transaction && valid_browser_nonce?
 
-    transaction.class.connection_owner.connected_to(role: :writing) do
-      transaction.class.transaction do
-        with_original_locks do
-          now = transaction.class.database_now
-          original_binding?(now) && current_policy_matches? && bounded_pending_receipt?(now) &&
-            email.binding_effective? && committed_provenance? &&
-            transaction.status == "pending" && transaction.consumed_at.nil?
-        end
-      end
-    end
-  end
-
-  private
-
-  attr_reader :actor, :actor_context, :token, :email, :transaction, :browser_nonce, :requirement, :code,
-              :surface, :policy_model, :audit_model, :bootstrap_transaction
-
-  def with_original_locks
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
-        token_device_session.with_lock do
-          token.with_lock do
-            email.with_lock do
-              if bootstrap_transaction
-                next false unless transaction.bootstrap_ceremony_transaction_ref == bootstrap_transaction.transaction_id
-
-                EmailCredentialRegistrationBootstrapGuard.call(
-                  actor: actor, token: token, bootstrap_transaction: bootstrap_transaction,
-                  browser_nonce: browser_nonce, credential_ref: email.public_id, receipt: email.binding_effective?,
-                ) do
-                  transaction.lock!
-                  yield
+        email.with_lock do
+          transaction.class.connection_owner.connected_to(role: :writing) do
+            transaction.class.transaction do
+              token_device_session.with_lock do
+                token.with_lock do
+                  EmailCredentialRegistrationBootstrapGuard.call(
+                    actor: actor, token: token, bootstrap_transaction: bootstrap_transaction,
+                    browser_nonce: browser_nonce, credential_ref: email.public_id, receipt: true,
+                  ) do
+                    transaction.with_lock do
+                      now = transaction.class.database_now
+                      original_binding?(now) && current_policy_matches? && bounded_consumed_receipt?(now) &&
+                        email.binding_effective? && committed_provenance?
+                    end
+                  end || false
                 end
-              else
-                transaction.lock!
-                next false if transaction.bootstrap_ceremony_transaction_ref
-
-                yield
               end
             end
           end
@@ -95,18 +98,72 @@ class EmailCredentialRegistrationOtpFinalizer
     end
   end
 
+  private
+
+  attr_reader :actor, :actor_context, :token, :email, :transaction, :browser_nonce, :requirement, :code,
+              :surface, :policy_model, :audit_model, :step_up_evidence, :bootstrap_transaction
+
+  def consume_ticket_result!
+    transaction.class.connection_owner.connected_to(role: :writing) do
+      transaction.class.transaction do
+        token_device_session.with_lock do
+          token.with_lock do
+            if bootstrap_transaction
+              unless transaction.bootstrap_ceremony_transaction_ref == bootstrap_transaction.transaction_id
+                next :unavailable
+              end
+
+              EmailCredentialRegistrationBootstrapGuard.call(
+                actor: actor, token: token, bootstrap_transaction: bootstrap_transaction,
+                browser_nonce: browser_nonce, credential_ref: email.public_id,
+                receipt: transaction.consumed?,
+              ) do
+                transaction.with_lock { consume_ticket_result_locked! }
+              end || :unavailable
+            else
+              transaction.with_lock { consume_ticket_result_locked! }
+            end
+          end
+        end
+      end
+    end
+  end
+
+  def consume_ticket_result_locked!
+    now = transaction.class.database_now
+    return :unavailable unless original_authority?(now) && current_policy_matches?
+
+    if transaction.consumed?
+      return :committed if email.binding_effective? && committed_provenance?
+
+      return :unavailable
+    end
+    return :unavailable if email.binding_effective? || email.binding_finalized_at || email.binding_released?
+
+    consumption_now = transaction.class.database_now
+    return :unavailable unless original_authority?(consumption_now) && current_policy_matches?
+    return :unavailable unless bootstrap_transaction || StepUpEvidenceVerifier.call(
+      evidence: step_up_evidence, actor: actor, token: token,
+    )
+
+    bootstrap_transaction&.consume_email_registration!(registered_credential_ref: email.public_id)
+    transaction.consume_registration_result!
+    unless root_current?(transaction.consumed_at)
+      raise IdentityEmailCeremonyContract::Error.new(
+        "Email registration Root expired before Ticket consumption committed", code: "transaction_unavailable",
+      )
+    end
+    :consumed
+  end
+
   def finalize_source!
     now = transaction.class.database_now
     return false unless original_authority?(now) && current_policy_matches?
     return committed_provenance? if email.binding_effective?
-    return false if transaction.consumed? || email.binding_finalized_at || email.binding_released?
+    return false if email.binding_finalized_at || email.binding_released?
 
     previous = previous_bindings.lock.to_a
-    return false unless bootstrap_transaction || current_credential?
-
-    now = transaction.class.database_now
-    return false unless original_authority?(now) && current_policy_matches? &&
-      (bootstrap_transaction || StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?)
+    return false unless transaction.consumed?
 
     previous.each do |binding|
       binding.release_binding!
@@ -114,9 +171,7 @@ class EmailCredentialRegistrationOtpFinalizer
     end
     email.finalize_registration_binding!(transaction: transaction, code: code, session_ref: transaction.session_ref)
     record_audit!(email, "finalized")
-    # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent with it; a
-    # bootstrap registration carries no Step-Up.
-    token.consume_step_up_evidence!(requirement: requirement) unless bootstrap_transaction
+    # The Step-Up (or bootstrap authority) was consumed in Ticket before Source finalization.
     true
   end
 
@@ -131,7 +186,7 @@ class EmailCredentialRegistrationOtpFinalizer
   def original_binding?(now)
     source_now = email.class.database_now
     return false unless actor.login_allowed? && actor.accessible?(source_now) && email.accessible?(source_now) &&
-      source_owned? && actor_context_matches? && root_current?(now)
+      source_owned? && actor_context_matches? && ticket_root_authority_current?(now)
 
     expected = CredentialRegistrationOtpSessionValue.for(
       surface: surface, channel: :email, transaction_ref: transaction.transaction_id,
@@ -143,8 +198,8 @@ class EmailCredentialRegistrationOtpFinalizer
       transaction.session_ref == expected && original_bootstrap_matches?(now)
   end
 
-  def bounded_pending_receipt?(now)
-    transaction.status == "pending" && transaction.consumed_at.nil? && transaction.expires_at > now &&
+  def bounded_consumed_receipt?(now)
+    transaction.consumed? && transaction.consumed_at <= now && transaction.expires_at > now &&
       transaction.otp_cancelled_at.nil? && transaction.otp_consumed_at && transaction.otp_consumed_at <= now &&
       transaction.otp_result_expires_at && transaction.otp_result_expires_at > now &&
       transaction.otp_receipt_verifier.is_a?(String) && transaction.otp_receipt_verifier.match?(/\A[0-9a-f]{64}\z/)
@@ -154,11 +209,12 @@ class EmailCredentialRegistrationOtpFinalizer
     return false unless transaction.bootstrap_ceremony_transaction_ref == bootstrap_transaction&.transaction_id
     return true unless bootstrap_transaction
 
-    bootstrap_transaction.expires_at > now &&
-      (bootstrap_transaction.status == "pending" ||
-       (email.binding_effective? && bootstrap_transaction.consumed? &&
-        bootstrap_transaction.verified_credential_ref == email.public_id &&
-        bootstrap_transaction[:method] == "email_otp"))
+    return bootstrap_transaction.expires_at > now if bootstrap_transaction.status == "pending"
+    return false unless transaction.consumed? && bootstrap_transaction.consumed?
+
+    bootstrap_transaction.consumed_at <= bootstrap_transaction.expires_at &&
+      bootstrap_transaction.verified_credential_ref == email.public_id &&
+      bootstrap_transaction[:method] == "email_otp"
   end
 
   def valid_browser_nonce?
@@ -178,6 +234,12 @@ class EmailCredentialRegistrationOtpFinalizer
       token.device_session_id == token_device_session.id && token_device_session.current_refresh_token_id == token.id
   end
 
+  def ticket_root_authority_current?(now)
+    return root_current?(now) unless transaction.consumed?
+
+    transaction.consumed_at <= now
+  end
+
   def token_device_session
     @token_device_session ||= token.device_session_record!
   end
@@ -191,29 +253,6 @@ class EmailCredentialRegistrationOtpFinalizer
   def current_policy_matches?
     requirement.is_a?(StepUpRequirement) &&
       requirement.to_h == policy_model.new(email, user: actor).credential_registration_requirement(token: token).to_h
-  end
-
-  def current_credential?
-    credentials =
-      case [actor, token.last_step_up_method]
-      in [Client, "passkey"] then ClientPasskey.where(user_id: actor.id).active
-      in [Client, "email_otp"]
-        ClientEmail.where(user_id: actor.id).effective_binding.where(
-          user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES,
-        )
-      in [Client, "totp"]
-        ClientTotpCredential.where(
-          user_id: actor.id, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-        )
-      else return false
-      end
-    credential = credentials.lock.find_by(public_id: token.last_step_up_credential_ref)
-    return false unless credential
-
-    case credential
-    when ClientTotpCredential then credential.usable?
-    else credential.accessible?(credential.class.database_now)
-    end
   end
 
   def previous_bindings

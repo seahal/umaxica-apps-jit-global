@@ -24,4 +24,16 @@ module SessionBoundaryNotFound
              content_type: "text/html", formats: [:html]
     end
   end
+
+  # An authenticated session at Home is refused, not hidden: the page exists and is denied to this
+  # session. No redirect is issued (adr/home-dashboard-authentication-boundary.md, 2026-11-03).
+  def render_authenticated_home_forbidden
+    response.headers["Cache-Control"] = "private, no-store"
+
+    if request.format.json?
+      render json: { status: 403, error: Rack::Utils::HTTP_STATUS_CODES.fetch(403) }, status: :forbidden
+    else
+      render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
+    end
+  end
 end

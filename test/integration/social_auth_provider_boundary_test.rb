@@ -64,62 +64,52 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
             },
           )
           JitSecurityJwtRegistry.surface("BASE_APP")
-          2.times do |flow0_index|
-            flow0_target = URI.parse(@base_browser.response.location)
+          # The Base sign entry hands the browser to the Visa OP authorize endpoint, which
+          # relays an unauthenticated browser to the Auth sign-in entry. The Auth admission
+          # then runs its ceremony-binding confirmation on Visa and redeems the reference,
+          # so the chain must be followed until Auth renders the sign-in page itself.
+          flow0_admission_browser = @base_browser
+          12.times do |flow0_admission_index|
+            raise RuntimeError,
+                  "Social admission stopped before a redirect" unless flow0_admission_browser.response.redirect?
+
+            flow0_target = URI.parse(flow0_admission_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-            unless flow0_target.host == flow0_base_host
-              flow0_target = URI.parse(jump_rt_url_from_location_for_test(flow0_target.to_s))
-            end
-            if flow0_index.zero?
-              raise RuntimeError,
-                    "Base authorization host mismatch" unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
+            3.times do
+              break unless flow0_target.host == "jump.umaxica.net"
 
-              @base_browser.host!(flow0_target.host)
-              @base_browser.get(flow0_target.request_uri)
-              flow0_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-              flow0_fields =
-                flow0_form.css("input[name]").to_h { |flow0_input|
-                  [
-                    flow0_input["name"],
-                    flow0_input["value"],
-                  ]
-                }
-              @base_browser.post(
-                flow0_form["action"], params: flow0_fields, headers: {
-                  "Origin" => "https://#{visa_host_for_test_base_host(flow0_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                },
-              )
-            else
+              flow0_unwrapped = URI.parse(jump_rt_url_from_location_for_test(flow0_target.to_s))
+              break if flow0_unwrapped.to_s == flow0_target.to_s
+
+              flow0_target = flow0_unwrapped
+            end
+            if flow0_admission_index.zero?
+              unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
+                raise RuntimeError, "Base authorization host mismatch"
+              end
+            elsif flow0_admission_index == 1
               raise RuntimeError, "Auth admission host mismatch" unless flow0_target.host == flow0_auth_host
-
-              host!(flow0_auth_host)
-              https!
-              get(flow0_target.request_uri)
             end
-          end
-          3.times do |flow0_index|
-            flow0_sender = (flow0_index == 1) ? @base_browser : self
-            flow0_form = Nokogiri::HTML(flow0_sender.response.body).at_css("form")
-            flow0_fields =
-              flow0_form.css("input[name]").to_h { |flow0_input|
-                [
-                  flow0_input["name"],
-                  flow0_input["value"],
-                ]
-              }
-            flow0_sender.post(
-              flow0_form["action"], params: flow0_fields, headers: {
-                "Origin" => "https://#{(flow0_index == 1) ? flow0_base_host : flow0_auth_host}",
-                "Sec-Fetch-Site" => "same-origin",
+            flow0_next_browser =
+              if flow0_target.host.nil?
+                flow0_admission_browser
+              elsif flow0_target.host == flow0_auth_host
+                self
+              else
+                @base_browser
+              end
+            flow0_next_browser.host!(flow0_target.host) if flow0_target.host
+            flow0_next_browser.https!
+            flow0_next_browser.get(
+              flow0_target.request_uri, headers: {
+                "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
               },
             )
-            raise RuntimeError,
-                  "Social admission failed at step #{flow0_index}" unless flow0_sender.response.status == 303
-            next if flow0_index == 2
-
-            flow0_receiver = flow0_index.zero? ? @base_browser : self
-            flow0_receiver.get(URI.parse(flow0_sender.response.location).request_uri)
+            flow0_admission_browser = flow0_next_browser
+            break if flow0_next_browser == self && !response.redirect?
           end
+
+          assert_equal [flow0_auth_host, 200], [request.host, response.status]
         end
         flow0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         host!(flow0_host)
@@ -174,7 +164,10 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
           headers: social_callback_headers(@host)
     end
 
-    assert_response :redirect
+    # A rejected sign-in path callback answers with its refusal, not a redirect:
+    # provider_failed is a dependency-class refusal (SignInPathRefusalValue).
+    assert_response :service_unavailable
+    assert_equal I18n.t("errors.rate_limit.backend_unavailable"), response.body
     assert_nil ClientGoogleIdentity.find_by(uid: "forged-google-sub")
   end
 
@@ -219,62 +212,52 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
             },
           )
           JitSecurityJwtRegistry.surface("BASE_APP")
-          2.times do |flow1_index|
-            flow1_target = URI.parse(@base_browser.response.location)
+          # The Base sign entry hands the browser to the Visa OP authorize endpoint, which
+          # relays an unauthenticated browser to the Auth sign-in entry. The Auth admission
+          # then runs its ceremony-binding confirmation on Visa and redeems the reference,
+          # so the chain must be followed until Auth renders the sign-in page itself.
+          flow1_admission_browser = @base_browser
+          12.times do |flow1_admission_index|
+            raise RuntimeError,
+                  "Social admission stopped before a redirect" unless flow1_admission_browser.response.redirect?
+
+            flow1_target = URI.parse(flow1_admission_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-            unless flow1_target.host == flow1_base_host
-              flow1_target = URI.parse(jump_rt_url_from_location_for_test(flow1_target.to_s))
-            end
-            if flow1_index.zero?
-              raise RuntimeError,
-                    "Base authorization host mismatch" unless flow1_target.host == visa_host_for_test_base_host(flow1_base_host)
+            3.times do
+              break unless flow1_target.host == "jump.umaxica.net"
 
-              @base_browser.host!(flow1_target.host)
-              @base_browser.get(flow1_target.request_uri)
-              flow1_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-              flow1_fields =
-                flow1_form.css("input[name]").to_h { |flow1_input|
-                  [
-                    flow1_input["name"],
-                    flow1_input["value"],
-                  ]
-                }
-              @base_browser.post(
-                flow1_form["action"], params: flow1_fields, headers: {
-                  "Origin" => "https://#{visa_host_for_test_base_host(flow1_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                },
-              )
-            else
+              flow1_unwrapped = URI.parse(jump_rt_url_from_location_for_test(flow1_target.to_s))
+              break if flow1_unwrapped.to_s == flow1_target.to_s
+
+              flow1_target = flow1_unwrapped
+            end
+            if flow1_admission_index.zero?
+              unless flow1_target.host == visa_host_for_test_base_host(flow1_base_host)
+                raise RuntimeError, "Base authorization host mismatch"
+              end
+            elsif flow1_admission_index == 1
               raise RuntimeError, "Auth admission host mismatch" unless flow1_target.host == flow1_auth_host
-
-              host!(flow1_auth_host)
-              https!
-              get(flow1_target.request_uri)
             end
-          end
-          3.times do |flow1_index|
-            flow1_sender = (flow1_index == 1) ? @base_browser : self
-            flow1_form = Nokogiri::HTML(flow1_sender.response.body).at_css("form")
-            flow1_fields =
-              flow1_form.css("input[name]").to_h { |flow1_input|
-                [
-                  flow1_input["name"],
-                  flow1_input["value"],
-                ]
-              }
-            flow1_sender.post(
-              flow1_form["action"], params: flow1_fields, headers: {
-                "Origin" => "https://#{(flow1_index == 1) ? flow1_base_host : flow1_auth_host}",
-                "Sec-Fetch-Site" => "same-origin",
+            flow1_next_browser =
+              if flow1_target.host.nil?
+                flow1_admission_browser
+              elsif flow1_target.host == flow1_auth_host
+                self
+              else
+                @base_browser
+              end
+            flow1_next_browser.host!(flow1_target.host) if flow1_target.host
+            flow1_next_browser.https!
+            flow1_next_browser.get(
+              flow1_target.request_uri, headers: {
+                "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
               },
             )
-            raise RuntimeError,
-                  "Social admission failed at step #{flow1_index}" unless flow1_sender.response.status == 303
-            next if flow1_index == 2
-
-            flow1_receiver = flow1_index.zero? ? @base_browser : self
-            flow1_receiver.get(URI.parse(flow1_sender.response.location).request_uri)
+            flow1_admission_browser = flow1_next_browser
+            break if flow1_next_browser == self && !response.redirect?
           end
+
+          assert_equal [flow1_auth_host, 200], [request.host, response.status]
         end
         flow1_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         host!(flow1_host)
@@ -331,7 +314,10 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :redirect
+    # A rejected sign-in path callback answers with its refusal, not a redirect:
+    # provider_failed is a dependency-class refusal (SignInPathRefusalValue).
+    assert_response :service_unavailable
+    assert_equal I18n.t("errors.rate_limit.backend_unavailable"), response.body
   end
 
   test "callback rejects stale provider assertion iat" do
@@ -379,62 +365,52 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
             },
           )
           JitSecurityJwtRegistry.surface("BASE_APP")
-          2.times do |flow2_index|
-            flow2_target = URI.parse(@base_browser.response.location)
+          # The Base sign entry hands the browser to the Visa OP authorize endpoint, which
+          # relays an unauthenticated browser to the Auth sign-in entry. The Auth admission
+          # then runs its ceremony-binding confirmation on Visa and redeems the reference,
+          # so the chain must be followed until Auth renders the sign-in page itself.
+          flow2_admission_browser = @base_browser
+          12.times do |flow2_admission_index|
+            raise RuntimeError,
+                  "Social admission stopped before a redirect" unless flow2_admission_browser.response.redirect?
+
+            flow2_target = URI.parse(flow2_admission_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-            unless flow2_target.host == flow2_base_host
-              flow2_target = URI.parse(jump_rt_url_from_location_for_test(flow2_target.to_s))
-            end
-            if flow2_index.zero?
-              raise RuntimeError,
-                    "Base authorization host mismatch" unless flow2_target.host == visa_host_for_test_base_host(flow2_base_host)
+            3.times do
+              break unless flow2_target.host == "jump.umaxica.net"
 
-              @base_browser.host!(flow2_target.host)
-              @base_browser.get(flow2_target.request_uri)
-              flow2_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-              flow2_fields =
-                flow2_form.css("input[name]").to_h { |flow2_input|
-                  [
-                    flow2_input["name"],
-                    flow2_input["value"],
-                  ]
-                }
-              @base_browser.post(
-                flow2_form["action"], params: flow2_fields, headers: {
-                  "Origin" => "https://#{visa_host_for_test_base_host(flow2_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                },
-              )
-            else
+              flow2_unwrapped = URI.parse(jump_rt_url_from_location_for_test(flow2_target.to_s))
+              break if flow2_unwrapped.to_s == flow2_target.to_s
+
+              flow2_target = flow2_unwrapped
+            end
+            if flow2_admission_index.zero?
+              unless flow2_target.host == visa_host_for_test_base_host(flow2_base_host)
+                raise RuntimeError, "Base authorization host mismatch"
+              end
+            elsif flow2_admission_index == 1
               raise RuntimeError, "Auth admission host mismatch" unless flow2_target.host == flow2_auth_host
-
-              host!(flow2_auth_host)
-              https!
-              get(flow2_target.request_uri)
             end
-          end
-          3.times do |flow2_index|
-            flow2_sender = (flow2_index == 1) ? @base_browser : self
-            flow2_form = Nokogiri::HTML(flow2_sender.response.body).at_css("form")
-            flow2_fields =
-              flow2_form.css("input[name]").to_h { |flow2_input|
-                [
-                  flow2_input["name"],
-                  flow2_input["value"],
-                ]
-              }
-            flow2_sender.post(
-              flow2_form["action"], params: flow2_fields, headers: {
-                "Origin" => "https://#{(flow2_index == 1) ? flow2_base_host : flow2_auth_host}",
-                "Sec-Fetch-Site" => "same-origin",
+            flow2_next_browser =
+              if flow2_target.host.nil?
+                flow2_admission_browser
+              elsif flow2_target.host == flow2_auth_host
+                self
+              else
+                @base_browser
+              end
+            flow2_next_browser.host!(flow2_target.host) if flow2_target.host
+            flow2_next_browser.https!
+            flow2_next_browser.get(
+              flow2_target.request_uri, headers: {
+                "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
               },
             )
-            raise RuntimeError,
-                  "Social admission failed at step #{flow2_index}" unless flow2_sender.response.status == 303
-            next if flow2_index == 2
-
-            flow2_receiver = flow2_index.zero? ? @base_browser : self
-            flow2_receiver.get(URI.parse(flow2_sender.response.location).request_uri)
+            flow2_admission_browser = flow2_next_browser
+            break if flow2_next_browser == self && !response.redirect?
           end
+
+          assert_equal [flow2_auth_host, 200], [request.host, response.status]
         end
         flow2_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         host!(flow2_host)
@@ -539,62 +515,52 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
             },
           )
           JitSecurityJwtRegistry.surface("BASE_APP")
-          2.times do |flow3_index|
-            flow3_target = URI.parse(@base_browser.response.location)
+          # The Base sign entry hands the browser to the Visa OP authorize endpoint, which
+          # relays an unauthenticated browser to the Auth sign-in entry. The Auth admission
+          # then runs its ceremony-binding confirmation on Visa and redeems the reference,
+          # so the chain must be followed until Auth renders the sign-in page itself.
+          flow3_admission_browser = @base_browser
+          12.times do |flow3_admission_index|
+            raise RuntimeError,
+                  "Social admission stopped before a redirect" unless flow3_admission_browser.response.redirect?
+
+            flow3_target = URI.parse(flow3_admission_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-            unless flow3_target.host == flow3_base_host
-              flow3_target = URI.parse(jump_rt_url_from_location_for_test(flow3_target.to_s))
-            end
-            if flow3_index.zero?
-              raise RuntimeError,
-                    "Base authorization host mismatch" unless flow3_target.host == visa_host_for_test_base_host(flow3_base_host)
+            3.times do
+              break unless flow3_target.host == "jump.umaxica.net"
 
-              @base_browser.host!(flow3_target.host)
-              @base_browser.get(flow3_target.request_uri)
-              flow3_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-              flow3_fields =
-                flow3_form.css("input[name]").to_h { |flow3_input|
-                  [
-                    flow3_input["name"],
-                    flow3_input["value"],
-                  ]
-                }
-              @base_browser.post(
-                flow3_form["action"], params: flow3_fields, headers: {
-                  "Origin" => "https://#{visa_host_for_test_base_host(flow3_base_host)}", "Sec-Fetch-Site" => "same-origin",
-                },
-              )
-            else
+              flow3_unwrapped = URI.parse(jump_rt_url_from_location_for_test(flow3_target.to_s))
+              break if flow3_unwrapped.to_s == flow3_target.to_s
+
+              flow3_target = flow3_unwrapped
+            end
+            if flow3_admission_index.zero?
+              unless flow3_target.host == visa_host_for_test_base_host(flow3_base_host)
+                raise RuntimeError, "Base authorization host mismatch"
+              end
+            elsif flow3_admission_index == 1
               raise RuntimeError, "Auth admission host mismatch" unless flow3_target.host == flow3_auth_host
-
-              host!(flow3_auth_host)
-              https!
-              get(flow3_target.request_uri)
             end
-          end
-          3.times do |flow3_index|
-            flow3_sender = (flow3_index == 1) ? @base_browser : self
-            flow3_form = Nokogiri::HTML(flow3_sender.response.body).at_css("form")
-            flow3_fields =
-              flow3_form.css("input[name]").to_h { |flow3_input|
-                [
-                  flow3_input["name"],
-                  flow3_input["value"],
-                ]
-              }
-            flow3_sender.post(
-              flow3_form["action"], params: flow3_fields, headers: {
-                "Origin" => "https://#{(flow3_index == 1) ? flow3_base_host : flow3_auth_host}",
-                "Sec-Fetch-Site" => "same-origin",
+            flow3_next_browser =
+              if flow3_target.host.nil?
+                flow3_admission_browser
+              elsif flow3_target.host == flow3_auth_host
+                self
+              else
+                @base_browser
+              end
+            flow3_next_browser.host!(flow3_target.host) if flow3_target.host
+            flow3_next_browser.https!
+            flow3_next_browser.get(
+              flow3_target.request_uri, headers: {
+                "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
               },
             )
-            raise RuntimeError,
-                  "Social admission failed at step #{flow3_index}" unless flow3_sender.response.status == 303
-            next if flow3_index == 2
-
-            flow3_receiver = flow3_index.zero? ? @base_browser : self
-            flow3_receiver.get(URI.parse(flow3_sender.response.location).request_uri)
+            flow3_admission_browser = flow3_next_browser
+            break if flow3_next_browser == self && !response.redirect?
           end
+
+          assert_equal [flow3_auth_host, 200], [request.host, response.status]
         end
         flow3_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         host!(flow3_host)
@@ -852,7 +818,6 @@ class SocialAuthProviderBoundaryTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -875,24 +840,6 @@ class SocialAuthProviderBoundaryTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

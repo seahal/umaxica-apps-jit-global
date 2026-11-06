@@ -82,6 +82,34 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: client_auth_admission_binding_statuses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_auth_admission_binding_statuses (
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: client_auth_admission_binding_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_auth_admission_binding_statuses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_auth_admission_binding_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_auth_admission_binding_statuses_id_seq OWNED BY public.client_auth_admission_binding_statuses.id;
+
+
+--
 -- Name: client_auth_admission_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -104,7 +132,9 @@ CREATE TABLE public.client_auth_admission_bindings (
     updated_at timestamp with time zone NOT NULL,
     entry_intent character varying NOT NULL,
     curfew_at timestamp(6) with time zone NOT NULL,
+    status_id bigint DEFAULT 10 NOT NULL,
     CONSTRAINT client_admission_binding_entry_intent CHECK (((((purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying])::text[])) AND ((entry_intent)::text = ANY ((ARRAY['sign_in'::character varying, 'sign_up'::character varying])::text[]))) OR (((purpose)::text = ANY ((ARRAY['step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])) AND ((entry_intent)::text = 'not_applicable'::text)))),
+    CONSTRAINT client_admission_binding_status_facts CHECK ((((status_id = 10) AND (auth_ceremony_session_id IS NULL) AND (confirmation_ref IS NULL) AND (base_confirmed_at IS NULL) AND (redeemed_at IS NULL) AND (admitted_auth_ceremony_session_id IS NULL) AND (retired_at IS NULL)) OR ((status_id = 20) AND (auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL) AND (base_confirmed_at IS NULL) AND (redeemed_at IS NULL) AND (admitted_auth_ceremony_session_id IS NULL) AND (retired_at IS NULL)) OR ((status_id = 30) AND (auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL) AND (base_confirmed_at IS NOT NULL) AND (redeemed_at IS NULL) AND (admitted_auth_ceremony_session_id IS NULL) AND (retired_at IS NULL)) OR ((status_id = 40) AND (auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL) AND (base_confirmed_at IS NOT NULL) AND (redeemed_at IS NOT NULL) AND (admitted_auth_ceremony_session_id IS NOT NULL) AND (retired_at IS NULL)) OR ((status_id = 90) AND (redeemed_at IS NULL) AND (admitted_auth_ceremony_session_id IS NULL) AND (retired_at IS NOT NULL)) OR ((status_id = 91) AND (auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL) AND (base_confirmed_at IS NOT NULL) AND (redeemed_at IS NOT NULL) AND (admitted_auth_ceremony_session_id IS NOT NULL) AND (retired_at IS NULL)))),
     CONSTRAINT client_admission_bindings_auth_proof_pair CHECK ((((auth_ceremony_session_id IS NULL) AND (confirmation_ref IS NULL)) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_confirmation_requires_auth CHECK (((base_confirmed_at IS NULL) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_one_parent CHECK ((num_nonnulls(authorization_transaction_id, step_up_ceremony_transaction_id) = 1)),
@@ -136,6 +166,34 @@ ALTER SEQUENCE public.client_auth_admission_bindings_id_seq OWNED BY public.clie
 
 
 --
+-- Name: client_auth_ceremony_session_statuses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_auth_ceremony_session_statuses (
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: client_auth_ceremony_session_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_auth_ceremony_session_statuses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_auth_ceremony_session_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_auth_ceremony_session_statuses_id_seq OWNED BY public.client_auth_ceremony_session_statuses.id;
+
+
+--
 -- Name: client_auth_ceremony_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -157,7 +215,9 @@ CREATE TABLE public.client_auth_ceremony_sessions (
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
     email_otp_context jsonb,
+    status_id bigint NOT NULL,
     CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
+    CONSTRAINT client_auth_ceremony_session_status_facts CHECK ((((status_id = 10) AND (admitted_at IS NULL) AND (authentication_method IS NULL) AND (authentication_event_at IS NULL) AND (revoked_at IS NULL) AND (completed_at IS NULL) AND (cancelled_at IS NULL)) OR ((status_id = 20) AND (admitted_at IS NOT NULL) AND (authentication_method IS NULL) AND (authentication_event_at IS NULL) AND (revoked_at IS NULL) AND (completed_at IS NULL) AND (cancelled_at IS NULL)) OR ((status_id = 30) AND (admitted_at IS NOT NULL) AND (authentication_method IS NOT NULL) AND (authentication_event_at IS NOT NULL) AND (revoked_at IS NULL) AND (completed_at IS NULL) AND (cancelled_at IS NULL)) OR ((status_id = ANY (ARRAY[(40)::bigint, (90)::bigint])) AND (revoked_at IS NOT NULL) AND (completed_at IS NULL) AND (cancelled_at IS NULL)) OR ((status_id = 91) AND (admitted_at IS NOT NULL) AND (revoked_at IS NULL) AND (completed_at IS NOT NULL) AND (cancelled_at IS NULL)) OR ((status_id = 92) AND (admitted_at IS NOT NULL) AND (authentication_method IS NULL) AND (authentication_event_at IS NULL) AND (revoked_at IS NULL) AND (completed_at IS NULL) AND (cancelled_at IS NOT NULL)) OR ((status_id = 93) AND (admitted_at IS NOT NULL) AND (authentication_method IS NOT NULL) AND (authentication_event_at IS NOT NULL) AND (revoked_at IS NULL) AND (completed_at IS NULL) AND (cancelled_at IS NOT NULL)))),
     CONSTRAINT client_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
@@ -404,6 +464,34 @@ ALTER SEQUENCE public.client_oauth_callback_states_id_seq OWNED BY public.client
 
 
 --
+-- Name: client_oidc_authorization_transaction_statuses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_oidc_authorization_transaction_statuses (
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: client_oidc_authorization_transaction_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_oidc_authorization_transaction_statuses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_oidc_authorization_transaction_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_oidc_authorization_transaction_statuses_id_seq OWNED BY public.client_oidc_authorization_transaction_statuses.id;
+
+
+--
 -- Name: client_oidc_authorization_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -429,7 +517,6 @@ CREATE TABLE public.client_oidc_authorization_transactions (
     acr character varying,
     consumed_at timestamp(6) with time zone,
     expires_at timestamp(6) with time zone NOT NULL,
-    status character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     oidc_prompt character varying,
@@ -446,11 +533,12 @@ CREATE TABLE public.client_oidc_authorization_transactions (
     cancellation_handoff_digest character varying(64),
     cancellation_handoff_ref uuid,
     cancellation_handoff_ciphertext text,
+    status_id bigint NOT NULL,
     CONSTRAINT chk_client_oidc_txns_max_age CHECK ((oidc_max_age >= 0)),
-    CONSTRAINT client_oidc_auth_canceled_terminal CHECK (((canceled_at IS NULL) = ((status)::text <> 'canceled'::text))),
     CONSTRAINT client_oidc_auth_cancellation_handoff_pair CHECK ((((cancellation_handoff_ref IS NULL) AND (cancellation_handoff_ciphertext IS NULL)) OR ((cancellation_handoff_ref IS NOT NULL) AND (cancellation_handoff_ciphertext IS NOT NULL)))),
     CONSTRAINT client_oidc_auth_cancellation_handoff_valid CHECK (((cancellation_handoff_digest IS NULL) OR ((cancellation_handoff_digest)::text ~ '^[0-9a-f]{64}$'::text))),
-    CONSTRAINT client_oidc_auth_transactions_result_generation_nonnegative CHECK ((result_generation >= 0))
+    CONSTRAINT client_oidc_auth_transactions_result_generation_nonnegative CHECK ((result_generation >= 0)),
+    CONSTRAINT client_oidc_authorization_transaction_status_facts CHECK ((((status_id = 10) AND (authenticated_at IS NULL) AND (consumed_at IS NULL) AND (canceled_at IS NULL) AND (base_finalized_at IS NULL) AND (browser_session_ref IS NULL)) OR ((status_id = 20) AND (authenticated_at IS NOT NULL) AND (consumed_at IS NULL) AND (canceled_at IS NULL) AND (base_finalized_at IS NULL) AND (browser_session_ref IS NULL)) OR ((status_id = 30) AND (authenticated_at IS NOT NULL) AND (consumed_at IS NOT NULL) AND (canceled_at IS NULL) AND (((base_finalized_at IS NULL) AND (browser_session_ref IS NULL)) OR ((base_finalized_at IS NOT NULL) AND (browser_session_ref IS NOT NULL)))) OR ((status_id = 90) AND (canceled_at IS NOT NULL) AND (consumed_at IS NULL) AND (base_finalized_at IS NULL) AND (browser_session_ref IS NULL))))
 );
 
 
@@ -635,6 +723,269 @@ CREATE SEQUENCE public.client_secret_sign_in_receipts_id_seq
 --
 
 ALTER SEQUENCE public.client_secret_sign_in_receipts_id_seq OWNED BY public.client_secret_sign_in_receipts.id;
+
+
+--
+-- Name: client_sensitive_admission_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admission_attachments (
+    id bigint NOT NULL,
+    sensitive_admission_id bigint CONSTRAINT client_sensitive_admission_atta_sensitive_admission_id_not_null NOT NULL,
+    auth_ceremony_session_digest character varying(64) CONSTRAINT client_sensitive_admission__auth_ceremony_session_dige_not_null NOT NULL,
+    confirmation_ref uuid CONSTRAINT client_sensitive_admission_attachment_confirmation_ref_not_null NOT NULL,
+    attached_at timestamp with time zone NOT NULL,
+    CONSTRAINT client_sensitive_attach_digest CHECK (((auth_ceremony_session_digest)::text ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: client_sensitive_admission_attachments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admission_attachments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admission_attachments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admission_attachments_id_seq OWNED BY public.client_sensitive_admission_attachments.id;
+
+
+--
+-- Name: client_sensitive_admission_audit_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admission_audit_attempts (
+    id bigint NOT NULL,
+    outbox_id bigint NOT NULL,
+    attempt_number integer CONSTRAINT client_sensitive_admission_audit_attemp_attempt_number_not_null NOT NULL,
+    attempted_at timestamp with time zone NOT NULL,
+    outcome character varying(16) NOT NULL,
+    failure_code character varying(64) NOT NULL,
+    CONSTRAINT client_sensitive_attempt_failure CHECK ((((failure_code)::text = ANY ((ARRAY['none'::character varying, 'chronicle_unavailable'::character varying, 'retention_policy_missing'::character varying, 'event_identity_conflict'::character varying, 'chronicle_record_invalid'::character varying, 'delivery_failed'::character varying])::text[])) AND (((outcome)::text <> 'delivered'::text) OR ((failure_code)::text = 'none'::text)))),
+    CONSTRAINT client_sensitive_attempt_outcome CHECK (((attempt_number > 0) AND ((outcome)::text = ANY ((ARRAY['delivered'::character varying, 'failed'::character varying])::text[]))))
+);
+
+
+--
+-- Name: client_sensitive_admission_audit_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admission_audit_attempts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admission_audit_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admission_audit_attempts_id_seq OWNED BY public.client_sensitive_admission_audit_attempts.id;
+
+
+--
+-- Name: client_sensitive_admission_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admission_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    event_type character varying(64) NOT NULL,
+    realm character varying(3) NOT NULL,
+    client_id character varying(64) NOT NULL,
+    subject_ref character varying(255) NOT NULL,
+    context_ref character varying(21) NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    payload jsonb NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    delivery_state_id bigint CONSTRAINT client_sensitive_admission_audit_out_delivery_state_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_sensitive_audit_identity CHECK ((((event_type)::text = 'sensitive_admission.closed'::text) AND ((realm)::text = 'APP'::text) AND ((client_id)::text = 'base-app-ww'::text))),
+    CONSTRAINT client_sensitive_audit_payload CHECK (((jsonb_typeof(payload) = 'object'::text) AND (payload ? 'admission_ref'::text) AND (jsonb_typeof((payload -> 'admission_ref'::text)) = 'string'::text) AND ((payload - 'admission_ref'::text) = '{}'::jsonb) AND ((payload ->> 'admission_ref'::text) = (context_ref)::text))),
+    CONSTRAINT client_sensitive_audit_reason CHECK (((reason_code)::text = ANY ((ARRAY['completed'::character varying, 'expired'::character varying, 'user_cancelled'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_sensitive_admission_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admission_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admission_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admission_audit_outboxes_id_seq OWNED BY public.client_sensitive_admission_audit_outboxes.id;
+
+
+--
+-- Name: client_sensitive_admission_confirmations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admission_confirmations (
+    id bigint NOT NULL,
+    sensitive_admission_id bigint CONSTRAINT client_sensitive_admission_conf_sensitive_admission_id_not_null NOT NULL,
+    confirmed_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: client_sensitive_admission_confirmations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admission_confirmations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admission_confirmations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admission_confirmations_id_seq OWNED BY public.client_sensitive_admission_confirmations.id;
+
+
+--
+-- Name: client_sensitive_admission_redemptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admission_redemptions (
+    id bigint NOT NULL,
+    sensitive_admission_id bigint CONSTRAINT client_sensitive_admission_rede_sensitive_admission_id_not_null NOT NULL,
+    auth_ceremony_session_digest character varying(64) CONSTRAINT client_sensitive_admission_auth_ceremony_session_dige_not_null1 NOT NULL,
+    ceremony_ref character varying(21) NOT NULL,
+    redeemed_at timestamp with time zone NOT NULL,
+    continuation_expires_at timestamp with time zone CONSTRAINT client_sensitive_admission_red_continuation_expires_at_not_null NOT NULL,
+    CONSTRAINT client_sensitive_redeem_values CHECK ((((auth_ceremony_session_digest)::text ~ '^[0-9a-f]{64}$'::text) AND ((ceremony_ref)::text ~ '^[A-Za-z0-9_-]{21}$'::text) AND (continuation_expires_at > redeemed_at)))
+);
+
+
+--
+-- Name: client_sensitive_admission_redemptions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admission_redemptions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admission_redemptions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admission_redemptions_id_seq OWNED BY public.client_sensitive_admission_redemptions.id;
+
+
+--
+-- Name: client_sensitive_admission_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admission_sessions (
+    id bigint NOT NULL,
+    sensitive_admission_id bigint CONSTRAINT client_sensitive_admission_sess_sensitive_admission_id_not_null NOT NULL,
+    sid_digest character varying(64) NOT NULL,
+    phase character varying(16) NOT NULL,
+    status character varying(16) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_sensitive_session_deadline CHECK ((expires_at > created_at)),
+    CONSTRAINT client_sensitive_session_state CHECK ((((sid_digest)::text ~ '^[0-9a-f]{64}$'::text) AND ((phase)::text = ANY ((ARRAY['attached'::character varying, 'admitted'::character varying])::text[])) AND ((status)::text = ANY ((ARRAY['active'::character varying, 'revoked'::character varying])::text[]))))
+);
+
+
+--
+-- Name: client_sensitive_admission_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admission_sessions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admission_sessions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admission_sessions_id_seq OWNED BY public.client_sensitive_admission_sessions.id;
+
+
+--
+-- Name: client_sensitive_admissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_sensitive_admissions (
+    id bigint NOT NULL,
+    public_ref character varying(21) NOT NULL,
+    secret_digest character varying(64) NOT NULL,
+    realm character varying(3) NOT NULL,
+    client_id character varying(64) NOT NULL,
+    actor_subject character varying(255) NOT NULL,
+    grant_sid character varying(64) NOT NULL,
+    rp_session_ref character varying(64) NOT NULL,
+    browser_binding_digest character varying(64) NOT NULL,
+    purpose character varying(32) NOT NULL,
+    provider character varying(16) NOT NULL,
+    event_jti character varying(255) NOT NULL,
+    event_auth_time bigint NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    status character varying(16) NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_sensitive_admission_deadline CHECK (((expires_at > issued_at) AND (event_auth_time > 0))),
+    CONSTRAINT client_sensitive_admission_digests CHECK ((((secret_digest)::text ~ '^[0-9a-f]{64}$'::text) AND ((browser_binding_digest)::text ~ '^[0-9a-f]{64}$'::text))),
+    CONSTRAINT client_sensitive_admission_purpose CHECK (((((purpose)::text = 'passkey_registration'::text) AND ((provider)::text = 'none'::text)) OR (((purpose)::text = 'social_link'::text) AND ((provider)::text = ANY ((ARRAY['google'::character varying, 'apple'::character varying])::text[]))))),
+    CONSTRAINT client_sensitive_admission_realm CHECK ((((realm)::text = 'app'::text) AND ((client_id)::text = 'base-app-ww'::text))),
+    CONSTRAINT client_sensitive_admission_references CHECK ((((public_ref)::text ~ '^[A-Za-z0-9_-]{21}$'::text) AND (length((actor_subject)::text) > 0) AND (length((grant_sid)::text) > 0) AND (length((rp_session_ref)::text) > 0) AND (length((event_jti)::text) > 0))),
+    CONSTRAINT client_sensitive_admission_status CHECK (((status)::text = ANY ((ARRAY['issued'::character varying, 'attached'::character varying, 'confirmed'::character varying, 'redeemed'::character varying, 'cancelled'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_sensitive_admissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_sensitive_admissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_sensitive_admissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_sensitive_admissions_id_seq OWNED BY public.client_sensitive_admissions.id;
 
 
 --
@@ -985,6 +1336,118 @@ ALTER SEQUENCE public.client_social_ceremony_transactions_id_seq OWNED BY public
 
 
 --
+-- Name: client_step_up_audit_outbox_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_audit_outbox_attempts (
+    id bigint NOT NULL,
+    outbox_id bigint NOT NULL,
+    attempt_number integer NOT NULL,
+    attempted_at timestamp(6) with time zone NOT NULL,
+    outcome character varying(16) NOT NULL,
+    failure_code character varying(64) NOT NULL,
+    CONSTRAINT chk_client_step_up_attempt_failure_codes CHECK (((failure_code)::text = ANY ((ARRAY['none'::character varying, 'chronicle_unavailable'::character varying, 'retention_policy_missing'::character varying, 'event_identity_conflict'::character varying, 'chronicle_record_invalid'::character varying, 'delivery_failed'::character varying])::text[]))),
+    CONSTRAINT chk_client_step_up_audit_attempt_failure CHECK ((length((failure_code)::text) > 0)),
+    CONSTRAINT chk_client_step_up_audit_attempt_number CHECK ((attempt_number > 0)),
+    CONSTRAINT chk_client_step_up_audit_attempt_outcome CHECK (((outcome)::text = ANY ((ARRAY['delivered'::character varying, 'failed'::character varying])::text[]))),
+    CONSTRAINT chk_client_step_up_delivered_failure_none CHECK ((((outcome)::text <> 'delivered'::text) OR ((failure_code)::text = 'none'::text)))
+);
+
+
+--
+-- Name: client_step_up_audit_outbox_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_audit_outbox_attempts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_audit_outbox_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_audit_outbox_attempts_id_seq OWNED BY public.client_step_up_audit_outbox_attempts.id;
+
+
+--
+-- Name: client_step_up_audit_outbox_delivery_states; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_audit_outbox_delivery_states (
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: client_step_up_audit_outbox_delivery_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_audit_outbox_delivery_states_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_audit_outbox_delivery_states_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_audit_outbox_delivery_states_id_seq OWNED BY public.client_step_up_audit_outbox_delivery_states.id;
+
+
+--
+-- Name: client_step_up_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    event_type character varying(64) NOT NULL,
+    realm character varying(3) NOT NULL,
+    client_id character varying NOT NULL,
+    subject_ref character varying(255) NOT NULL,
+    context_ref character varying(21) NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    payload jsonb NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    delivery_state_id bigint NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_step_up_audit_event CHECK (((event_type)::text = ANY ((ARRAY['step_up.requested'::character varying, 'step_up.committed'::character varying, 'step_up.installed'::character varying, 'step_up.cancelled'::character varying, 'step_up.expired'::character varying, 'step_up.failed'::character varying, 'step_up.refused'::character varying, 'step_up.indeterminate'::character varying, 'step_up.attempt_rejected'::character varying])::text[]))),
+    CONSTRAINT chk_client_step_up_audit_payload CHECK (((jsonb_typeof(payload) = 'object'::text) AND ((((event_type)::text = 'step_up.requested'::text) AND (payload ?& ARRAY['rp_state_ref'::text, 'return_target_kind'::text]) AND ((payload - ARRAY['rp_state_ref'::text, 'return_target_kind'::text]) = '{}'::jsonb)) OR (((event_type)::text = 'step_up.committed'::text) AND (payload ?& ARRAY['op_context_ref'::text, 'grant_ref'::text, 'verified_method'::text, 'auth_time'::text]) AND ((payload - ARRAY['op_context_ref'::text, 'grant_ref'::text, 'verified_method'::text, 'auth_time'::text]) = '{}'::jsonb)) OR (((event_type)::text = 'step_up.installed'::text) AND (payload ?& ARRAY['rp_state_ref'::text, 'grant_ref'::text, 'installed_generation'::text]) AND ((payload - ARRAY['rp_state_ref'::text, 'grant_ref'::text, 'installed_generation'::text]) = '{}'::jsonb)) OR (((event_type)::text = ANY ((ARRAY['step_up.cancelled'::character varying, 'step_up.expired'::character varying])::text[])) AND ((payload ? 'op_context_ref'::text) <> (payload ? 'rp_state_ref'::text)) AND ((payload - ARRAY['op_context_ref'::text, 'rp_state_ref'::text]) = '{}'::jsonb)) OR (((event_type)::text = 'step_up.failed'::text) AND (payload ?& ARRAY['op_context_ref'::text, 'failure_code'::text]) AND ((payload - ARRAY['op_context_ref'::text, 'failure_code'::text]) = '{}'::jsonb)) OR (((event_type)::text = ANY ((ARRAY['step_up.refused'::character varying, 'step_up.indeterminate'::character varying])::text[])) AND (payload ?& ARRAY['rp_state_ref'::text, 'failure_code'::text]) AND ((payload - ARRAY['rp_state_ref'::text, 'failure_code'::text]) = '{}'::jsonb)) OR (((event_type)::text = 'step_up.attempt_rejected'::text) AND (payload ?& ARRAY['context_ref'::text, 'rejection_code'::text]) AND ((payload - ARRAY['context_ref'::text, 'rejection_code'::text]) = '{}'::jsonb))))),
+    CONSTRAINT chk_client_step_up_audit_payload_codes CHECK (((((event_type)::text <> 'step_up.failed'::text) OR (COALESCE((payload ->> 'failure_code'::text), ''::text) = ANY (ARRAY['binding_mismatch'::text, 'expectation_mismatch'::text, 'policy_refused'::text, 'unsatisfiable_class'::text]))) AND (((event_type)::text <> ALL ((ARRAY['step_up.refused'::character varying, 'step_up.indeterminate'::character varying])::text[])) OR (COALESCE((payload ->> 'failure_code'::text), ''::text) = ANY (ARRAY['op_error'::text, 'generation_superseded'::text, 'session_invalid'::text, 'exchange_timeout'::text, 'dispatch_deadline_passed'::text]))) AND (((event_type)::text <> 'step_up.attempt_rejected'::text) OR (COALESCE((payload ->> 'rejection_code'::text), ''::text) = ANY (ARRAY['foreign_browser'::text, 'state_mismatch'::text, 'duplicate_callback'::text]))))),
+    CONSTRAINT chk_client_step_up_audit_realm CHECK (((realm)::text = 'APP'::text)),
+    CONSTRAINT chk_client_step_up_audit_reason CHECK ((length((reason_code)::text) > 0)),
+    CONSTRAINT chk_client_step_up_audit_reason_codes CHECK (((reason_code)::text = ANY ((ARRAY['requested'::character varying, 'dispatch_started'::character varying, 'completed'::character varying, 'user_cancelled'::character varying, 'expired'::character varying, 'binding_mismatch'::character varying, 'expectation_mismatch'::character varying, 'policy_refused'::character varying, 'unsatisfiable_class'::character varying, 'op_error'::character varying, 'generation_superseded'::character varying, 'session_invalid'::character varying, 'exchange_timeout'::character varying, 'dispatch_deadline_passed'::character varying, 'foreign_browser'::character varying, 'state_mismatch'::character varying, 'duplicate_callback'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_step_up_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_audit_outboxes_id_seq OWNED BY public.client_step_up_audit_outboxes.id;
+
+
+--
 -- Name: client_step_up_ceremony_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1057,6 +1520,141 @@ CREATE SEQUENCE public.client_step_up_ceremony_transactions_id_seq
 --
 
 ALTER SEQUENCE public.client_step_up_ceremony_transactions_id_seq OWNED BY public.client_step_up_ceremony_transactions.id;
+
+
+--
+-- Name: client_step_up_commits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_commits (
+    id bigint NOT NULL,
+    grant_id bigint NOT NULL,
+    root_token_id bigint NOT NULL,
+    context_ref character varying(21) NOT NULL,
+    verified_method character varying(16) NOT NULL,
+    committed_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_step_up_commits_method CHECK (((verified_method)::text = ANY ((ARRAY['passkey'::character varying, 'totp'::character varying, 'email_otp'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_step_up_commits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_commits_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_commits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_commits_id_seq OWNED BY public.client_step_up_commits.id;
+
+
+--
+-- Name: client_step_up_context_states; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_context_states (
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: client_step_up_context_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_context_states_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_context_states_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_context_states_id_seq OWNED BY public.client_step_up_context_states.id;
+
+
+--
+-- Name: client_step_up_context_transitions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_context_transitions (
+    id bigint NOT NULL,
+    owner_id bigint NOT NULL,
+    from_state_id bigint NOT NULL,
+    to_state_id bigint NOT NULL,
+    reason_code character varying(64) NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_step_up_transition_reason CHECK (((reason_code)::text = ANY ((ARRAY['requested'::character varying, 'dispatch_started'::character varying, 'completed'::character varying, 'user_cancelled'::character varying, 'expired'::character varying, 'binding_mismatch'::character varying, 'expectation_mismatch'::character varying, 'policy_refused'::character varying, 'unsatisfiable_class'::character varying, 'op_error'::character varying, 'generation_superseded'::character varying, 'session_invalid'::character varying, 'exchange_timeout'::character varying, 'dispatch_deadline_passed'::character varying, 'foreign_browser'::character varying, 'state_mismatch'::character varying, 'duplicate_callback'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_step_up_context_transitions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_context_transitions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_context_transitions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_context_transitions_id_seq OWNED BY public.client_step_up_context_transitions.id;
+
+
+--
+-- Name: client_step_up_contexts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_step_up_contexts (
+    id bigint NOT NULL,
+    public_id character varying(21) NOT NULL,
+    oidc_authorization_transaction_id bigint CONSTRAINT client_step_up_contexts_oidc_authorization_transaction_not_null NOT NULL,
+    grant_id bigint NOT NULL,
+    bound_subject character varying(255) NOT NULL,
+    requested_acr character varying(255) NOT NULL,
+    state_id bigint NOT NULL,
+    expires_at timestamp(6) with time zone NOT NULL,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_step_up_contexts_acr CHECK (((requested_acr)::text = 'https://visa.umaxica.app/acr/reauthentication'::text))
+);
+
+
+--
+-- Name: client_step_up_contexts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_step_up_contexts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_step_up_contexts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_step_up_contexts_id_seq OWNED BY public.client_step_up_contexts.id;
 
 
 --
@@ -1441,6 +2039,113 @@ CREATE SEQUENCE public.client_verifications_id_seq
 --
 
 ALTER SEQUENCE public.client_verifications_id_seq OWNED BY public.client_verifications.id;
+
+
+--
+-- Name: client_visa_sensitive_admissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_visa_sensitive_admissions (
+    id bigint NOT NULL,
+    public_ref character varying(21) NOT NULL,
+    oidc_authorization_transaction_id bigint CONSTRAINT client_visa_sensitive_admis_oidc_authorization_transac_not_null NOT NULL,
+    step_up_ceremony_transaction_id bigint CONSTRAINT client_visa_sensitive_admis_step_up_ceremony_transacti_not_null NOT NULL,
+    auth_admission_binding_id bigint CONSTRAINT client_visa_sensitive_admiss_auth_admission_binding_id_not_null NOT NULL,
+    realm character varying(3) NOT NULL,
+    client_id character varying(64) NOT NULL,
+    actor_subject character varying(255) NOT NULL,
+    grant_sid character varying(64) NOT NULL,
+    rp_session_ref character varying(64) NOT NULL,
+    rp_session_expires_at timestamp with time zone NOT NULL,
+    browser_binding_digest character varying(64) CONSTRAINT client_visa_sensitive_admission_browser_binding_digest_not_null NOT NULL,
+    purpose character varying(32) NOT NULL,
+    provider character varying(16) NOT NULL,
+    event_jti character varying(255) NOT NULL,
+    event_auth_time bigint NOT NULL,
+    event_acr character varying(64) NOT NULL,
+    event_amr jsonb NOT NULL,
+    status character varying(24) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_visa_admission_purpose CHECK ((((purpose)::text = 'passkey_registration'::text) AND ((provider)::text = 'none'::text))),
+    CONSTRAINT client_visa_admission_realm CHECK ((((realm)::text = 'app'::text) AND ((client_id)::text = 'base-app-ww'::text))),
+    CONSTRAINT client_visa_admission_status CHECK (((status)::text = ANY ((ARRAY['issued'::character varying, 'browser_confirmed'::character varying, 'source_committed'::character varying, 'refused'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT client_visa_admission_values CHECK ((((public_ref)::text ~ '^[A-Za-z0-9_-]{21}$'::text) AND (event_auth_time > 0) AND ((event_acr)::text <> ''::text) AND ((browser_binding_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (jsonb_typeof(event_amr) = 'array'::text) AND (jsonb_array_length(event_amr) > 0) AND (expires_at > created_at) AND (expires_at <= rp_session_expires_at)))
+);
+
+
+--
+-- Name: client_visa_sensitive_admissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_visa_sensitive_admissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_visa_sensitive_admissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_visa_sensitive_admissions_id_seq OWNED BY public.client_visa_sensitive_admissions.id;
+
+
+--
+-- Name: client_visa_social_link_admissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_visa_social_link_admissions (
+    id bigint NOT NULL,
+    public_ref character varying(21) NOT NULL,
+    oidc_authorization_transaction_id bigint CONSTRAINT client_visa_social_link_adm_oidc_authorization_transac_not_null NOT NULL,
+    social_ceremony_transaction_id bigint CONSTRAINT client_visa_social_link_adm_social_ceremony_transactio_not_null NOT NULL,
+    step_up_ceremony_transaction_id bigint CONSTRAINT client_visa_social_link_adm_step_up_ceremony_transacti_not_null NOT NULL,
+    auth_admission_binding_id bigint CONSTRAINT client_visa_social_link_admi_auth_admission_binding_id_not_null NOT NULL,
+    realm character varying(3) NOT NULL,
+    client_id character varying(64) NOT NULL,
+    actor_subject character varying(255) NOT NULL,
+    grant_sid character varying(64) NOT NULL,
+    rp_session_ref character varying(64) NOT NULL,
+    rp_session_expires_at timestamp with time zone CONSTRAINT client_visa_social_link_admissio_rp_session_expires_at_not_null NOT NULL,
+    browser_binding_digest character varying(64) CONSTRAINT client_visa_social_link_admissi_browser_binding_digest_not_null NOT NULL,
+    purpose character varying(32) NOT NULL,
+    provider character varying(16) NOT NULL,
+    event_jti character varying(255) NOT NULL,
+    event_auth_time bigint NOT NULL,
+    event_acr character varying(64) NOT NULL,
+    event_amr jsonb NOT NULL,
+    status character varying(24) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_visa_social_admission_purpose CHECK ((((purpose)::text = 'social_link'::text) AND ((provider)::text = ANY ((ARRAY['google'::character varying, 'apple'::character varying])::text[])))),
+    CONSTRAINT client_visa_social_admission_realm CHECK ((((realm)::text = 'app'::text) AND ((client_id)::text = 'base-app-ww'::text))),
+    CONSTRAINT client_visa_social_admission_status CHECK (((status)::text = ANY ((ARRAY['issued'::character varying, 'browser_confirmed'::character varying, 'source_committed'::character varying, 'refused'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT client_visa_social_admission_values CHECK ((((public_ref)::text ~ '^[A-Za-z0-9_-]{21}$'::text) AND (event_auth_time > 0) AND ((event_acr)::text <> ''::text) AND ((browser_binding_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (jsonb_typeof(event_amr) = 'array'::text) AND (jsonb_array_length(event_amr) > 0) AND (expires_at > created_at) AND (expires_at <= rp_session_expires_at)))
+);
+
+
+--
+-- Name: client_visa_social_link_admissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_visa_social_link_admissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_visa_social_link_admissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_visa_social_link_admissions_id_seq OWNED BY public.client_visa_social_link_admissions.id;
 
 
 --
@@ -2222,10 +2927,24 @@ ALTER SEQUENCE public.user_verifications_user_token_id_seq OWNED BY public.clien
 
 
 --
+-- Name: client_auth_admission_binding_statuses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_auth_admission_binding_statuses ALTER COLUMN id SET DEFAULT nextval('public.client_auth_admission_binding_statuses_id_seq'::regclass);
+
+
+--
 -- Name: client_auth_admission_bindings id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_auth_admission_bindings ALTER COLUMN id SET DEFAULT nextval('public.client_auth_admission_bindings_id_seq'::regclass);
+
+
+--
+-- Name: client_auth_ceremony_session_statuses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_auth_ceremony_session_statuses ALTER COLUMN id SET DEFAULT nextval('public.client_auth_ceremony_session_statuses_id_seq'::regclass);
 
 
 --
@@ -2271,6 +2990,13 @@ ALTER TABLE ONLY public.client_oauth_callback_states ALTER COLUMN id SET DEFAULT
 
 
 --
+-- Name: client_oidc_authorization_transaction_statuses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_oidc_authorization_transaction_statuses ALTER COLUMN id SET DEFAULT nextval('public.client_oidc_authorization_transaction_statuses_id_seq'::regclass);
+
+
+--
 -- Name: client_oidc_authorization_transactions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2303,6 +3029,55 @@ ALTER TABLE ONLY public.client_secret_credential_ceremony_transactions ALTER COL
 --
 
 ALTER TABLE ONLY public.client_secret_sign_in_receipts ALTER COLUMN id SET DEFAULT nextval('public.client_secret_sign_in_receipts_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admission_attachments id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_attachments ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admission_attachments_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admission_audit_attempts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_audit_attempts ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admission_audit_attempts_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admission_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admission_audit_outboxes_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admission_confirmations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_confirmations ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admission_confirmations_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admission_redemptions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_redemptions ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admission_redemptions_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admission_sessions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_sessions ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admission_sessions_id_seq'::regclass);
+
+
+--
+-- Name: client_sensitive_admissions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admissions ALTER COLUMN id SET DEFAULT nextval('public.client_sensitive_admissions_id_seq'::regclass);
 
 
 --
@@ -2362,10 +3137,59 @@ ALTER TABLE ONLY public.client_social_ceremony_transactions ALTER COLUMN id SET 
 
 
 --
+-- Name: client_step_up_audit_outbox_attempts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outbox_attempts ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_audit_outbox_attempts_id_seq'::regclass);
+
+
+--
+-- Name: client_step_up_audit_outbox_delivery_states id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outbox_delivery_states ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_audit_outbox_delivery_states_id_seq'::regclass);
+
+
+--
+-- Name: client_step_up_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_audit_outboxes_id_seq'::regclass);
+
+
+--
 -- Name: client_step_up_ceremony_transactions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_step_up_ceremony_transactions ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_ceremony_transactions_id_seq'::regclass);
+
+
+--
+-- Name: client_step_up_commits id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_commits ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_commits_id_seq'::regclass);
+
+
+--
+-- Name: client_step_up_context_states id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_states ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_context_states_id_seq'::regclass);
+
+
+--
+-- Name: client_step_up_context_transitions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_transitions ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_context_transitions_id_seq'::regclass);
+
+
+--
+-- Name: client_step_up_contexts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_contexts ALTER COLUMN id SET DEFAULT nextval('public.client_step_up_contexts_id_seq'::regclass);
 
 
 --
@@ -2429,6 +3253,20 @@ ALTER TABLE ONLY public.client_totp_ceremony_transactions ALTER COLUMN id SET DE
 --
 
 ALTER TABLE ONLY public.client_verifications ALTER COLUMN id SET DEFAULT nextval('public.client_verifications_id_seq'::regclass);
+
+
+--
+-- Name: client_visa_sensitive_admissions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_sensitive_admissions ALTER COLUMN id SET DEFAULT nextval('public.client_visa_sensitive_admissions_id_seq'::regclass);
+
+
+--
+-- Name: client_visa_social_link_admissions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_social_link_admissions ALTER COLUMN id SET DEFAULT nextval('public.client_visa_social_link_admissions_id_seq'::regclass);
 
 
 --
@@ -2596,11 +3434,27 @@ ALTER TABLE public.client_step_up_sessions
 
 
 --
+-- Name: client_auth_admission_binding_statuses client_auth_admission_binding_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_auth_admission_binding_statuses
+    ADD CONSTRAINT client_auth_admission_binding_statuses_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_auth_admission_bindings client_auth_admission_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_auth_admission_bindings
     ADD CONSTRAINT client_auth_admission_bindings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_auth_ceremony_session_statuses client_auth_ceremony_session_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_auth_ceremony_session_statuses
+    ADD CONSTRAINT client_auth_ceremony_session_statuses_pkey PRIMARY KEY (id);
 
 
 --
@@ -2652,6 +3506,14 @@ ALTER TABLE ONLY public.client_oauth_callback_states
 
 
 --
+-- Name: client_oidc_authorization_transaction_statuses client_oidc_authorization_transaction_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_oidc_authorization_transaction_statuses
+    ADD CONSTRAINT client_oidc_authorization_transaction_statuses_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_oidc_authorization_transactions client_oidc_authorization_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2689,6 +3551,62 @@ ALTER TABLE ONLY public.client_secret_credential_ceremony_transactions
 
 ALTER TABLE ONLY public.client_secret_sign_in_receipts
     ADD CONSTRAINT client_secret_sign_in_receipts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admission_attachments client_sensitive_admission_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_attachments
+    ADD CONSTRAINT client_sensitive_admission_attachments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admission_audit_attempts client_sensitive_admission_audit_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_audit_attempts
+    ADD CONSTRAINT client_sensitive_admission_audit_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admission_audit_outboxes client_sensitive_admission_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_audit_outboxes
+    ADD CONSTRAINT client_sensitive_admission_audit_outboxes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admission_confirmations client_sensitive_admission_confirmations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_confirmations
+    ADD CONSTRAINT client_sensitive_admission_confirmations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admission_redemptions client_sensitive_admission_redemptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_redemptions
+    ADD CONSTRAINT client_sensitive_admission_redemptions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admission_sessions client_sensitive_admission_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_sessions
+    ADD CONSTRAINT client_sensitive_admission_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_sensitive_admissions client_sensitive_admissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admissions
+    ADD CONSTRAINT client_sensitive_admissions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2756,11 +3674,67 @@ ALTER TABLE ONLY public.client_social_ceremony_transactions
 
 
 --
+-- Name: client_step_up_audit_outbox_attempts client_step_up_audit_outbox_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outbox_attempts
+    ADD CONSTRAINT client_step_up_audit_outbox_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_step_up_audit_outbox_delivery_states client_step_up_audit_outbox_delivery_states_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outbox_delivery_states
+    ADD CONSTRAINT client_step_up_audit_outbox_delivery_states_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_step_up_audit_outboxes client_step_up_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outboxes
+    ADD CONSTRAINT client_step_up_audit_outboxes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_step_up_ceremony_transactions client_step_up_ceremony_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_step_up_ceremony_transactions
     ADD CONSTRAINT client_step_up_ceremony_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_step_up_commits client_step_up_commits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_commits
+    ADD CONSTRAINT client_step_up_commits_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_step_up_context_states client_step_up_context_states_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_states
+    ADD CONSTRAINT client_step_up_context_states_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_step_up_context_transitions client_step_up_context_transitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_transitions
+    ADD CONSTRAINT client_step_up_context_transitions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_step_up_contexts client_step_up_contexts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_contexts
+    ADD CONSTRAINT client_step_up_contexts_pkey PRIMARY KEY (id);
 
 
 --
@@ -2833,6 +3807,22 @@ ALTER TABLE ONLY public.client_totp_ceremony_transactions
 
 ALTER TABLE ONLY public.client_verifications
     ADD CONSTRAINT client_verifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_visa_sensitive_admissions client_visa_sensitive_admissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_sensitive_admissions
+    ADD CONSTRAINT client_visa_sensitive_admissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_visa_social_link_admissions client_visa_social_link_admissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_social_link_admissions
+    ADD CONSTRAINT client_visa_social_link_admissions_pkey PRIMARY KEY (id);
 
 
 --
@@ -3018,10 +4008,17 @@ CREATE UNIQUE INDEX idx_active_op_app_grant_per_device_session ON public.op_app_
 
 
 --
--- Name: idx_auth_ceremony_sessions_on_live_tx_ref; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_client_admission_active_oidc_purpose; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_auth_ceremony_sessions_on_live_tx_ref ON public.client_auth_ceremony_sessions USING btree (authorization_transaction_ref) WHERE ((authorization_transaction_ref IS NOT NULL) AND (cancelled_at IS NULL));
+CREATE UNIQUE INDEX idx_client_admission_active_oidc_purpose ON public.client_auth_admission_bindings USING btree (authorization_transaction_id, purpose) WHERE ((authorization_transaction_id IS NOT NULL) AND (status_id = ANY (ARRAY[(10)::bigint, (20)::bigint, (30)::bigint])));
+
+
+--
+-- Name: idx_client_admission_active_step_purpose; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_admission_active_step_purpose ON public.client_auth_admission_bindings USING btree (step_up_ceremony_transaction_id, purpose) WHERE ((step_up_ceremony_transaction_id IS NOT NULL) AND (status_id = ANY (ARRAY[(10)::bigint, (20)::bigint, (30)::bigint])));
 
 
 --
@@ -3032,17 +4029,10 @@ CREATE INDEX idx_client_admission_bindings_auth_session ON public.client_auth_ad
 
 
 --
--- Name: idx_client_admission_bindings_live_oidc; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_client_auth_ceremony_sessions_state_parent; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_client_admission_bindings_live_oidc ON public.client_auth_admission_bindings USING btree (authorization_transaction_id) WHERE ((authorization_transaction_id IS NOT NULL) AND (retired_at IS NULL) AND (redeemed_at IS NULL));
-
-
---
--- Name: idx_client_admission_bindings_live_step_up; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_client_admission_bindings_live_step_up ON public.client_auth_admission_bindings USING btree (step_up_ceremony_transaction_id) WHERE ((step_up_ceremony_transaction_id IS NOT NULL) AND (retired_at IS NULL) AND (redeemed_at IS NULL));
+CREATE UNIQUE INDEX idx_client_auth_ceremony_sessions_state_parent ON public.client_auth_ceremony_sessions USING btree (authorization_transaction_ref) WHERE ((authorization_transaction_ref IS NOT NULL) AND (status_id <> ALL (ARRAY[(92)::bigint, (93)::bigint])));
 
 
 --
@@ -3060,6 +4050,97 @@ CREATE UNIQUE INDEX idx_client_resolution_waiting_actor ON public.client_session
 
 
 --
+-- Name: idx_client_sensitive_attach_admission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_attach_admission ON public.client_sensitive_admission_attachments USING btree (sensitive_admission_id);
+
+
+--
+-- Name: idx_client_sensitive_attach_confirmation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_attach_confirmation ON public.client_sensitive_admission_attachments USING btree (confirmation_ref);
+
+
+--
+-- Name: idx_client_sensitive_attach_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_attach_session ON public.client_sensitive_admission_attachments USING btree (auth_ceremony_session_digest);
+
+
+--
+-- Name: idx_client_sensitive_audit_attempt_delivered; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_audit_attempt_delivered ON public.client_sensitive_admission_audit_attempts USING btree (outbox_id) WHERE ((outcome)::text = 'delivered'::text);
+
+
+--
+-- Name: idx_client_sensitive_audit_attempt_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_audit_attempt_number ON public.client_sensitive_admission_audit_attempts USING btree (outbox_id, attempt_number);
+
+
+--
+-- Name: idx_client_sensitive_audit_context; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_audit_context ON public.client_sensitive_admission_audit_outboxes USING btree (context_ref);
+
+
+--
+-- Name: idx_client_sensitive_audit_delivery; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_sensitive_audit_delivery ON public.client_sensitive_admission_audit_outboxes USING btree (delivery_state_id);
+
+
+--
+-- Name: idx_client_sensitive_audit_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_audit_uuid ON public.client_sensitive_admission_audit_outboxes USING btree (event_uuid);
+
+
+--
+-- Name: idx_client_sensitive_confirm_admission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_confirm_admission ON public.client_sensitive_admission_confirmations USING btree (sensitive_admission_id);
+
+
+--
+-- Name: idx_client_sensitive_redeem_admission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_redeem_admission ON public.client_sensitive_admission_redemptions USING btree (sensitive_admission_id);
+
+
+--
+-- Name: idx_client_sensitive_redeem_ceremony; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_redeem_ceremony ON public.client_sensitive_admission_redemptions USING btree (ceremony_ref);
+
+
+--
+-- Name: idx_client_sensitive_session_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_session_digest ON public.client_sensitive_admission_sessions USING btree (sid_digest);
+
+
+--
+-- Name: idx_client_sensitive_session_phase; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_sensitive_session_phase ON public.client_sensitive_admission_sessions USING btree (sensitive_admission_id, phase);
+
+
+--
 -- Name: idx_client_session_limit_resolution_on_oidc_tx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3071,6 +4152,146 @@ CREATE INDEX idx_client_session_limit_resolution_on_oidc_tx ON public.client_ses
 --
 
 CREATE UNIQUE INDEX idx_client_signup_one_in_progress_per_admission ON public.client_sign_up_flows USING btree (auth_admission_binding_id) WHERE (status_id = ANY (ARRAY[(10)::bigint, (20)::bigint, (30)::bigint, (35)::bigint, (36)::bigint, (38)::bigint, (40)::bigint, (60)::bigint]));
+
+
+--
+-- Name: idx_client_step_up_audit_attempts_delivered; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_audit_attempts_delivered ON public.client_step_up_audit_outbox_attempts USING btree (outbox_id) WHERE ((outcome)::text = 'delivered'::text);
+
+
+--
+-- Name: idx_client_step_up_audit_attempts_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_audit_attempts_number ON public.client_step_up_audit_outbox_attempts USING btree (outbox_id, attempt_number);
+
+
+--
+-- Name: idx_client_step_up_audit_outboxes_delivery; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_step_up_audit_outboxes_delivery ON public.client_step_up_audit_outboxes USING btree (delivery_state_id);
+
+
+--
+-- Name: idx_client_step_up_audit_outboxes_event_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_audit_outboxes_event_uuid ON public.client_step_up_audit_outboxes USING btree (event_uuid);
+
+
+--
+-- Name: idx_client_step_up_audit_outboxes_rejected; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_audit_outboxes_rejected ON public.client_step_up_audit_outboxes USING btree (realm, client_id, context_ref, reason_code) WHERE ((event_type)::text = 'step_up.attempt_rejected'::text);
+
+
+--
+-- Name: idx_client_step_up_commits_context_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_commits_context_ref ON public.client_step_up_commits USING btree (context_ref);
+
+
+--
+-- Name: idx_client_step_up_commits_root_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_step_up_commits_root_time ON public.client_step_up_commits USING btree (root_token_id, committed_at);
+
+
+--
+-- Name: idx_client_step_up_context_transitions_owner_to; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_context_transitions_owner_to ON public.client_step_up_context_transitions USING btree (owner_id, to_state_id);
+
+
+--
+-- Name: idx_client_step_up_contexts_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_step_up_contexts_public_id ON public.client_step_up_contexts USING btree (public_id);
+
+
+--
+-- Name: idx_client_visa_admission_binding; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_admission_binding ON public.client_visa_sensitive_admissions USING btree (auth_admission_binding_id);
+
+
+--
+-- Name: idx_client_visa_admission_oidc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_admission_oidc ON public.client_visa_sensitive_admissions USING btree (oidc_authorization_transaction_id);
+
+
+--
+-- Name: idx_client_visa_admission_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_admission_ref ON public.client_visa_sensitive_admissions USING btree (public_ref);
+
+
+--
+-- Name: idx_client_visa_admission_rp_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_visa_admission_rp_session ON public.client_visa_sensitive_admissions USING btree (rp_session_ref, status);
+
+
+--
+-- Name: idx_client_visa_admission_ticket; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_admission_ticket ON public.client_visa_sensitive_admissions USING btree (step_up_ceremony_transaction_id);
+
+
+--
+-- Name: idx_client_visa_social_admission_binding; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_social_admission_binding ON public.client_visa_social_link_admissions USING btree (auth_admission_binding_id);
+
+
+--
+-- Name: idx_client_visa_social_admission_oidc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_social_admission_oidc ON public.client_visa_social_link_admissions USING btree (oidc_authorization_transaction_id);
+
+
+--
+-- Name: idx_client_visa_social_admission_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_social_admission_ref ON public.client_visa_social_link_admissions USING btree (public_ref);
+
+
+--
+-- Name: idx_client_visa_social_admission_rp_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_visa_social_admission_rp_session ON public.client_visa_social_link_admissions USING btree (rp_session_ref, status);
+
+
+--
+-- Name: idx_client_visa_social_admission_social_tx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_social_admission_social_tx ON public.client_visa_social_link_admissions USING btree (social_ceremony_transaction_id);
+
+
+--
+-- Name: idx_client_visa_social_admission_ticket; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_visa_social_admission_ticket ON public.client_visa_social_link_admissions USING btree (step_up_ceremony_transaction_id);
 
 
 --
@@ -3232,6 +4453,13 @@ CREATE UNIQUE INDEX idx_on_grant_jti_58e101b1d8 ON public.client_secret_credenti
 --
 
 CREATE UNIQUE INDEX idx_on_login_challenge_91d464d261 ON public.client_oidc_authorization_transactions USING btree (login_challenge);
+
+
+--
+-- Name: idx_on_oidc_authorization_transaction_id_fa9f92a9de; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_oidc_authorization_transaction_id_fa9f92a9de ON public.client_step_up_contexts USING btree (oidc_authorization_transaction_id);
 
 
 --
@@ -3620,6 +4848,20 @@ CREATE INDEX index_client_secret_sign_in_receipts_on_sign_in_flow_id ON public.c
 
 
 --
+-- Name: index_client_sensitive_admissions_on_public_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_sensitive_admissions_on_public_ref ON public.client_sensitive_admissions USING btree (public_ref);
+
+
+--
+-- Name: index_client_sensitive_admissions_on_secret_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_sensitive_admissions_on_secret_digest ON public.client_sensitive_admissions USING btree (secret_digest);
+
+
+--
 -- Name: index_client_session_limit_resolution_transactions_on_state_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3795,6 +5037,20 @@ CREATE UNIQUE INDEX index_client_social_ceremony_transactions_on_transaction_id 
 
 
 --
+-- Name: index_client_step_up_audit_outbox_attempts_on_outbox_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_audit_outbox_attempts_on_outbox_id ON public.client_step_up_audit_outbox_attempts USING btree (outbox_id);
+
+
+--
+-- Name: index_client_step_up_audit_outboxes_on_delivery_state_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_audit_outboxes_on_delivery_state_id ON public.client_step_up_audit_outboxes USING btree (delivery_state_id);
+
+
+--
 -- Name: index_client_step_up_ceremony_transactions_on_expires_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3834,6 +5090,48 @@ CREATE UNIQUE INDEX index_client_step_up_ceremony_transactions_on_result_jti ON 
 --
 
 CREATE UNIQUE INDEX index_client_step_up_ceremony_transactions_on_transaction_id ON public.client_step_up_ceremony_transactions USING btree (transaction_id);
+
+
+--
+-- Name: index_client_step_up_commits_on_grant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_commits_on_grant_id ON public.client_step_up_commits USING btree (grant_id);
+
+
+--
+-- Name: index_client_step_up_commits_on_root_token_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_commits_on_root_token_id ON public.client_step_up_commits USING btree (root_token_id);
+
+
+--
+-- Name: index_client_step_up_context_transitions_on_from_state_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_context_transitions_on_from_state_id ON public.client_step_up_context_transitions USING btree (from_state_id);
+
+
+--
+-- Name: index_client_step_up_context_transitions_on_to_state_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_context_transitions_on_to_state_id ON public.client_step_up_context_transitions USING btree (to_state_id);
+
+
+--
+-- Name: index_client_step_up_contexts_on_grant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_contexts_on_grant_id ON public.client_step_up_contexts USING btree (grant_id);
+
+
+--
+-- Name: index_client_step_up_contexts_on_state_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_step_up_contexts_on_state_id ON public.client_step_up_contexts USING btree (state_id);
 
 
 --
@@ -4415,6 +5713,14 @@ ALTER TABLE ONLY public.op_app_authority_stop_participants
 
 
 --
+-- Name: client_auth_admission_bindings fk_client_admission_bindings_status; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_auth_admission_bindings
+    ADD CONSTRAINT fk_client_admission_bindings_status FOREIGN KEY (status_id) REFERENCES public.client_auth_admission_binding_statuses(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_auth_admission_bindings fk_client_auth_admission_bindings_admitted_session; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4423,11 +5729,27 @@ ALTER TABLE ONLY public.client_auth_admission_bindings
 
 
 --
+-- Name: client_auth_ceremony_sessions fk_client_auth_ceremony_sessions_status; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_auth_ceremony_sessions
+    ADD CONSTRAINT fk_client_auth_ceremony_sessions_status FOREIGN KEY (status_id) REFERENCES public.client_auth_ceremony_session_statuses(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_device_sessions fk_client_device_sessions_on_current_refresh_token_owner; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_device_sessions
     ADD CONSTRAINT fk_client_device_sessions_on_current_refresh_token_owner FOREIGN KEY (id, current_refresh_token_id) REFERENCES public.client_tokens(device_session_id, id) ON DELETE SET NULL (current_refresh_token_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: client_oidc_authorization_transactions fk_client_oidc_authorization_transactions_status; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_oidc_authorization_transactions
+    ADD CONSTRAINT fk_client_oidc_authorization_transactions_status FOREIGN KEY (status_id) REFERENCES public.client_oidc_authorization_transaction_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -4475,7 +5797,15 @@ ALTER TABLE ONLY public.client_oidc_authorization_transactions
 --
 
 ALTER TABLE ONLY public.client_verifications
-    ADD CONSTRAINT fk_rails_18a774c144 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_18a774c144 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
+
+
+--
+-- Name: client_step_up_commits fk_rails_1e8492e340; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_commits
+    ADD CONSTRAINT fk_rails_1e8492e340 FOREIGN KEY (root_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
 
 
 --
@@ -4484,6 +5814,14 @@ ALTER TABLE ONLY public.client_verifications
 
 ALTER TABLE ONLY public.client_totp_ceremony_transactions
     ADD CONSTRAINT fk_rails_23f495015b FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_sensitive_admission_redemptions fk_rails_25af5e33b0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_redemptions
+    ADD CONSTRAINT fk_rails_25af5e33b0 FOREIGN KEY (sensitive_admission_id) REFERENCES public.client_sensitive_admissions(id);
 
 
 --
@@ -4519,11 +5857,27 @@ ALTER TABLE ONLY public.identity_passkey_ceremony_candidates
 
 
 --
+-- Name: client_sensitive_admission_audit_outboxes fk_rails_3831150218; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_audit_outboxes
+    ADD CONSTRAINT fk_rails_3831150218 FOREIGN KEY (delivery_state_id) REFERENCES public.client_step_up_audit_outbox_delivery_states(id);
+
+
+--
 -- Name: client_auth_admission_bindings fk_rails_39848a51b7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_auth_admission_bindings
-    ADD CONSTRAINT fk_rails_39848a51b7 FOREIGN KEY (auth_ceremony_session_id) REFERENCES public.client_auth_ceremony_sessions(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_39848a51b7 FOREIGN KEY (auth_ceremony_session_id) REFERENCES public.client_auth_ceremony_sessions(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
+-- Name: client_visa_sensitive_admissions fk_rails_41eeb7bc71; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_sensitive_admissions
+    ADD CONSTRAINT fk_rails_41eeb7bc71 FOREIGN KEY (auth_admission_binding_id) REFERENCES public.client_auth_admission_bindings(id) ON DELETE RESTRICT;
 
 
 --
@@ -4535,11 +5889,35 @@ ALTER TABLE ONLY public.client_session_limit_resolution_transactions
 
 
 --
+-- Name: client_step_up_audit_outboxes fk_rails_4cc3a68107; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outboxes
+    ADD CONSTRAINT fk_rails_4cc3a68107 FOREIGN KEY (delivery_state_id) REFERENCES public.client_step_up_audit_outbox_delivery_states(id);
+
+
+--
 -- Name: client_sign_up_flows fk_rails_533362926d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_sign_up_flows
-    ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
+-- Name: client_step_up_context_transitions fk_rails_5bff08accd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_transitions
+    ADD CONSTRAINT fk_rails_5bff08accd FOREIGN KEY (owner_id) REFERENCES public.client_step_up_contexts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_step_up_context_transitions fk_rails_5c9cc84b15; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_transitions
+    ADD CONSTRAINT fk_rails_5c9cc84b15 FOREIGN KEY (from_state_id) REFERENCES public.client_step_up_context_states(id);
 
 
 --
@@ -4555,7 +5933,7 @@ ALTER TABLE ONLY public.identity_totp_ceremony_candidates
 --
 
 ALTER TABLE ONLY public.client_step_up_sessions
-    ADD CONSTRAINT fk_rails_64ec203fd3 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_64ec203fd3 FOREIGN KEY (user_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -4567,11 +5945,51 @@ ALTER TABLE ONLY public.client_auth_admission_bindings
 
 
 --
+-- Name: client_step_up_contexts fk_rails_7698ba46ba; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_contexts
+    ADD CONSTRAINT fk_rails_7698ba46ba FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id);
+
+
+--
 -- Name: client_sign_up_flows fk_rails_7b193122e7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_sign_up_flows
     ADD CONSTRAINT fk_rails_7b193122e7 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_step_up_contexts fk_rails_7fbe0191be; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_contexts
+    ADD CONSTRAINT fk_rails_7fbe0191be FOREIGN KEY (state_id) REFERENCES public.client_step_up_context_states(id);
+
+
+--
+-- Name: client_step_up_commits fk_rails_805a0ebac7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_commits
+    ADD CONSTRAINT fk_rails_805a0ebac7 FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id);
+
+
+--
+-- Name: client_visa_social_link_admissions fk_rails_8254883071; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_social_link_admissions
+    ADD CONSTRAINT fk_rails_8254883071 FOREIGN KEY (step_up_ceremony_transaction_id) REFERENCES public.client_step_up_ceremony_transactions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_sensitive_admission_attachments fk_rails_8b274e255f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_attachments
+    ADD CONSTRAINT fk_rails_8b274e255f FOREIGN KEY (sensitive_admission_id) REFERENCES public.client_sensitive_admissions(id);
 
 
 --
@@ -4595,7 +6013,7 @@ ALTER TABLE ONLY public.client_sign_up_flows
 --
 
 ALTER TABLE ONLY public.client_sign_up_flows
-    ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id);
+    ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id) NOT VALID;
 
 
 --
@@ -4615,6 +6033,14 @@ ALTER TABLE ONLY public.client_session_limit_resolution_transactions
 
 
 --
+-- Name: client_step_up_context_transitions fk_rails_a8501b1782; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_context_transitions
+    ADD CONSTRAINT fk_rails_a8501b1782 FOREIGN KEY (to_state_id) REFERENCES public.client_step_up_context_states(id);
+
+
+--
 -- Name: client_passkey_ceremony_transactions fk_rails_aac854f11a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4623,11 +6049,27 @@ ALTER TABLE ONLY public.client_passkey_ceremony_transactions
 
 
 --
+-- Name: client_step_up_audit_outbox_attempts fk_rails_b57fda7e48; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_audit_outbox_attempts
+    ADD CONSTRAINT fk_rails_b57fda7e48 FOREIGN KEY (outbox_id) REFERENCES public.client_step_up_audit_outboxes(id) ON DELETE CASCADE;
+
+
+--
 -- Name: client_sign_in_flows fk_rails_bd772deef1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_sign_in_flows
-    ADD CONSTRAINT fk_rails_bd772deef1 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_bd772deef1 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
+
+
+--
+-- Name: client_sensitive_admission_audit_attempts fk_rails_bf73f087c8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_audit_attempts
+    ADD CONSTRAINT fk_rails_bf73f087c8 FOREIGN KEY (outbox_id) REFERENCES public.client_sensitive_admission_audit_outboxes(id);
 
 
 --
@@ -4635,7 +6077,23 @@ ALTER TABLE ONLY public.client_sign_in_flows
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
+-- Name: client_visa_social_link_admissions fk_rails_c1ae9d5a21; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_social_link_admissions
+    ADD CONSTRAINT fk_rails_c1ae9d5a21 FOREIGN KEY (oidc_authorization_transaction_id) REFERENCES public.client_oidc_authorization_transactions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_step_up_contexts fk_rails_c49f7b9b41; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_step_up_contexts
+    ADD CONSTRAINT fk_rails_c49f7b9b41 FOREIGN KEY (oidc_authorization_transaction_id) REFERENCES public.client_oidc_authorization_transactions(id) ON DELETE CASCADE;
 
 
 --
@@ -4655,6 +6113,46 @@ ALTER TABLE ONLY public.op_app_grant_logout_hints
 
 
 --
+-- Name: client_visa_sensitive_admissions fk_rails_cfa9d57c6a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_sensitive_admissions
+    ADD CONSTRAINT fk_rails_cfa9d57c6a FOREIGN KEY (oidc_authorization_transaction_id) REFERENCES public.client_oidc_authorization_transactions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_sensitive_admission_sessions fk_rails_d16a7bb21e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_sessions
+    ADD CONSTRAINT fk_rails_d16a7bb21e FOREIGN KEY (sensitive_admission_id) REFERENCES public.client_sensitive_admissions(id);
+
+
+--
+-- Name: client_visa_sensitive_admissions fk_rails_d36b9e0130; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_sensitive_admissions
+    ADD CONSTRAINT fk_rails_d36b9e0130 FOREIGN KEY (step_up_ceremony_transaction_id) REFERENCES public.client_step_up_ceremony_transactions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_visa_social_link_admissions fk_rails_d750dc1bec; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_social_link_admissions
+    ADD CONSTRAINT fk_rails_d750dc1bec FOREIGN KEY (social_ceremony_transaction_id) REFERENCES public.client_social_ceremony_transactions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_sensitive_admission_confirmations fk_rails_d94a8fdc12; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_sensitive_admission_confirmations
+    ADD CONSTRAINT fk_rails_d94a8fdc12 FOREIGN KEY (sensitive_admission_id) REFERENCES public.client_sensitive_admissions(id);
+
+
+--
 -- Name: client_emergency_sign_in_operations fk_rails_e979437e5d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4671,11 +6169,19 @@ ALTER TABLE ONLY public.client_auth_admission_bindings
 
 
 --
+-- Name: client_visa_social_link_admissions fk_rails_f1f2ab57eb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_visa_social_link_admissions
+    ADD CONSTRAINT fk_rails_f1f2ab57eb FOREIGN KEY (auth_admission_binding_id) REFERENCES public.client_auth_admission_bindings(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_tokens fk_rails_f69bf5b8f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_rails_f69bf5b8f0 FOREIGN KEY (user_token_kind_id) REFERENCES public.client_token_kinds(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_f69bf5b8f0 FOREIGN KEY (user_token_kind_id) REFERENCES public.client_token_kinds(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -4683,7 +6189,7 @@ ALTER TABLE ONLY public.client_tokens
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_user_tokens_on_user_token_binding_method_id FOREIGN KEY (user_token_binding_method_id) REFERENCES public.client_token_binding_methods(id);
+    ADD CONSTRAINT fk_user_tokens_on_user_token_binding_method_id FOREIGN KEY (user_token_binding_method_id) REFERENCES public.client_token_binding_methods(id) NOT VALID;
 
 
 --
@@ -4691,7 +6197,7 @@ ALTER TABLE ONLY public.client_tokens
 --
 
 ALTER TABLE ONLY public.client_tokens
-    ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id);
+    ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id) NOT VALID;
 
 
 --
@@ -4701,6 +6207,40 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261105050418'),
+('20261105050417'),
+('20261105050239'),
+('20261105050223'),
+('20261105044804'),
+('20261105035150'),
+('20261104102812'),
+('20261104102755'),
+('20261104101950'),
+('20261104101933'),
+('20261104101408'),
+('20261104101051'),
+('20261103183201'),
+('20261103183200'),
+('20261103112925'),
+('20261103112921'),
+('20261101073139'),
+('20261101073138'),
+('20261101073137'),
+('20261101041004'),
+('20261101041003'),
+('20261101041002'),
+('20261101041001'),
+('20261101041000'),
+('20261101034340'),
+('20261101034339'),
+('20261101034338'),
+('20261101034333'),
+('20261101034328'),
+('20261101031900'),
+('20261101031816'),
+('20261101031805'),
+('20261101031715'),
+('20261101031705'),
 ('20261026190823'),
 ('20261026185751'),
 ('20261025120400'),

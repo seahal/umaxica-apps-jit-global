@@ -4,6 +4,7 @@
 require "test_helper"
 
 class AuthCeremonySessionConcurrencyTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
   self.use_transactional_tests = false
 
   CASES = [
@@ -74,9 +75,7 @@ class AuthCeremonySessionConcurrencyTest < ActiveSupport::TestCase
       assert_equal 1, model.where(previous_sid_digest: previous.sid_digest).count
       assert_equal 1, model.where(
         previous_sid_digest: previous.sid_digest,
-        revoked_at: nil,
-        completed_at: nil,
-        cancelled_at: nil,
+        status_id: AuthCeremonySession::ACTIVE_STATUS_IDS,
       ).count
     end
   end

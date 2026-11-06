@@ -1,11 +1,15 @@
 # typed: false
 # frozen_string_literal: true
 
+# Requires `browser_rp_controller?`. Browser RP controllers provide a verified `browser_rp_access_state`;
+# root-auth controllers provide `current_session_token`. Base RP controllers also name their challenge layout.
+# Context is read from that owner, not actor data.
 module VerificationBase
   extend ActiveSupport::Concern
 
   include CommonRedirect
   include ::RedirectsSignedTargetSupport
+  include ::BrowserNavigationRequest
   include VerificationStepUpGuard
   include StepUpCeremonyLogging
 
@@ -32,10 +36,16 @@ module VerificationBase
   end
 
   def verification_satisfied?
+    scope = verification_scope
+    if browser_rp_controller? && scope.present? && base_rp_local_session?
+      return false if standby_authentication_context?
+
+      return current_step_up_evidence.present?
+    end
+
     actor_token = current_actor_token
     return false unless actor_token
 
-    scope = verification_scope
     if scope.present?
       return recorded_step_up_satisfied?(actor_token, scope: scope)
     end
@@ -65,6 +75,8 @@ module VerificationBase
   end
 
   def recorded_step_up_satisfied?(token, scope:)
+    return current_step_up_evidence.present? if browser_rp_controller?
+
     StepUpResolver.call(
       token: token,
       requirement: step_up_requirement(scope: scope),
@@ -72,17 +84,21 @@ module VerificationBase
   end
 
   def step_up_satisfied?(scope:)
-    step_up = StepUpResolver.call(
-      token: current_session_token,
-      requirement: step_up_requirement(scope: scope),
-    )
-    Actor.install_context!(step_up: step_up) if defined?(Actor)
-    step_up.satisfied?
+    step_up_satisfied_with_requirement?(step_up_requirement(scope: scope))
   end
 
   def require_step_up!(scope:, **policy)
     return false if reject_step_up_for_authentication_context!
     return false if step_up_session_revoked?
+
+    if base_rp_actor_unavailable?
+      head :forbidden
+      return false
+    end
+
+    if browser_rp_controller? && base_rp_local_session? && policy.empty?
+      return require_local_rp_step_up!(scope)
+    end
 
     requirement = step_up_requirement(scope: scope, **policy)
     return if step_up_satisfied_with_requirement?(requirement)
@@ -90,6 +106,11 @@ module VerificationBase
     log_step_up_required!(requirement: requirement)
     require_verification!(scope)
     return false unless enforce_step_up_prereqs!(scope_override: scope)
+
+    if browser_rp_controller? && requirement.purpose == "step_up" && requirement.step_up_required?
+      render_step_up_challenge!
+      return false
+    end
 
     if request.get? || request.head?
       redirect_to(
@@ -143,12 +164,77 @@ module VerificationBase
   end
 
   def step_up_satisfied_with_requirement?(requirement)
+    if browser_rp_controller? && requirement.purpose == "step_up" && requirement.step_up_required?
+      return current_step_up_evidence.present?
+    end
+
     step_up = StepUpResolver.call(token: current_session_token, requirement: requirement)
     Actor.install_context!(step_up: step_up) if defined?(Actor)
     step_up.satisfied?
   end
 
   private
+
+  def base_rp_actor_unavailable?
+    browser_rp_controller? && %w(base-app-ww base-org-ww).include?(browser_rp_client_id) &&
+      current_resource && !current_resource.login_allowed?
+  end
+
+  def base_rp_local_session?
+    case browser_rp_access_state.rp_session
+    when RpBaseAppSession, RpBaseOrgSession then true
+    else false
+    end
+  end
+
+  def require_local_rp_step_up!(scope)
+    return if current_step_up_evidence.present?
+
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.step_up.required", controller: self.class.name, action: action_name,
+                                 method: request.request_method, scope: scope,
+      ),
+    )
+    require_verification!(scope)
+    return false unless enforce_step_up_prereqs!(scope_override: scope)
+
+    render_step_up_challenge!
+    false
+  end
+
+  def render_step_up_challenge!
+    response.set_header(
+      "WWW-Authenticate",
+      'Bearer error="insufficient_user_authentication", ' \
+      'error_description="step-up authentication is required", ' \
+      'acr_values="https://visa.umaxica.app/acr/reauthentication", max_age="300"',
+    )
+    response.set_header("Cache-Control", "private, no-store")
+
+    if document_navigation_request?
+      render "base/shared/step_up_challenge", layout: step_up_challenge_layout, status: :unauthorized,
+                                              locals: {
+                                                entry_path: actor_verification_path(
+                                                  return_target: request.path,
+                                                  ri: params[:ri],
+                                                ),
+                                              }
+    else
+      render plain: I18n.t("auth.step_up.challenge.description"), status: :unauthorized,
+             content_type: "text/plain"
+    end
+  end
+
+  def current_step_up_evidence
+    return unless browser_rp_controller?
+
+    StepUpEvidenceResolver.call(
+      access_state: browser_rp_access_state,
+      actor: current_resource,
+      cell: RpCellBinding.for_client(browser_rp_client_id),
+    )
+  end
 
   # An authentication context that is not eligible for Step-Up is rejected at
   # the ceremony entry, before any credential is requested. This is not "step-up
@@ -180,14 +266,30 @@ module VerificationBase
   end
 
   def standby_authentication_context?
+    if browser_rp_controller?
+      access_state = browser_rp_access_state
+      return false unless access_state.status == :valid
+
+      payload = access_state.payload
+      raise ArgumentError, "authenticated RP state must carry a token payload" unless payload.is_a?(Hash)
+
+      return AuthenticationContextValue.for(payload.fetch(AuthenticationContextValue::CLAIM)).standby?
+    end
+
     token = current_session_token
-    token.respond_to?(:standby_authentication_context?) && token.standby_authentication_context?
+    return false unless token
+
+    token.standby_authentication_context?
   end
 
   # Check whether the underlying refresh token record has been revoked,
   # expired, or compromised.  If so, force-logout the session so that a
   # stale (but still JWT-valid) access token cannot pass step-up.
   def step_up_session_revoked?
+    if browser_rp_controller? && browser_rp_access_state.status == :valid && base_rp_local_session?
+      return false
+    end
+
     token = current_session_token
     return true if token.nil? # no record at all - dead
     return false if token.active_status? # alive

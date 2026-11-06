@@ -36,86 +36,24 @@ module Preference
   end
 
   class JwtConfigurationTest < ActiveSupport::TestCase
-    test "audience_for selects matching host family and keeps localhost in development" do
-      assert_includes PreferenceJwtConfiguration.audience_for("log.umaxica.app"), "www.umaxica.app"
-      assert_includes PreferenceJwtConfiguration.audience_for("www.umaxica.com"), "www.umaxica.com"
-      assert_includes PreferenceJwtConfiguration.audience_for("base.org.localhost"), "org.localhost"
-    end
-  end
+    test "issuer and key resolution are explicit for each preference realm" do
+      { "preference_app" => "app", "preference_com" => "com", "preference_org" => "org" }.each do |issuer_id, audience|
+        issuer = JitSecurityJwtRegistry.issuer(issuer_id)
 
-  class JwtConfigurationTest < ActiveSupport::TestCase
-    test "active_kid returns value from ENV" do
-      with_env("PREFERENCE_JWT_ACTIVE_KID" => "test_kid") do
-        assert_equal JitSecurityJwtRegistry.issuer("preference").current_kid,
-                     PreferenceJwtConfiguration.active_kid
+        assert_equal [audience], issuer.audiences
+        assert_equal issuer.current_kid, PreferenceJwtConfiguration.active_kid(issuer_id)
+        assert_equal issuer.issuer, PreferenceJwtConfiguration.issuer_for(issuer_id)
+        assert_equal issuer.current_key.private_key,
+                     PreferenceJwtConfiguration.private_key_for_active(issuer_id)
+        assert_equal issuer.public_key_for(issuer.current_kid),
+                     PreferenceJwtConfiguration.public_key_for(issuer.current_kid, issuer_id: issuer_id)
       end
-    end
 
-    test "leeway_seconds ignores the environment and returns the fixed profile leeway" do
-      with_env("PREFERENCE_JWT_LEEWAY_SECONDS" => "3600") do
-        assert_equal SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS,
-                     PreferenceJwtConfiguration.leeway_seconds
+      assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+        PreferenceJwtConfiguration.issuer_for("preference")
       end
-    end
-
-    test "issuer returns value from ENV" do
-      with_env("PREFERENCE_JWT_ISSUER" => "test-issuer") do
-        assert_equal "test-issuer", PreferenceJwtConfiguration.issuer
-      end
-    end
-
-    test "audiences are derived from boot config hosts" do
-      expected = Rails.configuration.x.boot_config.fetch(:hosts).base_origins.map(&:host) +
-        %w(app.localhost org.localhost com.localhost localhost)
-
-      assert_equal expected,
-                   PreferenceJwtConfiguration.audiences
-    end
-
-    test "audience_for filters to matching TLD only" do
-      result = PreferenceJwtConfiguration.audience_for("log.umaxica.app")
-
-      assert_includes result, "www.umaxica.app"
-      assert_includes result, "app.localhost", "localhost fallback is included in non-production"
-      assert_not_includes result, "www.umaxica.com"
-    end
-
-    test "audience_for returns only matching TLD for com host" do
-      result = PreferenceJwtConfiguration.audience_for("wwww.umaxica.com")
-
-      assert_includes result, "www.umaxica.com"
-      assert_includes result, "app.localhost"
-      assert_not_includes result, "www.umaxica.app"
-    end
-
-    test "audience_for includes localhost for localhost host" do
-      result = PreferenceJwtConfiguration.audience_for("id.app.localhost")
-
-      assert_includes result, "app.localhost"
-      assert_includes result, "localhost"
-      assert_not_includes result, "www.umaxica.app"
-    end
-
-    test "audience_for raises when host is blank" do
-      assert_raises(ArgumentError) { PreferenceJwtConfiguration.audience_for("") }
-      assert_raises(ArgumentError) { PreferenceJwtConfiguration.audience_for(nil) }
-    end
-
-    test "audience_for raises when no configured TLD matches" do
-      assert_equal ["app.localhost"], PreferenceJwtConfiguration.audience_for("example.invalid")
-    end
-
-    test "audience_for raises for an .org host when only .app/.com are configured" do
-      assert_includes PreferenceJwtConfiguration.audience_for("log.umaxica.org"), "www.umaxica.org"
-    end
-
-    test "host_scope_for uses matching configured audience for sibling hosts" do
-      assert_equal "www.umaxica.app", PreferenceJwtConfiguration.host_scope_for("log.umaxica.app")
-      assert_equal "www.umaxica.com", PreferenceJwtConfiguration.host_scope_for("www.umaxica.com")
-    end
-
-    test "host_scope_for raises when no configured audience matches" do
-      assert_equal "localhost", PreferenceJwtConfiguration.host_scope_for("example.invalid")
+      assert_equal SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS,
+                   PreferenceJwtConfiguration.leeway_seconds
     end
 
     test "parse_header decodes token header" do
@@ -124,75 +62,52 @@ module Preference
 
       assert_equal "test_kid", header["kid"]
     end
-
-    private
-
-    def with_env(vars)
-      original = vars.keys.index_with { |k| ENV[k] }
-      vars.each { |k, v| ENV[k] = v }
-      yield
-    ensure
-      original.each { |k, v| ENV[k] = v }
-    end
   end
 
   class TokenTest < ActiveSupport::TestCase
     setup do
-      @preferences = { "theme" => "dark" }.freeze
-      @host = "app.localhost"
-      @type = "user"
+      @preferences = SecurityJwtPreferenceTokenCodec::ANONYMOUS_PREFERENCE_VALUES.transform_values(&:first).freeze
+      @host = Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
+      @type = "AppPreference"
       @public_id = "test_id"
       @jti = "test_jti"
-
-      # Generate a test EC key
-      @key = OpenSSL::PKey::EC.generate("secp384r1")
-      @der = Base64.encode64(@key.to_der)
-      @pub_der = Base64.encode64(@key.public_to_der)
+      @issuer_id = "preference_app"
     end
 
-    test "encode and decode a valid token" do
-      PreferenceJwtConfiguration.stub(:private_key_for_active, @key) do
-        PreferenceJwtConfiguration.stub(:public_key_for, @key) do
-          PreferenceJwtConfiguration.stub(:active_kid, "test_kid") do
-            token = PreferenceToken.encode(
-              @preferences,
-              host: @host,
-              preference_type: @type,
-              public_id: @public_id,
-              jti: @jti,
-            )
+    test "encode and decode a valid realm token with the closed claim set" do
+      token = PreferenceToken.encode(
+        @preferences,
+        host: @host,
+        preference_type: @type,
+        public_id: @public_id,
+        jti: @jti,
+        jwt_issuer_id: @issuer_id,
+        issued_at: Time.current,
+      )
 
-            assert_not_nil token
+      assert_not_nil token
+      decoded = PreferenceToken.decode(token, host: @host, jwt_issuer_id: @issuer_id)
 
-            decoded = PreferenceToken.decode(token, host: @host)
-
-            assert_not_nil decoded
-            assert_equal @preferences, decoded["preferences"]
-            assert_equal PreferenceJwtConfiguration.host_scope_for(@host), decoded["host"]
-            assert_equal @type, decoded["preference_type"]
-            assert_equal @public_id, decoded["public_id"]
-            assert_equal @jti, decoded["jti"]
-          end
-        end
-      end
+      assert_not_nil decoded
+      assert_equal @preferences, decoded["preferences"]
+      assert_equal "app", decoded["aud"]
+      assert_equal @public_id, decoded["sub"]
+      assert_equal @jti, decoded["jti"]
+      assert_equal SecurityJwtPreferenceTokenCodec::ANONYMOUS_CLAIMS.sort, decoded.keys.sort
     end
 
     test "decode returns nil for invalid host" do
-      PreferenceJwtConfiguration.stub(:private_key_for_active, @key) do
-        PreferenceJwtConfiguration.stub(:public_key_for, @key) do
-          PreferenceJwtConfiguration.stub(:active_kid, "test_kid") do
-            token = PreferenceToken.encode(
-              @preferences,
-              host: @host,
-              preference_type: @type,
-              public_id: @public_id,
-              jti: @jti,
-            )
+      token = PreferenceToken.encode(
+        @preferences,
+        host: @host,
+        preference_type: @type,
+        public_id: @public_id,
+        jti: @jti,
+        jwt_issuer_id: @issuer_id,
+        issued_at: Time.current,
+      )
 
-            assert_nil PreferenceToken.decode(token, host: "wrong.host")
-          end
-        end
-      end
+      assert_nil PreferenceToken.decode(token, host: "wrong.host", jwt_issuer_id: @issuer_id)
     end
 
     test "extract_preferences returns preferences from payload" do
@@ -200,47 +115,6 @@ module Preference
 
       assert_equal({ "theme" => "light" }, PreferenceToken.extract_preferences(payload))
       assert_equal({}, PreferenceToken.extract_preferences(nil))
-    end
-  end
-
-  private
-
-  def encode_preference_jwt(preferences:, host:, public_id:, preference_type: "AppPreference")
-    jti = "test-jti-#{SecureRandom.uuid}"
-    token = nil
-
-    with_preference_jwt_keys(host: host) do
-      token = PreferenceToken.encode(
-        preferences,
-        host: host,
-        preference_type: preference_type,
-        public_id: public_id,
-        jti: jti,
-      )
-    end
-
-    token
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    key = OpenSSL::PKey::EC.generate("secp384r1")
-    public_key_for_stub = ->(_kid, **_options) { key }
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-
-    PreferenceJwtConfiguration.stub(:private_key, key) do
-      PreferenceJwtConfiguration.stub(:public_key, key) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, key) do
-          PreferenceJwtConfiguration.stub(:public_key_for, public_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) do
-                  yield
-                end
-              end
-            end
-          end
-        end
-      end
     end
   end
 end
@@ -284,8 +158,6 @@ class Preference::BaseTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
-
   private
 
   def configured_host(surface_name)
@@ -311,24 +183,6 @@ class Preference::BaseTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

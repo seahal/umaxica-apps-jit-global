@@ -7,35 +7,22 @@
 # Database name: org_principal
 #
 #  id              :bigint           not null, primary key
-#  consent_version :uuid
-#  consented       :boolean          default(FALSE), not null
-#  consented_at    :datetime
-#  currency        :string           default("jpy"), not null
-#  date_format     :string           default("iso"), not null
-#  density         :string           default("standard"), not null
-#  functional      :boolean          default(FALSE), not null
-#  language        :string           default("ja"), not null
-#  motion          :string           default("standard"), not null
-#  page_size       :string           default("20"), not null
-#  performant      :boolean          default(FALSE), not null
-#  region          :string           default("jp"), not null
-#  targetable      :boolean          default(FALSE), not null
-#  theme           :string           default("sy"), not null
-#  time_format     :string           default("hour_24"), not null
-#  timezone        :string           default("Asia/Tokyo"), not null
+#  operator_id     :bigint           not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
-#  public_id       :string(21)
-#  staff_id        :bigint           not null
+#  public_id       :string(21)       not null
+#  explicit_fields :jsonb            default([]), not null
+#  status_id       :bigint           default(0), not null
 #
 # Indexes
 #
 #  index_operator_preferences_on_public_id  (public_id) UNIQUE
-#  index_operator_preferences_on_staff_id   (staff_id) UNIQUE
+#  index_operator_preferences_on_active_operator_id (operator_id) UNIQUE WHERE status_id = 0
 #
 # Foreign Keys
 #
-#  fk_rails_...  (staff_id => operators.id)
+#  fk_operator_preferences_on_operator_id  (operator_id => operators.id)
+#  fk_operator_preferences_on_status_id    (status_id => operator_preference_statuses.id)
 #
 class OperatorPreference < OrgPrincipalRecord
   include ::PublicId
@@ -52,21 +39,21 @@ class OperatorPreference < OrgPrincipalRecord
     operator_preference_adult_content_gate
   ).freeze
 
-  belongs_to :operator, foreign_key: :operator_id, inverse_of: :operator_preference
+  belongs_to :operator, inverse_of: :operator_preference
   belongs_to :operator_preference_status, foreign_key: :status_id, inverse_of: :operator_preferences
 
   has_one :operator_preference_language, class_name: "OperatorPreferenceLanguage", foreign_key: :preference_id,
-                                      inverse_of: :preference,
-                                      dependent: :destroy
+                                         inverse_of: :preference,
+                                         dependent: :destroy
   has_one :operator_preference_timezone, class_name: "OperatorPreferenceTimezone", foreign_key: :preference_id,
+                                         inverse_of: :preference,
+                                         dependent: :destroy
+  has_one :operator_preference_region, class_name: "OperatorPreferenceRegion", foreign_key: :preference_id,
+                                       inverse_of: :preference,
+                                       dependent: :destroy
+  has_one :operator_preference_theme, class_name: "OperatorPreferenceTheme", foreign_key: :preference_id,
                                       inverse_of: :preference,
                                       dependent: :destroy
-  has_one :operator_preference_region, class_name: "OperatorPreferenceRegion", foreign_key: :preference_id,
-                                    inverse_of: :preference,
-                                    dependent: :destroy
-  has_one :operator_preference_theme, class_name: "OperatorPreferenceTheme", foreign_key: :preference_id,
-                                   inverse_of: :preference,
-                                   dependent: :destroy
   has_one :operator_preference_currency,
           foreign_key: :preference_id,
           inverse_of: :preference,
@@ -97,7 +84,6 @@ class OperatorPreference < OrgPrincipalRecord
           dependent: :destroy
 
   attribute :status_id, default: ACTIVE_STATUS_ID
-  validates :operator_id, presence: true
   validates :status_id, inclusion: { in: OperatorPreferenceStatus::DEFAULTS }
   validates :public_id, presence: true, uniqueness: true
   validate :retired_status_cannot_be_reactivated, on: :update

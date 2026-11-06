@@ -64,18 +64,18 @@ module Auth
                         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
                       )
                       entry0_path = "/sign/#{(entry0_intent == "sign_up") ? "up" : "in"}"
+                      # An entry reference is accepted only on a top-level document navigation, and
+                      # a live reference never renders: it answers 303 to the ceremony binding
+                      # action and redeems only after Base confirmed the binding.
+                      entry0_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
                       entry0_browser.get(
                         entry0_path,
                         params: { entry_ref: entry0_issuance.reference, ri: "jp" },
+                        headers: entry0_navigation,
                       )
-                      entry0_csrf =
-                        entry0_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-                      entry0_browser.post(
-                        "/ceremony_bindings",
-                        params: { entry_ref: entry0_issuance.reference,
-                                  authenticity_token: entry0_csrf,
-                                  ri: "jp", },
-                      )
+
+                      assert_equal 303, entry0_browser.response.status
+                      entry0_browser.get(entry0_browser.response.location, headers: entry0_navigation)
 
                       assert_equal 303, entry0_browser.response.status
                       entry0_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -88,17 +88,13 @@ module Auth
                       entry0_browser.get(
                         entry0_path,
                         params: { entry_ref: entry0_issuance.reference, ri: "jp" },
-                      )
-                      entry0_csrf =
-                        entry0_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-                      entry0_browser.post(
-                        entry0_path,
-                        params: { entry_ref: entry0_issuance.reference,
-                                  authenticity_token: entry0_csrf,
-                                  ri: "jp", },
+                        headers: entry0_navigation,
                       )
 
                       assert_equal 303, entry0_browser.response.status
+                      entry0_browser.get(entry0_browser.response.location, headers: entry0_navigation)
+
+                      assert_equal 200, entry0_browser.response.status
                       entry0_phase_binding = nil
                     end
                     fx0_session.post(
@@ -140,18 +136,18 @@ module Auth
                         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
                       )
                       entry1_path = "/sign/#{(entry1_intent == "sign_up") ? "up" : "in"}"
+                      # An entry reference is accepted only on a top-level document navigation, and
+                      # a live reference never renders: it answers 303 to the ceremony binding
+                      # action and redeems only after Base confirmed the binding.
+                      entry1_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
                       entry1_browser.get(
                         entry1_path,
                         params: { entry_ref: entry1_issuance.reference, ri: "jp" },
+                        headers: entry1_navigation,
                       )
-                      entry1_csrf =
-                        entry1_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-                      entry1_browser.post(
-                        "/ceremony_bindings",
-                        params: { entry_ref: entry1_issuance.reference,
-                                  authenticity_token: entry1_csrf,
-                                  ri: "jp", },
-                      )
+
+                      assert_equal 303, entry1_browser.response.status
+                      entry1_browser.get(entry1_browser.response.location, headers: entry1_navigation)
 
                       assert_equal 303, entry1_browser.response.status
                       entry1_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -164,17 +160,13 @@ module Auth
                       entry1_browser.get(
                         entry1_path,
                         params: { entry_ref: entry1_issuance.reference, ri: "jp" },
-                      )
-                      entry1_csrf =
-                        entry1_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-                      entry1_browser.post(
-                        entry1_path,
-                        params: { entry_ref: entry1_issuance.reference,
-                                  authenticity_token: entry1_csrf,
-                                  ri: "jp", },
+                        headers: entry1_navigation,
                       )
 
                       assert_equal 303, entry1_browser.response.status
+                      entry1_browser.get(entry1_browser.response.location, headers: entry1_navigation)
+
+                      assert_equal 200, entry1_browser.response.status
                       entry1_phase_binding = nil
                     end
                     fx1_session.post(
@@ -222,18 +214,18 @@ module Auth
                 base_browser_nonce: SecureRandom.hex(32), base_token: nil,
               )
               admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+              # An entry reference is accepted only on a top-level document navigation, and a live
+              # reference never renders: it answers 303 to the ceremony binding action and redeems
+              # only after Base confirmed the binding.
+              admission_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
               admission_browser.get(
                 admission_path,
                 params: { entry_ref: admission_issuance.reference, ri: "jp" },
+                headers: admission_navigation,
               )
-              admission_csrf =
-                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-              admission_browser.post(
-                "/ceremony_bindings",
-                params: { entry_ref: admission_issuance.reference,
-                          authenticity_token: admission_csrf,
-                          ri: "jp", },
-              )
+
+              assert_equal 303, admission_browser.response.status
+              admission_browser.get(admission_browser.response.location, headers: admission_navigation)
 
               assert_equal 303, admission_browser.response.status
               admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -246,17 +238,13 @@ module Auth
               admission_browser.get(
                 admission_path,
                 params: { entry_ref: admission_issuance.reference, ri: "jp" },
-              )
-              admission_csrf =
-                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-              admission_browser.post(
-                admission_path,
-                params: { entry_ref: admission_issuance.reference,
-                          authenticity_token: admission_csrf,
-                          ri: "jp", },
+                headers: admission_navigation,
               )
 
               assert_equal 303, admission_browser.response.status
+              admission_browser.get(admission_browser.response.location, headers: admission_navigation)
+
+              assert_equal 200, admission_browser.response.status
               phase_binding = nil
             end
             session.post(
@@ -287,18 +275,18 @@ module Auth
                 base_browser_nonce: SecureRandom.hex(32), base_token: nil,
               )
               admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+              # An entry reference is accepted only on a top-level document navigation, and a live
+              # reference never renders: it answers 303 to the ceremony binding action and redeems
+              # only after Base confirmed the binding.
+              admission_navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
               admission_browser.get(
                 admission_path,
                 params: { entry_ref: admission_issuance.reference, ri: "jp" },
+                headers: admission_navigation,
               )
-              admission_csrf =
-                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-              admission_browser.post(
-                "/ceremony_bindings",
-                params: { entry_ref: admission_issuance.reference,
-                          authenticity_token: admission_csrf,
-                          ri: "jp", },
-              )
+
+              assert_equal 303, admission_browser.response.status
+              admission_browser.get(admission_browser.response.location, headers: admission_navigation)
 
               assert_equal 303, admission_browser.response.status
               admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -311,17 +299,13 @@ module Auth
               admission_browser.get(
                 admission_path,
                 params: { entry_ref: admission_issuance.reference, ri: "jp" },
-              )
-              admission_csrf =
-                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-              admission_browser.post(
-                admission_path,
-                params: { entry_ref: admission_issuance.reference,
-                          authenticity_token: admission_csrf,
-                          ri: "jp", },
+                headers: admission_navigation,
               )
 
               assert_equal 303, admission_browser.response.status
+              admission_browser.get(admission_browser.response.location, headers: admission_navigation)
+
+              assert_equal 200, admission_browser.response.status
               phase_binding = nil
             end
             session.post(

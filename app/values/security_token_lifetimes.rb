@@ -13,7 +13,6 @@ module SecurityTokenLifetimes
   # Fixed clock-skew leeway (seconds) for Access JWT exp/nbf/iat - must
   # match SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS.
   OIDC_ACCESS_JWT_CLOCK_LEEWAY_SECONDS = 30
-  PREFERENCE_JWT_TTL = 7.days
   OIDC_ID_TOKEN_TTL = 5.minutes
   JUMP_RT_TTL = 30.seconds
 

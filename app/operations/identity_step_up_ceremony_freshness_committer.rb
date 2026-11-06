@@ -35,7 +35,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
 
     def read_result_delivery(transaction:, raw_result:, result_reference:)
       intent = transaction.purpose
-      unless %w(step_up reauthentication).include?(intent)
+      unless intent == "reauthentication"
         raise BaseAuthAdmissionCoordinator::Denied.new("unsupported freshness purpose", code: "invalid_admission")
       end
 
@@ -65,64 +65,15 @@ class IdentityStepUpCeremonyFreshnessCommitter
     private
 
     def finalize_ticket!(actor:, token:, transaction:, requirement:, payload:, digest:, binding:, credential:)
-      return finalize_full_reauthentication_ticket!(
-        actor:, token:, transaction:, requirement:, payload:, digest:, binding:, credential:,
-      ) if transaction.purpose == "reauthentication"
+      unless transaction.purpose == "reauthentication"
+        raise BaseAuthAdmissionCoordinator::Denied.new(
+          "ordinary step-up uses the OP callback", code: "invalid_admission",
+        )
+      end
 
-      finalize_standard_ticket!(
+      finalize_full_reauthentication_ticket!(
         actor:, token:, transaction:, requirement:, payload:, digest:, binding:, credential:,
       )
-    end
-
-    def finalize_standard_ticket!(actor:, token:, transaction:, requirement:, payload:, digest:, binding:, credential:)
-      session_model, ceremony_model, credentials = binding
-      transaction.class.connection_owner.connected_to(role: :writing) do
-        with_device_and_token_locks!(token) do
-          transaction.with_lock do
-            session_record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
-            now = transaction.class.database_now
-            unless credentials.exists?(id: credential.id)
-              raise IdentityStepUpCeremonyContract::Error.new(
-                "verified credential unavailable",
-                code: "authorization_denied",
-              )
-            end
-
-            validate_finalization!(actor, token, transaction, requirement, now)
-            unless transaction.result_delivery_matches?(
-              result_digest: digest, result_generation: payload.fetch("result_generation"), now: now,
-            )
-              raise BaseAuthAdmissionCoordinator::Denied.new(
-                "step-up result generation mismatch",
-                code: "return_binding_mismatch",
-              )
-            end
-
-            ceremony = ceremony_model.lock.find(payload.fetch("ceremony_session_ref"))
-            validate_continuity!(ceremony, transaction, now)
-            unless session_owned_by?(session_record, token) && session_record.scope == transaction.required_scope
-              raise IdentityStepUpCeremonyContract::Error.new(
-                "session scope or owner mismatch",
-                code: "session_binding_mismatch",
-              )
-            end
-
-            if transaction.consumed?
-              unless ceremony.completed? && token.last_step_up_at == transaction.verified_at &&
-                  StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
-                raise IdentityStepUpCeremonyContract::Error.new(
-                  "finalized authority no longer available",
-                  code: "authorization_denied",
-                )
-              end
-            else
-              commit!(token, transaction, ceremony, requirement, now)
-            end
-            # Keep the same row for replay/retention; no latest-pending replacement or deletion.
-            transaction
-          end
-        end
-      end
     end
 
     # Full reauthentication is the one step-up purpose allowed to replace the root token. The
@@ -217,7 +168,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
       current_token.revoke_step_up_authority!(now:, except_transaction_ref: transaction.transaction_id)
       commit_step_up_event!(replacement.fetch(:token), transaction, requirement)
       transaction.commit_consumption!(now:)
-      ceremony.complete!(now:)
+      ceremony.complete!
     end
 
     def session_owned_by?(record, token)
@@ -269,7 +220,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
       device = find_device_session(token)
       unless token.active_status?(now) && device.usable? && device.current_refresh_token_id == token.id &&
           transaction.actor_ref == actor.public_id &&
-          transaction.session_ref == token.public_id && %w(step_up reauthentication).include?(transaction.purpose) &&
+          transaction.session_ref == token.public_id && transaction.purpose == "reauthentication" &&
           %w(verified consumed).include?(transaction.status) && !transaction.expired?(now: now)
         raise IdentityStepUpCeremonyContract::Error.new("step-up actor or session unavailable", code: "session_expired")
       end
@@ -382,16 +333,10 @@ class IdentityStepUpCeremonyFreshnessCommitter
       unless ceremony.admitted? &&
           ceremony.admission_purpose == BaseAuthAdmissionCoordinator::HANDOFF_PURPOSE.fetch(transaction.purpose) &&
           ceremony.step_up_ceremony_transaction_ref == transaction.transaction_id &&
-          !ceremony.revoked_at && !ceremony.cancelled_at && ceremony.expires_at > now &&
+          ceremony.expires_at > now &&
           (ceremony.active?(now: now) || (transaction.consumed? && ceremony.completed?))
         raise IdentityStepUpCeremonyContract::Error.new("Auth continuity unavailable", code: "return_binding_mismatch")
       end
-    end
-
-    def commit!(token, transaction, ceremony, requirement, now)
-      commit_step_up_event!(token, transaction, requirement)
-      transaction.commit_consumption!(now: now)
-      ceremony.complete!(now: now)
     end
 
     def commit_step_up_event!(token, transaction, requirement)

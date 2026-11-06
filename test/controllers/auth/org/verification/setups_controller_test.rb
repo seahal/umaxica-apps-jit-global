@@ -58,7 +58,11 @@ class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::Integratio
         admission_issuance
       end
     host!(ENV.fetch("PUBLIC_AUTH_STAFF_URL"))
-    get(new_auth_org_verification_setup_path(ri: "jp", entry_ref: issuance.reference))
+    # An admission reference is accepted only on a top-level document navigation.
+    get(
+      new_auth_org_verification_setup_path(ri: "jp", entry_ref: issuance.reference),
+      headers: { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" },
+    )
 
     assert_response :see_other
     assert_equal new_auth_org_verification_registration_passkey_path(ri: "jp"), URI.parse(response.location).request_uri

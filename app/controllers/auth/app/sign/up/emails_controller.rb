@@ -11,6 +11,7 @@ module Auth
           include ::CloudflareTurnstile
           include CommonRedirect
           include SignEmailRegistrable
+          include EmailOtpResponseTiming
           include EnforcementIdentifierGate
 
           include AppSignUpEntryPage
@@ -22,9 +23,11 @@ module Auth
           REGISTRATION_EMAIL_PERMITTED_KEYS = %i(raw_address address confirm_policy promotional notifiable).freeze
 
           before_action :require_sign_up_ceremony_admission!
+          before_action :refuse_progressed_sign_up_email_entry!, only: :new
           before_action :enforce_email_flow!
+          around_action :with_otp_issue_response_timing, only: :create
 
-          declare_authentication_mode! :guest, status: :unauthorized,
+          declare_authentication_mode! :guest, status: :forbidden,
                                                message: I18n.t("errors.messages.already_authenticated"),
                                                no_redirect: true
 
@@ -87,6 +90,10 @@ module Auth
               email_preferences: email_params.slice(:promotional, :notifiable),
             )
 
+            if @sign_up_initial_otp_refusal
+              return render_initial_signup_otp_refusal(@sign_up_initial_otp_refusal)
+            end
+
             if result == :cooldown
               render plain: t("sign.app.registration.email.create.otp_resend_too_soon"),
                      status: :too_many_requests
@@ -105,7 +112,6 @@ module Auth
               return
             end
 
-            progress_email_flow!(:create)
             return render_signup_email_delivery_unavailable if @otp_delivery_unavailable
 
             redirect_params = {}
@@ -114,6 +120,10 @@ module Auth
           end
 
           private
+
+          def refuse_progressed_sign_up_email_entry!
+            refuse_progressed_sign_entry_page!(expected_intent: "sign_up")
+          end
 
           def sign_up_surface = :app
 
@@ -153,15 +163,24 @@ module Auth
           end
 
           def send_verification_email(_otp_number)
-            bind_sign_up_flow_to_email!(@user_email)
+            flow = current_sign_up_flow
             issued = EmailSignUpOtpDeliveryIssuer.call(
-              flow: current_sign_up_flow, email: @user_email,
+              flow:, email: @user_email,
               session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+              initial_submission: true,
+              actor_context: Actor.authn,
+              after_commit: lambda do |_committed|
+                session[:auth_app_up_sequence_id] = flow.public_id
+                progress_email_flow!(:create)
+              end,
             )
-            raise ArgumentError, "initial Email signup challenge was refused" unless issued.success?
+            unless issued.success? || issued.status == :registered_destination
+              @sign_up_initial_otp_refusal = issued
+              return true
+            end
 
             true
-          rescue ActiveJob::EnqueueError
+          rescue ActiveJob::EnqueueError, EmailSignUpOtpDeliveryIssuer::DeliveryUnavailable
             @otp_delivery_unavailable = true
             true
           end
@@ -193,16 +212,12 @@ module Auth
               submit_label: sign_up_submit_label(ClientEmail),
               links: [
                 {
-                  key: "other_methods",
-                  label: t("sign.app.registration.new.page_title"),
+                  key: "back",
+                  label: t("actions.back"),
                   href: auth_app_sign_up_path,
                 },
-                {
-                  key: "sign_in",
-                  label: t("sign.app.registration.email.new.link_to_sign_in"),
-                  href: new_auth_app_sign_in_email_path,
-                },
               ],
+              cancel: auth_parent_cancellation_form,
             }
           end
 
@@ -398,18 +413,13 @@ module Auth
           end
 
           def issue_sign_up_flow!
-            sign_up_flow_locator.issue!(
-              ClientSignUpFlow.create!(
-                auth_admission_binding: auth_sign_up_admission_binding!,
-                principal_id: nil,
-                status_id: ClientSignUpFlowStatus::STARTED,
-                step: "start",
-                nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-                issued_at: Time.current,
-                expires_at: ClientSignUpFlow.default_ttl.from_now,
-                entry_method: "email",
-                return_to: sanitized_return_to,
-              ),
+            sign_up_flow_locator.create_for_admission!(
+              admission_binding: auth_sign_up_admission_binding!,
+              ceremony_session: admitted_auth_ceremony_session,
+              entry_method: "email",
+              social_provider: nil,
+              return_to: sanitized_return_to,
+              reject_prior_flow: false,
             )
           end
 
@@ -417,17 +427,16 @@ module Auth
             current_sign_up_flow_ticket || issue_sign_up_flow!
           end
 
-          def bind_sign_up_flow_to_email!(email)
-            cycle = current_sign_up_flow
-            OpBaseAppRecord.connected_to(role: :writing) do
-              cycle.update!(
-                principal_id: email.user_id,
-                pending_contact_type: "email",
-                pending_contact_id: email.id,
-              )
-              SignUpStateMachine.call(ticket: cycle, event: :submit_contact, actor_context: Actor.authn)
+          def render_initial_signup_otp_refusal(result)
+            case result.status
+            when :rate_limited, :locked
+              render plain: t("sign.app.registration.email.create.otp_resend_too_soon"),
+                     status: :too_many_requests
+            when :session_mismatch, :inactive_flow, :binding_mismatch, :inactive_candidate, :closed_challenge
+              render_sign_in_phase_refusal!
+            else
+              raise ArgumentError, "unsupported initial Email signup OTP refusal: #{result.status.inspect}"
             end
-            session[:auth_app_up_sequence_id] = cycle.public_id
           end
 
           def sign_up_flow_locator

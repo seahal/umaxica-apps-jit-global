@@ -96,7 +96,9 @@ module Email::App
         return deliver_current_signup_email_otp(signup_binding) { yield }
       end
 
-      ceremony = ClientAuthCeremonySession.find_by(id: binding.auth_ceremony_session_ref)
+      ceremony = ClientAuthCeremonySession.where(admission_purpose: "authentication_handoff").find_by(
+        id: binding.auth_ceremony_session_ref,
+      )
       delivered =
         ceremony&.with_email_otp_delivery!(
           generation: binding.auth_email_otp_generation, code: @pass_code, destination: params[:email_address],

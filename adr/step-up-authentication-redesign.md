@@ -14,9 +14,10 @@
 > replaces scope-level reuse (C5) with operation-, target-, actor- and session-bound evidence
 > consumed once. Not yet implemented.
 
-> **Amendment (2026-10-15, later):** `adr/authentication-security-cycle-consolidation-2026-10-15.md` section 5 removes any
-> runtime use of a required AAL level; step-up requirements are concrete (methods, phishing
-> resistance, UV, TTL, scope, binding). `required_aal` is deprecated for staged removal.
+> **Amendment (2026-10-15, later):** `adr/authentication-security-cycle-consolidation-2026-10-15.md`
+> section 5 removes any runtime use of a required AAL level; step-up requirements are concrete
+> (methods, phishing resistance, UV, TTL, scope, binding). `required_aal` is deprecated for staged
+> removal.
 
 **Correction (2026-05-19):** The current route contract for `settings_mfa` is
 `/settings/mfa/challenge` on every sign surface. WebAuthn challenge state remains in the Rails
@@ -26,6 +27,15 @@ session store; only email OTP step-up state uses the cache-backed `step_up_sessi
 sets the target URL language. User self-service account settings belong under canonical `/setting`,
 and existing plural `/settings` references in this ADR describe the implementation-era route
 contract until a route migration plan replaces them.
+
+> **Amendment (2026-11-03, owner):** for ordinary step-up on the RPs in scope of
+> `specs/op-mediated-step-up/`, evidence is no longer stored on the login token (A1 to A3) and is no
+> longer scoped (D): it is the OP-issued event on the requesting RP session's grant, verified by the
+> RP from its access token. C5's 15 minute repeat window is replaced by 300 seconds measured from
+> the re-authentication. The token-bound tables, the scope catalog and the bootstrap rules (F, G)
+> remain for the retained purposes listed in
+> `specs/op-mediated-step-up/contracts/consumer-inventory.md` section 6 until a separate change
+> removes them.
 
 ## Context
 
@@ -88,8 +98,8 @@ redesign decisions agreed in the 2026-05-11 design dialogue.
 - **B3.** `UNIQUE(<token>_id)` constraint enforces the singleton at the DB layer (replaces the
   previous non-unique `(<actor>_id, status)` index).
 - **B4.** `STATUSES` reduced to `%w(PENDING VERIFIED)`. `CANCELLED` is unnecessary because overwrite
-  replaces the old ticket; `EXPIRED` is unnecessary because `discard_at < Time.current` is
-  computed at read time.
+  replaces the old ticket; `EXPIRED` is unnecessary because `discard_at < Time.current` is computed
+  at read time.
 - **B5.** Email OTP secret/counter state lives in cache, keyed by
   `step_up_session:{step_up_session_id}:email_otp`, with TTL ≤ `STEP_UP_TTL`. WebAuthn challenge
   bytes remain in the Rails session store and continue to use the existing one-time-use / TTL
@@ -97,8 +107,8 @@ redesign decisions agreed in the 2026-05-11 design dialogue.
 
 - **B6.** Step-up completion consumes the token-bound row under a PostgreSQL row lock. The
   completion result is issued only inside the pending-row transaction, and the row is destroyed
-  before that transaction commits. A concurrent completion therefore observes no pending ticket
-  and cannot issue a second ceremony result.
+  before that transaction commits. A concurrent completion therefore observes no pending ticket and
+  cannot issue a second ceremony result.
 
 ### C. Judgement logic
 

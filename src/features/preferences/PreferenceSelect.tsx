@@ -40,6 +40,12 @@ type PreferenceLinkedScreen = PreferenceLink & {
   key: string;
 };
 
+type PreferenceSelectDraft = {
+  value: string;
+  dirty: boolean;
+  revision: number;
+};
+
 export type PreferenceSelectProps = {
   screen: string;
   title: string;
@@ -59,7 +65,13 @@ export default function PreferenceSelect({
   region_link: regionLink,
   linked_screens: linkedScreens,
 }: PreferenceSelectProps) {
-  const [value, setValue] = useState(String(form.value));
+  const serverValue = String(form.value);
+  const [draft, setDraft] = useState<PreferenceSelectDraft>(() => ({
+    value: serverValue,
+    dirty: false,
+    revision: 0,
+  }));
+  const value = draft.dirty ? draft.value : serverValue;
   const [processing, setProcessing] = useState(false);
   const { errors, chrome } = usePage<SharedProps>().props;
   const themeEndpointUrl = chrome.theme_controls?.endpoint_url;
@@ -67,6 +79,7 @@ export default function PreferenceSelect({
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const submittedRevision = draft.revision;
     router.patch(
       form.action,
       { [form.scope]: { [form.field]: value } },
@@ -74,6 +87,9 @@ export default function PreferenceSelect({
         onStart: () => setProcessing(true),
         onFinish: () => setProcessing(false),
         onSuccess: () => {
+          setDraft((current) =>
+            current.revision === submittedRevision ? { ...current, dirty: false } : current,
+          );
           // The theme screen writes through Inertia rather than the chrome control. Colour
           // follows the value the server stored, and only after that write is accepted.
           if (screen === "theme") {
@@ -104,7 +120,7 @@ export default function PreferenceSelect({
           name={`${form.scope}[${form.field}]`}
           value={value}
           onChange={(next) => {
-            setValue(next);
+            setDraft((current) => ({ value: next, dirty: true, revision: current.revision + 1 }));
           }}
           {...(error === undefined ? {} : { errorMessage: error })}
           options={form.choices.map((choice) => ({

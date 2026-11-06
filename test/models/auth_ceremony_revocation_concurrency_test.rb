@@ -96,6 +96,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     %i(app org totp).each do |surface|
       actor = nil
       tokens = []
+      evidences = []
+      grants = []
       threads = nil
       ready = Queue.new
       release = Queue.new
@@ -142,6 +144,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           )
           tokens << token
           token.rotate_refresh_token!
+          device = token.device_session_record!
           evidence_ref = (surface == :org) ? credential.external_id : credential.public_id
           scope = (surface == :totp) ? "settings_totp" : "settings_passkey"
           method = (surface == :totp) ? "totp" : "passkey"
@@ -154,10 +157,31 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
             last_step_up_audience: audience, last_step_up_phishing_resistant: true,
             last_step_up_user_verified: true, last_step_up_full_reauthentication: false,
           )
+          op_record, grant_class, oidc_client, grant_owner =
+            if surface == :org
+              [OpBaseOrgRecord, OpOrgGrant, OidcClientRegistry.find!("base-org-ww"), :operator_token]
+            else
+              [OpBaseAppRecord, OpAppGrant, OidcClientRegistry.find!("base-app-ww"), :client_token]
+            end
+          op_now = op_record.database_now
+          grant = grant_class.create!(
+            :authentication_epoch => token.authentication_epoch, grant_owner => token,
+            :device_session_id => device.id, :oidc_client_id => oidc_client.client_id,
+            :oidc_scope => "openid profile", :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16),
+            :oidc_auth_time => Time.at(op_now.to_time.to_i).utc, :oidc_acr => StepUpEvidenceResolver::STEP_UP_ACR,
+            :oidc_amr => JSON.generate(["passkey"]), :refresh_token_expires_at => op_now + 10.minutes,
+          )
+          grant.issue_refresh_token!(now: op_now)
+          grants << [grant_class, grant.id]
+          evidences << StepUpEvidenceValue.new(
+            acr: grant.oidc_acr, amr: ["passkey"], auth_time: grant.oidc_auth_time.to_i, sid: grant.public_id,
+            sub: OidcSubject.for(actor, resource_type: (surface == :org) ? "operator" : "client"),
+            client_id: oidc_client.client_id, aud: [oidc_client.aud], jti: grant.oidc_jti,
+          )
         end
         ActiveRecord::Base.connection_handler.clear_active_connections!
         threads =
-          credentials.zip(tokens).map do |credential, token|
+          credentials.zip(tokens, evidences).map do |credential, token, evidence|
             Thread.new do
               model.connection_class_for_self.connected_to(role: :writing) do
                 model.connection_pool.with_connection do |connection|
@@ -165,7 +189,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                   release.pop
                   IdentityCredentialRemovalCommitter.call!(
                     actor: actor.class.find(actor.id), credential: model.find(credential.id),
-                    current_session: token_model.find(token.id),
+                    current_session: token_model.find(token.id), step_up_evidence: evidence,
                   )
                 end
               end
@@ -206,6 +230,9 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         end
         device_class = (surface == :org) ? OperatorDeviceSession : ClientDeviceSession
         device_ids = tokens.filter_map(&:device_session_id)
+        grants.each do |grant_class, grant_id|
+          grant_class.where(id: grant_id).delete_all
+        end
         token_model.where(id: tokens.map(&:id)).delete_all if tokens.any?
         device_class.where(id: device_ids).delete_all if device_ids.any?
         model.where(owner_key => actor.id).delete_all if actor && model
@@ -382,425 +409,56 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
-
   [
-    [:app, Client, ClientToken, ClientPasskey, ClientStepUpCeremonyTransaction,
-     ClientAuthCeremonySession, ClientStepUpSession, OpBaseAppRecord,],
-    [:org, Operator, OperatorToken, OperatorPasskey, OperatorStepUpCeremonyTransaction,
-     OperatorAuthCeremonySession, OperatorStepUpSession, OpBaseOrgRecord,],
-  ].each do |surface, actors, tokens, passkeys, transactions, continuities, sessions, tickets|
-    test "#{surface} logout racing Base finalization leaves no usable authority or reusable result" do
-      case surface
-      when :app
-        actor = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
-          visibility_id: ClientVisibility::BOTH,
-        )
-        credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_001, user: actor)
-        credential_ref = credential.public_id
-        credential_ref = credential.public_id
-      when :org
-        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-        credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(authentication_epoch: 0, id: 9_920_000_000_001, staff: actor)
-        credential_ref = credential.external_id
-      end
+    [:app, Client, ClientToken, ClientStepUpCeremonyTransaction],
+    [:org, Operator, OperatorToken, OperatorStepUpCeremonyTransaction],
+  ].each do |surface, actors, tokens, transactions|
+    test "#{surface} Base admission refuses OIDC step-up without OP context" do
+      actor =
+        case surface
+        when :app
+          Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+            visibility_id: ClientVisibility::BOTH,
+          )
+        when :org
+          Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+        end
+      token =
+        case surface
+        when :app then ClientToken.create!(authentication_epoch: 0, user: actor)
+        when :org then OperatorToken.create!(authentication_epoch: 0, staff: actor)
+        end
       requirement = StepUpRequirement.new(
         scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
         step_up_required: true, phishing_resistant_required: true, user_verification_required: false,
-        full_reauthentication_required: false,
-        ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-        audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, audience: "step_up:#{surface}",
+        session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
       )
-      parent = BaseStepUpAdmissionIssuer.call!(
-        actor: actor,
-        token: token,
-        requirement: requirement,
-        return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: token,
-      ).transaction
-      # Synthetic evidence isolates finalization and logout, not WebAuthn signature verification.
-      parent.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
-        verified_at: transactions.database_now, verified_credential_ref: credential_ref,
-      )
-      continuity, = continuities.rotate_and_admit!(
-        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
-      )
-      issuance = BaseAuthAdmissionCoordinator.issue_result!(
-        transaction: parent, ceremony_session_ref: continuity.id.to_s,
-      )
-      ready = Queue.new
-      release = Queue.new
-      ActiveRecord::Base.connection_handler.clear_active_connections!
-      threads =
-        Array.new(2) do |index|
-          Thread.new do
-            tickets.connected_to(role: :writing) do
-              tickets.connection_pool.with_connection do |connection|
-                ready << connection.select_value("SELECT pg_backend_pid()")
-                release.pop
-                if index.zero?
-                  begin
-                    IdentityStepUpCeremonyFreshnessCommitter.call!(
-                      actor: actors.find(actor.id), token: tokens.find(token.id),
-                      transaction: transactions.find(parent.id), requirement: requirement,
-                      raw_result: issuance.code,
-                    )
-                    :finalized
-                  rescue IdentityStepUpCeremonyContract::Error, BaseAuthAdmissionCoordinator::Denied
-                    :finalization_refused
-                  end
-                else
-                  tokens.find(token.id).revoke!
-                  :revoked
-                end
-              end
-            end
-          end
-        end
-      pids = nil
-      results =
-        Timeout.timeout(10) do
-          pids = [ready.pop, ready.pop]
-          2.times { release << true }
-          threads.map(&:value)
-        end
+      transaction_count = transactions.count
 
-      assert_equal 2, pids.uniq.length
-      assert_equal :revoked, results.last
-      assert_includes [:finalized, :finalization_refused], results.first
-      assert_predicate token.reload, :revoked?
-      assert_not token.currently_usable?
-      assert_nil token.last_step_up_at
-      assert_not StepUpResolver.call(token: token, requirement: requirement).satisfied?
-      if results.first == :finalized
-        assert_equal "consumed", parent.reload.status
-        assert_predicate continuity.reload, :completed?
-      else
-        assert_equal "revoked", parent.reload.status
-        assert_predicate continuity.reload, :terminal?
-      end
-      assert_raises(IdentityStepUpCeremonyContract::Error, BaseAuthAdmissionCoordinator::Denied) do
-        IdentityStepUpCeremonyFreshnessCommitter.call!(
-          actor: actor, token: token, transaction: parent, requirement: requirement, raw_result: issuance.code,
-        )
-      end
-      assert_nil token.reload.last_step_up_at
-    ensure
-      if threads
-        2.times { release << true }
-        threads.each { |thread| thread.kill unless thread.join(10) }
-      end
-      if parent
-        case surface
-        when :app then ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
-        when :org then OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
-        end
-        continuities.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
-        sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
-        transactions.where(id: parent.id).delete_all
-      end
-      delete_admission_bindings_for(token) if token
-      tokens.where(id: token.id).delete_all if token
-      passkeys.where(id: credential.id).delete_all if credential
-      if actor
-        case surface
-        when :app then ClientAuthorityLock.where(client_id: actor.id).delete_all
-        when :org then OperatorAuthorityLock.where(operator_id: actor.id).delete_all
-        end
-        actors.where(id: actor.id).delete_all
-      end
-    end
-
-    test "#{surface} credential revocation racing Base finalization clears authority and rejects result reuse" do
-      case surface
-      when :app
-        actor = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
-          visibility_id: ClientVisibility::BOTH,
-        )
-        credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_002, user: actor)
-        credential_ref = credential.public_id
-        credential_ref = credential.public_id
-      when :org
-        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-        credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(authentication_epoch: 0, id: 9_920_000_000_002, staff: actor)
-        credential_ref = credential.external_id
-      end
-      requirement = StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
-        step_up_required: true, phishing_resistant_required: true, user_verification_required: false,
-        full_reauthentication_required: false,
-        ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-        audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      )
-      parent = BaseStepUpAdmissionIssuer.call!(
-        actor: actor,
-        token: token,
-        requirement: requirement,
-        return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: token,
-      ).transaction
-      # Synthetic evidence isolates finalization and credential revocation, not WebAuthn signature verification.
-      parent.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
-        verified_at: transactions.database_now, verified_credential_ref: credential_ref,
-      )
-      continuity, = continuities.rotate_and_admit!(
-        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
-      )
-      issuance = BaseAuthAdmissionCoordinator.issue_result!(
-        transaction: parent, ceremony_session_ref: continuity.id.to_s,
-      )
-      ready = Queue.new
-      release = Queue.new
-      ActiveRecord::Base.connection_handler.clear_active_connections!
-      threads =
-        Array.new(2) do |index|
-          Thread.new do
-            tickets.connected_to(role: :writing) do
-              tickets.connection_pool.with_connection do |connection|
-                ready << connection.select_value("SELECT pg_backend_pid()")
-                release.pop
-                if index.zero?
-                  begin
-                    IdentityStepUpCeremonyFreshnessCommitter.call!(
-                      actor: actors.find(actor.id), token: tokens.find(token.id),
-                      transaction: transactions.find(parent.id), requirement: requirement,
-                      raw_result: issuance.code,
-                    )
-                    :finalized
-                  rescue IdentityStepUpCeremonyContract::Error,
-                         BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
-                    :finalization_refused
-                  end
-                else
-                  actors.connection_class_for_self.connected_to(role: :writing) do
-                    changing_actor = actors.find(actor.id)
-                    changing_actor.with_lock do
-                      changing_credential = passkeys.lock.find(credential.id)
-                      revoked_status =
-                        case surface
-                        when :app then ClientPasskeyStatus::REVOKED
-                        when :org then OperatorPasskeyStatus::REVOKED
-                        end
-                      changing_credential.update!(status_id: revoked_status)
-                      CredentialSecurityTransition.call(
-                        actor: changing_actor, current_session: tokens.find(token.id), reason: :mfa_reset,
-                        affected_surface: surface, revoke_other_sessions: false,
-                      )
-                    end
-                  end
-                  :credential_revoked
-                end
-              end
-            end
-          end
-        end
-      pids = nil
-      results =
-        Timeout.timeout(10) do
-          pids = [ready.pop, ready.pop]
-          2.times { release << true }
-          threads.map(&:value)
-        end
-
-      assert_equal 2, pids.uniq.length
-      assert_equal :credential_revoked, results.last
-      assert_not_equal 1, credential.reload.status_id, "ACTIVE has ID 1 on each actor's Passkey status table"
-      assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
-      assert_includes [:finalized, :finalization_refused], results.first
-      assert_predicate token.reload, :currently_usable?
-      assert_not_predicate token, :revoked?
-      assert_nil token.last_step_up_at
-      assert_not StepUpResolver.call(token: token, requirement: requirement).satisfied?
-      if results.first == :finalized
-        assert_equal "consumed", parent.reload.status
-        assert_predicate continuity.reload, :completed?
-      else
-        assert_equal "revoked", parent.reload.status
-        assert_predicate continuity.reload, :terminal?
-      end
-      assert_raises(
-        IdentityStepUpCeremonyContract::Error, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
-      ) do
-        IdentityStepUpCeremonyFreshnessCommitter.call!(
-          actor: actor, token: token, transaction: parent, requirement: requirement, raw_result: issuance.code,
-        )
-      end
-      assert_nil token.reload.last_step_up_at
-    ensure
-      if threads
-        2.times { release << true }
-        threads.each { |thread| thread.kill unless thread.join(10) }
-      end
-      if parent
-        case surface
-        when :app then ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
-        when :org then OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
-        end
-        continuities.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
-        sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
-        transactions.where(id: parent.id).delete_all
-      end
-      delete_admission_bindings_for(token) if token
-      tokens.where(id: token.id).delete_all if token
-      passkeys.where(id: credential.id).delete_all if credential
-      if actor
-        case surface
-        when :app then ClientAuthorityLock.where(client_id: actor.id).delete_all
-        when :org then OperatorAuthorityLock.where(operator_id: actor.id).delete_all
-        end
-        actors.where(id: actor.id).delete_all
-      end
-    end
-
-    test "#{surface} cancellation racing Base finalization retains exactly one coherent terminal outcome" do
-      case surface
-      when :app
-        actor = Client.create!(
-          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
-          visibility_id: ClientVisibility::BOTH,
-        )
-        credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_003, user: actor)
-        credential_ref = credential.public_id
-        credential_ref = credential.public_id
-      when :org
-        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
-        credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(authentication_epoch: 0, id: 9_920_000_000_003, staff: actor)
-        credential_ref = credential.external_id
-      end
-      requirement = StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
-        step_up_required: true, phishing_resistant_required: true, user_verification_required: false,
-        full_reauthentication_required: false,
-        ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-        audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      )
-      parent = BaseStepUpAdmissionIssuer.call!(
-        actor: actor,
-        token: token,
-        requirement: requirement,
-        return_to: "/identity/birthdate",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: token,
-      ).transaction
-      # Synthetic evidence isolates finalization and cancellation, not WebAuthn signature verification.
-      parent.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
-        verified_at: transactions.database_now, verified_credential_ref: credential_ref,
-      )
-      continuity, = continuities.rotate_and_admit!(
-        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
-      )
-      issuance = BaseAuthAdmissionCoordinator.issue_result!(
-        transaction: parent, ceremony_session_ref: continuity.id.to_s,
-      )
-      ready = Queue.new
-      release = Queue.new
-      ActiveRecord::Base.connection_handler.clear_active_connections!
-      threads =
-        Array.new(2) do |index|
-          Thread.new do
-            tickets.connected_to(role: :writing) do
-              tickets.connection_pool.with_connection do |connection|
-                ready << connection.select_value("SELECT pg_backend_pid()")
-                release.pop
-                if index.zero?
-                  begin
-                    IdentityStepUpCeremonyFreshnessCommitter.call!(
-                      actor: actors.find(actor.id), token: tokens.find(token.id),
-                      transaction: transactions.find(parent.id), requirement: requirement,
-                      raw_result: issuance.code,
-                    )
-                    :finalized
-                  rescue IdentityStepUpCeremonyContract::Error, BaseAuthAdmissionCoordinator::Denied
-                    :finalization_refused
-                  end
-                else
-                  canceled = IdentityStepUpCeremonyCancellationCommitter.call!(
-                    actor: actors.find(actor.id), token: tokens.find(token.id),
-                    transaction: transactions.find(parent.id),
-                  )
-                  canceled ? :canceled : :cancellation_refused
-                end
-              end
-            end
-          end
-        end
-      pids = nil
-      results =
-        Timeout.timeout(10) do
-          pids = [ready.pop, ready.pop]
-          2.times { release << true }
-          threads.map(&:value)
-        end
-
-      assert_equal 2, pids.uniq.length
-      assert_predicate token.reload, :currently_usable?
-      assert_not_predicate token, :revoked?
-      if results.first == :finalized
-        assert_equal :cancellation_refused, results.last
-        assert_equal "consumed", parent.reload.status
-        assert_predicate continuity.reload, :completed?
-        assert_equal parent.verified_at, token.last_step_up_at
-        assert_predicate StepUpResolver.call(token: token, requirement: requirement), :satisfied?
-        event = token.last_step_up_at
-        IdentityStepUpCeremonyFreshnessCommitter.call!(
-          actor: actor, token: token, transaction: parent, requirement: requirement, raw_result: issuance.code,
-        )
-
-        assert_equal event, token.reload.last_step_up_at
-        assert_not IdentityStepUpCeremonyCancellationCommitter.call!(actor: actor, token: token, transaction: parent)
-      else
-        assert_equal :finalization_refused, results.first
-        assert_equal :canceled, results.last
-        assert_equal "canceled", parent.reload.status
-        assert_not_nil parent.canceled_at
-        assert_not_nil continuity.reload.cancelled_at
-        assert_not_predicate continuity, :completed?
-        assert_nil token.last_step_up_at
-        assert_not_predicate StepUpResolver.call(token: token, requirement: requirement), :satisfied?
-        assert IdentityStepUpCeremonyCancellationCommitter.call!(actor: actor, token: token, transaction: parent)
-        assert_raises(IdentityStepUpCeremonyContract::Error, BaseAuthAdmissionCoordinator::Denied) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            actor: actor, token: token, transaction: parent, requirement: requirement, raw_result: issuance.code,
+      error =
+        assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+          BaseStepUpAdmissionIssuer.call!(
+            actor:, token:, requirement:, return_to: "/identity/birthdate",
+            base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: token,
           )
         end
-        assert_nil token.reload.last_step_up_at
-      end
+
+      assert_equal "malformed_request", error.code
+      assert_equal transaction_count, transactions.count
+      assert_nil token.reload.last_step_up_at
     ensure
-      if threads
-        2.times { release << true }
-        threads.each { |thread| thread.kill unless thread.join(10) }
-      end
-      if parent
-        case surface
-        when :app then ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
-        when :org then OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
-        end
-        continuities.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
-        sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
-        transactions.where(id: parent.id).delete_all
-      end
-      delete_admission_bindings_for(token) if token
       tokens.where(id: token.id).delete_all if token
-      passkeys.where(id: credential.id).delete_all if credential
       if actor
-        case surface
-        when :app then ClientAuthorityLock.where(client_id: actor.id).delete_all
-        when :org then OperatorAuthorityLock.where(operator_id: actor.id).delete_all
+        case actor
+        when Client
+          ClientChronicle.where(actor_type: "Client", actor_id: actor.id).delete_all
+          ClientAuthorityLock.where(client_id: actor.id).delete_all
+        when Operator
+          OperatorChronicle.where(actor_type: "Operator", actor_id: actor.id).delete_all
+          OperatorAuthorityLock.where(operator_id: actor.id).delete_all
         end
         actors.where(id: actor.id).delete_all
       end
@@ -831,7 +489,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                 ready << connection.select_value("SELECT pg_backend_pid()")
                 release.pop
                 begin
-                  continuity_model.find(continuity.id).revoke!(now: decision_time)
+                  continuity_model.find(continuity.id).revoke!
                   :revoked
                 rescue AuthCeremonySession::InvalidTransition
                   :terminal_refused
@@ -842,10 +500,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         end
       pids = nil
       results =
-        Timeout.timeout(10) do
-          pids = [ready.pop, ready.pop]
-          2.times { release << true }
-          threads.map(&:value)
+        continuity_model.stub(:database_now, decision_time) do
+          Timeout.timeout(10) do
+            pids = [ready.pop, ready.pop]
+            2.times { release << true }
+            threads.map(&:value)
+          end
         end
 
       assert_equal 2, pids.uniq.length
@@ -854,7 +514,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       assert_predicate continuity, :terminal?
       assert_not continuity.active?(now: decision_time)
       assert_raises(AuthCeremonySession::InvalidTransition) do
-        continuity.record_authentication_evidence!(method: "passkey", now: decision_time)
+        continuity.record_authentication_evidence!(method: "passkey")
       end
     ensure
       if threads
@@ -877,8 +537,9 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       required_aal: "none", allowed_methods: ["passkey"], now: now - 9.days, expires_at: now - 8.days,
     )
     continuity, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id, now: now - 9.days,
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
     )
+    continuity.update!(expires_at: now - 8.days)
     ready = Queue.new
     release = Queue.new
     ActiveRecord::Base.connection_handler.clear_active_connections!
@@ -898,7 +559,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                 end
               else
                 begin
-                  ClientAuthCeremonySession.find(continuity.id).revoke!(now: now)
+                  ClientAuthCeremonySession.find(continuity.id).revoke!
                   :revoked
                 rescue ActiveRecord::RecordNotFound
                   :already_purged
@@ -910,10 +571,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       end
     pids = nil
     results =
-      Timeout.timeout(10) do
-        pids = [ready.pop, ready.pop]
-        2.times { release << true }
-        threads.map(&:value)
+      ClientAuthCeremonySession.stub(:database_now, now) do
+        Timeout.timeout(10) do
+          pids = [ready.pop, ready.pop]
+          2.times { release << true }
+          threads.map(&:value)
+        end
       end
     parent_present = ClientStepUpCeremonyTransaction.exists?(parent.id)
     continuity_present = ClientAuthCeremonySession.exists?(continuity.id)
@@ -926,7 +589,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       assert_equal now.iso8601(6), continuity.reload.revoked_at.iso8601(6)
       assert_not continuity.active?(now: now)
       assert_raises(AuthCeremonySession::InvalidTransition) do
-        continuity.record_authentication_evidence!(method: "passkey", now: now)
+        continuity.record_authentication_evidence!(method: "passkey")
       end
     else
       assert_equal :purged, results.first
@@ -952,7 +615,6 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       else raise ArgumentError, "unsupported test token class: #{token.class.name}"
       end
 
-      binding_model.where(base_token_id: token.id).delete_all
+    binding_model.where(base_token_id: token.id).delete_all
   end
-
 end

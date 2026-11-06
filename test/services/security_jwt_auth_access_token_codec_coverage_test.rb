@@ -31,6 +31,63 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
     end
   end
 
+  test "signed operator access tokens preserve identical scopes for normal and standby" do
+    signing_key = OpenSSL::PKey::EC.generate("secp384r1")
+    encode_with_test_key =
+      lambda do |payload, typ:, issuer_id:|
+        JWT.encode(
+          payload,
+          signing_key,
+          SecurityJwtAuthAccessTokenCodec::JWT_ALGORITHM,
+          { "typ" => typ, "kid" => "wua6-scope-test" },
+        )
+      end
+    token_arguments = {
+      host: "org.example.test",
+      resource_type: "operator",
+      oidc_sid: "same-session",
+      oidc_jti: "same-jti",
+      issuer: "https://issuer.example.test",
+      audiences: ["https://org.example.test"],
+      client_id: "org-browser-client",
+    }
+
+    tokens =
+      %w(normal standby).map do |context|
+        JitSecurityJwtKeyring.stub(:encode, encode_with_test_key) do
+          SecurityJwtAuthAccessTokenCodec.encode(
+            Operator.new(id: 42),
+            **token_arguments,
+            authentication_context: context,
+          )
+        end
+      end
+
+    payloads =
+      tokens.map do |token|
+        JitSecurityJwtKeyring.stub(:public_key_for, signing_key.public_key) do
+          SecurityJwtAuthAccessTokenCodec.decode(
+            token,
+            host: "org.example.test",
+            resource_type: "operator",
+            issuer: "https://issuer.example.test",
+            audiences: ["https://org.example.test"],
+            jwt_issuer_id: SecurityJwtAuthAccessTokenCodec::DEFAULT_JWT_ISSUER_ID,
+          )
+        end
+      end
+
+    normal_payload, standby_payload = payloads
+
+    assert_predicate normal_payload, :present?
+    assert_predicate standby_payload, :present?
+    assert_equal AuthorizationTokenClaims.scopes(normal_payload), AuthorizationTokenClaims.scopes(standby_payload)
+    assert_equal %w(authenticated domain:operator read:org write:org),
+                 AuthorizationTokenClaims.scopes(normal_payload)
+    assert_equal "normal", AuthorizationTokenClaims.authentication_context(normal_payload).to_s
+    assert_equal "standby", AuthorizationTokenClaims.authentication_context(standby_payload).to_s
+  end
+
   test "decode_allow_expired returns nil for bad header and success for a stubbed payload" do
     assert_nil SecurityJwtAuthAccessTokenCodec.decode_allow_expired(nil, host: "app.example.test")
     assert_nil SecurityJwtAuthAccessTokenCodec.decode_allow_expired("token", host: nil)

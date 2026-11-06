@@ -2803,10 +2803,8 @@ module AuthenticationBase
       record_login_audit: true,
       token_kind_id: "BROWSER_WEB",
       audit_context: { auth_method: pending_mfa_auth_method.presence || "mfa" },
-      # The primary factor that gated MFA, not the step-up factor itself --
-      # step-up attribution lives on last_step_up_method (adr/unified-enforcement.md,
-      # Session revocation, rule 3). Captured before clear_pending_mfa! deletes
-      # the session-backed value.
+      # The primary factor that gated MFA, not a later step-up factor. Captured before
+      # clear_pending_mfa! deletes the session-backed value; OP step-up attribution is separate.
       established_authentication_method: pending_mfa_established_authentication_method,
     )
     advance_pending_sign_in_flow_after_primary!(cycle, user, result) if cycle
@@ -3274,10 +3272,8 @@ module AuthenticationBase
   def token_dbsc_path
     raw =
       case resource_type
-      when "client"
-        dbsc_route_helper(:auth_app_edge_v0_token_dbsc_path, :sign_app_edge_v0_token_dbsc_path)
-      when "operator"
-        dbsc_route_helper(:auth_org_edge_v0_token_dbsc_path, :sign_org_edge_v0_token_dbsc_path)
+      when "client" then visa_app_edge_v0_token_dbsc_path
+      when "operator" then visa_org_edge_v0_token_dbsc_path
       end
     # Canonicalize: the advertised DBSC path must not carry per-request context params.
     dbsc_canonical_url(raw)
@@ -3286,21 +3282,12 @@ module AuthenticationBase
   def token_dbsc_url
     raw =
       case resource_type
-      when "client"
-        dbsc_route_helper(:auth_app_edge_v0_token_dbsc_url, :sign_app_edge_v0_token_dbsc_url)
-      when "operator"
-        dbsc_route_helper(:auth_org_edge_v0_token_dbsc_url, :sign_org_edge_v0_token_dbsc_url)
+      when "client" then visa_app_edge_v0_token_dbsc_url
+      when "operator" then visa_org_edge_v0_token_dbsc_url
       end
     # Canonicalize: this URL is the DBSC proof audience and must match registration and
     # refresh byte-for-byte, so it cannot vary with request context (ri/lx/...).
     dbsc_canonical_url(raw)
-  end
-
-  def dbsc_route_helper(primary_helper, compatibility_helper)
-    return public_send(primary_helper) if respond_to?(primary_helper, true)
-    return public_send(compatibility_helper) if respond_to?(compatibility_helper, true)
-
-    raise NoMethodError, "missing DBSC route helper for #{resource_type}"
   end
 
   def dbsc_binding_method_name(record)

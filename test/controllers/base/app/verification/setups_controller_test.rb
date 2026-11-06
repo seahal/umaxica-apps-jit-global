@@ -91,6 +91,63 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     TurnstileVerifierStub.challenge_response = nil
   end
 
+  test "an RP step-up start refusal is logged by reason and returned as localized text" do
+    @user.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+    log_messages = []
+    capture_log = ->(message = nil, *_arguments, **_keywords, &_block) { log_messages << message if message }
+
+    Rails.logger.stub(:info, capture_log) do
+      RpStepUpStartIssuer.stub(
+        :call,
+        ->(**) { raise RpStepUpStartIssuer::Refused.new(reason_code: "rp_binding_changed") },
+      ) do
+        post base_app_verification_path(ri: "jp"), params: { scope: "settings_telephone", pt: @pt }, headers: @headers
+      end
+    end
+
+    assert_response :conflict
+    assert_equal I18n.t("sign.app.verification.step_up_refused"), response.body
+    refusal_event =
+      log_messages.filter_map do |message|
+        JSON.parse(message) if message.start_with?("{")
+      end.find { |event| event.fetch("event") == "auth.step_up.refused" }
+
+    assert_equal "rp_binding_changed", refusal_event.dig("data", "reason_code")
+    assert_equal "rp_start", refusal_event.dig("data", "stage")
+  end
+
+  test "an RP step-up callback refusal is logged without callback credentials and returned as localized text" do
+    callback_state = "s" * 43
+    authorization_code = "authorization-code-secret"
+    issuer = "https://visa.example.test"
+    result = RpStepUpCallbackDispatcher::Result.new(
+      outcome: :refused, return_target: "/identity", token_response: nil, reason_code: "op_error",
+    )
+    log_messages = []
+    capture_log = ->(message = nil, *_arguments, **_keywords, &_block) { log_messages << message if message }
+
+    Rails.logger.stub(:info, capture_log) do
+      RpStepUpCallbackDispatcher.stub(:call, ->(**) { result }) do
+        get base_app_verification_oidc_callback_path(ri: "jp"),
+            params: { state: callback_state, code: authorization_code, iss: issuer }, headers: @headers
+      end
+    end
+
+    assert_response :conflict
+    assert_equal I18n.t("sign.app.verification.step_up_refused"), response.body
+    refusal_event =
+      log_messages.filter_map do |message|
+        JSON.parse(message) if message.start_with?("{")
+      end.find { |event| event.fetch("event") == "auth.step_up.refused" }
+
+    assert_equal "op_error", refusal_event.dig("data", "reason_code")
+    assert_equal "rp_callback", refusal_event.dig("data", "stage")
+    refusal_event_json = JSON.generate(refusal_event)
+
+    assert_not_includes refusal_event_json, callback_state
+    assert_not_includes refusal_event_json, authorization_code
+  end
+
   test "the protected operation of an actor without an authenticator leads to the Base method choice" do
     assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
       post base_app_verification_path(ri: "jp"), params: { scope: "settings_telephone", pt: @pt }, headers: @headers
@@ -191,22 +248,19 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     begin
       fv5001 = auth
       fv5004 = entry_ref
+      # An admission reference is accepted only on a top-level document navigation, and a live
+      # reference never renders: it hands the browser to the ceremony binding action, which then
+      # points at Base's continuation for the attached binding.
+      navigation = { "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document" }
       fv5001.get(
         new_auth_app_verification_setup_path(
           ri: "jp",
           entry_ref: fv5004,
         ),
+        headers: navigation,
       )
-      fv5001.assert_response :success
-      fv5003 = fv5001.response.parsed_body.at_css("form")
-
-      fv5001.post(
-        fv5003["action"],
-        params: {
-          entry_ref: fv5003.at_css('input[name="entry_ref"]')["value"],
-          authenticity_token: fv5003.at_css('input[name="authenticity_token"]')["value"],
-        },
-      )
+      fv5001.assert_response :see_other
+      fv5001.get(fv5001.response.location, headers: navigation)
       fv5001.assert_response :see_other
 
       get(fv5001.response.location, headers: @headers)
@@ -224,16 +278,10 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
       assert_response :see_other
 
-      fv5001.get(URI.parse(response.location).request_uri)
-      fv5001.assert_response :success
-      fv5000 = fv5001.response.parsed_body.at_css("form")
-      fv5001.post(
-        fv5000["action"],
-        params: {
-          entry_ref: fv5000.at_css('input[name="entry_ref"]')["value"],
-          authenticity_token: fv5000.at_css('input[name="authenticity_token"]')["value"],
-        },
-      )
+      # Base's confirmation returns the browser to Auth, which redeems the attached and
+      # confirmed reference with a 303 to the ceremony's clean URL.
+      fv5001.get(URI.parse(response.location).request_uri, headers: navigation)
+      fv5001.assert_response :see_other
     end
 
     auth.assert_response :see_other

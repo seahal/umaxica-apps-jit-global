@@ -97,6 +97,7 @@ class ClientSecretLifecycleJob < ApplicationJob
     rows.each do |issuance|
       OpBaseAppRecord.connected_to(role: :writing) do
         flow = ClientSignUpFlow.find_by(public_id: issuance.sign_up_flow_ref, principal_id: issuance.client_id)
+        flow&.with_cycle_lock { flow.reload }
         if flow&.sign_up_completed?
           ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: flow)
         elsif flow && terminal_signup_states.include?(ClientSignUpFlow::STATUS_NAMES.fetch(flow.status_id))

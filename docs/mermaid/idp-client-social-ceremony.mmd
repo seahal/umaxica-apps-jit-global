@@ -14,4 +14,9 @@ stateDiagram-v2
         Release history prevents stale callback reattachment.
         App link completion requires a live pending Ticket grant and
         retires that grant after consuming the candidate.
+        A verified Google/Apple login callback may expose only the closed
+        L1/L2 subject reason matching its admitted entry. The 400 guidance
+        clears Auth continuity and links to a fresh Base /sign request with
+        normalized ri only; it never reuses provider state or evidence.
+        Unverified callbacks and every other refusal keep the generic response.
     end note

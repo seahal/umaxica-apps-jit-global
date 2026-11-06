@@ -28,6 +28,7 @@ module SocialAuth
   SOCIAL_PT_SESSION_KEY = :social_auth_pt
   SOCIAL_ENTRY_SESSION_KEY = :social_auth_entry
   SOCIAL_RI_SESSION_KEY = :social_auth_ri
+  SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY = :social_admission_ceremony_session_id
   # Stores the social ceremony transaction id, not the JWT grant. Keeping the
   # JWT in the cookie-backed session can exceed the 4KB cookie limit.
   SOCIAL_CEREMONY_GRANT_SESSION_KEY = :social_ceremony_grant
@@ -45,7 +46,8 @@ module SocialAuth
   #
   # @param intent [String] One of: "login", "link"
   # @return [void]
-  def prepare_social_auth_intent!(intent, provider: nil, pt: nil, entry: nil, ri: nil)
+  def prepare_social_auth_intent!(intent, provider: nil, pt: nil, entry: nil, ri: nil,
+                                  admission_ceremony_session_id: nil)
     intent = intent.to_s
     raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") unless VALID_INTENTS.include?(intent)
 
@@ -57,7 +59,9 @@ module SocialAuth
       require_recent_step_up!
     end
 
-    store_social_auth_intent_context(intent, provider: provider, pt: pt, entry: entry, ri: ri)
+    store_social_auth_intent_context(
+      intent, provider:, pt:, entry:, ri:, admission_ceremony_session_id:,
+    )
     store_oauth_callback_state(provider)
     store_social_auth_user_context(intent)
 
@@ -70,14 +74,21 @@ module SocialAuth
     raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in")
   end
 
-  def store_social_auth_intent_context(intent, provider:, pt:, entry:, ri:)
+  def store_social_auth_intent_context(intent, provider:, pt:, entry:, ri:, admission_ceremony_session_id:)
     _ = pt
+    session.delete(:social_auth_nonce)
     if intent == "login"
+      if admission_ceremony_session_id.blank?
+        raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+      end
+
+      session[SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY] = admission_ceremony_session_id.to_s
       session.delete(SOCIAL_INTENT_SESSION_KEY)
       session.delete(SOCIAL_STARTED_AT_SESSION_KEY)
       session.delete(SOCIAL_FLOW_ID_SESSION_KEY)
       session.delete(SOCIAL_PROVIDER_SESSION_KEY)
     else
+      session.delete(SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY)
       session[SOCIAL_INTENT_SESSION_KEY] = intent
       session[SOCIAL_STARTED_AT_SESSION_KEY] = Time.current.to_i
       session[SOCIAL_FLOW_ID_SESSION_KEY] = PublicId.generate
@@ -90,6 +101,12 @@ module SocialAuth
   end
 
   def store_oauth_callback_state(provider)
+    previous_state = session[SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY]
+    previous_provider = session[SocialCallbackGuard::SOCIAL_STATE_PROVIDER_SESSION_KEY]
+    if previous_state.present? && previous_provider.present?
+      SocialAuthCallbackStateStore.consume!(state: previous_state, provider: previous_provider)
+    end
+
     state = SecureRandom.hex(16)
     session[SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY] = state
     session[SocialCallbackGuard::SOCIAL_STATE_STARTED_AT_SESSION_KEY] = Time.current.to_i
@@ -159,6 +176,7 @@ module SocialAuth
     session.delete(SOCIAL_ENTRY_SESSION_KEY)
     session.delete(SOCIAL_RI_SESSION_KEY)
     session.delete(SOCIAL_CEREMONY_GRANT_SESSION_KEY)
+    session.delete(SOCIAL_ADMISSION_CEREMONY_SESSION_ID_SESSION_KEY)
     session.delete(:social_auth_nonce)
     session.delete(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
     session.delete(SocialCallbackGuard::SOCIAL_STATE_STARTED_AT_SESSION_KEY)
@@ -407,6 +425,8 @@ module SocialAuth
     reason = classify_social_auth_error_reason(error)
 
     log_social_auth_error_details(error, intent, provider, reason)
+    guidance = verified_subject_guidance(error, intent)
+    return render_verified_subject_guidance!(guidance) if guidance
     return refuse_social_sign_path!(social_sign_path_refusal_reason(error)) if social_sign_path_intent?(intent)
 
     respond_to do |format|
@@ -421,9 +441,56 @@ module SocialAuth
     end
   end
 
-  # D-47 / D-198: on the Sign In / Sign Up path ("login" intent) every social refusal ends the
-  # attempt with the one Sign-in path response; the reason reaches only the server log. Linking from
-  # settings keeps its own redirect.
+  def verified_subject_guidance(error, intent)
+    callback = @external_authentication_callback_result
+    return unless callback.is_a?(ExternalAuthentication::CallbackResult) && callback.verified?
+    return unless intent.to_s == "login"
+
+    case [error.context[:verified_subject_reason], current_social_auth_entry]
+    when [:unregistered_subject, "sign_in"]
+      :unregistered
+    when [:already_registered_subject, "sign_up"]
+      :registered
+    end
+  end
+
+  def render_verified_subject_guidance!(guidance)
+    copy =
+      case guidance
+      when :unregistered
+        {
+          title: t("sign.app.social.verified_subject_guidance.unregistered.title"),
+          body: t("sign.app.social.verified_subject_guidance.unregistered.body"),
+          link_label: t("sign.app.social.verified_subject_guidance.start"),
+        }
+      when :registered
+        {
+          title: t("sign.app.social.verified_subject_guidance.registered.title"),
+          body: t("sign.app.social.verified_subject_guidance.registered.body"),
+          link_label: t("sign.app.social.verified_subject_guidance.start"),
+        }
+      else
+        raise ArgumentError, "unsupported verified social subject guidance"
+      end
+
+    record_sign_in_path_refusal!("credential_failed")
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Referrer-Policy"] = "strict-origin"
+    deny_framing!
+
+    start_url = base_app_sign_show_url(
+      ri: RequestContextContract.normalize_region(current_social_auth_ri),
+      host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
+      protocol: "https",
+    )
+    render "auth/shared/verified_subject_guidance",
+           layout: false,
+           status: :bad_request,
+           locals: { **copy, start_url: start_url }
+  end
+
+  # D-47 / D-198 keeps remaining sign-path refusals uniform after the verified-subject crossing
+  # guidance above. Linking from settings keeps its own redirect.
   def social_sign_path_intent?(intent)
     intent.to_s != "link"
   end
@@ -456,7 +523,8 @@ module SocialAuth
         error_class: error.class.name,
       ),
     )
-    # D-198 (3): the unique index is the last guard against a second start in one attempt.
+    # Provider identity lookups are optimistic; the unique index is the final guard against a
+    # concurrent identity ownership conflict.
     return refuse_social_sign_path!("phase_violation") if social_sign_path_intent?(intent)
 
     respond_to do |format|

@@ -512,7 +512,7 @@ module Auth
         assert_includes response.headers["Cache-Control"], "no-store"
         transaction = issuance.transaction.reload
 
-        assert_equal "pending", transaction.status
+        assert_equal "pending", transaction.status_name
         assert_nil transaction.actor_ref
         assert_nil transaction.session_ref
         assert_nil session[:oidc_authorization_login_challenge]

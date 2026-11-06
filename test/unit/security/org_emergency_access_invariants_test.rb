@@ -51,6 +51,7 @@ class OrgEmergencyAccessInvariantsTest < ActiveSupport::TestCase
     assert_not recognizes?(com_host, "GET", "/sign/in/passkey/new")
 
     landing = Rails.application.routes.recognize_path("https://#{com_host}/", method: "GET")
+
     assert_equal %w(unknown_hosts show), [landing[:controller], landing[:action]],
                  "the corporate Auth host must fall through to the unknown-host handler"
   end

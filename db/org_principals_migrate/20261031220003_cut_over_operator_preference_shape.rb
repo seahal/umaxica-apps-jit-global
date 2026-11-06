@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 class CutOverOperatorPreferenceShape < ActiveRecord::Migration[8.2]
-  class ReferenceRow < ActiveRecord::Base
-    self.abstract_class = true
-  end
-
   def up
     require_empty_table!(:operator_preferences)
 
@@ -48,9 +44,7 @@ class CutOverOperatorPreferenceShape < ActiveRecord::Migration[8.2]
   end
 
   def seed_reference_rows(table_name, ids)
-    ReferenceRow.establish_connection(connection.pool.db_config)
-    ReferenceRow.table_name = table_name.to_s
-    ReferenceRow.primary_key = "id"
-    ReferenceRow.insert_all(ids.map { |id| { id: id } })
+    values = ids.map { |id| "(#{connection.quote(id)})" }.join(", ")
+    execute "INSERT INTO #{quote_table_name(table_name)} (id) VALUES #{values}"
   end
 end

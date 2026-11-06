@@ -202,6 +202,9 @@ module ActorSupport
   def resolved_current_step_up
     return Actor::StepUp::NULL unless defined?(StepUpResolver)
     return Actor::StepUp::NULL unless respond_to?(:current_session_token, true)
+    # Base authorization reads its OP Access-token event at the protected writer. Actor's legacy
+    # request snapshot cannot represent that unscoped event, so it must not resolve root columns.
+    return Actor::StepUp::NULL if browser_rp_controller?
 
     scope = resolved_current_step_up_scope
     return Actor::StepUp::NULL if scope.blank?

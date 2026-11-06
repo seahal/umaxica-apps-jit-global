@@ -22,6 +22,7 @@ module Base
           # email through current_operator.staff_emails (owner-scoped). Step-up/turnstile remain below.
           before_action :authorize_email_registration!, only: %i(new create edit update)
           step_up only: %i(new create edit update)
+          before_action :refuse_root_token_feature_in_rp_cell!, only: %i(edit create update)
 
           def new
             @staff_email = OperatorEmail.new
@@ -248,6 +249,7 @@ module Base
               token: current_session_token, email: @staff_email, transaction: registration_email_otp_transaction,
               browser_nonce: base_admission_browser_nonce, code: code,
               requirement: step_up_requirement(scope: "settings_email"),
+              step_up_evidence: current_step_up_evidence,
             )
             return fail_registration_session unless status == :finalized
 

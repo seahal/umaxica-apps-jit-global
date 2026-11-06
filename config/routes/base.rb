@@ -60,6 +60,7 @@ scope(module: :base, as: :base) do
         post "emails/:id", to: "emails#create"
         resource :language, only: %i(edit update)
         resource :motion, only: %i(edit update)
+        resource :notification, only: %i(edit update)
         resource :pagination, only: %i(edit update)
         resource :region, only: %i(edit update)
         resource :customization, only: %i(edit destroy)
@@ -225,6 +226,9 @@ scope(module: :base, as: :base) do
       # Step-up verification.
       resource :verification, only: %i(show create)
       namespace :verification do
+        namespace :oidc do
+          resource :callback, only: :show
+        end
         resource :cancellation, only: %i(show create)
         resource :completion, only: %i(show create)
         # Choice of a first authenticator. GET shows the methods; POST starts one bootstrap.
@@ -248,6 +252,10 @@ scope(module: :base, as: :base) do
                                                     as: :cancel_avatar_ownership_transfer
 
       namespace :identity do
+        resources :social_identities, only: :index
+        resource :sensitive_admission_confirmation, only: %i(show create),
+                                                    path: "sensitive_admissions/:admission_ref/confirmation",
+                                                    controller: :sensitive_admission_confirmations
         resource :standing, only: :show
         resources :passkeys, only: %i(index show new create update destroy)
         resources :totps, only: %i(index show new create update destroy)
@@ -319,6 +327,7 @@ scope(module: :base, as: :base) do
         resource :density, only: %i(edit update)
         resource :language, only: %i(edit update)
         resource :motion, only: %i(edit update)
+        resource :notification, only: %i(edit update)
         resource :pagination, only: %i(edit update)
         resource :region, only: %i(edit update)
         resource :customization, only: %i(edit destroy)
@@ -371,7 +380,6 @@ scope(module: :base, as: :base) do
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
     end
   end
-
 
   # Staff authority gateway host.
   constraints(
@@ -428,6 +436,7 @@ scope(module: :base, as: :base) do
         post "emails/:id", to: "emails#create"
         resource :language, only: %i(edit update)
         resource :motion, only: %i(edit update)
+        resource :notification, only: %i(edit update)
         resource :pagination, only: %i(edit update)
         resource :region, only: %i(edit update)
         resource :customization, only: %i(edit destroy)
@@ -631,6 +640,9 @@ scope(module: :base, as: :base) do
       # Step-up verification.
       resource :verification, only: %i(show create)
       namespace :verification do
+        namespace :oidc do
+          resource :callback, only: :show
+        end
         resource :cancellation, only: %i(show create)
         resource :completion, only: %i(show create)
         resource :setup, only: %i(show create)
@@ -642,6 +654,7 @@ scope(module: :base, as: :base) do
       resource :other_sessions, path: "sessions/other", controller: "identity/revocations/others", only: :destroy
       resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
+        resources :social_identities, only: :index
         resource :standing, only: :show
         resources :passkeys, only: %i(index show new create update destroy)
         namespace :mfa do

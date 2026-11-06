@@ -6,6 +6,15 @@ module EmailOtpResponseTiming
 
   TIMING_PROTECTION_SECONDS = 0.01
 
+  public
+
+  def with_otp_issue_response_timing
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    yield
+  ensure
+    ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
+  end
+
   private
 
   def ensure_min_elapsed(start_time, target_seconds = TIMING_PROTECTION_SECONDS)

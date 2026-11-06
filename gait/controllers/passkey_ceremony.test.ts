@@ -36,6 +36,33 @@ describe("postCeremonyJson", () => {
     await expect(postCeremonyJson("/x", {}, "failed")).resolves.toBe(CEREMONY_REDIRECTED);
     expect(reload).toHaveBeenCalled();
   });
+
+  it("opens the explicit step-up entry without replaying the rejected mutation", async () => {
+    const location = {
+      href: "https://base.example.test/identity/passkeys/passkey-1?ri=jp",
+      origin: "https://base.example.test",
+      assign: vi.fn(),
+    };
+    const fetchRequest = vi.fn(
+      async () =>
+        new Response("Confirm your identity", {
+          status: 401,
+          headers: {
+            "WWW-Authenticate": 'Bearer error="insufficient_user_authentication"',
+            "Content-Type": "text/plain",
+          },
+        }),
+    );
+    vi.stubGlobal("window", { location });
+    vi.stubGlobal("fetch", fetchRequest);
+
+    await expect(
+      postCeremonyJson("/sensitive-operation", { confirm: true }, "failed"),
+    ).resolves.toBe(CEREMONY_REDIRECTED);
+
+    expect(fetchRequest).toHaveBeenCalledTimes(1);
+    expect(location.assign).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("ceremonyErrorMessage", () => {

@@ -12,10 +12,13 @@ module Security
       test "a preference token in the access cookie does not authenticate a protected route" do
         host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
         host! host
-        patch base_app_preference_region_path(ri: "jp"),
-              params: { preference_region: { option_id: "JP" } }
+        https!
+        controls = PreferenceBrowserControlsRegistry.fetch(family: "base", surface: "app")
+        patch controls.theme_endpoint_path,
+              params: { theme: "system" }.to_json,
+              headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
 
-        assert_response :redirect
+        assert_response :ok
         preference_token = cookies[PreferenceCookieName.anonymous_jwt]
 
         assert_predicate preference_token, :present?
@@ -29,10 +32,13 @@ module Security
       test "a preference token sent as a bearer token does not authenticate a protected route" do
         host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
         host! host
-        patch base_app_preference_region_path(ri: "jp"),
-              params: { preference_region: { option_id: "JP" } }
+        https!
+        controls = PreferenceBrowserControlsRegistry.fetch(family: "base", surface: "app")
+        patch controls.theme_endpoint_path,
+              params: { theme: "system" }.to_json,
+              headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
 
-        assert_response :redirect
+        assert_response :ok
         preference_token = cookies[PreferenceCookieName.anonymous_jwt]
 
         assert_predicate preference_token, :present?

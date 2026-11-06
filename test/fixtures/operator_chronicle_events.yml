@@ -29,6 +29,12 @@ login_failed:
   id: 5
 token_refreshed:
   id: 6
+staff_secret_created:
+  id: 8
+staff_secret_removed:
+  id: 9
+staff_secret_updated:
+  id: 10
 step_up_verified:
   id: 11
 social_unlinked:

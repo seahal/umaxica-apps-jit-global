@@ -28,6 +28,7 @@ module AuthCeremonyEntryHelper
         "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
       },
     )
+
     raise RuntimeError, "auth entry did not relay to ceremony_bindings (HTTP #{browser.response.status})" unless
       browser.response.status == 303 && URI.parse(browser.response.location).path == "/ceremony_bindings"
 

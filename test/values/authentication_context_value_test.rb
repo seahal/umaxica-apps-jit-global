@@ -8,6 +8,8 @@ require "test_helper"
 # strictness: issuing a session under an unknown context must fail loudly, while
 # reading one out of an already-signed token must fail closed.
 class AuthenticationContextValueTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   test "the registry is closed" do
     assert_equal %w(normal standby), AuthenticationContextValue::KEYS
   end

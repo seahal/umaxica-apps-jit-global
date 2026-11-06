@@ -30,18 +30,29 @@ class TelephoneCredentialRegistrationOtpResendIssuer
     ).dump
     return result(:unavailable) unless transaction.session_ref == expected
 
-    actor.class.connection_class_for_self.connected_to(role: :writing) do
-      actor.with_lock do
-        transaction.class.connection_owner.connected_to(role: :writing) do
-          token_device_session.with_lock do
-            token.with_lock do
-              telephone.with_lock do
-                transaction.with_lock { resend_locked(expected) }
+    resend =
+      lambda do |registered_destination|
+        next result(:registered_destination) if registered_destination
+
+        actor.class.connection_class_for_self.connected_to(role: :writing) do
+          actor.with_lock do
+            transaction.class.connection_owner.connected_to(role: :writing) do
+              token_device_session.with_lock do
+                token.with_lock do
+                  telephone.with_lock do
+                    transaction.with_lock { resend_locked(expected) }
+                  end
+                end
               end
             end
           end
         end
       end
+
+    if actor.is_a?(Client)
+      AppRegisteredContactDestinationGuard.with_lock(contact: telephone, owner: actor, &resend)
+    else
+      resend.call(false)
     end
   end
 

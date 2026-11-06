@@ -72,7 +72,7 @@ CREATE FUNCTION public.check_staff_identity_telephones_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_68092a83e365' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_68092a83e365' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_b02fca6943b3' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_b02fca6943b3' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -91,7 +91,7 @@ CREATE FUNCTION public.prevent_operator_telephone_public_id_mutation() RETURNS t
 CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_68092a83e365' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_b02fca6943b3' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -101,7 +101,7 @@ CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_dig
 CREATE FUNCTION public.rotate_operator_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_68092a83e365' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_b02fca6943b3' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -2417,6 +2417,34 @@ ALTER SEQUENCE public.operator_preference_regions_id_seq OWNED BY public.operato
 
 
 --
+-- Name: operator_preference_statuses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.operator_preference_statuses (
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: operator_preference_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.operator_preference_statuses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: operator_preference_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.operator_preference_statuses_id_seq OWNED BY public.operator_preference_statuses.id;
+
+
+--
 -- Name: operator_preference_theme_options; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2602,27 +2630,12 @@ ALTER SEQUENCE public.operator_preference_timezones_id_seq OWNED BY public.opera
 
 CREATE TABLE public.operator_preferences (
     id bigint CONSTRAINT staff_preferences_id_not_null NOT NULL,
-    staff_id bigint CONSTRAINT staff_preferences_staff_id_not_null NOT NULL,
-    consented boolean DEFAULT false CONSTRAINT staff_preferences_consented_not_null NOT NULL,
-    functional boolean DEFAULT false CONSTRAINT staff_preferences_functional_not_null NOT NULL,
-    performant boolean DEFAULT false CONSTRAINT staff_preferences_performant_not_null NOT NULL,
-    targetable boolean DEFAULT false CONSTRAINT staff_preferences_targetable_not_null NOT NULL,
-    consented_at timestamp(6) with time zone,
-    consent_version uuid,
-    language character varying DEFAULT 'ja'::character varying CONSTRAINT staff_preferences_language_not_null NOT NULL,
-    region character varying DEFAULT 'jp'::character varying CONSTRAINT staff_preferences_region_not_null NOT NULL,
-    timezone character varying DEFAULT 'Asia/Tokyo'::character varying CONSTRAINT staff_preferences_timezone_not_null NOT NULL,
-    theme character varying DEFAULT 'sy'::character varying CONSTRAINT staff_preferences_theme_not_null NOT NULL,
+    operator_id bigint CONSTRAINT staff_preferences_staff_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT staff_preferences_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT staff_preferences_updated_at_not_null NOT NULL,
     public_id character varying(21) CONSTRAINT operator_preferences_public_id_not_null1 NOT NULL,
-    currency character varying DEFAULT 'jpy'::character varying CONSTRAINT staff_preferences_currency_not_null NOT NULL,
-    date_format character varying DEFAULT 'iso'::character varying CONSTRAINT staff_preferences_date_format_not_null NOT NULL,
-    time_format character varying DEFAULT '24'::character varying CONSTRAINT staff_preferences_time_format_not_null NOT NULL,
-    motion character varying DEFAULT 'standard'::character varying CONSTRAINT staff_preferences_motion_not_null NOT NULL,
-    density character varying DEFAULT 'standard'::character varying CONSTRAINT staff_preferences_density_not_null NOT NULL,
-    page_size character varying DEFAULT 'infinity'::character varying CONSTRAINT staff_preferences_items_per_page_not_null NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb,
+    explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status_id bigint DEFAULT 0 NOT NULL,
     CONSTRAINT chk_operator_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
@@ -3378,6 +3391,46 @@ CREATE SEQUENCE public.org_enforcement_principal_links_id_seq
 --
 
 ALTER SEQUENCE public.org_enforcement_principal_links_id_seq OWNED BY public.org_enforcement_principal_links.id;
+
+
+--
+-- Name: org_iam_operation_outcomes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_iam_operation_outcomes (
+    id bigint NOT NULL,
+    operation_id uuid NOT NULL,
+    operation_kind character varying NOT NULL,
+    actor_public_id character varying NOT NULL,
+    subject_public_id character varying NOT NULL,
+    request_digest character varying(64) NOT NULL,
+    result jsonb NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_org_iam_outcomes_digest CHECK (((request_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT chk_org_iam_outcomes_kind CHECK (((operation_kind)::text = ANY ((ARRAY['grant'::character varying, 'revoke'::character varying])::text[]))),
+    CONSTRAINT chk_org_iam_outcomes_owners CHECK (((length(btrim((actor_public_id)::text)) > 0) AND (length(btrim((subject_public_id)::text)) > 0))),
+    CONSTRAINT chk_org_iam_outcomes_result CHECK (((jsonb_typeof(result) = 'object'::text) AND COALESCE((jsonb_typeof((result -> 'grant_public_id'::text)) = 'string'::text), false) AND (length(btrim((result ->> 'grant_public_id'::text))) > 0) AND ((((operation_kind)::text = 'grant'::text) AND COALESCE((jsonb_typeof((result -> 'expires_at'::text)) = 'string'::text), false) AND (length(btrim((result ->> 'expires_at'::text))) > 0) AND ((result - ARRAY['grant_public_id'::text, 'expires_at'::text]) = '{}'::jsonb)) OR (((operation_kind)::text = 'revoke'::text) AND ((result - ARRAY['grant_public_id'::text]) = '{}'::jsonb)))))
+);
+
+
+--
+-- Name: org_iam_operation_outcomes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_iam_operation_outcomes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_iam_operation_outcomes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_iam_operation_outcomes_id_seq OWNED BY public.org_iam_operation_outcomes.id;
 
 
 --
@@ -4298,6 +4351,13 @@ ALTER TABLE ONLY public.operator_preference_regions ALTER COLUMN id SET DEFAULT 
 
 
 --
+-- Name: operator_preference_statuses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_preference_statuses ALTER COLUMN id SET DEFAULT nextval('public.operator_preference_statuses_id_seq'::regclass);
+
+
+--
 -- Name: operator_preference_theme_options id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4477,6 +4537,13 @@ ALTER TABLE ONLY public.org_enforcement_principal_effects ALTER COLUMN id SET DE
 --
 
 ALTER TABLE ONLY public.org_enforcement_principal_links ALTER COLUMN id SET DEFAULT nextval('public.org_enforcement_principal_links_id_seq'::regclass);
+
+
+--
+-- Name: org_iam_operation_outcomes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_iam_operation_outcomes ALTER COLUMN id SET DEFAULT nextval('public.org_iam_operation_outcomes_id_seq'::regclass);
 
 
 --
@@ -5131,6 +5198,14 @@ ALTER TABLE ONLY public.operator_preference_regions
 
 
 --
+-- Name: operator_preference_statuses operator_preference_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_preference_statuses
+    ADD CONSTRAINT operator_preference_statuses_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: operator_preference_theme_options operator_preference_theme_options_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5336,6 +5411,14 @@ ALTER TABLE ONLY public.org_enforcement_principal_effects
 
 ALTER TABLE ONLY public.org_enforcement_principal_links
     ADD CONSTRAINT org_enforcement_principal_links_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: org_iam_operation_outcomes org_iam_operation_outcomes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_iam_operation_outcomes
+    ADD CONSTRAINT org_iam_operation_outcomes_pkey PRIMARY KEY (id);
 
 
 --
@@ -5785,6 +5868,13 @@ CREATE UNIQUE INDEX idx_operator_oidc_identity_bindings_identity ON public.opera
 --
 
 CREATE UNIQUE INDEX idx_operator_oidc_identity_bindings_subject ON public.operator_oidc_identity_bindings USING btree (issuer, subject, audience);
+
+
+--
+-- Name: idx_operator_passkey_registration_operation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_operator_passkey_registration_operation ON public.operator_passkey_audit_outboxes USING btree (operation_ref) WHERE (((event_type)::text = ANY ((ARRAY['passkey.registered.signup'::character varying, 'passkey.registered.settings'::character varying])::text[])) AND (operation_ref IS NOT NULL) AND ((operation_ref)::text <> ''::text));
 
 
 --
@@ -6453,17 +6543,17 @@ CREATE UNIQUE INDEX index_operator_preference_timezones_on_preference_id ON publ
 
 
 --
+-- Name: index_operator_preferences_on_active_operator_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_preferences_on_active_operator_id ON public.operator_preferences USING btree (operator_id) WHERE (status_id = 0);
+
+
+--
 -- Name: index_operator_preferences_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX index_operator_preferences_on_public_id ON public.operator_preferences USING btree (public_id);
-
-
---
--- Name: index_operator_preferences_on_staff_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_operator_preferences_on_staff_id ON public.operator_preferences USING btree (staff_id);
 
 
 --
@@ -6698,6 +6788,13 @@ CREATE INDEX index_org_enforcement_principal_links_on_principal_public_id ON pub
 
 
 --
+-- Name: index_org_iam_operation_outcomes_on_operation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_org_iam_operation_outcomes_on_operation_id ON public.org_iam_operation_outcomes USING btree (operation_id);
+
+
+--
 -- Name: index_organization_entra_connections_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6870,7 +6967,7 @@ CREATE TRIGGER operator_telephones_public_id_immutability BEFORE UPDATE OF publi
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6878,7 +6975,7 @@ ALTER TABLE ONLY public.agent_memberships
 --
 
 ALTER TABLE ONLY public.bureau_units
-    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6946,6 +7043,22 @@ ALTER TABLE ONLY public.operator_lifecycle_requests
 
 
 --
+-- Name: operator_preferences fk_operator_preferences_on_operator_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_preferences
+    ADD CONSTRAINT fk_operator_preferences_on_operator_id FOREIGN KEY (operator_id) REFERENCES public.operators(id);
+
+
+--
+-- Name: operator_preferences fk_operator_preferences_on_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_preferences
+    ADD CONSTRAINT fk_operator_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.operator_preference_statuses(id);
+
+
+--
 -- Name: operator_workspace_account_memberships fk_operator_workspace_account_memberships_on_staff_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6982,7 +7095,7 @@ ALTER TABLE ONLY public.operator_workspace_accounts
 --
 
 ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -7006,7 +7119,7 @@ ALTER TABLE ONLY public.organization_entra_connections
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id);
+    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id) NOT VALID;
 
 
 --
@@ -7086,7 +7199,7 @@ ALTER TABLE ONLY public.operator_entra_identities
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id);
+    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id) NOT VALID;
 
 
 --
@@ -7150,7 +7263,7 @@ ALTER TABLE ONLY public.operator_capability_grants
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -7294,7 +7407,7 @@ ALTER TABLE ONLY public.operator_passkeys
 --
 
 ALTER TABLE ONLY public.operator_workspace_account_memberships
-    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -7366,7 +7479,7 @@ ALTER TABLE ONLY public.operators
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -7546,14 +7659,6 @@ ALTER TABLE ONLY public.user_workspaces
 
 
 --
--- Name: operator_preferences fk_rails_9b2a21cc23; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.operator_preferences
-    ADD CONSTRAINT fk_rails_9b2a21cc23 FOREIGN KEY (staff_id) REFERENCES public.operators(id);
-
-
---
 -- Name: agent_delegation_grants fk_rails_a613aea5c6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7638,7 +7743,7 @@ ALTER TABLE ONLY public.bureau_view_grants
 --
 
 ALTER TABLE ONLY public.operator_lifecycle_requests
-    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -7774,7 +7879,7 @@ ALTER TABLE ONLY public.agent_assignments
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id);
+    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id) NOT VALID;
 
 
 --
@@ -7814,7 +7919,7 @@ ALTER TABLE ONLY public.agent_ownerships
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -7904,6 +8009,10 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261105031755'),
+('20261104110000'),
+('20261031220003'),
+('20261031201217'),
 ('20261023140003'),
 ('20261023140002'),
 ('20261023140001'),

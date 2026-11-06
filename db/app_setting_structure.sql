@@ -112,34 +112,6 @@ ALTER SEQUENCE public.app_preference_adult_content_gates_id_seq OWNED BY public.
 
 
 --
--- Name: app_preference_binding_methods; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.app_preference_binding_methods (
-    id bigint NOT NULL
-);
-
-
---
--- Name: app_preference_binding_methods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.app_preference_binding_methods_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: app_preference_binding_methods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.app_preference_binding_methods_id_seq OWNED BY public.app_preference_binding_methods.id;
-
-
---
 -- Name: app_preference_browser_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -212,9 +184,7 @@ ALTER SEQUENCE public.app_preference_consent_receipts_id_seq OWNED BY public.app
 CREATE TABLE public.app_preference_cookies (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
-    consent_version uuid,
     consented boolean DEFAULT false NOT NULL,
-    consented_at timestamp(6) with time zone,
     functional boolean DEFAULT false NOT NULL,
     performant boolean DEFAULT false NOT NULL,
     targetable boolean DEFAULT false NOT NULL,
@@ -360,34 +330,6 @@ CREATE SEQUENCE public.app_preference_date_formats_id_seq
 --
 
 ALTER SEQUENCE public.app_preference_date_formats_id_seq OWNED BY public.app_preference_date_formats.id;
-
-
---
--- Name: app_preference_dbsc_statuses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.app_preference_dbsc_statuses (
-    id bigint NOT NULL
-);
-
-
---
--- Name: app_preference_dbsc_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.app_preference_dbsc_statuses_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: app_preference_dbsc_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.app_preference_dbsc_statuses_id_seq OWNED BY public.app_preference_dbsc_statuses.id;
 
 
 --
@@ -965,23 +907,13 @@ ALTER SEQUENCE public.app_preference_web_pushes_id_seq OWNED BY public.app_prefe
 
 CREATE TABLE public.app_preferences (
     id bigint NOT NULL,
-    binding_method_id bigint DEFAULT 0 NOT NULL,
-    dbsc_challenge text,
-    dbsc_challenge_issued_at timestamp(6) with time zone,
-    dbsc_public_key jsonb,
-    dbsc_session_id character varying,
-    dbsc_status_id bigint DEFAULT 0 NOT NULL,
-    jti character varying,
+    jti character varying NOT NULL,
     public_id character varying(21) NOT NULL,
-    replaced_by_id bigint,
     status_id bigint DEFAULT 0 NOT NULL,
-    token_digest bytea,
-    used_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT app_preferences_purged_at_not_null NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT app_preferences_discarded_at_not_null NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    last_issued_at timestamp(6) with time zone NOT NULL,
+    last_issued_expires_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_app_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
@@ -1041,13 +973,6 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates ALTER COLUMN id SET D
 
 
 --
--- Name: app_preference_binding_methods id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preference_binding_methods ALTER COLUMN id SET DEFAULT nextval('public.app_preference_binding_methods_id_seq'::regclass);
-
-
---
 -- Name: app_preference_browser_bindings id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1094,13 +1019,6 @@ ALTER TABLE ONLY public.app_preference_date_format_options ALTER COLUMN id SET D
 --
 
 ALTER TABLE ONLY public.app_preference_date_formats ALTER COLUMN id SET DEFAULT nextval('public.app_preference_date_formats_id_seq'::regclass);
-
-
---
--- Name: app_preference_dbsc_statuses id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preference_dbsc_statuses ALTER COLUMN id SET DEFAULT nextval('public.app_preference_dbsc_statuses_id_seq'::regclass);
 
 
 --
@@ -1260,14 +1178,6 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates
 
 
 --
--- Name: app_preference_binding_methods app_preference_binding_methods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preference_binding_methods
-    ADD CONSTRAINT app_preference_binding_methods_pkey PRIMARY KEY (id);
-
-
---
 -- Name: app_preference_browser_bindings app_preference_browser_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1321,14 +1231,6 @@ ALTER TABLE ONLY public.app_preference_date_format_options
 
 ALTER TABLE ONLY public.app_preference_date_formats
     ADD CONSTRAINT app_preference_date_formats_pkey PRIMARY KEY (id);
-
-
---
--- Name: app_preference_dbsc_statuses app_preference_dbsc_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preference_dbsc_statuses
-    ADD CONSTRAINT app_preference_dbsc_statuses_pkey PRIMARY KEY (id);
 
 
 --
@@ -1697,27 +1599,6 @@ CREATE UNIQUE INDEX index_app_preference_web_pushes_on_preference_id ON public.a
 
 
 --
--- Name: index_app_preferences_on_binding_method_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_app_preferences_on_binding_method_id ON public.app_preferences USING btree (binding_method_id);
-
-
---
--- Name: index_app_preferences_on_dbsc_session_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_app_preferences_on_dbsc_session_id ON public.app_preferences USING btree (dbsc_session_id);
-
-
---
--- Name: index_app_preferences_on_dbsc_status_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_app_preferences_on_dbsc_status_id ON public.app_preferences USING btree (dbsc_status_id);
-
-
---
 -- Name: index_app_preferences_on_jti; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1732,38 +1613,10 @@ CREATE UNIQUE INDEX index_app_preferences_on_public_id ON public.app_preferences
 
 
 --
--- Name: index_app_preferences_on_purge_eligible_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_app_preferences_on_purge_eligible_at ON public.app_preferences USING btree (purge_eligible_at);
-
-
---
--- Name: index_app_preferences_on_replaced_by_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_app_preferences_on_replaced_by_id ON public.app_preferences USING btree (replaced_by_id);
-
-
---
 -- Name: index_app_preferences_on_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_app_preferences_on_status_id ON public.app_preferences USING btree (status_id);
-
-
---
--- Name: index_app_preferences_on_token_digest; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_app_preferences_on_token_digest ON public.app_preferences USING btree (token_digest);
-
-
---
--- Name: index_app_preferences_on_used_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_app_preferences_on_used_at ON public.app_preferences USING btree (used_at);
 
 
 --
@@ -1806,27 +1659,11 @@ ALTER TABLE ONLY public.app_preference_timezones
 
 
 --
--- Name: app_preferences fk_app_preferences_on_binding_method_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.app_preference_binding_methods(id) NOT VALID;
-
-
---
--- Name: app_preferences fk_app_preferences_on_dbsc_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id) NOT VALID;
-
-
---
 -- Name: app_preferences fk_app_preferences_on_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.app_preference_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_app_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.app_preference_statuses(id);
 
 
 --
@@ -1867,14 +1704,6 @@ ALTER TABLE ONLY public.app_preference_motions
 
 ALTER TABLE ONLY public.app_preference_timezones
     ADD CONSTRAINT fk_rails_3a83164d61 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
-
-
---
--- Name: app_preferences fk_rails_40612c8731; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -2028,6 +1857,8 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261031220000'),
+('20261031201205'),
 ('20261031191202'),
 ('20261020130001'),
 ('20261020130000'),

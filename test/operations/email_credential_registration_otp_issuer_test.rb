@@ -3,6 +3,34 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
+  test "APP Email registration suppresses OTP issuance for another Client's effective address" do
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
+    address = "registered-registration-#{SecureRandom.hex(8)}@example.test"
+    email = owner.client_emails.create!(raw_address: address, confirm_policy: true, otp_attempts_count: 1)
+    competitor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    registered = competitor.client_emails.create!(
+      raw_address: address, confirm_policy: true, user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    registered.finalize_binding!
+    token.rotate_refresh_token!
+    before = email.reload.attributes
+    transaction_count = ClientEmailCeremonyTransaction.count
+
+    issued = EmailCredentialRegistrationOtpIssuer.call(
+      actor: owner, token: token, email: email, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+
+    assert_equal :registered_destination, issued.status
+    assert_nil issued.transaction
+    assert_nil issued.code
+    assert_equal transaction_count, ClientEmailCeremonyTransaction.count
+    assert_equal before, email.reload.attributes
+    assert_predicate registered.reload, :binding_effective?
+  end
+
   %w(app org).each do |surface|
     test "#{surface} Email registration bounds its ceremony within the default Root lifetime" do
       owner_model, root_model, email_model, owner_key, active_status =

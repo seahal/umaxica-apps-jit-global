@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TelephoneCeremonyOtpReissueTest < ActiveSupport::TestCase
-  [ClientTelephoneCeremonyTransaction,    OperatorTelephoneCeremonyTransaction,].each do |model|
+  [ClientTelephoneCeremonyTransaction, OperatorTelephoneCeremonyTransaction].each do |model|
     test "#{model.name} reissue rotates its generation without extending either deadline" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser", operation: "registration", telephone_candidate_ref: "candidate",

@@ -59,58 +59,60 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
       end
     end
 
-    assert_equal base_host, target.host
-    base.get(target.request_uri)
-    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
-    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+    # WU-9: /oauth/authorize lives on the Visa OP host; it relays the unauthenticated
+    # browser to the Auth sign-in entry, whose admission the chain below follows.
+    assert_equal visa_host_for_test_base_host(base_host), target.host
 
-    assert_equal 303, base.response.status
-    auth_target = URI.parse(base.response.location)
-    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless auth_target.host == base_host
-      auth_target = auth_target
+    entry_reference = nil
+    admission_browser = base
+    12.times do
+      raise RuntimeError, "Admission stopped before a redirect" unless admission_browser.response.redirect?
+
+      hop = URI.parse(admission_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless auth_target.host == base_host
-        handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
-        handoff_payload, = JWT.decode(
-          handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        auth_target = URI.parse(handoff_payload.fetch("url"))
+      3.times do
+        break unless hop.host == "jump.umaxica.net"
+
+        unwrapped = URI.parse(jump_rt_url_from_location_for_test(hop.to_s))
+        break if unwrapped.to_s == hop.to_s
+
+        hop = unwrapped
       end
+      if entry_reference.nil? && hop.host == auth_host &&
+          (captured_reference = Rack::Utils.parse_query(hop.query.to_s)["entry_ref"]).present?
+        entry_reference = captured_reference
+        pending_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "app", reference: entry_reference,
+        )
+
+        assert_nil pending_binding.reload.base_confirmed_at
+      end
+      hop_browser =
+        if hop.host.nil?
+          admission_browser
+        elsif hop.host == auth_host
+          auth
+        else
+          base
+        end
+      hop_browser.host!(hop.host) if hop.host
+      hop_browser.https!
+      hop_browser.get(
+        hop.request_uri, headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
+        },
+      )
+      admission_browser = hop_browser
+      break if hop_browser == auth && !auth.response.redirect?
     end
 
-    assert_equal auth_host, auth_target.host
-    entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")
+    assert_equal [auth_host, 200], [auth.request.host, auth.response.status]
+
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_reference)
-    auth.host!(auth_host)
-    auth.https!
-    auth.get(auth_app_sign_in_path, params: { entry_ref: entry_reference, ri: "jp" })
 
-    assert_equal 200, auth.response.status
-    csrf = nil
-    3.times do |admission_index|
-      browser = (admission_index == 1) ? base : auth
-      form = Nokogiri::HTML(browser.response.body).at_css("form")
-
-      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      csrf = fields.fetch("authenticity_token") if admission_index == 2
-      assert_nil binding.reload.base_confirmed_at if admission_index == 1
-      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
-
-      assert_equal 303, browser.response.status
-      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
-      next if admission_index == 2
-
-      target = URI.parse(browser.response.location)
-      receiver = admission_index.zero? ? base : auth
-
-      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
-      receiver.get(target.request_uri)
-    end
+    assert_not_nil binding.reload.base_confirmed_at
+    assert_predicate binding.reload, :redeemed?
+    csrf = auth.response.parsed_body.at_css(%q(meta[name="csrf-token"]))&.[]("content")
 
     binding.reload
     OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new(
@@ -119,7 +121,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
     switch_browser_to_sign_up!(auth, base_browser: base)
     # The Switch admits the browser again on a new Sign Up Binding of the same parent.
-    binding = binding.class.where(
+    binding.class.where(
       authorization_transaction_id: binding.authorization_transaction_id, entry_intent: "sign_up",
     ).order(:id).last
     auth.host!(auth_host)
@@ -233,60 +235,61 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
       end
     end
 
-    assert_equal base_host, target.host
-    base.get(target.request_uri)
-    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
-    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+    # WU-9: /oauth/authorize lives on the Visa OP host; it relays the unauthenticated
+    # browser to the Auth sign-in entry, whose admission the chain below follows.
+    assert_equal visa_host_for_test_base_host(base_host), target.host
 
-    assert_equal 303, base.response.status
-    auth_target = URI.parse(base.response.location)
-    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-    unless auth_target.host == base_host
-      auth_target = auth_target
+    entry_reference = nil
+    admission_browser = base
+    12.times do
+      raise RuntimeError, "Admission stopped before a redirect" unless admission_browser.response.redirect?
+
+      hop = URI.parse(admission_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless auth_target.host == base_host
-        handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
-        handoff_payload, = JWT.decode(
-          handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        auth_target = URI.parse(handoff_payload.fetch("url"))
+      3.times do
+        break unless hop.host == "jump.umaxica.net"
+
+        unwrapped = URI.parse(jump_rt_url_from_location_for_test(hop.to_s))
+        break if unwrapped.to_s == hop.to_s
+
+        hop = unwrapped
       end
+      if entry_reference.nil? && hop.host == auth_host &&
+          (captured_reference = Rack::Utils.parse_query(hop.query.to_s)["entry_ref"]).present?
+        entry_reference = captured_reference
+        pending_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "app", reference: entry_reference,
+        )
+
+        assert_nil pending_binding.reload.base_confirmed_at
+      end
+      hop_browser =
+        if hop.host.nil?
+          admission_browser
+        elsif hop.host == auth_host
+          auth
+        else
+          base
+        end
+      hop_browser.host!(hop.host) if hop.host
+      hop_browser.https!
+      hop_browser.get(
+        hop.request_uri, headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
+        },
+      )
+      admission_browser = hop_browser
+      break if hop_browser == auth && !auth.response.redirect?
     end
 
-    assert_equal auth_host, auth_target.host
-    entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")
+    assert_equal [auth_host, 200], [auth.request.host, auth.response.status]
+
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_reference)
-    auth.host!(auth_host)
-    auth.https!
-    auth.get(auth_app_sign_in_path, params: { entry_ref: entry_reference, ri: "jp" })
 
-    assert_equal 200, auth.response.status
-    csrf = nil
-    3.times do |admission_index|
-      browser = (admission_index == 1) ? base : auth
-      form = Nokogiri::HTML(browser.response.body).at_css("form")
-
-      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      csrf = fields.fetch("authenticity_token") if admission_index == 2
-      assert_nil binding.reload.base_confirmed_at if admission_index == 1
-      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
-
-      assert_equal 303, browser.response.status
-      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
-      next if admission_index == 2
-
-      target = URI.parse(browser.response.location)
-      receiver = admission_index.zero? ? base : auth
-
-      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
-      receiver.get(target.request_uri)
-    end
-
+    assert_not_nil binding.reload.base_confirmed_at
     assert_predicate binding.reload, :redeemed?
+    csrf = auth.response.parsed_body.at_css(%q(meta[name="csrf-token"]))&.[]("content")
+
     OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new(
       provider: "google", uid: subject, info: { name: "Provider fixture" },
       credentials: { token: "provider-fixture", expires_at: 1.hour.from_now.to_i },
@@ -308,26 +311,40 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     assert_equal "google", ceremony.authentication_method
     assert_equal [true, true], [auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].nil?,
                                 auth.cookies[AuthenticationBase::REFRESH_COOKIE_KEY].nil?,]
-    assert_equal "pending", ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).reload.status
+    assert_equal "pending",
+                 ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).reload.status_name
 
-    auth.get(auth_app_sign_oidc_handoff_path, params: { ri: "jp" })
-
-    assert_equal 200, auth.response.status
-    form = Nokogiri::HTML(auth.response.body).at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    auth.post(form["action"], params: fields, headers: auth_headers)
-
-    assert_equal 303, auth.response.status
+    # The Auth handoff answers 303 to the Visa result page, which continues the
+    # parent authorization by a same-origin POST; the root login is committed there.
+    auth.get(
+      auth_app_sign_oidc_handoff_path, params: { ri: "jp" }, headers: {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+    visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     receiver = URI.parse(auth.response.location)
 
-    assert_equal base_host, receiver.host
-    base.get(receiver.request_uri)
+    assert_equal [303, visa_host], [auth.response.status, receiver.host]
+    base.host!(visa_host)
+    base.https!
+    base.get(
+      receiver.request_uri, headers: {
+        "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+      },
+    )
+    form = base.response.parsed_body.at_css("form#visa-authorization-continuation-form")
 
-    assert_equal 200, base.response.status
-    form = Nokogiri::HTML(base.response.body).at_css("form")
+    assert_not_nil form, "the Visa result must render its continuation form"
     fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     assert_difference(-> { ClientToken.where(user_id: actor.id).count }, 1) do
-      base.post(form["action"], params: fields, headers: base_headers)
+      base.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{visa_host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+        },
+      )
     end
     assert_equal 303, base.response.status
     token = ClientToken.find_by!(user_id: actor.id)
@@ -376,64 +393,105 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
       form = Nokogiri::HTML(base.response.body).at_css("form")
       fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       base.post(form["action"], params: fields, headers: base_headers)
-      2.times do |phase|
-        target = URI.parse(base.response.location)
-        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-        unless target.host == base_host
-          target = target
-          # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-          unless target.host == base_host
-            rt = Rack::Utils.parse_query(target.query).fetch("rt")
-            payload, = JWT.decode(
-              rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            target = URI.parse(payload.fetch("url"))
-          end
-        end
-        if phase.zero?
-          base.get(target.request_uri)
-          form = Nokogiri::HTML(base.response.body).at_css("form")
-          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-          base.post(form["action"], params: fields, headers: base_headers)
-        else
-          reference = Rack::Utils.parse_query(target.query).fetch("entry_ref")
-          binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference:)
-          if index.zero?
-            original_parent = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
-          end
-          auth.get(target.request_uri)
-        end
+      # WU-9: /oauth/authorize lives on the Visa OP host; it relays the
+      # unauthenticated browser to the Auth sign-in entry, whose admission the
+      # chain below follows.
+      target = URI.parse(base.response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless target.host == base_host
+        rt = Rack::Utils.parse_query(target.query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        target = URI.parse(payload.fetch("url"))
       end
-      csrf = nil
-      3.times do |phase|
-        sender = (phase == 1) ? base : auth
-        form = Nokogiri::HTML(sender.response.body).at_css("form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        csrf = fields.fetch("authenticity_token") if phase == 2
-        sender.post(form["action"], params: fields, headers: (phase == 1) ? base_headers : auth_headers)
-        raise RuntimeError, "Admission failed" unless sender.response.status == 303
-        next if phase == 2
 
-        (phase.zero? ? base : auth).get(URI.parse(sender.response.location).request_uri)
+      assert_equal visa_host_for_test_base_host(base_host), target.host
+
+      entry_reference = nil
+      admission_browser = base
+      12.times do
+        raise RuntimeError, "Admission stopped before a redirect" unless admission_browser.response.redirect?
+
+        hop = URI.parse(admission_browser.response.location)
+        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+        3.times do
+          break unless hop.host == "jump.umaxica.net"
+
+          unwrapped = URI.parse(jump_rt_url_from_location_for_test(hop.to_s))
+          break if unwrapped.to_s == hop.to_s
+
+          hop = unwrapped
+        end
+        if entry_reference.nil? && hop.host == auth_host &&
+            (captured_reference = Rack::Utils.parse_query(hop.query.to_s)["entry_ref"]).present?
+          entry_reference = captured_reference
+        end
+        hop_browser =
+          if hop.host.nil?
+            admission_browser
+          elsif hop.host == auth_host
+            auth
+          else
+            base
+          end
+        hop_browser.host!(hop.host) if hop.host
+        hop_browser.https!
+        hop_browser.get(
+          hop.request_uri, headers: {
+            "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
+          },
+        )
+        admission_browser = hop_browser
+        break if hop_browser == auth && !auth.response.redirect?
       end
+
+      assert_equal [auth_host, 200], [auth.request.host, auth.response.status]
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_reference)
+      if index.zero?
+        original_parent = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+      end
+      csrf = auth.response.parsed_body.at_css(%q(meta[name="csrf-token"]))&.[]("content")
       auth.post(auth_app_social_google_session_path(ri: "jp"), headers: auth_headers.merge("X-CSRF-Token" => csrf))
       state = auth.session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
       auth.get(auth_app_social_google_callback_path(ri: "jp"), params: { state: }, headers: auth_headers)
-      auth.get(auth_app_sign_oidc_handoff_path(ri: "jp"))
-      form = Nokogiri::HTML(auth.response.body).at_css("form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      auth.post(form["action"], params: fields, headers: auth_headers)
-      base.get(URI.parse(auth.response.location).request_uri)
-      form = Nokogiri::HTML(base.response.body).at_css("form")
+      # The Auth handoff answers 303 to the Visa result page, which continues the
+      # parent authorization by a same-origin POST; the root login is committed there.
+      auth.get(
+        auth_app_sign_oidc_handoff_path(ri: "jp"), headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+      visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+      receiver = URI.parse(auth.response.location)
+
+      assert_equal [303, visa_host], [auth.response.status, receiver.host]
+      base.host!(visa_host)
+      base.https!
+      base.get(
+        receiver.request_uri, headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+        },
+      )
+      form = base.response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+      assert_not_nil form, "the Visa result must render its continuation form"
       fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       if index.zero?
         pending_action = form["action"]
         pending_fields = fields
       else
         assert_difference(-> { ClientToken.where(user_id: actor.id).count }, 1) do
-          base.post(form["action"], params: fields, headers: base_headers)
+          base.post(
+            form["action"], params: fields, headers: {
+              "Origin" => "https://#{visa_host}",
+              "Sec-Fetch-Site" => "same-origin",
+              "Sec-Fetch-Mode" => "navigate",
+              "Sec-Fetch-Dest" => "document",
+            },
+          )
         end
         assert_equal 303, base.response.status
       end
@@ -441,12 +499,23 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     root = ClientToken.find_by!(user_id: actor.id)
     anchor = root.root_login_established_at
     assert_no_difference(["ClientToken.count", "ClientDeviceSession.count"]) do
-      post(pending_action, params: pending_fields, headers: base_headers)
+      # The pending completion is the Visa continuation POST the first browser
+      # never sent; it commits the root login at the Visa authority, where the
+      # cooldown refusal is answered.
+      host!(ENV.fetch("PUBLIC_VISA_SERVICE_URL"))
+      post(
+        pending_action, params: pending_fields, headers: {
+          "Origin" => "https://#{ENV.fetch("PUBLIC_VISA_SERVICE_URL")}",
+          "Sec-Fetch-Site" => "same-origin",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+        },
+      )
     end
     assert_equal [429, "60", nil], [response.status, response.headers["Retry-After"], response.headers["Location"]]
     assert_equal [anchor, nil, "authenticated"],
                  [root.reload.root_login_established_at, original_parent.reload.base_finalized_at,
-                  original_parent.status,]
+                  original_parent.status_name,]
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end

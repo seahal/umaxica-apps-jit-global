@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AppSocialLoginWorksTest < ActionDispatch::IntegrationTest
+  self.fixture_table_names = []
+
   setup do
     https!
     @previous_omniauth_test_mode = OmniAuth.config.test_mode
@@ -16,13 +18,17 @@ class AppSocialLoginWorksTest < ActionDispatch::IntegrationTest
   end
 
   test "POST /social/google on app host redirects to Google OAuth" do
-    host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
-    post "/social/google"
+    post "/social/google", headers: {
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+      "Sec-Fetch-Site" => "same-origin",
+    }
 
     assert_response :redirect
     assert_equal "accounts.google.com", URI.parse(response.location).host
     callback = URI.parse(Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s).fetch("redirect_uri"))
+
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), callback.host
     assert_equal "/social/google/callback", callback.path
     assert_equal "https", callback.scheme
@@ -44,6 +50,7 @@ class AppSocialLoginWorksTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_equal "appleid.apple.com", URI.parse(response.location).host
     callback = URI.parse(Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s).fetch("redirect_uri"))
+
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), callback.host
     assert_equal "/social/apple/callback", callback.path
     assert_equal "https", callback.scheme

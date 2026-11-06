@@ -56,6 +56,8 @@ class DatabaseConsistencyTest < ActiveSupport::TestCase
     AppPreference.create!(
       jti: "unique_jti_123",
       status_id: AppPreferenceStatus::ACTIVE,
+      last_issued_at: Time.current,
+      last_issued_expires_at: 400.days.from_now,
     )
 
     pref2 = AppPreference.new(

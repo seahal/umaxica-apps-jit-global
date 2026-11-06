@@ -54,6 +54,25 @@ class VisaAuthorizationContinuationsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "authorization POST rejects missing and unsupported continuation purposes" do
+    host! "visa.umaxica.app"
+    headers = {
+      "Origin" => "https://visa.umaxica.app",
+      "Sec-Fetch-Site" => "same-origin",
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+    }
+    post "/oauth/authorize", params: { ceremony_action: "continue" }, headers: headers
+
+    assert_response :bad_request
+    assert_equal "invalid_request", response.parsed_body.fetch("error")
+
+    post "/oauth/authorize", params: { ceremony_action: "finish", continuation: "signed" }, headers: headers
+
+    assert_response :bad_request
+    assert_equal "invalid_request", response.parsed_body.fetch("error")
+  end
+
   test "every continuation preserves the parameter byte limit below at and above its boundary" do
     {
       "visa.umaxica.app" => %w(result cancellation switch),

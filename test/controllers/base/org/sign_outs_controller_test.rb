@@ -2,11 +2,12 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require_relative "../../../support/oidc_rp_logout_hint_helper"
+require_relative "../../../support/rp_cell_sign_out_helper"
 # require "helpers/global_test_support"
 
 class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
-  include OidcRpLogoutHintHelper
+  include RpCellSessionHelper
+  include RpCellSignOutHelper
 
   fixtures :operators, :operator_token_kinds
 
@@ -14,6 +15,7 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @staff = operators(:one)
     host! @host
+    https!
     # Completion redirects through the jump gateway, which needs signing keys loaded.
     load_jump_rt_env!
   end
@@ -52,38 +54,18 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "RP logout clears its session and redirects to Visa with the stored ID Token hint" do
+  test "RP logout revokes its local session and redirects to Visa without an ID Token hint" do
     token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-    https!
-    rp_headers = session_headers(token)
-    rp_headers.fetch("Cookie").split("; ").each do |pair|
-      name, value = pair.split("=", 2)
-      cookies[name] = Rack::Utils.unescape(value)
-    end
-    csrf_token = fetch_csrf_token(edit_base_org_sign_out_url(host: @host, ri: "jp"), headers: rp_headers)
-    post base_org_sign_out_url(host: @host, ri: "jp"), headers: {
-      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
-    }
+    authenticate_rp_cell_for_sign_out!(client_id: "base-org-ww", actor: @staff, root_token: token)
+    csrf_token = fetch_csrf_token(edit_base_org_sign_out_url(host: @host, ri: "jp"), headers: { "Host" => @host })
+    post_rp_cell_sign_out(
+      base_org_sign_out_url(host: @host, ri: "jp"), headers: {
+        "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+      },
+    )
 
-    assert_response :see_other
+    assert_rp_cell_sign_out_handoff!(client_id: "base-org-ww", region: "jp")
     assert_predicate token.reload, :currently_usable?
-    authority = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(authority.query.to_s)
-    client = OidcClientRegistry.find!("base-org-ww")
-
-    assert_equal URI.parse(OidcIssuer.end_session_endpoint("operator")).host, authority.host
-    assert_equal "/oidc/logout", authority.path
-    assert_equal client.client_id, query.fetch("client_id")
-    assert_predicate query.fetch("id_token_hint"), :present?
-    assert_predicate query.fetch("state"), :present?
-    assert_equal @base_rp_session.logout_hint.id_token, query.fetch("id_token_hint")
-    expected_redirect =
-      client.post_logout_redirect_uris.find do |candidate|
-        Rack::Utils.parse_nested_query(URI.parse(candidate).query.to_s)["ri"] == "jp"
-      end
-
-    assert_equal expected_redirect, query.fetch("post_logout_redirect_uri")
-    assert_predicate @base_rp_session.reload, :active?
   end
 
   test "sign out without an RP session refuses authority mutation" do
@@ -100,52 +82,8 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def session_headers(token)
-    rp_cookie =
-      begin
-        fixture_root = token
-        fixture_actor = @staff
-        fixture_host = @host
-        base_headers = as_staff_headers(fixture_actor, host: fixture_host, session_public_id: fixture_root.public_id)
-        fixture_root.rotate_refresh_token! unless fixture_root.device_session.current_refresh_token_id
-        fixture_client = OidcClientRegistry.find!("base-org-ww")
-        @base_rp_fixture_credentials ||= {}
-        fixture_key = [fixture_client.client_id, fixture_root.public_id]
-        unless @base_rp_fixture_credentials[fixture_key]
-          fixture_now = OpOrgGrant.database_now
-          fixture_rp = OpOrgGrant.create!(
-            authentication_epoch: 0,
-            operator_token: fixture_root, oidc_client_id: fixture_client.client_id,
-            oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
-            oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,
-            refresh_token_expires_at: fixture_now + 1.hour,
-          )
-          @base_rp_session = fixture_rp
-          store_oidc_rp_logout_hint!(fixture_rp, fixture_actor, fixture_client)
-          fixture_access = AuthenticationTokenService.encode(
-            fixture_actor, host: fixture_host, resource_type: "operator",
-                           session_public_id: fixture_root.public_id, base_session_public_id: fixture_root.public_id,
-                           oidc_sid: fixture_rp.public_id, oidc_jti: fixture_rp.oidc_jti,
-                           expires_at: fixture_now + 1.hour, scopes: %w(openid profile),
-                           issuer: OidcIssuer.for_client(fixture_client), audiences: [fixture_client.aud],
-                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fixture_client),
-                           subject: OidcSubject.for(
-                             fixture_actor,
-                             resource_type: "operator",
-                           ), client_id: fixture_client.client_id,
-          )
-          fixture_refresh = fixture_rp.issue_refresh_token!
-          @base_rp_fixture_credentials[fixture_key] = [
-            base_headers.fetch("Cookie"),
-            "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fixture_access)}",
-            "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fixture_refresh)}",
-          ].join("; ")
-        end
-        @base_rp_fixture_credentials.fetch(fixture_key)
-      end
-    { "Host" => @host,
-      "Cookie" => rp_cookie,
-      "HTTP_COOKIE" => rp_cookie,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id, }
+    authenticate_rp_cell_for_sign_out!(client_id: "base-org-ww", actor: @staff, root_token: token)
+    { "Host" => @host }
   end
 end
 
@@ -156,7 +94,6 @@ class Base::Org::SignOutsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -183,24 +120,6 @@ class Base::Org::SignOutsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

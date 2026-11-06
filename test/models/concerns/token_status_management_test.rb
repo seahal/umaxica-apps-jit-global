@@ -4,50 +4,75 @@
 require "test_helper"
 
 class TokenStatusManagementTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   test "token revocation closes admitted continuity before at and after expiry on all three surfaces" do
     %i(app org).each do |surface|
       [-1, 0, 1].each do |microseconds|
-        actor, token, ceremony_model =
+        actor, token, ceremony_model, grant_model, client, resource_type =
           case surface
           when :app
-            [@user, ClientToken.create!(authentication_epoch: 0, user: @user), ClientAuthCeremonySession]
+            principal = Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+            )
+            principal.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
+            [principal, ClientToken.create!(authentication_epoch: 0, user: principal), ClientAuthCeremonySession,
+             OpAppGrant, OidcClientRegistry.find!("core-app-jp"), "client",]
           when :org
             operator = Operator.create!(
               security_mode_id: SecurityModeConfigurable::ADVANCED,
               status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
             )
-            [operator, OperatorToken.create!(authentication_epoch: 0, staff: operator), OperatorAuthCeremonySession]
+            operator.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public", sign_count: 0)
+            [operator, OperatorToken.create!(authentication_epoch: 0, staff: operator), OperatorAuthCeremonySession,
+             OpOrgGrant, OidcClientRegistry.find!("core-org-jp"), "operator",]
           else
             raise ArgumentError, "unsupported test surface"
           end
-        requirement = StepUpRequirement.new(
-          scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],
-          phishing_resistant_required: false, user_verification_required: false,
-          full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-          resource_ref: nil, tenant_ref: nil, purpose: "step_up", audience: "step_up:#{surface}",
-          session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
+        now = grant_model.database_now
+        grant_attributes = {
+          authentication_epoch: token.authentication_epoch,
+          oidc_client_id: client.client_id,
+          oidc_scope: "openid profile",
+          oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: now - 1.hour,
+          refresh_token_expires_at: now + 1.hour,
+        }
+        grant_attributes[(surface == :app) ? :client_token : :operator_token] = token
+        grant = grant_model.create!(grant_attributes)
+        grant.issue_refresh_token!(expires_at: now + 1.hour, now:)
+        realm = (surface == :app) ? "client" : "operator"
+        params = {
+          response_type: "code",
+          client_id: client.client_id,
+          redirect_uri: client.redirect_uris_by_realm.fetch(realm).first,
+          scope: grant.oidc_scope,
+          state: SecureRandom.urlsafe_base64(32),
+          nonce: SecureRandom.urlsafe_base64(32),
+          code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("token-revocation-step-up"), padding: false),
+          code_challenge_method: "S256",
+          prompt: "login",
+          claims: OidcAuthorizeRequestResolver::STEP_UP_CLAIMS,
+        }
+        validated_request = OidcAuthorizeRequestResolver.call(params:, resource: actor, resource_type:)
+        issuance = OidcStepUpAuthorizationIssuer.call!(
+          surface: surface.to_s, actor:, token:, client:, params:, validated_request:,
         )
-        parent = BaseStepUpAdmissionIssuer.call!(
-          actor: actor,
-          token: token,
-          requirement: requirement,
-          return_to: "/identity/birthdate",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: token,
-        ).transaction
+        parent = issuance.ticket
         continuity, = ceremony_model.rotate_and_admit!(
           admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id, ttl: 1.second,
         )
         decision_time = continuity.expires_at + Rational(microseconds, 1_000_000)
 
-        token.revoke!(now: decision_time)
+        ceremony_model.stub(:database_now, decision_time) { token.revoke!(now: decision_time) }
 
         assert_predicate token.reload, :revoked?
         assert_equal "revoked", parent.reload.status
         assert_equal decision_time.iso8601(6), continuity.reload.revoked_at.iso8601(6)
         assert_not continuity.active?(now: decision_time)
         assert_raises(AuthCeremonySession::InvalidTransition) do
-          continuity.record_authentication_evidence!(method: "passkey", now: decision_time)
+          continuity.record_authentication_evidence!(method: "passkey")
         end
       end
     end

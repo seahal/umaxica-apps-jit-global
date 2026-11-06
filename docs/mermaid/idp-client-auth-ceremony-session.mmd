@@ -1,35 +1,59 @@
 stateDiagram-v2
-    %% CURRENT implementation; sources and guards in transition inventory.
-    state "issued (derived: admitted_at null)" as issued
-    state "admitted (derived)" as admitted
-    state "authentication evidence recorded (derived)" as evidence
-    state "revoked_at present" as revoked
-    state "completed_at present" as completed
-    state "cancelled_at present" as cancelled
-    [*] --> issued
-    [*] --> admitted
+    %% Current App Auth ceremony lifecycle; transition guards and evidence are in the inventory.
+    state "issued (status_id 10)" as issued
+    state "admitted (status_id 20)" as admitted
+    state "evidence_recorded (status_id 30)" as evidence
+    state "replaced (status_id 40)" as replaced
+    state "revoked (status_id 90)" as revoked
+    state "completed (status_id 91)" as completed
+    state "cancelled_before_progress (status_id 92)" as cancelled_before
+    state "cancelled_after_progress (status_id 93)" as cancelled_after
+
+    [*] --> issued: issue!
+    [*] --> admitted: rotate_and_admit! without predecessor
     issued --> admitted: admit!
     admitted --> evidence: record_authentication_evidence!
-    issued --> revoked: revoke! / rotate_and_admit! previous row
+    issued --> replaced: rotate_and_admit! replaces predecessor
+    admitted --> replaced: rotate_and_admit! replaces predecessor
+    evidence --> replaced: rotate_and_admit! replaces predecessor
+    issued --> revoked: revoke!
+    admitted --> revoked: revoke!
+    evidence --> revoked: revoke!
     issued --> issued: rotate! same row
-    admitted --> revoked: revoke! / rotate_and_admit! previous row
     admitted --> admitted: rotate! same row
-    evidence --> revoked: revoke! / rotate_and_admit! previous row
     evidence --> evidence: rotate! same row
     admitted --> completed: complete!
-    admitted --> cancelled: cancel! (first-page Cancel or Switch)
     evidence --> completed: complete!
-    evidence --> cancelled: cancel!
-    revoked --> [*]
-    completed --> [*]
-    cancelled --> [*]
+    admitted --> cancelled_before: cancel!
+    evidence --> cancelled_after: cancel!
+    issued --> [*]: retention after expiry and the final binding reference
+    admitted --> [*]: retention after expiry and the final binding reference
+    evidence --> [*]: retention after expiry and the final binding reference
+    replaced --> [*]: retention after revocation and the final binding reference
+    revoked --> [*]: retention after revocation and the final binding reference
+    completed --> [*]: retention after completion and the final binding reference
+    cancelled_before --> [*]: retention after cancellation and the final binding reference
+    cancelled_after --> [*]: retention after cancellation and the final binding reference
+
     note right of issued
-        Labels are derived, not stored state strings.
+        client_auth_ceremony_session_statuses is an id-only reference table.
+        status_id is NOT NULL and is written only by AuthCeremonySession.
         TTL expiry makes active? false without a state write.
-        rotate_and_admit! starts a replacement row admitted.
+        rotate! changes SID facts but keeps the lifecycle status.
+        The binding collector deletes an expired row only after its final
+        binding reference is gone and the status-specific retention boundary
+        has elapsed. It does not write a replacement status.
     end note
-    note right of cancelled
-        App Switch locks parent then session, rechecks
-        progress, and commits cancellation only after
-        its handoff has been generated successfully.
+
+    note right of replaced
+        rotate_and_admit! changes a nonterminal predecessor to replaced
+        and creates the admitted row in one OP transaction. An already
+        terminal predecessor keeps its original terminal state.
     end note
+
+    note right of cancelled_before
+        Parent Cancel may end an admitted or evidence-recorded ceremony while
+        its OIDC parent remains unfinalized. App Switch locks the parent then
+        session and is limited to before evidence or email OTP progress.
+    end note
+end

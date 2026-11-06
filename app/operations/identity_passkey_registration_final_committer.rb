@@ -5,6 +5,10 @@
 # effective credential. The remaining realms deliberately share the lifecycle but keep their actor,
 # Ticket, session and credential classes explicit.
 class IdentityPasskeyRegistrationFinalCommitter
+  # An enclosing OP transaction would defer the candidate/proof consumption while the independent
+  # Zenith credential and audit commit. Refuse instead of reporting a committed registration.
+  class TransactionConflict < ArgumentError; end
+
   CONFIG = {
     "app" => {
       ticket_class: OpBaseAppRecord,
@@ -40,9 +44,10 @@ class IdentityPasskeyRegistrationFinalCommitter
     public
 
     def call!(actor:, token:, transaction:, raw_result: nil, result_reference: nil,
-              ip_address: nil, user_agent: nil)
+              ip_address: nil, user_agent: nil, step_up_evidence: nil)
       binding = binding_for(actor, token, transaction)
       validate_initial_binding!(binding, actor, token, transaction)
+      require_independent_ticket_commit!(binding)
       payload, digest = read_result_delivery(
         transaction: transaction, raw_result: raw_result, result_reference: result_reference,
       )
@@ -50,7 +55,9 @@ class IdentityPasskeyRegistrationFinalCommitter
       binding.fetch(:actor_class).connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           refuse!("registration actor unavailable") unless actor.login_allowed?
-          commit_ticket!(binding, actor, token, transaction, payload, digest, ip_address, user_agent)
+          commit_ticket!(
+            binding, actor, token, transaction, payload, digest, ip_address, user_agent, step_up_evidence,
+          )
         end
       end
     rescue ActiveRecord::RecordNotFound, KeyError, TypeError
@@ -69,6 +76,18 @@ class IdentityPasskeyRegistrationFinalCommitter
 
     def refuse!(message)
       raise IdentityPasskeyCeremonyContract::Error, message
+    end
+
+    # Candidate and proof consumption precede the Zenith credential, so the OP commit must be
+    # independent. Checked before the result reference is read.
+    def require_independent_ticket_commit!(config)
+      ticket = config.fetch(:ticket_class)
+      ticket.connected_to(role: :writing) do
+        connection = ticket.lease_connection
+        if connection.transaction_open?
+          raise TransactionConflict, "passkey registration requires an independent OP commit"
+        end
+      end
     end
 
     def binding_for(actor, token, transaction)
@@ -117,18 +136,18 @@ class IdentityPasskeyRegistrationFinalCommitter
       end
     end
 
-    def commit_ticket!(config, actor, token, transaction, payload, digest, _ip_address, _user_agent)
+    def commit_ticket!(config, actor, token, transaction, payload, digest, _ip_address, _user_agent, step_up_evidence)
       config.fetch(:ticket_class).connected_to(role: :writing) do
         config.fetch(:ticket_class).transaction do
           device = token.device_session_record!
           device.with_lock do
-            commit_under_device_lock!(config, actor, token, transaction, payload, digest, device)
+            commit_under_device_lock!(config, actor, token, transaction, payload, digest, device, step_up_evidence)
           end
         end
       end
     end
 
-    def commit_under_device_lock!(config, actor, token, transaction, payload, digest, device)
+    def commit_under_device_lock!(config, actor, token, transaction, payload, digest, device, step_up_evidence)
       token.with_lock do
         if token.is_a?(OperatorToken) && token.standby_authentication_context?
           refuse!("passkey registration binding mismatch")
@@ -152,15 +171,14 @@ class IdentityPasskeyRegistrationFinalCommitter
           return existing_credential!(actor, transaction, candidate, ceremony) if transaction.consumed?
 
           refuse!("passkey registration already ended") if candidate.consumed_at || ceremony.completed?
-          ensure_current_registration_authority!(actor, token, transaction)
+          ensure_current_registration_authority!(actor, token, transaction, step_up_evidence)
 
           credential = create_credential!(config, actor, transaction, candidate)
-          consume_registration_step_up!(actor, token, transaction)
           candidate.update!(consumed_at: now)
           transaction.commit_registration_consumption!(
             now: now, method: "passkey", registered_credential_ref: credential_reference(credential),
           )
-          ceremony.complete!(now: now)
+          ceremony.complete!
           credential
         end
       end
@@ -207,16 +225,6 @@ class IdentityPasskeyRegistrationFinalCommitter
       )
     end
 
-    # adr/authentication-security-mode.md D3: the Step-Up that authorized this registration is spent
-    # with it. A bootstrap registration carries no Step-Up.
-    def consume_registration_step_up!(actor, token, transaction)
-      return if transaction.purpose == "bootstrap"
-
-      token.consume_step_up_evidence!(requirement: registration_policy(actor).management_requirement(token: token))
-    rescue TokenStatusManagement::StepUpEvidenceUnavailable
-      refuse!("passkey registration requires current scoped Step-Up")
-    end
-
     def registration_policy(actor)
       case actor
       when Client then ClientPasskeyPolicy.new(ClientPasskey, user: actor)
@@ -225,19 +233,16 @@ class IdentityPasskeyRegistrationFinalCommitter
       end
     end
 
-    def ensure_current_registration_authority!(actor, token, transaction)
+    def ensure_current_registration_authority!(actor, token, transaction, evidence)
       return if transaction.purpose == "bootstrap"
 
       policy = registration_policy(actor)
-      evidence = policy.management_credential(token: token)
-      refuse!("passkey registration evidence is unavailable") unless evidence
-
-      evidence.lock!
       now = transaction.class.database_now
       unless !transaction.expired?(now: now) &&
           transaction.required_scope == policy.management_requirement(token: token).scope &&
-          policy.apply(:create?) && policy.management_authorized?(token: token, now: now)
-        refuse!("passkey registration requires current scoped Step-Up")
+          policy.apply(:create?) && policy.management_authorized?(token: token, now: now) &&
+          StepUpEvidenceVerifier.call(evidence:, actor:, token:)
+        refuse!("passkey registration requires current Step-Up")
       end
     end
 
@@ -282,7 +287,7 @@ class IdentityPasskeyRegistrationFinalCommitter
     def validate_continuity!(ceremony, transaction, now)
       valid = ceremony.admitted? && ceremony.admission_purpose == "#{transaction.purpose}_handoff" &&
         ceremony.step_up_ceremony_transaction_ref == transaction.transaction_id &&
-        !ceremony.revoked_at && !ceremony.cancelled_at && ceremony.expires_at > now &&
+        ceremony.expires_at > now &&
         (ceremony.active?(now: now) || (transaction.consumed? && ceremony.completed?))
       refuse!("passkey registration continuity unavailable") unless valid
     end

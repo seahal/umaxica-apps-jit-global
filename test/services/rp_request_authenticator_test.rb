@@ -43,6 +43,13 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
     assert_equal :invalid, authenticate(token: token(payload.merge("sub" => "subject-b"))).status
   end
 
+  test "the identity binding issuer must match the fixed OP issuer" do
+    identity_binding = RpCoreAppIdentityBinding.find(@enrollment.session.op_session_binding.identity_binding_id)
+    identity_binding.update_columns(issuer: "https://other.example.test")
+
+    assert_equal :invalid, authenticate.status
+  end
+
   test "a revoked OP binding, a revoked session or an expired session stops authenticating" do
     anchor = RpCoreAppOpSessionBinding.find(@enrollment.session.op_session_binding_id)
     anchor.update_columns(revoked_at: Time.current)

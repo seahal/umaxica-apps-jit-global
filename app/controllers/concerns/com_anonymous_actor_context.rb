@@ -52,7 +52,7 @@ module ComAnonymousActorContext
 
   def valid_anonymous_experience_cookie?(value, expected)
     return false unless value.is_a?(String) && value.present?
-    return false if value.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_COM_TOKEN_MAX_BYTES
+    return false if value.bytesize > SecurityJwtPreferenceTokenCodec::ANONYMOUS_REALM_TOKEN_MAX_BYTES
 
     JSON.parse(value, allow_duplicate_key: false) == expected
   rescue JSON::ParserError
@@ -63,7 +63,8 @@ module ComAnonymousActorContext
     load_access_token_payload if (request.get? || request.head?) && !@preference_payload.is_a?(Hash)
     return unless @preference_payload.is_a?(Hash) && @preference_payload["aud"] == "com"
 
-    Actor.install_context!(preferences: Actor::Preference.from_jwt(effective_context.stringify_keys))
+    preference = Actor::Preference.from_jwt(effective_context.stringify_keys)
+    Actor.install_context!(preferences: preference_with_request_overlay(preference))
   end
 
   # Time.zone is thread-local, so a zone set for one request would otherwise stay on the thread and

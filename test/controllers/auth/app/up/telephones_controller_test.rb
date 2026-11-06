@@ -17,10 +17,25 @@ module Auth::App::Up
     fixtures :app_preference_chronicle_levels, :app_preference_chronicle_events,
              :client_statuses, :client_telephone_statuses,
              :client_chronicle_events, :client_chronicle_levels
+    # Keep inherited fixtures :all from loading unrelated cross-database Org fixtures.
+    self.fixture_table_names = %w(
+      app_preference_chronicle_levels app_preference_chronicle_events
+      client_statuses client_telephone_statuses client_chronicle_events client_chronicle_levels
+    )
+    # The OTP delivery issuer refuses to run inside the fixture transaction, so this committed
+    # journey cleans up its own rows instead.
+    self.use_transactional_tests = false
     include ActiveJob::TestHelper
     include ActiveSupport::Testing::TimeHelpers
+    include SignInFlowCleanup
+    include SignUpJourneyCleanup
+    include DatabaseSelectorPrimary
 
     setup do
+      # Cases travel the clock past the DatabaseSelector's read-your-writes delay, which would
+      # route a read to the replica; the test environment's replica does not hold this case's rows.
+      keep_reads_on_primary!
+      sign_up_journey_watermarks!
       ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
       ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
       ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
@@ -149,12 +164,47 @@ module Auth::App::Up
     teardown do
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.challenge_response = nil
+      begin
+        delete_sign_up_journey_rows!
+      ensure
+        restore_database_selector_delay!
+      end
     end
 
     test "should get new" do
       get new_auth_app_sign_up_telephone_url(ri: "jp")
 
       assert_response :success
+    end
+
+    test "new refuses a logged-in client with 403, not 401" do
+      user = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+      )
+
+      get new_auth_app_sign_up_telephone_url(ri: "jp"),
+          headers: as_user_headers(user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+
+      assert_response :forbidden
+      assert_equal I18n.t("errors.messages.already_authenticated"), response.body
+      assert_nil response.location
+    end
+
+    test "create refuses a logged-in client with 403 and creates nothing" do
+      user = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+      )
+
+      assert_no_difference(["ClientTelephone.count", "ClientSignUpFlow.count", "enqueued_jobs.size"]) do
+        post auth_app_sign_up_telephone_url(ri: "jp"),
+             params: { :client_telephone => { raw_number: "+819012345678" }, "cf-turnstile-response" => "test" },
+             headers: as_user_headers(user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+      end
+
+      assert_response :forbidden
+      assert_equal I18n.t("errors.messages.already_authenticated"), response.body
     end
 
     test "new keeps an admitted ceremony independent of a presented root token" do
@@ -352,7 +402,7 @@ module Auth::App::Up
       assert_includes response.body, "prohibited this telephone from being saved"
     end
 
-    test "create beside an effective telephone issues only an independent pending candidate" do
+    test "create beside an effective telephone creates an independent candidate without SMS" do
       user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
       existing = ClientTelephone.create!(
         user: user, number: "+1234567898", user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
@@ -361,7 +411,7 @@ module Auth::App::Up
       existing_facts = existing.reload.attributes
       owner_facts = user.reload.attributes
 
-      assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do
+      assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
         assert_difference("Client.count", 1) do
           assert_difference("ClientTelephone.count", 1) do
             post auth_app_sign_up_telephone_url(ri: "jp"), params: {
@@ -383,35 +433,15 @@ module Auth::App::Up
       assert_nil candidate.binding_finalized_at
       assert_withheld("effective binding is unchanged") { existing_facts == existing.reload.attributes }
       assert_withheld("effective owner is unchanged") { owner_facts == user.reload.attributes }
+      candidate_facts = candidate.reload.attributes
+
+      assert_not ClientTelephoneCeremonyTransaction.exists?(telephone_candidate_ref: candidate.public_id)
       get target.request_uri
 
       assert_response :success
-      transaction_ref =
-        ClientTelephoneCeremonyTransaction.find_by!(
-          telephone_candidate_ref: candidate.public_id,
-        ).transaction_id
-      queued =
-        enqueued_jobs.reverse.find do |job|
-          next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
-
-          payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
-          payload.fetch(:otp_binding)[3] == transaction_ref
-        end
-      valid_code =
-        OutboundSensitivePayload.decrypt_sms_delivery(
-          queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
-        ).fetch(:otp_code)
-      wrong_code = (valid_code[0] == "0") ? "1#{valid_code[1..]}" : "0#{valid_code[1..]}"
-      assert_no_difference("ClientToken.count") do
-        patch target.request_uri, params: {
-          client_telephone: { pass_code: wrong_code }, "cf-turnstile-response": "test",
-        }
-      end
-
-      assert_response :unprocessable_content
-      assert_includes response.body, I18n.t("sign.app.registration.telephone.update.invalid_code")
-      assert_withheld("wrong input cannot alter the existing binding") { existing_facts == existing.reload.attributes }
-      assert_withheld("wrong input cannot alter the existing owner") { owner_facts == user.reload.attributes }
+      assert_equal candidate_facts, candidate.reload.attributes
+      assert_withheld("the effective binding remains unchanged") { existing_facts == existing.reload.attributes }
+      assert_withheld("the effective owner remains unchanged") { owner_facts == user.reload.attributes }
     end
 
     test "a verified telephone candidate lock cannot mutate an independent signup candidate" do
@@ -612,6 +642,34 @@ module Auth::App::Up
       TelephoneSignUpOtpDeliveryIssuer.stub(:call, unexpected) do
         assert_raises(ArgumentError) { post target }
       end
+    end
+
+    test "the telephone entry Cancel ends the parent request instead of switching to sign-in" do
+      get new_auth_app_sign_up_telephone_url(ri: "jp")
+
+      assert_response :success
+      assert_equal([I18n.t("actions.back")], inertia_props.fetch("links").map { |link| link.fetch("label") })
+
+      post inertia_props.fetch("cancel").fetch("action")
+
+      assert_response :see_other
+      assert_match(/[?&]rt=/, response.location)
+    end
+
+    test "initial telephone OTP phase refusal uses the shared conflict response boundary" do
+      refusal = TelephoneSignUpOtpIssueResult.new(status: :closed_challenge, transaction: nil, code: nil)
+
+      TelephoneSignUpOtpDeliveryIssuer.stub(:call, refusal) do
+        post auth_app_sign_up_telephone_url(ri: "jp"), params: {
+          user_telephone: { raw_number: "+1234567890", confirm_policy: "1", confirm_using_mfa: "1" },
+          "cf-turnstile-response": "test",
+        }, headers: { "X-CSRF-Token" => "test-csrf-token", "Sec-Fetch-Site" => "same-origin" }
+      end
+
+      assert_response :conflict
+      assert_equal I18n.t("errors.messages.phase_violation_refused"), response.body
+      assert_equal "private, no-store", response.headers["Cache-Control"]
+      assert_nil response.location
     end
 
     test "should update telephone with valid otp" do
@@ -1047,7 +1105,7 @@ module Auth::App::Up
       browsers = []
       targets = []
 
-      [existing.number, "+819012300007"].each do |destination|
+      ["+819012300007", existing.number].each do |destination|
         2.times do |attempt|
           browser = open_session
           browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
@@ -1150,6 +1208,56 @@ module Auth::App::Up
       browsers.last.get(targets.last.request_uri)
 
       assert_equal 200, browsers.last.response.status
+    end
+
+    test "registered and pending telephone sign-up have equal entry and OTP issuance responses" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+        visibility_id: ClientVisibility::USER,
+      )
+      registered = owner.client_telephones.create!(
+        raw_number: "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}",
+        confirm_policy: true,
+        confirm_using_mfa: true,
+        user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+        binding_finalized_at: ClientTelephone.database_now,
+      )
+      destinations = [registered.number, "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"]
+      redirects = []
+      entry_pages = []
+      otp_pages = []
+      clear_enqueued_jobs
+
+      destinations.each do |destination|
+        browser = open_session
+        browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+        browser.https!
+        issuance = OidcTestEntry.issue!(
+          surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+        )
+        admit_auth_ceremony_entry!(auth_app_sign_up_path(ri: "jp"), reference: issuance.reference, browser: browser)
+        browser.get(new_auth_app_sign_up_telephone_path(ri: "jp"))
+        entry_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+        entry_pages << [browser.response.status, entry_page.fetch("component"), entry_page.dig("props", "title")]
+        browser.post(
+          auth_app_sign_up_telephone_path(ri: "jp"),
+          params: { :client_telephone => { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                    "cf-turnstile-response" => "test", },
+          headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" },
+        )
+
+        assert_equal 302, browser.response.status
+        target = URI.parse(browser.response.location)
+        redirects << [browser.response.status, target.path, Rack::Utils.parse_query(target.query).keys.sort]
+        browser.get(target.request_uri)
+        otp_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+        otp_pages << [browser.response.status, otp_page.fetch("component"), otp_page.dig("props", "title")]
+      end
+
+      assert_equal entry_pages.first, entry_pages.last
+      assert_equal redirects.first, redirects.last
+      assert_equal otp_pages.first, otp_pages.last
     end
 
     test "suspended SMS retains the replacement signup challenge" do
@@ -1469,7 +1577,11 @@ module Auth::App::Up
 
     test "create rejects signup for a telephone number blocked by an in-force registration_blocked Identifier " \
          "Effect, sending no OTP" do
-      operator = operators(:one)
+      operator = principal = the_case = nil
+      operator = Operator.create!(
+        security_mode_id: OperatorSecurityMode::ADVANCED,
+        status_id: OperatorStatus::NOTHING,
+      )
       principal = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       the_case = AppEnforcementCase.new(
         kind: "permanent_ban",
@@ -1490,18 +1602,37 @@ module Auth::App::Up
 
       assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
         assert_no_difference("ClientTelephone.count") do
-          post auth_app_sign_up_telephone_url, params: {
-            client_telephone: {
-              raw_number: "+15551234567",
-              confirm_policy: "1",
-              confirm_using_mfa: "1",
+          post(
+            auth_app_sign_up_telephone_url, params: {
+              client_telephone: {
+                raw_number: "+15551234567",
+                confirm_policy: "1",
+                confirm_using_mfa: "1",
+              },
+              "cf-turnstile-response": "test",
             },
-            "cf-turnstile-response": "test",
-          }
+          )
         end
       end
 
       assert_response :unprocessable_content
+    ensure
+      if the_case&.persisted?
+        ChronicleRecord.connected_to(role: :writing) do
+          EnforcementEvent.where(realm: "app", case_public_id: the_case.public_id).delete_all
+        end
+        AppEnforcementIdentifierEffect.where(app_enforcement_case_id: the_case.id).delete_all
+        AppEnforcementCase.where(id: the_case.id).delete_all
+      end
+      Client.where(id: principal&.id).delete_all if principal
+      if operator&.persisted?
+        OperatorCapabilityGrant.where(operator_id: operator.id).delete_all
+        OperatorCapabilityGrant.where(granted_by_operator_id: operator.id).delete_all
+        OperatorCapabilityGrant.where(revoked_by_operator_id: operator.id).delete_all
+        OperatorAuthorityLock.where(operator_id: operator.id).delete_all
+        OperatorAccount.where(staff_id: operator.id).delete_all
+        Operator.where(id: operator.id).delete_all
+      end
     end
 
     test "sign-up beside an effective telephone creates only its own pending candidate" do
@@ -1547,7 +1678,7 @@ module Auth::App::Up
       assert_nil candidate.binding_finalized_at
     end
 
-    test "resending the code for an already verified telephone answers without creating records" do
+    test "registered telephone sign-up shows the generic OTP page without sending a code" do
       visitor = Client.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
@@ -1561,40 +1692,38 @@ module Auth::App::Up
       )
       existing_facts = existing.reload.attributes
 
-      post auth_app_sign_up_telephone_url(ri: "jp"),
-           params: {
-             client_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
-             "cf-turnstile-response": "test",
-           }, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
+      assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
+        post auth_app_sign_up_telephone_url(ri: "jp"),
+             params: {
+               client_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
+               "cf-turnstile-response": "test",
+             }, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
+      end
 
       assert_response :redirect
       target = URI.parse(response.location)
 
       flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
       candidate = ClientTelephone.find(flow.pending_contact_id)
-      decision_time = candidate.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
-      travel_to decision_time do
-        ClientTelephone.stub(:database_now, decision_time) do
-          assert_no_difference("ClientTelephone.count") do
-            post target.request_uri, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-          end
-        end
+      candidate_facts = candidate.reload.attributes
+
+      assert_nil candidate.otp_last_sent_at
+      assert_not ClientTelephoneCeremonyTransaction.exists?(telephone_candidate_ref: candidate.public_id)
+
+      assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do
+        post target.request_uri, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
       end
 
       assert_response :redirect
-      assert_includes response.location, "/sign/up/check/telephone/otp"
+      assert_equal target.path, URI.parse(response.location).path
+      get target.request_uri, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
 
-      # The second resend lands inside the send cooldown and must be refused with the
-      # same message a real pending registration gets, so the two cannot be told apart.
-      target = URI.parse(response.location)
-      post target.request_uri, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-
-      assert_response :too_many_requests
-      assert_equal I18n.t("sign.app.registration.email.create.otp_resend_too_soon"), response.body
+      assert_response :success
+      assert_equal candidate_facts, candidate.reload.attributes
       assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
     end
 
-    test "the code page for an already verified telephone stops answering once the window closes" do
+    test "the generic OTP page for a registered telephone has no OTP ceremony to expire" do
       visitor = Client.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
@@ -1620,21 +1749,16 @@ module Auth::App::Up
       candidate = ClientTelephone.find(flow.pending_contact_id)
       original_facts = candidate.reload.attributes
       original_existing_facts = existing.reload.attributes
+
+      assert_not ClientTelephoneCeremonyTransaction.exists?(telephone_candidate_ref: candidate.public_id)
       travel TelephoneOtpPolicy::AUTHENTICATION_TTL + 1.minute do
-        ClientTelephoneCeremonyTransaction.stub(
-          :database_now,
-          ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: candidate.public_id).otp_expires_at,
-        ) do
-          get target.request_uri, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-        end
+        get target.request_uri, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
       end
 
-      assert_response :redirect
-      expired_target = URI.parse(response.location)
-
-      assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), expired_target.host
-      assert_equal URI.parse(new_auth_app_sign_up_telephone_path(ri: "jp")).path, expired_target.path
-      assert_withheld("expired evidence is not revived") { original_facts == candidate.reload.attributes }
+      assert_response :success
+      assert_withheld("no OTP ceremony is created by reading the generic page") {
+        original_facts == candidate.reload.attributes
+      }
       assert_withheld("effective binding is unchanged") { original_existing_facts == existing.reload.attributes }
     end
 
@@ -1663,15 +1787,24 @@ module Auth::App::Up
 
       assert_response :success
 
-      assert_no_difference("Client.count") do
+      flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+      candidate = ClientTelephone.find(flow.pending_contact_id)
+      candidate_facts = candidate.reload.attributes
+      flow_facts = flow.reload.attributes
+      owner_facts = visitor.reload.attributes
+      token_count = ClientToken.count
+
+      assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
         patch target.request_uri,
               params: { client_telephone: { pass_code: "123456" }, "cf-turnstile-response": "test" },
               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
       end
 
-      assert_response :unprocessable_content
-      assert_equal ClientTelephoneStatus::VERIFIED, existing.reload.user_telephone_status_id
       assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+      assert_equal owner_facts, visitor.reload.attributes
+      assert_equal candidate_facts, candidate.reload.attributes
+      assert_equal flow_facts, flow.reload.attributes
+      assert_equal token_count, ClientToken.count
     end
 
     private
@@ -1954,7 +2087,6 @@ class Auth::App::Up::TelephonesControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -1981,24 +2113,6 @@ class Auth::App::Up::TelephonesControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

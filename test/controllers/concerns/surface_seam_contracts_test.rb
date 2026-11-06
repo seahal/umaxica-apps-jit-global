@@ -41,7 +41,7 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
 
   SEAMS = {
     CoreBrowserApiBoundary => [
-      [:core_actor_tld], [:core_resource_class], [:core_token_class], [:core_resource_type],
+      [:core_actor_tld], [:core_resource_type],
     ],
     McpEndpoint => [[:mcp_surface_identity]],
     OidcSsoInitiator => [[:oidc_client_id], [:oidc_sign_host], [:oidc_visa_authority_host]],

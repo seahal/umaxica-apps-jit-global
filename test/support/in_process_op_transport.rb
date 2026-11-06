@@ -10,8 +10,14 @@ require "rack/mock"
 module TestSupport
   module InProcessOpTransport
     # OP endpoints an RP calls server-to-server (token exchange and refresh).
-    OP_PATHS = %w(/oauth/token /.well-known/jwks.json
-                  /api/v0/tech-capability-checks /api/v0/support).freeze
+    OP_PATHS = %w(
+      /oauth/token
+      /.well-known/jwks.json
+      /api/v0/sensitive_admissions
+      /api/v0/sensitive_admission_session
+      /api/v0/sensitive_admission_confirmation
+      /api/v0/tech-capability-checks /api/v0/support
+    ).freeze
 
     # Forwards a Faraday request to Rails.application as a Rack request.
     class Adapter < Faraday::Adapter

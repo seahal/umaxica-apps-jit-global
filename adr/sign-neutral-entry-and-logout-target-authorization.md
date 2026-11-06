@@ -44,6 +44,14 @@ confirmed that this ended another subject's session (D1,
    inherited check; that let plain POSTs run with no CSRF check (D2). Coordinated-logout POSTs are
    gated by `verify_coordinated_sign_out_post!` and the live logout challenge instead.
 
+## Amendment: authenticated browsers are refused the neutral page (2026-11-03)
+
+Decided by the owner on 2026-11-03. Decision 1 keeps `GET /sign` display-only, and decision 2
+refused only the start. A browser the RP can verify as authenticated is now also refused `GET /sign`
+with the same `403 text/plain`, `Cache-Control: no-store` and no `Location`, so every Sign entry
+(Auth and RP) answers an authenticated browser the same way. An anonymous browser, and a browser
+whose RP credential is for another surface, still receive the page.
+
 ## Consequences
 
 - Cross-RP single sign-on is given up for new logins; users authenticate at each RP's start.
@@ -76,6 +84,6 @@ Base OP authorization decision above.
 The no-session branch is stricter than the earlier target wording: a verified hint cannot create a
 logout intent or redirect the browser when the current IdP session is absent, lacks its captured
 `sid`, or does not match the hint. Base returns the localized plain error without a `Location`
-header and with `Cache-Control: no-store`; JSON callers receive the corresponding
-`login_required` or `invalid_request` response. This preserves the boundary that an identifier
-does not grant authority and leaves the persisted session state unchanged.
+header and with `Cache-Control: no-store`; JSON callers receive the corresponding `login_required`
+or `invalid_request` response. This preserves the boundary that an identifier does not grant
+authority and leaves the persisted session state unchanged.

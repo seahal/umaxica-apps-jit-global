@@ -5,9 +5,10 @@ class EmailCredentialRegistrationOtpFormQuery
     public
 
     def call(actor:, token:, email:, transaction:, browser_nonce:)
-      return false unless actor && token && email && transaction && browser_nonce.is_a?(String) &&
+      return false unless actor && token && email && browser_nonce.is_a?(String) &&
         browser_nonce.encoding.ascii_compatible? && browser_nonce.valid_encoding? &&
         browser_nonce.match?(/\A[A-Za-z0-9_-]{43}\z/)
+      return registered_destination_form?(actor:, token:, email:) if transaction.nil?
 
       surface, owned, parent_model = components(actor, token, email, transaction)
       now = transaction.class.database_now
@@ -25,6 +26,18 @@ class EmailCredentialRegistrationOtpFormQuery
     end
 
     private
+
+    def registered_destination_form?(actor:, token:, email:)
+      return false unless actor.is_a?(Client) && token.is_a?(ClientToken) && email.is_a?(ClientEmail) &&
+        token.user_id == actor.id && email.user_id == actor.id && !email.binding_finalized_at &&
+        !email.binding_released?
+
+      now = ClientEmailCeremonyTransaction.database_now
+      device_session = token.device_session_record
+      actor.login_allowed? && actor.accessible?(actor.class.database_now) && email.accessible?(email.class.database_now) &&
+        token.active_status?(now) && device_session&.usable? && device_session.current_refresh_token_id == token.id &&
+        AppRegisteredContactDestinationGuard.registered_by_other_owner?(contact: email, owner: actor)
+    end
 
     def components(actor, token, email, transaction)
       case [actor, token, email, transaction]

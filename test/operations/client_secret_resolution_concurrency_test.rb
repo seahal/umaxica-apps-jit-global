@@ -11,6 +11,34 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
+  # This file loads only status fixtures, so nothing else wipes the rows it commits, and the
+  # flows, resolutions, OIDC parents and chronicles it writes are not fixture tables at all.
+  # A recycled synthetic principal id then makes a later journey teardown match them and abort
+  # on their RESTRICT references, leaking rows that break fixture-load validation.
+  setup do
+    @initial_chronicle_ids = ClientChronicle.pluck(:id)
+    @initial_resolution_ids = ClientSessionLimitResolutionTransaction.pluck(:id)
+    @initial_authorization_ids = ClientOidcAuthorizationTransaction.pluck(:id)
+    @initial_sign_in_flow_ids = ClientSignInFlow.pluck(:id)
+    @initial_device_session_ids = ClientDeviceSession.pluck(:id)
+    @initial_token_ids = ClientToken.pluck(:id)
+    @initial_client_ids = Client.pluck(:id)
+  end
+
+  teardown do
+    ClientChronicle.where.not(id: @initial_chronicle_ids).delete_all
+    # Resolutions reference both the flow and the OIDC parent, so they go first.
+    ClientSessionLimitResolutionTransaction.where.not(id: @initial_resolution_ids).delete_all
+    # The OIDC parent holds the secret sign-in reference to the flow, so it goes before it.
+    ClientOidcAuthorizationTransaction.where.not(id: @initial_authorization_ids).delete_all
+    ClientSignInFlow.where.not(id: @initial_sign_in_flow_ids).delete_all
+    # client_tokens references client_device_sessions with ON DELETE RESTRICT, so tokens go
+    # first; the reverse reference is SET NULL and clears itself.
+    ClientToken.where.not(id: @initial_token_ids).delete_all
+    ClientDeviceSession.where.not(id: @initial_device_session_ids).delete_all
+    Client.where.not(id: @initial_client_ids).delete_all
+  end
+
   %i(cancellation expiration).each do |terminal|
     test "a separately connected selection blocked behind #{terminal} cannot revoke a session" do
       actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)

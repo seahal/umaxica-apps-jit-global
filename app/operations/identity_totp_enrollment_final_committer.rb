@@ -6,11 +6,14 @@ require "digest"
 # subsequent principal-commit failure leaves a terminal ticket: retry may return an existing
 # active credential, but never recreate a missing or revoked one. Registration grants no freshness.
 class IdentityTotpEnrollmentFinalCommitter
+  class TransactionConflict < ArgumentError; end
+
   class << self
     public
 
-    def call!(actor:, token:, transaction:, raw_result: nil, result_reference: nil)
+    def call!(actor:, token:, transaction:, raw_result: nil, result_reference: nil, step_up_evidence: nil)
       validate_binding!(actor, token, transaction)
+      require_independent_ticket_commit!
       payload, digest = read_result_delivery(
         transaction: transaction, raw_result: raw_result, result_reference: result_reference,
       )
@@ -18,7 +21,7 @@ class IdentityTotpEnrollmentFinalCommitter
         actor.with_lock do
           raise IdentityTotpCeremonyContract::Error, "enrollment actor unavailable" unless actor.login_allowed?
 
-          commit_ticket!(actor, token, transaction, payload, digest)
+          commit_ticket!(actor, token, transaction, payload, digest, step_up_evidence)
         end
       end
     rescue ActiveRecord::RecordNotFound
@@ -53,6 +56,14 @@ class IdentityTotpEnrollmentFinalCommitter
 
     private
 
+    def require_independent_ticket_commit!
+      OpBaseAppRecord.connected_to(role: :writing) do
+        if ClientStepUpCeremonyTransaction.lease_connection.transaction_open?
+          raise TransactionConflict, "TOTP enrollment requires an independent OP commit"
+        end
+      end
+    end
+
     # Bootstrap retains the original protected operation; the child binds TOTP registration.
     # Later authenticator registration requires its own settings scope.
     def enrollment_scope_permitted?(transaction)
@@ -68,7 +79,7 @@ class IdentityTotpEnrollmentFinalCommitter
       end
     end
 
-    def commit_ticket!(actor, token, transaction, payload, digest)
+    def commit_ticket!(actor, token, transaction, payload, digest, step_up_evidence)
       OpBaseAppRecord.connected_to(role: :writing) do
         device = token.device_session_record!
         device.with_lock do
@@ -98,14 +109,14 @@ class IdentityTotpEnrollmentFinalCommitter
                 last_otp_at: candidate.last_otp_at,
                 user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
               )
-              consume_registration_step_up!(actor, token, transaction, now) if
+              verify_registration_step_up!(actor, token, step_up_evidence) if
                 transaction.purpose == "credential_registration"
               child.update!(status: "consumed", result_jti: transaction.result_jti, consumed_at: now)
               candidate.update!(consumed_at: now)
               transaction.commit_registration_consumption!(
                 now: now, method: "totp", registered_credential_ref: credential.public_id,
               )
-              ceremony.complete!(now: now)
+              ceremony.complete!
               credential
             end
           end
@@ -120,17 +131,10 @@ class IdentityTotpEnrollmentFinalCommitter
       end
     end
 
-    def consume_registration_step_up!(actor, token, transaction, now)
-      requirement = StepUpRequirement.new(
-        scope: transaction.required_scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
-        session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-        ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      )
-      token.consume_step_up_evidence!(requirement:, now:)
-    rescue TokenStatusManagement::StepUpEvidenceUnavailable
-      raise IdentityTotpCeremonyContract::Error, "TOTP enrollment requires current scoped Step-Up"
+    def verify_registration_step_up!(actor, token, evidence)
+      return if StepUpEvidenceVerifier.call(evidence:, actor:, token:)
+
+      raise IdentityTotpCeremonyContract::Error, "TOTP enrollment requires current Step-Up"
     end
 
     def validate_ticket!(actor, token, transaction, record, digest, payload, now)
@@ -174,7 +178,7 @@ class IdentityTotpEnrollmentFinalCommitter
     def validate_continuity!(ceremony, transaction, now)
       unless ceremony.admitted? && ceremony.admission_purpose == "#{transaction.purpose}_handoff" &&
           ceremony.step_up_ceremony_transaction_ref == transaction.transaction_id &&
-          !ceremony.revoked_at && !ceremony.cancelled_at && ceremony.expires_at > now &&
+          ceremony.expires_at > now &&
           (ceremony.active?(now: now) || (transaction.consumed? && ceremony.completed?))
         raise IdentityTotpCeremonyContract::Error, "enrollment continuity unavailable"
       end

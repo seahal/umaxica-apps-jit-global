@@ -72,6 +72,26 @@ class RpRefreshRecoveryTest < ActionDispatch::IntegrationTest
     ]
   end
 
+  test "a local refresh reaches the OP token endpoint through the local back channel" do
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = "refresh-public-id.refresh-verifier"
+    calls = []
+    recorder =
+      lambda do |**args|
+        calls << args.slice(:token_url, :require_https)
+        DEPENDENCY
+      end
+    OidcOpTokenClient.stub(:refresh, recorder) do
+      get(tech_org_dashboard_path(ri: "jp"), headers: { "Sec-Fetch-Mode" => "navigate" })
+    end
+    public_endpoint = URI.parse(OidcIssuer.token_endpoint("operator").to_s)
+    token_url = URI.parse(calls.sole.fetch(:token_url))
+
+    assert_equal ["http", public_endpoint.host, Integer(ENV.fetch("PORT"), exception: false) || 3000,
+                  public_endpoint.path, false,],
+                 [token_url.scheme, token_url.host, token_url.port, token_url.path, calls.sole.fetch(:require_https)]
+    assert_equal [503, I18n.t("errors.messages.temporarily_unavailable")], [response.status, response.body]
+  end
+
   private
 
   def navigate_with_refresh_outcome(outcome, headers: { "Sec-Fetch-Mode" => "navigate" })

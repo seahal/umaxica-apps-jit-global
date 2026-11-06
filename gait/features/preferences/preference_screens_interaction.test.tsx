@@ -67,6 +67,8 @@ const { default: PreferenceCustomization } =
   await import("@/features/preferences/PreferenceCustomization");
 const { default: PreferenceEmailUnsubscribe } =
   await import("@/features/preferences/PreferenceEmailUnsubscribe");
+const { default: PreferenceNotification } =
+  await import("@/features/preferences/PreferenceNotification");
 
 let container: HTMLDivElement;
 let root: Root;
@@ -114,6 +116,41 @@ describe("PreferenceSelect interaction", () => {
     region_link: null,
     linked_screens: [],
   };
+
+  it("uses new server props when clean and preserves an in-progress edit", () => {
+    const editableProps = {
+      ...props,
+      form: {
+        ...props.form,
+        choices: props.form.choices.map((choice) => ({ ...choice, disabled: false })),
+      },
+    };
+    mount(<PreferenceSelect {...editableProps} />);
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    expect(select.value).toBe("2");
+
+    act(() => {
+      root.render(
+        <PreferenceSelect
+          {...editableProps}
+          form={{ ...editableProps.form, value: 1 }}
+        />,
+      );
+    });
+    expect(select.value).toBe("1");
+
+    act(() => {
+      select.value = "2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(select.value).toBe("2");
+
+    act(() => {
+      root.render(<PreferenceSelect {...editableProps} />);
+    });
+    expect(select.value).toBe("2");
+  });
 
   it("submits the selected value and toggles the processing label", () => {
     mount(<PreferenceSelect {...props} />);
@@ -499,6 +536,51 @@ describe("PreferenceCustomization interaction", () => {
       finishVisit(options);
     });
     expect(container.querySelector("button")?.textContent).toBe("リセット");
+  });
+});
+
+describe("PreferenceNotification mock interaction", () => {
+  const props = {
+    title: "通知設定",
+    description: "通知の希望を設定します。",
+    placeholder: "この画面はまだ保存しません。",
+    back_link: { label: "もどる", href: "/preference?ri=jp" },
+    form: {
+      action: "/preference/notification?ri=jp",
+      method: "patch",
+      scope: "preference_notification",
+      submit_label: "更新",
+      submitting_label: "送信中",
+    },
+    web_push: {
+      label: "Web Push",
+      value: "disabled",
+      choices: [
+        { label: "有効", value: "enabled" },
+        { label: "無効", value: "disabled" },
+      ],
+    },
+  };
+
+  it("submits an empty notification object and omits the display-only Web Push choice", () => {
+    mount(<PreferenceNotification {...props} />);
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    act(() => {
+      select.value = "enabled";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    const form = container.querySelector<HTMLFormElement>("form")!;
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(patch).toHaveBeenCalledWith(
+      "/preference/notification?ri=jp",
+      { preference_notification: {} },
+      containing({ onStart: A_FUNCTION, onFinish: A_FUNCTION }),
+    );
   });
 });
 

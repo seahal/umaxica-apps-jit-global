@@ -32,6 +32,7 @@ class SignUpExpiryJob < ApplicationJob
 
   def expire_ticket(ticket)
     result = SignUpTermination.call(cycle: ticket, event: :expire, actor_context: nil)
+    return if ticket.reload.sign_up_completed?
     return if result.status == :expired || result.ticket&.status_id == ticket.class.status_id_for("EXPIRED")
 
     Rails.logger.warn(

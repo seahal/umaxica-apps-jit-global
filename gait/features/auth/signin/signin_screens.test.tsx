@@ -18,6 +18,7 @@ vi.mock("@inertiajs/react", () => ({
 const { default: SignInMethodChoice } = await import("@/features/auth/signin/SignInMethodChoice");
 const { default: EmailSignInForm } = await import("@/features/auth/signin/EmailSignInForm");
 const { default: EmailPassCodeForm } = await import("@/features/auth/signin/EmailPassCodeForm");
+const { default: OrgPasskeySignInPage } = await import("@/pages/auth/org/sign/in/passkeys/new");
 const { default: PasskeySignInScreen } = await import("@/features/auth/signin/PasskeySignInScreen");
 const { default: StepUpPasskeyScreen } = await import("@/features/auth/signin/StepUpPasskeyScreen");
 
@@ -210,6 +211,7 @@ describe("email sign-in form", () => {
       action: "/sign/in/email",
       method: "post",
       pt: null,
+      authenticity_token: "csrf-value",
       address_field: {
         scope: "client_email",
         field: "address",
@@ -222,11 +224,14 @@ describe("email sign-in form", () => {
     turnstile,
     form_errors: [],
     back_link: backLink,
+    cancel: null,
   };
 
   it("renders the address field the server named", () => {
     const markup = renderToStaticMarkup(<EmailSignInForm {...props} />);
 
+    expect(markup).toMatch(/<header[^>]*><a[^>]*href="\/sign\/in\?ri=jp"/u);
+    expect(markup.match(/href="\/sign\/in\?ri=jp"/gu)).toHaveLength(1);
     expect(markup).toContain('name="client_email[address]"');
     expect(markup).toContain('placeholder="name@example.com"');
     expect(markup).toContain("送信する");
@@ -277,7 +282,7 @@ describe("email pass code form", () => {
     turnstile,
     form_errors: [],
     delivery_help: "届かない場合",
-    back_link: backLink,
+    cancel_button: { label: "キャンセル", parent_action: null },
   };
 
   it("renders the one-time code field and the resend control", () => {
@@ -288,6 +293,7 @@ describe("email pass code form", () => {
     expect(markup).toContain('maxLength="6"');
     expect(markup).toContain("再送する");
     expect(markup).toContain("届かない場合");
+    expect(markup).toMatch(/<button[^>]*type="button"[^>]*>キャンセル<\/button>/u);
   });
 
   it("shows the attempt messages the server returned", () => {
@@ -299,6 +305,20 @@ describe("email pass code form", () => {
     );
 
     expect(markup).toContain("認証コードが違います");
+  });
+
+  it("renders parent cancellation as a same-origin document POST when OIDC owns the page", () => {
+    const markup = renderToStaticMarkup(
+      <EmailPassCodeForm
+        {...props}
+        cancel_button={{ label: "ログインを取り消す", parent_action: "/sign/cancellation?ri=jp" }}
+      />,
+    );
+
+    expect(markup).toMatch(
+      /<form data-turbo="false" action="\/sign\/cancellation\?ri=jp" method="post">/u,
+    );
+    expect(markup).toContain("ログインを取り消す");
   });
 });
 
@@ -326,6 +346,64 @@ describe("passkey sign-in screen", () => {
     expect(markup).not.toContain("メールアドレス");
     expect(markup).toContain("パスキーでログイン");
     expect(markup).toContain('href="/sign/in?ri=jp"');
+  });
+
+  it("offers OIDC parent cancellation after passkey entry begins", () => {
+    const markup = renderToStaticMarkup(
+      <PasskeySignInScreen
+        title="パスキーでログイン"
+        description="登録済みのパスキー"
+        panel={{
+          options_url: "/sign/in/passkey/options?ri=jp",
+          verification_url: "/sign/in/passkey/verification?ri=jp",
+          region: "jp",
+          identifier_param: null,
+          turnstile_site_key: "stealth-key",
+          turnstile_error_message: "検証に失敗しました",
+          field: null,
+          submit_label: "パスキーでログイン",
+        }}
+        back_link={backLink}
+        cancel={{ label: "ログインを取り消す", action: "/sign/cancellation?ri=jp", method: "post" }}
+      />,
+    );
+
+    expect(markup).toMatch(/<header[^>]*><a[^>]*href="\/sign\/in\?ri=jp"/u);
+    expect(markup.match(/href="\/sign\/in\?ri=jp"/gu)).toHaveLength(1);
+    expect(markup).toMatch(
+      /<form data-turbo="false" action="\/sign\/cancellation\?ri=jp" method="post">/u,
+    );
+    expect(markup).toContain("ログインを取り消す");
+  });
+
+  it("renders parent cancellation on the Org passkey stage after Entra", () => {
+    const markup = renderToStaticMarkup(
+      <OrgPasskeySignInPage
+        title="パスキーでログイン"
+        description="登録済みのパスキー"
+        panel={{
+          options_url: "/sign/in/passkey/options?ri=jp",
+          verification_url: "/sign/in/passkey/verification?ri=jp",
+          region: "jp",
+          identifier_param: null,
+          turnstile_site_key: "stealth-key",
+          turnstile_error_message: "検証に失敗しました",
+          field: null,
+          submit_label: "パスキーでログイン",
+        }}
+        back_link={backLink}
+        parent_cancel={{
+          label: "ログインを取り消す",
+          action: "/sign/cancellation?ri=jp",
+          method: "post",
+        }}
+      />,
+    );
+
+    expect(markup).toMatch(
+      /<form data-turbo="false" action="\/sign\/cancellation\?ri=jp" method="post">/u,
+    );
+    expect(markup).toContain("ログインを取り消す");
   });
 });
 

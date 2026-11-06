@@ -91,6 +91,4 @@ class SignUpArtifactCleanupAtomicityTest < ActiveSupport::TestCase
     assert_equal ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, contact.reload.user_telephone_status_id
     assert_equal Float::INFINITY, contact.discard_at
   end
-
-
 end

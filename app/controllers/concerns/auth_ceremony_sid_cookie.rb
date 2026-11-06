@@ -35,5 +35,15 @@ module AuthCeremonySidCookie
     cookies[auth_ceremony_sid_cookie_name].presence
   end
 
+  def delete_auth_ceremony_sid_cookie!
+    cookies.delete(
+      auth_ceremony_sid_cookie_name,
+      path: "/",
+      secure: JitSessionCookieConfig.force_secure?,
+      httponly: true,
+      same_site: :lax,
+    )
+  end
+
   private :auth_ceremony_sid_cookie_name
 end

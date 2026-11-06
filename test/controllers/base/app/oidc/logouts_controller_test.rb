@@ -332,7 +332,33 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "xyz", query["state"]
   end
 
-  test "no-hint logout shows a single-use OP completion page" do
+  test "no-hint logout without an OP session returns to its registered RP completion" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    requested_state = "rp-cell-logout-state"
+
+    get visa_app_oidc_logout_url(host: @host), params: {
+      client_id: @client.client_id,
+      post_logout_redirect_uri: redirect_uri,
+      ri: "jp",
+      state: requested_state,
+    }
+
+    assert_response :see_other
+    jump_location = URI.parse(response.location)
+    jump_token = Rack::Utils.parse_nested_query(jump_location.query.to_s).fetch("rt")
+    jump_payload, = JWT.decode(jump_token, nil, false)
+    target = URI.parse(jump_payload.fetch("url"))
+    target_query = Rack::Utils.parse_nested_query(target.query.to_s)
+
+    assert_equal "jump.umaxica.net", jump_location.host
+    assert_equal URI.parse(redirect_uri).host, target.host
+    assert_equal URI.parse(redirect_uri).path, target.path
+    assert_equal requested_state, target_query["state"]
+    assert_not_predicate @token.reload, :revoked?
+    assert_nil @logout_grant.reload.revoked_at
+  end
+
+  test "confirmed no-hint logout returns to its registered RP completion" do
     http_headers_29 =
       begin
         fx1_harness =
@@ -411,9 +437,21 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx1_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get visa_app_oidc_logout_url(host: @host),
-        params: { ri: "jp" },
-        headers: http_headers_29
+    redirect_uri = @client.post_logout_redirect_uris.first
+    requested_state = "rp-cell-confirmed-logout-state"
+    get visa_app_oidc_logout_url(host: @host), params: {
+      client_id: @client.client_id,
+      post_logout_redirect_uri: redirect_uri,
+      ri: "jp",
+      state: requested_state,
+    }, headers: http_headers_29
+
+    assert_response :see_other
+    confirmation_uri = URI.parse(response.location)
+
+    assert_equal "/oidc/logout", confirmation_uri.path
+    assert_equal "jp", Rack::Utils.parse_nested_query(confirmation_uri.query.to_s)["ri"]
+    follow_redirect!
 
     assert_response :ok
     assert_equal visa_app_oidc_logout_confirmation_path(ri: "jp"), inertia_props.dig("form", "action")
@@ -499,26 +537,23 @@ class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
-    assert_equal "/oidc/logout/completion", URI.parse(response.location).path
+    jump_location = URI.parse(response.location)
+    jump_token = Rack::Utils.parse_nested_query(jump_location.query.to_s).fetch("rt")
+    jump_payload, = JWT.decode(jump_token, nil, false)
+    target = URI.parse(jump_payload.fetch("url"))
+    target_query = Rack::Utils.parse_nested_query(target.query.to_s)
+
+    assert_equal "jump.umaxica.net", jump_location.host
+    assert_equal URI.parse(redirect_uri).host, target.host
+    assert_equal URI.parse(redirect_uri).path, target.path
+    assert_equal requested_state, target_query.fetch("state")
 
     stop_target = OpAppAuthorityStopRootTarget.find_by!(root: @token)
     stop = OpAppAuthorityStop.find(stop_target.stop_id)
 
     assert_predicate stop, :persisted?
 
-    stops_after_commit = OpAppAuthorityStop.count
-
-    follow_redirect!
-
-    assert_response :ok
-    assert_nil inertia_props.fetch("form")
-    assert_equal I18n.t("sign.shared.sign_out.completed_description"), inertia_props.fetch("description")
-    assert_equal stops_after_commit, OpAppAuthorityStop.count
-
-    get "/oidc/logout/completion", params: { ri: "jp" }
-
-    assert_response :not_found
-    assert_equal stops_after_commit, OpAppAuthorityStop.count
+    assert_equal 1, OpAppAuthorityStop.where(id: stop.id).count
   end
 
   test "a confirmation POST with no pending request is refused without a signed-out page" do
@@ -3840,7 +3875,6 @@ class Visa::App::Oidc::LogoutsControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
       :TEST_BROWSER_USER_AGENT, false,
     )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
 
@@ -3867,24 +3901,6 @@ class Visa::App::Oidc::LogoutsControllerTest
     payload["url"].presence || location
   rescue JWT::DecodeError, URI::InvalidURIError
     location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
   end
 
   def host_headers(host = nil)

@@ -71,7 +71,6 @@ class SurfaceRootLandingTest < ActionDispatch::IntegrationTest
     assert_equal "auth/app/roots/index", inertia_component
   end
 
-
   test "auth org root with a region renders the ceremony-service entry" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host

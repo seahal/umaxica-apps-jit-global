@@ -90,7 +90,7 @@ module ComPreferenceScreenWrites
        [ComPreferenceDateFormat, submitted.fetch(:date_format)],
        [ComPreferenceTimeFormat, submitted.fetch(:time_format)],
        [ComPreferenceCurrency, submitted.fetch(:currency)],].each do |klass, option_id|
-        klass.find_or_initialize_by(preference_id: preference.id).update!(option_id: option_id)
+        klass.find_or_initialize_by(preference_id: preference.id).update!(preference: preference, option_id: option_id)
       end
     end
 

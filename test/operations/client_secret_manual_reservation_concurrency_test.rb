@@ -17,12 +17,23 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       visibility_id: ClientVisibility::BOTH,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_by_token_id ||= {}
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence_by_token_id[token.id] = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     device_id = token.device_session_record!.id
     operation_id = SecureRandom.uuid
@@ -55,6 +66,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
             ClientSecretManualReservationIssuer.call!(
               actor_context: context, token: ClientToken.find(token.id), operation_id: operation_id,
               expires_after: 1.minute,
+              step_up_evidence: evidence_by_token_id[token.id],
             )
           end
         end
@@ -95,6 +107,8 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     if actor
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      OpAppGrant.where(client_token_id: ClientToken.where(user_id: actor.id)).delete_all
+      token&.association(:op_app_grants)&.reset
       token&.destroy!
       actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
       destroy_test_client_after_cross_database_cleanup!(actor)
@@ -107,16 +121,28 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
         security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
         visibility_id: ClientVisibility::BOTH,
       )
+      evidence_by_token_id = {}
       tokens =
-        Array.new(2) do |index|
+        Array.new(2) do |_index|
           token = ClientToken.create!(authentication_epoch: 0, user: actor)
-          token.update!(
-            last_step_up_at: ClientToken.database_now,
-            last_step_up_scope: ((paths[index] == :manual) ? "settings_secret_credential" : "settings_passkey"),
-            last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-            last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-            last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-            last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+          evidence_now = ClientToken.database_now
+          token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+          token.rotate_refresh_token!(now: evidence_now)
+          token.device_session_record!
+          oidc_client = OidcClientRegistry.find!("base-app-ww")
+          grant = OpAppGrant.create!(
+            authentication_epoch: token.authentication_epoch,
+            client_token: token,
+            oidc_client_id: oidc_client.client_id,
+            oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+            oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+            oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+          )
+          grant.issue_refresh_token!(now: evidence_now)
+          evidence_by_token_id[token.id] = StepUpEvidenceValue.new(
+            acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+            sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+            aud: [oidc_client.aud], jti: grant.oidc_jti,
           )
           token
         end
@@ -162,10 +188,12 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                         ClientSecretManualReservationIssuer.call!(
                           actor_context: context, token: token, operation_id: SecureRandom.uuid,
                           expires_after: 1.minute,
+                          step_up_evidence: evidence_by_token_id[token.id],
                         )
                       else
                         ClientSecretPasskeyReservationIssuer.call!(
                           actor_context: context, token: token, passkey: passkeys[index], expires_after: 1.minute,
+                          step_up_evidence: evidence_by_token_id[token.id],
                         )
                       end
                     issuance.planned_count.zero? ? :omitted : :reserved
@@ -224,6 +252,8 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
         ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
         ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
         passkeys&.compact&.each(&:destroy!)
+        OpAppGrant.where(client_token_id: ClientToken.where(user_id: actor.id)).delete_all
+        tokens&.each { |session| session.association(:op_app_grants).reset } if defined?(tokens) && tokens
         tokens&.each(&:destroy!)
         # An Identity is physically erased only once it has lapsed and is purgeable.
         actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
@@ -238,12 +268,23 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       visibility_id: ClientVisibility::BOTH,
     )
     token = ClientToken.create!(authentication_epoch: 0, user: actor)
-    token.update!(
-      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+    evidence_by_token_id ||= {}
+    evidence_now = ClientToken.database_now
+    token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+    token.rotate_refresh_token!(now: evidence_now)
+    token.device_session_record!
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    grant = OpAppGrant.create!(
+      authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+    )
+    grant.issue_refresh_token!(now: evidence_now)
+    evidence_by_token_id[token.id] = StepUpEvidenceValue.new(
+      acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+      sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+      aud: [oidc_client.aud], jti: grant.oidc_jti,
     )
     now = Client.database_now
     19.times do
@@ -293,6 +334,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                   OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                     ClientSecretManualReservationIssuer.call!(
                       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+                      step_up_evidence: evidence_by_token_id[token.id],
                     )
                   end
                 else
@@ -335,6 +377,8 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      OpAppGrant.where(client_token_id: ClientToken.where(user_id: actor.id)).delete_all
+      token&.association(:op_app_grants)&.reset
       token&.destroy!
       # An Identity is physically erased only once it has lapsed and is purgeable.
       actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
@@ -347,15 +391,26 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::BOTH,
     )
+    evidence_by_token_id = {}
     tokens =
       Array.new(2) do
         token = ClientToken.create!(authentication_epoch: 0, user: actor)
-        token.update!(
-          last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
-          last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
-          last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
-          last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-          last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+        evidence_now = ClientToken.database_now
+        token.update!(root_login_established_at: evidence_now, established_authentication_method: "passkey")
+        token.rotate_refresh_token!(now: evidence_now)
+        token.device_session_record!
+        oidc_client = OidcClientRegistry.find!("base-app-ww")
+        grant = OpAppGrant.create!(
+          authentication_epoch: token.authentication_epoch, client_token: token, oidc_client_id: oidc_client.client_id,
+          oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: Time.at(evidence_now.to_i).utc, oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+          oidc_amr: JSON.generate(["passkey"]), refresh_token_expires_at: evidence_now + 1.hour,
+        )
+        grant.issue_refresh_token!(now: evidence_now)
+        evidence_by_token_id[token.id] = StepUpEvidenceValue.new(
+          acr: grant.oidc_acr, amr: ["passkey"], auth_time: evidence_now.to_i, sid: grant.public_id,
+          sub: OidcSubject.for(actor, resource_type: "client"), client_id: oidc_client.client_id,
+          aud: [oidc_client.aud], jti: grant.oidc_jti,
         )
         token
       end
@@ -375,8 +430,8 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     old = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: tokens.first, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      step_up_evidence: evidence_by_token_id[tokens.first.id],
     )
-    tokens.first.reload.update!(last_step_up_resource_ref: old.public_id)
     ready = Queue.new
     release = Queue.new
     ActiveRecord::Base.connection_handler.clear_active_connections!
@@ -395,11 +450,13 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                   if index.zero?
                     ClientSecretManualIssuanceInvalidator.call!(
                       actor_context: bound, token: token, issuance: old, purge_after: 1.day,
+                      step_up_evidence: evidence_by_token_id[token.id],
                     )
                     :canceled
                   elsif index == 1
                     ClientSecretManualReservationIssuer.call!(
                       actor_context: bound, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+                      step_up_evidence: evidence_by_token_id[token.id],
                     )
                     :reserved
                   else
@@ -446,6 +503,8 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      OpAppGrant.where(client_token_id: ClientToken.where(user_id: actor.id)).delete_all
+      tokens&.each { |session| session.association(:op_app_grants).reset } if defined?(tokens) && tokens
       tokens&.each(&:destroy!)
       # An Identity is physically erased only once it has lapsed and is purgeable.
       actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)

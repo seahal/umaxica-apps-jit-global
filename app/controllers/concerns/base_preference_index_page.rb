@@ -24,6 +24,7 @@ module BasePreferenceIndexPage
     pagination: :pagination_settings,
     theme: :theme_settings,
     cookie: :cookie_settings,
+    notification: :notification_settings,
     calendar: :calendar_settings,
     clock: :clock_settings,
     currency: :currency_settings,

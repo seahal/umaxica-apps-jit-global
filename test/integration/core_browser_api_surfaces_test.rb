@@ -52,7 +52,6 @@ class CoreBrowserApiSurfacesTest < ActionDispatch::IntegrationTest
   # redeem. All three answer as problem+json rather than leaking whether the token
   # ever existed.
 
-
   test "org token refresh without a refresh cookie is refused as unauthenticated" do
     host! ENV.fetch("PUBLIC_CORE_STAFF_URL")
     https!

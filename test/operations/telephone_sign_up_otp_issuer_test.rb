@@ -3,12 +3,89 @@
 require "test_helper"
 
 class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
   %w(app).each do |surface|
+    test "#{surface} Telephone signup raises without consuming proof if its destination becomes registered" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+      )
+      number = "+1202555#{SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")}"
+      telephone = owner.client_telephones.create!(raw_number: number, confirm_policy: true, otp_attempts_count: 2)
+      now = ClientSignUpFlow.database_now
+      nonce = SecureRandom.urlsafe_base64(32)
+      flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+        principal_id: owner.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+        nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
+      )
+      issued = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
+      competitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+      )
+      registered = competitor.client_telephones.create!(
+        raw_number: number, confirm_policy: true, user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      )
+      registered.finalize_binding!
+      flow_facts = flow.reload.attributes
+      telephone_facts = telephone.reload.attributes
+      ticket_facts = issued.transaction.reload.attributes
+      registered_facts = registered.reload.attributes
+
+      assert_raises(RuntimeError) do
+        TelephoneSignUpOtpVerificationCommitter.call(
+          flow: flow, telephone: telephone, session_nonce: nonce, code: issued.code,
+        )
+      end
+
+      assert_equal flow_facts, flow.reload.attributes
+      assert_equal telephone_facts, telephone.reload.attributes
+      assert_equal ticket_facts, issued.transaction.reload.attributes
+      assert_equal registered_facts, registered.reload.attributes
+    end
+
+    test "#{surface} Telephone signup suppresses OTP issuance for another Client's effective number" do
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
+      )
+      number = "+1202555#{SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")}"
+      telephone = owner.client_telephones.create!(raw_number: number, confirm_policy: true)
+      now = ClientSignUpFlow.database_now
+      nonce = SecureRandom.urlsafe_base64(32)
+      flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+        principal_id: owner.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+        nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
+      )
+      competitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+      )
+      registered = competitor.client_telephones.create!(
+        raw_number: number, confirm_policy: true, user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      )
+      registered.finalize_binding!
+      previous_flow = flow.reload.attributes
+      previous_telephone = telephone.reload.attributes
+      count = ClientTelephoneCeremonyTransaction.count
+
+      issued = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
+
+      assert_equal :registered_destination, issued.status
+      assert_nil issued.transaction
+      assert_nil issued.code
+      assert_equal count, ClientTelephoneCeremonyTransaction.count
+      assert_equal previous_flow, flow.reload.attributes
+      assert_equal previous_telephone, telephone.reload.attributes
+      assert_predicate registered.reload, :binding_effective?
+    end
+
     test "#{surface} Telephone signup retries a generated transaction reference collision" do
       owner_model, telephone_model, flow_model, transaction_model, owner_key, status =
         case surface

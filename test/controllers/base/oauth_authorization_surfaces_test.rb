@@ -556,6 +556,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
             "Sec-Fetch-Dest" => "document",
             "Sec-Fetch-Site" => "cross-site",
           }
+
+      assert_response :success
+      form = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+      assert form, "Visa result GET must render its signed POST continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+
+      post form["action"], params: fields, headers: {
+        "Origin" => OidcIssuer.absolute_url(host),
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Site" => "same-origin",
+      }
     end
 
     assert_response :see_other
@@ -823,7 +836,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
           "Sec-Fetch-Site" => "cross-site",
         }
 
-    assert_response :redirect
+    assert_response :success
+    form = response.parsed_body.at_css("form#visa-authorization-continuation-form")
+
+    assert form, "Visa result GET must render its signed POST continuation"
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    post form["action"], params: fields, headers: {
+      "Origin" => OidcIssuer.absolute_url(host),
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "same-origin",
+    }
+
+    assert_response :see_other
     assert_predicate transaction.reload, :consumed?
     browser_session_ref = transaction.browser_session_ref
 
@@ -1381,7 +1406,6 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     assert_predicate still_available, :success?
   end
-
 
   def cross_surface_result_headers(base_host, _auth_host_env)
     {
