@@ -142,7 +142,7 @@ class BaseSwitcherAuthority
   def rp_org_session_selection
     record =
       RpBaseOrgRecord.connected_to(role: :writing) do
-        RpBaseOrgSessionSelection.find_by(rp_session_id: session.id)
+        RpBaseOrgSessionSelection.includes(:avatar_selection).find_by(rp_session_id: session.id)
       end
     return nil unless record
 
@@ -150,7 +150,7 @@ class BaseSwitcherAuthority
       account_public_id: record.account_public_id,
       organization_public_id: record.organization_public_id,
       organization_unit_public_id: record.organization_unit_public_id,
-      avatar_public_id: nil,
+      avatar_public_id: record.avatar_selection&.avatar_public_id,
     }
   end
 end

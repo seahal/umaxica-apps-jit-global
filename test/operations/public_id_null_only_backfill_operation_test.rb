@@ -6,10 +6,15 @@ class PublicIdNullOnlyBackfillOperationTest < ActiveSupport::TestCase
   test "post-cutover supported scopes are idempotent and preserve source rows" do
     targets = [
       [ClientPreference,
-       ClientPreference.create!(user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)),],
+       ClientPreference.create!(
+         client: Client.create!(
+           security_mode_id: SecurityModeConfigurable::NORMAL,
+           status_id: ClientStatus::ACTIVE,
+         ),
+       ),],
       [OperatorPreference,
        OperatorPreference.create!(
-         staff: Operator.create!(
+         operator: Operator.create!(
            security_mode_id: SecurityModeConfigurable::ADVANCED,
            status_id: OperatorStatus::ACTIVE,
          ),

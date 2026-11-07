@@ -33,13 +33,7 @@ module Base
           },
           {
             heading: t("base.shared.identity.sections.security"),
-            items: [
-              identity_hub_link(:passkey, base_org_identity_passkeys_path(ri: params[:ri])),
-              identity_hub_link(:sessions, base_org_sessions_path(ri: params[:ri])),
-              identity_hub_link(:secrets, base_org_identity_secrets_path(ri: params[:ri])),
-              identity_hub_link(:activities, base_org_identity_activities_path(ri: params[:ri])),
-              identity_hub_link(:standing, base_org_identity_standing_path(ri: params[:ri])),
-            ],
+            items: identity_security_items,
           },
           {
             heading: t("base.shared.identity.sections.external_services"),
@@ -63,6 +57,17 @@ module Base
 
       def identity_hub_link(key, href)
         { label: t(key, scope: "base.shared.identity.links"), href: href }
+      end
+
+      def identity_security_items
+        [
+          identity_hub_link(:passkey, base_org_identity_passkeys_path(ri: params[:ri])),
+          { label: t("base.org.identity.mfa_reset"), href: base_org_identity_mfa_reset_path(ri: params[:ri]) },
+          identity_hub_link(:sessions, base_org_sessions_path(ri: params[:ri])),
+          identity_hub_link(:secrets, base_org_identity_secrets_path(ri: params[:ri])),
+          identity_hub_link(:activities, base_org_identity_activities_path(ri: params[:ri])),
+          identity_hub_link(:standing, base_org_identity_standing_path(ri: params[:ri])),
+        ]
       end
     end
   end

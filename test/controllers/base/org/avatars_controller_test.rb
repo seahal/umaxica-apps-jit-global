@@ -186,6 +186,11 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_4, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     get base_org_avatar_url(ri: "jp", host: @host),
         headers: http_headers_4
 
@@ -277,6 +282,21 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_3, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
+    patch base_org_switcher_url(host: @host), headers: http_headers_3, params: {
+      account_public_id: bootstrap.account.public_id,
+      organization_public_id: bootstrap.collective.public_id,
+      organization_unit_public_id: bootstrap.unit.public_id,
+      avatar_public_id: avatar.public_id,
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
+
     get base_org_avatar_url(ri: "jp", host: @host),
         headers: http_headers_3
 
@@ -542,6 +562,21 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_0, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
+    patch base_org_switcher_url(host: @host), headers: http_headers_0, params: {
+      account_public_id: bootstrap.account.public_id,
+      organization_public_id: bootstrap.collective.public_id,
+      organization_unit_public_id: bootstrap.unit.public_id,
+      avatar_public_id: selected_avatar.public_id,
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
+
     patch base_org_avatar_url(ri: "jp", host: @host),
           params: { id: other_avatar.public_id, avatar: { moniker: "Tampered" } },
           headers: http_headers_0
@@ -649,6 +684,21 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
         "Cookie" => cookie,
         "HTTP_COOKIE" => cookie,
       }
+
+      get base_org_selector_url(host: @host), headers:, as: :json
+
+      assert_response :success
+      assert_equal "selected", response.parsed_body.fetch("status")
+
+      patch base_org_switcher_url(host: @host), headers:, params: {
+        account_public_id: bootstrap.account.public_id,
+        organization_public_id: bootstrap.collective.public_id,
+        organization_unit_public_id: bootstrap.unit.public_id,
+        avatar_public_id: avatar.public_id,
+      }, as: :json
+
+      assert_response :success
+      assert_equal "switched", response.parsed_body.fetch("status")
 
       patch base_org_avatar_url(ri: "jp", host: @host),
             params: { avatar: { moniker: "Post-cutover ORG" } },

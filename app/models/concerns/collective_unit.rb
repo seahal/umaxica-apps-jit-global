@@ -8,8 +8,6 @@ module CollectiveUnit
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
-    self.belongs_to_required_by_default = false
-
     after_create :create_closure_rows
 
     validates :name, presence: true

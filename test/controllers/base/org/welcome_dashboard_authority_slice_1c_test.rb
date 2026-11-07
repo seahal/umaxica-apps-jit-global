@@ -124,6 +124,18 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f0_headers
         end
       end
+    rp_session_public_id = @base_browser_rp_session_public_ids.fetch(
+      [RpBaseOrgSession::CLIENT_ID, token.public_id],
+    )
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_public_id)
+    candidate = BaseSelectorAuthority.new(
+      surface: :org, principal: @staff, session: rp_session,
+    ).selectable_candidates.first
+
+    assert candidate
+    patch base_org_selector_url(host: @host), params: candidate.fetch(:public), headers: http_headers_9, as: :json
+
+    assert_response :success
     get base_org_dashboard_url(ri: "jp"), headers: http_headers_9
 
     assert_response :success
@@ -275,6 +287,18 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f1_headers
         end
       end
+    rp_session_public_id = @base_browser_rp_session_public_ids.fetch(
+      [RpBaseOrgSession::CLIENT_ID, token.public_id],
+    )
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_public_id)
+    candidate = BaseSelectorAuthority.new(
+      surface: :org, principal: @staff, session: rp_session,
+    ).selectable_candidates.first
+
+    assert candidate
+    patch base_org_selector_url(host: @host), params: candidate.fetch(:public), headers: http_headers_8, as: :json
+
+    assert_response :success
     get base_org_dashboard_url(
       ri: "jp", account_public_id: "attacker-account", avatar_public_id: "attacker-avatar",
       moniker: "Attacker Persona",
@@ -380,6 +404,18 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f2_headers
         end
       end
+    rp_session_public_id = @base_browser_rp_session_public_ids.fetch(
+      [RpBaseOrgSession::CLIENT_ID, token.public_id],
+    )
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_public_id)
+    candidate = BaseSelectorAuthority.new(
+      surface: :org, principal: @staff, session: rp_session,
+    ).selectable_candidates.first
+
+    assert candidate
+    patch base_org_selector_url(host: @host), params: candidate.fetch(:public), headers: http_headers_7, as: :json
+
+    assert_response :success
     error =
       assert_raises(RuntimeError) do
         get(
@@ -596,6 +632,18 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f4_headers
         end
       end
+    rp_session_public_id = @base_browser_rp_session_public_ids.fetch(
+      [RpBaseOrgSession::CLIENT_ID, token.public_id],
+    )
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_public_id)
+    candidate = BaseSelectorAuthority.new(
+      surface: :org, principal: @staff, session: rp_session,
+    ).selectable_candidates.first
+
+    assert candidate
+    patch base_org_selector_url(host: @host), params: candidate.fetch(:public), headers: http_headers_5, as: :json
+
+    assert_response :success
     get "/dashboard", headers: http_headers_5
 
     assert_response :found
@@ -630,14 +678,14 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   test "root_with_an_expired_org_session_renders_the_home" do
     token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     select_token!(surface: :org, principal: @staff, token: token)
+    expired_headers = as_staff_headers(@staff, host: @host, session_public_id: token.public_id)
     token.update!(discard_at: token.created_at)
     travel 1.second
 
     http_headers_4 =
       begin
-        fx5_token = token
         begin
-          f5_headers = as_staff_headers(@staff, host: @host, session_public_id: fx5_token.public_id)
+          f5_headers = expired_headers
           f5_host = f5_headers["Host"]
           f5_route =
             begin
@@ -1120,6 +1168,18 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
           f8_headers
         end
       end
+    rp_session_public_id = @base_browser_rp_session_public_ids.fetch(
+      [RpBaseOrgSession::CLIENT_ID, token.public_id],
+    )
+    rp_session = RpBaseOrgSession.find_by!(public_id: rp_session_public_id)
+    candidate = BaseSelectorAuthority.new(
+      surface: :org, principal: @staff, session: rp_session,
+    ).selectable_candidates.first
+
+    assert candidate
+    patch base_org_selector_url(host: @host), params: candidate.fetch(:public), headers: http_headers_1, as: :json
+
+    assert_response :success
     get base_org_dashboard_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
         headers: http_headers_1
 

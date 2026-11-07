@@ -123,21 +123,24 @@ class AvatarAuthorityClient
   attr_reader :client_id, :base, :access_token, :persona, :selection, :surface
 
   def request_selection_params
-    params = { persona: }
-    return params unless surface == "app"
+    return app_selection_params if surface == "app"
+    return { persona: } unless selection
 
-    params.merge(
-      organization_public_id: selection_value(:collective_public_id),
-      organization_unit_public_id: selection_value(:collective_unit_public_id),
-      avatar_public_id: selection_value(:avatar_public_id),
-    )
+    {
+      persona:,
+      organization_public_id: selection.collective_public_id,
+      organization_unit_public_id: selection.collective_unit_public_id,
+      avatar_public_id: selection.avatar_public_id,
+    }
   end
 
-  def selection_value(key)
-    return selection.public_send(key) if selection.respond_to?(key)
-    return selection[key] || selection[key.to_s] if selection.is_a?(Hash)
-
-    nil
+  def app_selection_params
+    {
+      persona:,
+      organization_public_id: selection&.collective_public_id,
+      organization_unit_public_id: selection&.collective_unit_public_id,
+      avatar_public_id: selection&.avatar_public_id,
+    }
   end
 
   def request(verb, path, params = {}, idempotency_key: nil)

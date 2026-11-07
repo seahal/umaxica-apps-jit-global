@@ -30,7 +30,7 @@ class Base::App::RpSelectorFlowTest < ActionDispatch::IntegrationTest
     cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE] = @rp_session.public_id
   end
 
-  test "RP login reaches selector, stores the actor's choice locally, and opens dashboard" do
+  test "RP session automatically selects its single candidate and opens dashboard" do
     with_rp_app_request do
       get "/dashboard?ri=jp"
 
@@ -38,19 +38,13 @@ class Base::App::RpSelectorFlowTest < ActionDispatch::IntegrationTest
 
       get "/selector?ri=jp"
 
-      assert_response :success
-      assert_equal "base/app/selectors/show", inertia_component
-      assert_equal 1, inertia_props.fetch("candidates").length
+      assert_redirected_to "/dashboard?ri=jp"
       candidate = BaseSelectorAuthority.new(
         surface: :app,
         principal: @actor,
         session: @rp_session,
       ).selectable_candidates.fetch(0).fetch(:public)
 
-      patch "/selector?ri=jp", params: candidate, as: :json
-
-      assert_response :success
-      assert_equal "selected", response.parsed_body.fetch("status")
       selection = RpBaseAppSessionSelection.find_by!(rp_session_id: @rp_session.id)
 
       assert_equal candidate.fetch(:account_public_id), selection.account_public_id
@@ -102,10 +96,6 @@ class Base::App::RpSelectorFlowTest < ActionDispatch::IntegrationTest
     ).selectable_candidates.fetch(0).fetch(:public)
 
     with_rp_app_request do
-      get "/selector?ri=jp"
-
-      assert_response :success
-
       patch "/selector?ri=jp", params: other_candidate, as: :json
 
       assert_response :unprocessable_content
@@ -117,16 +107,15 @@ class Base::App::RpSelectorFlowTest < ActionDispatch::IntegrationTest
 
   test "RP switcher reads and writes the same local session selection" do
     with_rp_app_request do
-      get "/selector?ri=jp", as: :json
+      get "/selector?ri=jp"
 
-      assert_response :success
+      assert_redirected_to "/dashboard?ri=jp"
       candidate = BaseSelectorAuthority.new(
         surface: :app, principal: @actor, session: @rp_session,
       ).selectable_candidates.fetch(0).fetch(:public)
-      patch "/selector?ri=jp", params: candidate, as: :json
-
-      assert_response :success
       selection = RpBaseAppSessionSelection.find_by!(rp_session_id: @rp_session.id)
+
+      assert_equal candidate.fetch(:account_public_id), selection.account_public_id
 
       get "/switcher?ri=jp", as: :json
 

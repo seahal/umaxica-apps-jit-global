@@ -47,6 +47,10 @@ module Security
           "app/controllers/concerns/base_step_up_completion.rb",
           "app/controllers/concerns/core_browser_api_boundary.rb",
           "app/controllers/concerns/verification_base.rb",
+          # Avatar owner endpoints install a selection only after resolving the supplied tuple
+          # against the authenticated actor's candidates; their controllers clear it in the
+          # with_actor_lifecycle around action.
+          "app/controllers/concerns/avatar_authority_api_endpoint.rb",
           # Anonymous com lifecycle: installs the com actor for the request and clears it in the
           # around hook, because the corporate surface has no principal to resolve.
           "app/controllers/concerns/com_anonymous_actor_context.rb",

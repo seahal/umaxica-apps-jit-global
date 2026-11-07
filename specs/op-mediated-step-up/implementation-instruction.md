@@ -3,6 +3,11 @@
 Status: approved by the owner on 2026-11-03 (recorded in `zero.md`). Codex may start with unit 0.
 Author: Claude Code, 2026-11-03. Claude Code does not implement this change; Codex does.
 
+Handoff status (2026-11-06): units 0–6 have implementation work recorded in `zero.md`; unit 6b
+is still open, including the accepted O-9 handoff, whose endpoint remains deliberately disconnected.
+Unit 7 is open. The implementation is not verified as a whole; use the latest H-2 test
+classification and do not treat this status note or the design contract as an activation signal.
+
 ## 1. Authority and inputs
 
 - Accepted spec: `specs/op-mediated-step-up/spec.md` (accepted 2026-11-03, AC-1 to AC-22) and
@@ -93,7 +98,12 @@ logout ordering; do not run them in parallel with other work on those files.
    O-9 handoff for passkey registration and the social link start only; keep sign-in, sign-up,
    verification, the passkey ceremonies and the OAuth start and callback on Auth. Regression tests
    for each moved operation on its new surface, the removed Auth routes, and the two handoffs
-   (missing, expired, replayed, wrong actor, wrong session, wrong purpose).
+   (missing, expired, replayed, wrong actor, wrong session, wrong purpose). As O-11 rebuilds ORG
+   telephone registration, restore the 20 success-flow tests removed from
+   `test/controllers/base/org/identity/telephones/registrations_controller_test.rb` at
+   pre-removal revision `b30345216886c98af1f04cbd434f067f12decf01`, then adapt them to the accepted
+   RP-session contract: Normal can issue an OTP, Standby refuses the correct OTP without consuming it,
+   and returning to Normal completes with that same OTP.
 7. Activation and closure. Publish Discovery metadata per realm; update `docs/mermaid` diagrams and
    the transition inventory, `docs/security/step-up-operation-inventory.md` and affected checklists
    with the delivered behavior; run the wider authentication boundary and a full test run, classify

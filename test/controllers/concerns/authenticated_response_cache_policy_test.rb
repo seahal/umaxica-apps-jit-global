@@ -507,7 +507,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal "application/json", response.media_type
-    assert_equal "no-store", response.headers.fetch("Cache-Control")
+    assert_no_store
   end
 
   # Stale credentials on an :open page are detached and the request continues anonymously. If it

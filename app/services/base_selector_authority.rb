@@ -21,6 +21,10 @@ class BaseSelectorAuthority
     new(surface: surface, principal: principal, session: session).select(params)
   end
 
+  def self.selection_options(surface:, principal:)
+    new(surface: surface, principal: principal, session: nil).selection_options
+  end
+
   def initialize(surface:, principal:, session:)
     @config = AcmeSelector.config_for(surface)
     @principal = principal
@@ -28,16 +32,30 @@ class BaseSelectorAuthority
   end
 
   def prepare
-    candidates = selectable_candidates
+    candidates = selector_candidates
     if session.instance_of?(RpBaseAppSession) || session.instance_of?(RpBaseOrgSession)
       return selected if session.selected_actor_context?
+      return selection_required(candidates) unless candidates.one?
 
-      return selection_required(candidates)
+      persist_selection!(candidates.first, once: true)
+      return selected
     end
     return selection_required(candidates) unless candidates.one?
 
     persist_selection!(candidates.first, once: true)
     selected
+  rescue AcmeSelectableContext::SelectionAlreadyEstablished
+    raise unless session&.selected_actor_context?
+
+    selected
+  end
+
+  def selection_options
+    candidates = selector_candidates
+    {
+      status: "selection_required",
+      accounts: serialize_candidates(candidates),
+    }
   end
 
   def select(params)
@@ -61,5 +79,12 @@ class BaseSelectorAuthority
       status: "selection_required",
       accounts: serialize_candidates(candidates),
     }
+  end
+
+  def selector_candidates
+    candidates = selectable_candidates
+    return candidates unless config.avatar_mode == :optional
+
+    candidates.select { |candidate| candidate.dig(:public, :avatar_public_id).blank? }
   end
 end

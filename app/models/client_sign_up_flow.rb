@@ -145,19 +145,15 @@ class ClientSignUpFlow < OpBaseAppRecord
     STATUS_MODEL::HALTED => [],
   }.freeze
 
-  belongs_to :token, class_name: "ClientToken"
+  # A sign-up flow starts before a root token exists and keeps its own lifecycle if no token is issued.
+  belongs_to :token, class_name: "ClientToken", optional: true
   belongs_to :auth_admission_binding, class_name: "ClientAuthAdmissionBinding", optional: false
   attr_readonly :auth_admission_binding_id
   belongs_to :principal, class_name: "Client", optional: true
   belongs_to :status, class_name: "ClientSignUpFlowStatus"
   belongs_to :cleanup_status, class_name: "ClientSignUpFlowCleanupStatus", optional: false
 
-  # SignFlow disables required belongs_to validation, so status presence stays explicit.
-  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
-  validates :auth_admission_binding, presence: true
-  validates :status_id, presence: true,
-                        inclusion: { in: ->(record) { record.class::STATUS_IDS } }
-  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :status_id, inclusion: { in: ->(record) { record.class::STATUS_IDS } }
   validates :step, presence: true, inclusion: { in: STEPS }
   validates :state, presence: true
   validate :legacy_state_matches_status

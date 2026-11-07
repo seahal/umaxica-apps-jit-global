@@ -33,7 +33,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
   test "client is authenticated on the app dashboard" do
     http_headers_8 =
       begin
-        rp_headers = as_user_headers(@client, host: APP_HOST)
+        rp_headers = as_user_headers(@client, host: APP_HOST, select_available_app_persona: false)
         rp_host = rp_headers["Host"]
         rp_route =
           begin
@@ -99,6 +99,22 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
+    app_candidate = BaseSelectorAuthority.selection_options(surface: :app, principal: @client)
+      .fetch(:accounts).fetch(0)
+    patch base_app_selector_url(ri: "jp", host: APP_HOST),
+          params: {
+            account_public_id: app_candidate.fetch(:public_id),
+            organization_public_id: app_candidate.dig(:organization, :public_id),
+            organization_unit_public_id: app_candidate.dig(:organization, :unit_public_id),
+            avatar_public_id: app_candidate.dig(:avatar, :public_id),
+          },
+          headers: http_headers_8,
+          as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     get base_app_dashboard_url(ri: "jp"), headers: http_headers_8
 
     assert_same_surface_dashboard_redirect(APP_HOST)
@@ -173,6 +189,21 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    org_candidate = BaseSelectorAuthority.selection_options(surface: :org, principal: @operator)
+      .fetch(:accounts).fetch(0)
+    patch base_org_selector_url(ri: "jp", host: ORG_HOST),
+          params: {
+            account_public_id: org_candidate.fetch(:public_id),
+            organization_public_id: org_candidate.dig(:organization, :public_id),
+            organization_unit_public_id: org_candidate.dig(:organization, :unit_public_id),
+          },
+          headers: http_headers_6,
+          as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     get base_org_dashboard_url(ri: "jp"), headers: http_headers_6
 
     assert_same_surface_dashboard_redirect(ORG_HOST)

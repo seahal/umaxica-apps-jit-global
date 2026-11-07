@@ -1522,6 +1522,16 @@ ja:
       roots:
         message: 開発者向けアクセスとサポートの入口です。
     org:
+      selectors:
+        show:
+          account_label: エージェント
+          description: このセッションで使用する組織とユニットを選択してください。
+          empty_message: このアカウントで利用できる組織がありません。
+          invalid_selection: この組織は利用できなくなりました。利用可能な組織を選択してください。
+          organization_label: 組織
+          submit_label: 続ける
+          title: 組織を選択
+          unit_label: 組織ユニット
       admin:
         clients:
           empty: 該当するクライアントはありません。
@@ -1674,6 +1684,7 @@ ja:
           max_graphemes: 名前は最大 %{count} 文字です。
         none_selected: この組織コンテキストでは Avatar が選択されていません。
       identity:
+        mfa_reset: MFA リセットを申請
         secret_credentials:
           edit:
             description: このシークレットの名前を変更するか、無効にします。

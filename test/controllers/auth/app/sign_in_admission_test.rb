@@ -9,6 +9,7 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! @host
+    https!
   end
 
   test "direct entry without admission is refused and starts no ceremony" do
@@ -75,6 +76,38 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "auth/app/sign_ins/new", inertia_component
     assert_predicate cookies["auth_sid"].presence || cookies["__Host-auth_sid"].presence, :present?
+  end
+
+  test "Auth APP sign-in state is issued in a secure host-only purpose cookie" do
+    _transaction, reference = issue_admission!
+
+    admit_auth_ceremony_entry!(auth_app_sign_in_path, reference:, params: { ri: "jp" })
+    follow_redirect!
+
+    assert_response :success
+    headers = Array(response.headers["Set-Cookie"]).join("\n")
+    purpose_cookie = headers.lines.find { |line| line.start_with?("__Host-umaxica-sign-in=") }
+
+    assert_not_nil purpose_cookie, "sign-in state should use its purpose-specific cookie"
+    assert_includes purpose_cookie, "Secure"
+    assert_includes purpose_cookie, "HttpOnly"
+    assert_includes purpose_cookie, "Path=/"
+    assert_not_match(/\bDomain=/i, purpose_cookie)
+  end
+
+  test "a tampered sign-in purpose cookie shows restart guidance without changing cookies" do
+    _transaction, reference = issue_admission!
+    admit_auth_ceremony_entry!(auth_app_sign_in_path, reference:, params: { ri: "jp" })
+    follow_redirect!
+    cookies_before = cookies.to_hash.deep_dup
+    cookie_header = cookies_before.map { |name, value| "#{name}=#{value}" }.join("; ")
+    cookie_header = [cookie_header, "__Host-umaxica-sign-in=not-an-encrypted-cookie"].compact_blank.join("; ")
+
+    get auth_app_sign_in_url(ri: "jp"), headers: { "Cookie" => cookie_header }
+
+    assert_response :conflict
+    assert_includes response.body, "最初からやり直してください"
+    assert_equal cookies_before, cookies.to_hash
   end
 
   test "an unsigned local return target is not carried into the clean sign-in URL" do

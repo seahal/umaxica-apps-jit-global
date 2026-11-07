@@ -95,7 +95,7 @@ test("notification explanations are readable and described by their checkbox", a
       // The guard fails missing form rendering, rather than bypassing an assertion.
       // oxlint-disable-next-line vitest/no-conditional-in-test
       if (!(node instanceof HTMLFormElement)) {
-        throw new Error("Expected the preference form");
+        throw new TypeError("Expected the preference form");
       }
       return new FormData(node).getAll("email[promotional]");
     }),
@@ -107,7 +107,7 @@ test("notification explanations are readable and described by their checkbox", a
       // The guard fails missing form rendering, rather than bypassing an assertion.
       // oxlint-disable-next-line vitest/no-conditional-in-test
       if (!(node instanceof HTMLFormElement)) {
-        throw new Error("Expected the preference form");
+        throw new TypeError("Expected the preference form");
       }
       return new FormData(node).getAll("email[promotional]");
     }),

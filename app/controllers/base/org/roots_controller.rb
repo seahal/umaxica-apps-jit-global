@@ -97,6 +97,7 @@ module Base
           surface: "org",
           access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
           persona: Actor.selection.account_public_id,
+          selection: Actor.selection,
         ).dashboard_identity
         raise ActiveRecord::RecordNotFound, "selected org Persona is not available to this principal" if
           result.status == :not_found

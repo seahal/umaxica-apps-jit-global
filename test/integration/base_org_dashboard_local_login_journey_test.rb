@@ -260,6 +260,25 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
         },
       )
 
+      assert_equal 200, visa_browser.response.status, visa_browser.response.body
+      continuation_form = visa_browser.response.parsed_body.at_css(
+        "form#visa-authorization-continuation-form",
+      )
+
+      assert continuation_form, "Visa authorization must present its browser POST continuation"
+      continuation_fields =
+        continuation_form.css("input[type='hidden']").to_h do |input|
+          [input["name"], input["value"]]
+        end
+      visa_browser.post(
+        continuation_form["action"], params: continuation_fields, headers: {
+          "Origin" => "https://#{visa_host}",
+          "Sec-Fetch-Mode" => "navigate",
+          "Sec-Fetch-Dest" => "document",
+          "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
       assert_equal 303, visa_browser.response.status, visa_browser.response.body
     end
     token = OperatorToken.find_by!(public_id: flow.reload.browser_session_ref)
@@ -308,9 +327,11 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
           begin
             protocol_browser.host!(env.url.authority)
             protocol_browser.https!(env.url.scheme == "https")
+            headers = { "Accept" => "application/json" }
+            headers["Authorization"] = env.request_headers["Authorization"] if
+              env.request_headers.key?("Authorization")
             protocol_browser.get(
-              env.url.request_uri, headers: { "Authorization" => env.request_headers.fetch("Authorization"),
-                                              "Accept" => "application/json", },
+              env.url.request_uri, headers:,
             )
           ensure
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
@@ -330,7 +351,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
       end
     OutboundHttp::Connection.stub(
       :build, ->(**args) {
-        assert_equal visa_host, args.fetch(:url).host
+        assert_equal visa_host, URI.parse(args.fetch(:url).to_s).host
         connection
       },
     ) do
@@ -346,12 +367,12 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     transport.verify_stubbed_calls
     get(base_org_selector_path(ri: "jp"))
 
-    assert_response :success
-    assert_equal "selected", response.parsed_body.fetch("status")
-    get(response.parsed_body.fetch("next"))
-    follow_redirect! if response.redirect?
+    assert_response :see_other
+    assert_redirected_to base_org_dashboard_path(ri: "jp")
+    follow_redirect!
 
-    assert_response :success
+    assert_response :success, response.body
+    assert_equal "base/org/dashboards/show", inertia_component
 
     assert_equal [
       ["POST", "/sign", 303],

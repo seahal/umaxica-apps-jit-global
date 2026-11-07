@@ -992,7 +992,7 @@ CREATE TABLE public.avatar_ownership_cutovers (
 CREATE TABLE public.avatar_ownership_periods (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
-    avatar_ownership_status_id bigint,
+    avatar_ownership_status_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     owner_organization_id character varying NOT NULL,
     transferred_by_actor_id bigint,
@@ -4760,6 +4760,8 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261106130501'),
+('20261106130500'),
 ('20261029120100'),
 ('20261020130001'),
 ('20261020130000'),

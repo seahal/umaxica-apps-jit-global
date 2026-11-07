@@ -132,7 +132,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         )
         fv5342.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
           fv5343
-        fv5342.cookies.merge!(
+        _installed_refresh_cookie = fv5342.cookies.merge(
           "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fv5341.issue_refresh_token!)}",
           URI.parse("https://#{fv5340}/"),
         )
@@ -382,7 +382,10 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       base.https!
       base.get(completion_uri.request_uri, headers: base_headers)
 
-      assert_equal 200, base.response.status, "O-9 completion response must render its Base continuation"
+      confirmation_error = (base.response.media_type == "text/plain") ? base.response.body : base.response.media_type
+
+      assert_equal 200, base.response.status,
+                   "O-9 completion response must render its Base continuation: #{confirmation_error}"
       completion_form = Nokogiri::HTML(base.response.body).at_css("form")
       completion_params = completion_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       base.post(completion_form["action"], params: completion_params, headers: base_headers)

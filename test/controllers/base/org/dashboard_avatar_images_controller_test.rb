@@ -185,6 +185,11 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
           f0_headers
         end
       end
+    get base_org_selector_url(host: @host), headers: http_headers_7, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     get base_org_dashboard_url(ri: "jp"), headers: http_headers_7
 
     assert_response :success
@@ -358,7 +363,8 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
   end
 
   test "a selected Avatar without a stored image is a normal absence with no default image" do
-    select_avatar!(provision_avatar!)
+    avatar = provision_avatar!
+    select_avatar!(avatar)
 
     http_headers_5 =
       begin
@@ -522,6 +528,21 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
           f2_headers
         end
       end
+    get base_org_selector_url(host: @host), headers: http_headers_5, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
+    patch base_org_switcher_url(host: @host), headers: http_headers_5, params: {
+      account_public_id: @bootstrap.account.public_id,
+      organization_public_id: @bootstrap.collective.public_id,
+      organization_unit_public_id: @bootstrap.unit.public_id,
+      avatar_public_id: avatar.public_id,
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
+
     get base_org_dashboard_url(ri: "jp"), headers: http_headers_5
 
     assert_response :success
@@ -862,6 +883,21 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
           f4_headers
         end
       end
+    get base_org_selector_url(host: @host), headers: http_headers_3, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
+    patch base_org_switcher_url(host: @host), headers: http_headers_3, params: {
+      account_public_id: @bootstrap.account.public_id,
+      organization_public_id: @bootstrap.collective.public_id,
+      organization_unit_public_id: @bootstrap.unit.public_id,
+      avatar_public_id: avatar.public_id,
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
+
     get base_org_dashboard_url(ri: "jp"), headers: http_headers_3
 
     assert_equal(
@@ -1206,6 +1242,21 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
           f6_headers
         end
       end
+    get base_org_selector_url(host: @host), headers: http_headers_1, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
+    patch base_org_switcher_url(host: @host), headers: http_headers_1, params: {
+      account_public_id: @bootstrap.account.public_id,
+      organization_public_id: @bootstrap.collective.public_id,
+      organization_unit_public_id: @bootstrap.unit.public_id,
+      avatar_public_id: avatar.public_id,
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
+
     get base_org_dashboard_avatar_image_url(ri: "jp"), headers: http_headers_1
     etag = response.headers.fetch("ETag")
 
@@ -1215,6 +1266,15 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
       organization_public_id: avatarless.dig(:organization, :public_id),
       organization_unit_public_id: avatarless.dig(:organization, :unit_public_id),
     )
+
+    patch base_org_switcher_url(host: @host), headers: http_headers_1, params: {
+      account_public_id: avatarless.fetch(:public_id),
+      organization_public_id: avatarless.dig(:organization, :public_id),
+      organization_unit_public_id: avatarless.dig(:organization, :unit_public_id),
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
 
     assert_nil @token.reload.selected_avatar_public_id
 
@@ -1577,7 +1637,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
     candidate =
       BaseSelectorAuthority.new(surface: :org, principal: @operator, session: @token)
         .selectable_candidates.find { |entry| entry.dig(:public, :avatar_public_id) == avatar.public_id }
-    BaseSelectorAuthority.select(
+    BaseSwitcherAuthority.switch(
       surface: :org, principal: @operator, session: @token,
       params: candidate.fetch(:public),
     )

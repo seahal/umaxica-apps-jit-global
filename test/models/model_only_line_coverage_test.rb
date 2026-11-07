@@ -100,7 +100,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "retainable discard now validates duration and clamps to persisted creation" do
-    record = AppPreference.new(created_at: 1.minute.from_now)
+    record = AppPreferenceChronicle.new(created_at: 1.minute.from_now)
 
     assert_raises(ArgumentError) { record.discard_now!(purge_after: 10) }
 

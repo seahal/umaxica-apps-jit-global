@@ -176,7 +176,7 @@ describe("CookieBanner mount", () => {
 
     await mount();
 
-    expect(fetchMock).toHaveBeenCalledWith(ENDPOINT);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(ENDPOINT);
     expect(banner()).toBeNull();
   });
 

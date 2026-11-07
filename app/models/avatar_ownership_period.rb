@@ -30,8 +30,6 @@
 #
 
 class AvatarOwnershipPeriod < AvatarRecord
-  self.belongs_to_required_by_default = false
-
   OWNER_SURFACES = %w(app org).freeze
 
   belongs_to :avatar

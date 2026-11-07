@@ -43,17 +43,17 @@
 class OrgPreferenceChronicle < ChronicleRecord
   PREFERENCE_AUDIT_LOCK_KEY = 88_038_921_016_975
 
-  self.belongs_to_required_by_default = false
-
   include Retainable
 
-  # Virtual belongs_to for ERD - uses subject_id/subject_type instead of FK
+  # Other subject types are valid; the guarded callback checks OrgPreference references.
   belongs_to :org_preference,
              class_name: "OrgPreference",
              foreign_key: :subject_id,
              primary_key: :id,
-             inverse_of: :org_preference_chronicles
-  belongs_to :actor, polymorphic: true # Helper methods for compatibility
+             inverse_of: :org_preference_chronicles,
+             optional: true
+  # Audit actors may be omitted or belong to another record type.
+  belongs_to :actor, polymorphic: true, optional: true # Helper methods for compatibility
   belongs_to :org_preference_chronicle_level, foreign_key: :level_id, inverse_of: :org_preference_chronicles
   belongs_to :org_preference_chronicle_event,
              class_name: "OrgPreferenceChronicleEvent",

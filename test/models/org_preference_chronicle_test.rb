@@ -86,6 +86,7 @@ class OrgPreferenceChronicleTest < ActiveSupport::TestCase
   end
 
   test "validates presence of subject_id" do
+    @audit.subject_type = "SomeOtherType"
     @audit.subject_id = nil
 
     assert_raises(ActiveRecord::NotNullViolation) { @audit.save!(validate: false) }

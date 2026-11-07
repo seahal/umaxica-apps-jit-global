@@ -37,17 +37,21 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     establish_contradictory_primary_binding!
     flow = @mfa_flow
     before = flow.attributes
+    cookies_before = cookies.to_hash.deep_dup
     path = auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
     assert_no_difference -> { ClientToken.count } do
       get path
 
       assert_response :conflict
-      assert_equal "text/plain", response.media_type
-      assert_equal "この画面は古くなっています。最初からやり直してください。", response.body
+
+      restart_url = base_app_sign_show_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https", ri: "jp")
+
+      assert_includes response.body, restart_url
       assert_nil response.headers["Location"]
       assert_includes response.headers["Cache-Control"], "no-store"
       assert_equal before, flow.reload.attributes
+      assert_equal cookies_before, cookies.to_hash
 
       head path
 
@@ -56,6 +60,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       assert_nil response.headers["Location"]
       assert_includes response.headers["Cache-Control"], "no-store"
       assert_equal before, flow.reload.attributes
+      assert_equal cookies_before, cookies.to_hash
     end
   end
 

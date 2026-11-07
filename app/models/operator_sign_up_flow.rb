@@ -83,14 +83,11 @@ class OperatorSignUpFlow < OpBaseOrgRecord
     STATUS_MODEL::HALTED => [],
   }.freeze
 
-  belongs_to :token, class_name: "OperatorToken"
+  # A sign-up flow exists before its root token is issued and is deleted with that token afterward.
+  belongs_to :token, class_name: "OperatorToken", optional: true
   belongs_to :status, class_name: "OperatorSignUpFlowStatus"
 
-  # SignFlow disables required belongs_to validation, so status presence stays explicit.
-  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
-  validates :status_id, presence: true,
-                        inclusion: { in: ->(record) { record.class::STATUS_IDS } }
-  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :status_id, inclusion: { in: ->(record) { record.class::STATUS_IDS } }
   validates :step, presence: true, inclusion: { in: STEPS }
   validates :state, presence: true
   validate :legacy_state_matches_status

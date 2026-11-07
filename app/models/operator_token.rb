@@ -85,8 +85,6 @@
 # Refresh tokens are persisted as digests only.
 # OIDC sid/jti are protocol identifiers; public_id remains the token row identifier.
 class OperatorToken < OpBaseOrgRecord
-  self.belongs_to_required_by_default = false
-
   include ::PublicId
   include ::RefreshTokenable
   include ::SignedSessionReference
@@ -120,7 +118,8 @@ class OperatorToken < OpBaseOrgRecord
   belongs_to :staff_token_kind, class_name: "OperatorTokenKind"
   belongs_to :staff_token_binding_method, class_name: "OperatorTokenBindingMethod"
   belongs_to :staff_token_dbsc_status, class_name: "OperatorTokenDbscStatus"
-  belongs_to :oidc_connection, class_name: "OperatorOidcConnection"
+  # A root token can outlive its optional OIDC connection, which is nullified on connection deletion.
+  belongs_to :oidc_connection, class_name: "OperatorOidcConnection", optional: true
   belongs_to :device_session, class_name: "OperatorDeviceSession", inverse_of: :staff_tokens
   has_many :op_org_grants, inverse_of: :operator_token, dependent: :restrict_with_exception
   has_many :staff_verifications, class_name: "OperatorVerification",

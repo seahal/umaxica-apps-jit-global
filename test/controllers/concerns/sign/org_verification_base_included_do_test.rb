@@ -16,7 +16,6 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
       webauthn_id: SecureRandom.urlsafe_base64(32), external_id: SecureRandom.uuid,
       public_key: "stored fixture key", status_id: OperatorPasskeyStatus::ACTIVE,
     )
-    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @staff)
     @requirement = StepUpRequirement.new(
       step_up_required: true, scope: "operator_lifecycle", allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
@@ -25,27 +24,44 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
       resource_ref: nil, tenant_ref: nil,
     )
     @auth_headers = as_staff_headers(@staff, host: @auth_host, session_public_id: @token.public_id)
-    @base_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @token.public_id)
     @rp_client = OidcClientRegistry.find!("base-org-ww")
-    rp = OpOrgGrant.create!(
-      authentication_epoch: 0,
-      operator_token: @token, oidc_client_id: @rp_client.client_id, oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
-      refresh_token_expires_at: 10.minutes.from_now,
-    )
-    @rp = rp
-    @rp_refresh = rp.issue_refresh_token!
-    access = AuthenticationTokenService.encode(
-      @staff, host: @base_host, resource_type: "operator", session_public_id: @token.public_id,
-              base_session_public_id: @token.public_id, oidc_sid: rp.public_id, oidc_jti: rp.oidc_jti,
-              expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(@rp_client),
-              audiences: [@rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@rp_client),
-              subject: OidcSubject.for(@staff, resource_type: "operator"), client_id: @rp_client.client_id,
-    )
-    cookie = [@base_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(@rp_refresh)}",].join("; ")
-    @base_headers = @base_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+    # This test writes its RP grant to a separate database. The primary database
+    # transaction rolls the token ID back between tests, so an older grant can
+    # retain the same device-session ID after a prior interrupted run.
+    OpOrgGrant.includes(:logout_hint)
+      .where(device_session_id: @token.device_session_id, oidc_client_id: @rp_client.client_id)
+      .destroy_all
+    @base_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @token.public_id)
+    @rp = OpOrgGrant.find_by!(operator_token_id: @token.id, oidc_client_id: @rp_client.client_id)
+
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @staff)
+    candidate = BaseSelectorAuthority.selection_options(surface: :org, principal: @staff)
+      .fetch(:accounts).fetch(0)
+    patch base_org_selector_url(ri: "jp", host: @base_host),
+          params: {
+            account_public_id: candidate.fetch(:public_id),
+            organization_public_id: candidate.dig(:organization, :public_id),
+            organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+          },
+          headers: @base_headers,
+          as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+  end
+
+  teardown do
+    if @rp_client
+      [@token, @other_token].compact.uniq(&:device_session_id).each do |token|
+        next if token.device_session_id.blank?
+
+        grants = OpOrgGrant.where(device_session_id: token.device_session_id, oidc_client_id: @rp_client.client_id)
+        grant_ids = grants.select(:id)
+        OperatorStepUpCommit.where(grant_id: grant_ids).delete_all
+        OperatorStepUpContext.where(grant_id: grant_ids).delete_all
+        OpOrgGrant.includes(:logout_hint).where(id: grant_ids).destroy_all
+      end
+    end
   end
 
   test "a missing Root cannot satisfy an explicit step-up requirement" do
@@ -114,6 +130,37 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
     assert_equal "operator_lifecycle", query.fetch("scope")
     assert_predicate query["pt"], :present?
     assert_nil @token.reload.last_step_up_at
+  end
+
+  test "the signed return target is accepted only by its originating RP session" do
+    get base_org_identity_withdrawal_url(ri: "jp", host: @base_host), headers: @base_headers
+
+    assert_response :redirect
+    query = Rack::Utils.parse_query(URI.parse(response.location).query)
+    signed_target = query.fetch("pt")
+
+    get base_org_verification_url(
+      ri: "jp", scope: query.fetch("scope"), pt: signed_target, host: @base_host,
+    ), headers: @base_headers
+
+    assert_response :success
+    assert_equal "/identity/withdrawal", inertia_props.fetch("form").fetch("return_target")
+
+    @other_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: @staff,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+    )
+    @other_token.rotate_refresh_token!
+    OpOrgGrant.includes(:logout_hint)
+      .where(device_session_id: @other_token.device_session_id, oidc_client_id: @rp_client.client_id)
+      .destroy_all
+    other_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @other_token.public_id)
+
+    get base_org_verification_url(
+      ri: "jp", scope: query.fetch("scope"), pt: signed_target, host: @base_host,
+    ), headers: other_headers
+
+    assert_response :bad_request
   end
 
   test "unsatisfied public resolution retains the explicit policy without inventing a freshness expiry" do

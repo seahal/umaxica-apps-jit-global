@@ -27,6 +27,40 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: rp_base_org_session_avatar_selections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rp_base_org_session_avatar_selections (
+    id bigint NOT NULL,
+    rp_session_id bigint NOT NULL,
+    avatar_public_id character varying(21) NOT NULL,
+    selected_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_rp_base_org_avatar_selection_public_id CHECK ((char_length((avatar_public_id)::text) = 21))
+);
+
+
+--
+-- Name: rp_base_org_session_avatar_selections_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.rp_base_org_session_avatar_selections_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: rp_base_org_session_avatar_selections_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.rp_base_org_session_avatar_selections_id_seq OWNED BY public.rp_base_org_session_avatar_selections.id;
+
+
+--
 -- Name: rp_base_org_session_selections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -517,6 +551,13 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: rp_base_org_session_avatar_selections id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rp_base_org_session_avatar_selections ALTER COLUMN id SET DEFAULT nextval('public.rp_base_org_session_avatar_selections_id_seq'::regclass);
+
+
+--
 -- Name: rp_base_org_session_selections id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -613,6 +654,14 @@ ALTER TABLE ONLY public.rp_step_up_states ALTER COLUMN id SET DEFAULT nextval('p
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: rp_base_org_session_avatar_selections rp_base_org_session_avatar_selections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rp_base_org_session_avatar_selections
+    ADD CONSTRAINT rp_base_org_session_avatar_selections_pkey PRIMARY KEY (id);
 
 
 --
@@ -725,6 +774,13 @@ ALTER TABLE ONLY public.rp_step_up_states
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: idx_rp_base_org_avatar_selection_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rp_base_org_avatar_selection_session ON public.rp_base_org_session_avatar_selections USING btree (rp_session_id);
 
 
 --
@@ -973,6 +1029,14 @@ ALTER TABLE ONLY public.rp_step_up_state_transitions
 
 
 --
+-- Name: rp_base_org_session_avatar_selections fk_rp_base_org_avatar_selection_parent; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rp_base_org_session_avatar_selections
+    ADD CONSTRAINT fk_rp_base_org_avatar_selection_parent FOREIGN KEY (rp_session_id) REFERENCES public.rp_base_org_session_selections(rp_session_id) ON DELETE CASCADE;
+
+
+--
 -- Name: rp_event_receipts fk_rp_base_org_event_receipts_op_binding; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1019,6 +1083,12 @@ ALTER TABLE ONLY public.rp_sessions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261106143215'),
+('20261106143211'),
+('20261106143207'),
+('20261106143203'),
+('20261106143159'),
+('20261106143155'),
 ('20261106064619'),
 ('20261106064615'),
 ('20261106064611'),

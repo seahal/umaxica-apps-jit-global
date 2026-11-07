@@ -100,47 +100,8 @@ class EnforcementCaseApplyOrderingTest < ActiveSupport::TestCase
 
     assert_predicate client.reload, :admin_locked?
 
-    step_up_now = OpBaseOrgRecord.database_now
-    step_up_token = OperatorToken.create!(
-      authentication_epoch: operator.authentication_epoch,
-      staff: operator,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      discard_at: step_up_now + 1.hour,
-    )
-    step_up_token.update!(root_login_established_at: step_up_now, established_authentication_method: "passkey")
-    step_up_token.rotate_refresh_token!(now: step_up_now)
-    step_up_token.device_session_record!
-    step_up_client = OidcClientRegistry.find!("base-org-ww")
-    step_up_auth_time = step_up_now.to_i - 1
-    step_up_grant = OpOrgGrant.create!(
-      authentication_epoch: step_up_token.authentication_epoch,
-      operator_token: step_up_token,
-      oidc_client_id: step_up_client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: Time.at(step_up_auth_time).utc,
-      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
-      oidc_amr: JSON.generate(["passkey"]),
-      refresh_token_expires_at: step_up_now + 1.hour,
-    )
-    step_up_grant.issue_refresh_token!(now: step_up_now)
-    step_up_evidence = StepUpEvidenceValue.new(
-      acr: step_up_grant.oidc_acr,
-      amr: ["passkey"],
-      auth_time: step_up_auth_time,
-      sid: step_up_grant.public_id,
-      sub: OidcSubject.for(operator, resource_type: "operator"),
-      client_id: step_up_client.client_id,
-      aud: [step_up_client.aud],
-      jti: step_up_grant.oidc_jti,
-    )
-
     EnforcementCaseEndOperation.call(
       enforcement_case: first, reason: "revoked",
-      ended_by_operator_public_id: operator.public_id,
-      step_up_token: step_up_token, step_up_actor: operator, step_up_evidence: step_up_evidence,
     )
 
     assert_predicate client.reload, :admin_locked?,
@@ -148,8 +109,6 @@ class EnforcementCaseApplyOrderingTest < ActiveSupport::TestCase
 
     EnforcementCaseEndOperation.call(
       enforcement_case: second, reason: "revoked",
-      ended_by_operator_public_id: operator.public_id,
-      step_up_token: step_up_token, step_up_actor: operator, step_up_evidence: step_up_evidence,
     )
 
     assert_not_predicate client.reload, :admin_locked?

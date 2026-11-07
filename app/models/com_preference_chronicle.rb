@@ -44,16 +44,17 @@ class ComPreferenceChronicle < ChronicleRecord
   # Shared writer locks and an exclusive purge lock coordinate the cross-database audit check.
   PREFERENCE_AUDIT_LOCK_KEY = 88_038_921_016_973
 
-  self.belongs_to_required_by_default = false
-
   include Retainable
 
+  # Other subject types are valid; the guarded callback checks ComPreference references.
   belongs_to :com_preference,
              class_name: "ComPreference",
              foreign_key: :subject_id,
              primary_key: :id,
-             inverse_of: :com_preference_chronicles
-  belongs_to :actor, polymorphic: true
+             inverse_of: :com_preference_chronicles,
+             optional: true
+  # Audit actors may be omitted or belong to another record type.
+  belongs_to :actor, polymorphic: true, optional: true
   belongs_to :com_preference_chronicle_level, foreign_key: :level_id, inverse_of: :com_preference_chronicles
   belongs_to :com_preference_chronicle_event,
              class_name: "ComPreferenceChronicleEvent",

@@ -249,7 +249,11 @@ class BaseRpContactRegistrationRefusalTest < ActionDispatch::IntegrationTest
              audiences: [client.aud], subject: OidcSubject.for(actor, resource_type: "operator"),
              auth_time: now, client_id: client.client_id, authentication_context: AuthenticationContextValue::NORMAL_KEY,
     )
-    before = [OperatorEmail.count, OperatorEmailCeremonyTransaction.count, enqueued_jobs.size]
+    before = [
+      OperatorEmail.count, OperatorTelephone.count,
+      OperatorEmailCeremonyTransaction.count, OperatorTelephoneCeremonyTransaction.count,
+      enqueued_jobs.size,
+    ]
     RuntimeRole.stub(:current, "shared") do
       post(
         base_org_identity_emails_registration_path(ri: "jp"),
@@ -261,6 +265,20 @@ class BaseRpContactRegistrationRefusalTest < ActionDispatch::IntegrationTest
 
       assert_response :service_unavailable
       patch(base_org_identity_emails_registration_path(ri: "jp"))
+
+      assert_response :service_unavailable
+
+      post(
+        base_org_identity_telephones_registration_path(ri: "jp"),
+        params: { staff_telephone: { raw_number: "+819012345602" } },
+      )
+
+      assert_response :service_unavailable
+
+      patch(
+        base_org_identity_telephones_registration_path(ri: "jp"),
+        params: { staff_telephone: { pass_code: "123456" } },
+      )
 
       assert_response :service_unavailable
 
@@ -289,7 +307,11 @@ class BaseRpContactRegistrationRefusalTest < ActionDispatch::IntegrationTest
 
       assert_not_equal 503, response.status
     end
-    assert_equal before, [OperatorEmail.count, OperatorEmailCeremonyTransaction.count, enqueued_jobs.size]
+    assert_equal before, [
+      OperatorEmail.count, OperatorTelephone.count,
+      OperatorEmailCeremonyTransaction.count, OperatorTelephoneCeremonyTransaction.count,
+      enqueued_jobs.size,
+    ]
   ensure
     if defined?(enrollment) && enrollment&.success?
       RpBaseOrgRecord.connected_to(role: :writing) do

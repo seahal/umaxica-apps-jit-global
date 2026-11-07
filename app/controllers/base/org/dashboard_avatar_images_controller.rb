@@ -21,6 +21,7 @@ module Base
             surface: "org",
             access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
             persona: Actor.selection.account_public_id,
+            selection: Actor.selection,
           ).selected_image
         authorize!(
           AvatarAuthorityClient::Result.new(status:, data: {}, errors: {}), to: :relay?,

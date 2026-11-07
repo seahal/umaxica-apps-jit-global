@@ -22,6 +22,7 @@ module Base
             around_action :with_actor_lifecycle
             before_action :authenticate_avatar_caller!
             before_action :set_current_actor
+            before_action :verify_avatar_persona!
             rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
 
             public

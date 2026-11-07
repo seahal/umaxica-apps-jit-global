@@ -16,6 +16,11 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     @client_token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :app, principal: @client, session: @client_token)
+    OpAppGrant.where(
+      device_session_id: @client_token.device_session_id,
+      oidc_client_id: "base-app-ww",
+      revoked_at: nil,
+    ).update_all(revoked_at: OpAppGrant.database_now)
 
     @operator = Operator.create!(
       security_mode_id: SecurityModeConfigurable::ADVANCED,
@@ -25,6 +30,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     @operator_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @operator_token)
+  end
+
+  teardown do
+    if @client_token&.device_session_id
+      OpAppGrant.where(
+        device_session_id: @client_token.device_session_id,
+        oidc_client_id: "base-app-ww",
+        revoked_at: nil,
+      ).update_all(revoked_at: OpAppGrant.database_now)
+    end
   end
 
   test "registry request transport is refused before the verified ownership cutover" do
@@ -768,7 +783,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_no_difference -> { AvatarOwnershipTransfer.count } do
       http_headers_11 =
         begin
-          rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+          rp_headers = authenticated_resource_headers(
+            @client, host: @host, headers: {}, session_public_id: @client_token.public_id,
+                     resource_type: "client", session_header: "X-TEST-CURRENT-USER",
+          )
           rp_host = rp_headers["Host"]
           rp_route =
             begin
@@ -1258,7 +1276,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     http_headers_10 =
       begin
-        rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+        rp_headers = authenticated_resource_headers(
+          @client, host: @host, headers: {}, session_public_id: @client_token.public_id,
+                   resource_type: "client", session_header: "X-TEST-CURRENT-USER",
+        )
         rp_host = rp_headers["Host"]
         rp_route =
           begin
@@ -1346,9 +1367,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_response :success
     transfer_id = response.parsed_body.fetch("transfer_public_id")
 
-    step_up_headers = as_staff_headers(
-      @operator, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), session_public_id: @operator_token.public_id,
-    )
+    step_up_headers = { "Host" => ENV.fetch("PUBLIC_BASE_STAFF_URL") }
     step_up_actor = @operator
     step_up_token = @operator_token
     step_up_token.device_session_record!
@@ -1382,9 +1401,13 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       [step_up_access, step_up_refresh]
     http_headers_9 =
       begin
-        rp_headers = as_staff_headers(
-          @operator, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-                     session_public_id: @operator_token.public_id,
+        rp_headers = authenticated_resource_headers(
+          @operator,
+          host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+          headers: {},
+          session_public_id: @operator_token.public_id,
+          resource_type: "operator",
+          session_header: "X-TEST-STAFF",
         )
         rp_host = rp_headers["Host"]
         rp_route =
@@ -1455,6 +1478,17 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     local_cookie = "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{enrollment.session.public_id}"
     cookie_header = [headers.fetch("Cookie"), local_cookie].join("; ")
     headers = headers.merge("Cookie" => cookie_header, "HTTP_COOKIE" => cookie_header)
+    if enrollment.session.instance_of?(RpBaseOrgSession)
+      RpBaseOrgRecord.connected_to(role: :writing) do
+        RpBaseOrgSessionSelection.create!(
+          rp_session_id: enrollment.session.id,
+          account_public_id: @target.account.public_id,
+          organization_public_id: @target.collective.public_id,
+          organization_unit_public_id: @target.unit.public_id,
+          selected_at: Time.current,
+        )
+      end
+    end
     post base_org_accept_avatar_ownership_transfer_url(
       transfer_id, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), ri: "jp",
     ),
@@ -1693,7 +1727,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     http_headers_5 =
       begin
-        rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+        rp_headers = authenticated_resource_headers(
+          @client, host: @host, headers: {}, session_public_id: @client_token.public_id,
+                   resource_type: "client", session_header: "X-TEST-CURRENT-USER",
+        )
         rp_host = rp_headers["Host"]
         rp_route =
           begin
@@ -1828,7 +1865,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
     http_headers_3 =
       begin
-        rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+        rp_headers = authenticated_resource_headers(
+          @client, host: @host, headers: {}, session_public_id: @client_token.public_id,
+                   resource_type: "client", session_header: "X-TEST-CURRENT-USER",
+        )
         rp_host = rp_headers["Host"]
         rp_route =
           begin
@@ -1959,7 +1999,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_no_difference -> { AvatarOwnershipTransfer.count } do
       http_headers_1 =
         begin
-          rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+          rp_headers = authenticated_resource_headers(
+            @client, host: @host, headers: {}, session_public_id: @client_token.public_id,
+                     resource_type: "client", session_header: "X-TEST-CURRENT-USER",
+          )
           rp_host = rp_headers["Host"]
           rp_route =
             begin
@@ -2084,7 +2127,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     http_headers_0 =
       begin
-        rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+        rp_headers = authenticated_resource_headers(
+          @client, host: @host, headers: {}, session_public_id: @client_token.public_id,
+                   resource_type: "client", session_header: "X-TEST-CURRENT-USER",
+        )
         rp_host = rp_headers["Host"]
         rp_route =
           begin
@@ -2175,7 +2221,14 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   private
 
   def base_browser_headers(principal: @client, token: @client_token)
-    rp_headers = as_user_headers(principal, host: @host, session_public_id: token.public_id)
+    rp_headers = authenticated_resource_headers(
+      principal,
+      host: @host,
+      headers: {},
+      session_public_id: token.public_id,
+      resource_type: "client",
+      session_header: "X-TEST-CURRENT-USER",
+    )
     rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     rp_client = OidcClientRegistry.find!("base-app-ww")
     rp_key = [rp_client.client_id, rp_token.public_id]

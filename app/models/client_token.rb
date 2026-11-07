@@ -87,8 +87,6 @@
 # Refresh tokens are persisted as digests only.
 # OIDC sid/jti are protocol identifiers; public_id remains the token row identifier.
 class ClientToken < OpBaseAppRecord
-  self.belongs_to_required_by_default = false
-
   include ::PublicId
   include ::RefreshTokenable
   include ::SignedSessionReference
@@ -120,7 +118,8 @@ class ClientToken < OpBaseAppRecord
   belongs_to :user_token_kind, class_name: "ClientTokenKind"
   belongs_to :user_token_binding_method, class_name: "ClientTokenBindingMethod"
   belongs_to :user_token_dbsc_status, class_name: "ClientTokenDbscStatus"
-  belongs_to :oidc_connection, class_name: "ClientOidcConnection"
+  # A root token can outlive its optional OIDC connection, which is nullified on connection deletion.
+  belongs_to :oidc_connection, class_name: "ClientOidcConnection", optional: true
   belongs_to :device_session, class_name: "ClientDeviceSession", inverse_of: :client_tokens
   has_many :client_sign_up_flows,
            foreign_key: :token_id,

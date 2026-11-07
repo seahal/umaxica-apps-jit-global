@@ -27,8 +27,28 @@ module SignUpJourneyCleanup
 
     owners = Client.where.not(id: @sign_up_journey_client_ids).to_a
     owner_ids = owners.map(&:id)
-    owners.each { |owner| delete_sign_up_journey_collective_graph!(owner) }
 
+    delete_sign_up_journey_flow_rows!(owner_ids)
+    delete_sign_up_journey_owner_rows!(owners, owner_ids)
+    owners.each { |owner| delete_sign_up_journey_collective_graph!(owner) }
+    delete_sign_up_journey_chronicle_rows!
+  end
+
+  private
+
+  # The flow side of the journey: ceremony transactions, the flows themselves, the admission
+  # rows that pin them, and the tokens issued on the resulting session.
+  def delete_sign_up_journey_flow_rows!(owner_ids)
+    delete_sign_up_journey_signup_flows!
+    # A session-limit resolution references both its flow and the OIDC parent with ON DELETE
+    # RESTRICT, so it goes before either of them.
+    ClientSessionLimitResolutionTransaction.where.not(id: @sign_up_journey_resolution_ids).delete_all
+    ClientOidcAuthorizationTransaction.where.not(id: @sign_up_journey_parent_ids).delete_all
+    delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: owner_ids))
+    delete_sign_up_journey_tokens!(owner_ids)
+  end
+
+  def delete_sign_up_journey_signup_flows!
     flows = ClientSignUpFlow.where.not(id: @sign_up_journey_signup_ids).to_a
     ClientEmailCeremonyTransaction
       .where(session_ref: flows.filter_map { |flow| sign_up_session_ref("email_sign_up", flow) }).delete_all
@@ -38,17 +58,17 @@ module SignUpJourneyCleanup
     # Bindings pin the ceremony sessions and the OIDC parent, so they go first.
     ClientAuthAdmissionBinding.where.not(id: @sign_up_journey_binding_ids).delete_all
     ClientAuthCeremonySession.where.not(id: @sign_up_journey_ceremony_ids).delete_all
-    # A session-limit resolution references both its flow and the OIDC parent with ON DELETE
-    # RESTRICT, so it goes before either of them.
-    ClientSessionLimitResolutionTransaction.where.not(id: @sign_up_journey_resolution_ids).delete_all
-    ClientOidcAuthorizationTransaction.where.not(id: @sign_up_journey_parent_ids).delete_all
-    delete_client_sign_in_flows!(ClientSignInFlow.where(principal_id: owner_ids))
-    token_ids = ClientToken.where(user_id: owner_ids).select(:id)
-    OpAppGrant.where(client_token_id: token_ids).delete_all
+  end
+
+  def delete_sign_up_journey_tokens!(owner_ids)
+    OpAppGrant.where(client_token_id: ClientToken.where(user_id: owner_ids).select(:id)).delete_all
     ClientDeviceSession.where(user_id: owner_ids).update_all(current_refresh_token_id: nil)
     # client_tokens references client_device_sessions with ON DELETE RESTRICT, so tokens go first.
     ClientToken.where(user_id: owner_ids).delete_all
     ClientDeviceSession.where(user_id: owner_ids).delete_all
+  end
+
+  def delete_sign_up_journey_owner_rows!(owners, owner_ids)
     ClientContactAuditOutbox.where(owner_ref: owners.map(&:public_id)).delete_all
     ClientPasskey.where(user_id: owner_ids).delete_all
     ClientEmail.where(user_id: owner_ids).delete_all
@@ -60,15 +80,15 @@ module SignUpJourneyCleanup
     ClientSecretCredential.where(client_id: owner_ids).delete_all
     ClientSecretIssuance.where(client_id: owner_ids).delete_all
     Client.where(id: owner_ids).delete_all
+  end
 
+  def delete_sign_up_journey_chronicle_rows!
     chronicle_ids = Chronicle.where.not(id: @sign_up_journey_chronicle_ids).pluck(:id)
     ChronicleVisibility.where(chronicle_id: chronicle_ids).delete_all
     ChronicleOutboxEntry.where(chronicle_id: chronicle_ids).delete_all
     Chronicle.where(id: chronicle_ids).delete_all
     ClientChronicle.where.not(id: @sign_up_journey_client_chronicle_ids).delete_all
   end
-
-  private
 
   def sign_up_session_ref(kind, flow)
     return nil unless flow.nonce_digest
@@ -85,8 +105,19 @@ module SignUpJourneyCleanup
       (PersonaMembership.where(persona_id: persona_ids).pluck(:enterprise_id) +
         EnterpriseOwnership.where(client_id: owner.id).pluck(:enterprise_id)).uniq
     unit_ids = EnterpriseUnit.where(enterprise_id: enterprise_ids).pluck(:id)
+
+    delete_sign_up_journey_memberships!(persona_ids, enterprise_ids)
+    delete_sign_up_journey_personas!(identity_ids, persona_ids)
+    delete_sign_up_journey_enterprises!(enterprise_ids, unit_ids)
+  end
+
+  # PersonaMembership spans both graphs, so it goes before either side is removed.
+  def delete_sign_up_journey_memberships!(persona_ids, enterprise_ids)
     PersonaMembership.where(persona_id: persona_ids)
       .or(PersonaMembership.where(enterprise_id: enterprise_ids)).delete_all
+  end
+
+  def delete_sign_up_journey_personas!(identity_ids, persona_ids)
     PersonaAssignment.where(persona_id: persona_ids).delete_all
     ClientOidcIdentityBinding.where(client_identity_id: identity_ids).delete_all
     AvatarPersonaBinding.where(persona_id: persona_ids).delete_all
@@ -94,6 +125,9 @@ module SignUpJourneyCleanup
     ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
     ClientPersona.where(id: persona_ids).delete_all
     ClientIdentity.where(id: identity_ids).delete_all
+  end
+
+  def delete_sign_up_journey_enterprises!(enterprise_ids, unit_ids)
     EnterpriseUnitClosure.where(ancestor_id: unit_ids)
       .or(EnterpriseUnitClosure.where(descendant_id: unit_ids)).delete_all
     EnterpriseUnit.where(id: unit_ids).delete_all

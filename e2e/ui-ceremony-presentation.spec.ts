@@ -53,7 +53,7 @@ test("Secret native validity preserves the exact 32-character boundary and accep
     await control.evaluate((node, candidate) => {
       // oxlint-disable-next-line vitest/no-conditional-in-test -- fail explicitly if the fixture control has the wrong DOM type.
       if (!(node instanceof HTMLInputElement)) {
-        throw new Error("The Secret control is not an input.");
+        throw new TypeError("The Secret control is not an input.");
       }
       node.value = candidate;
     }, value);

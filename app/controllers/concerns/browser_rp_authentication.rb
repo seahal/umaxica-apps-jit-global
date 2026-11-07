@@ -586,7 +586,7 @@ module BrowserRpAuthentication
   # Base APP and ORG selections are RP-local; other RP cells read their owner API.
   def rp_cell_selected_context
     return unless rp_cell_process?
-    # Base APP persona selection belongs to its RP session. The actor comes from the verified
+    # Base APP and ORG selections belong to their RP sessions. The actor comes from the verified
     # Access Token above; no OP root token or remote selection API participates.
     return Actor::SelectedContext::NULL unless browser_rp_authenticated? && rp_cell.client_id.start_with?("base-")
 
@@ -643,7 +643,7 @@ module BrowserRpAuthentication
 
     selection =
       RpBaseOrgRecord.connected_to(role: :writing) do
-        RpBaseOrgSessionSelection.find_by(rp_session_id: rp_session.id)
+        RpBaseOrgSessionSelection.includes(:avatar_selection).find_by(rp_session_id: rp_session.id)
       end
     return Actor::SelectedContext::NULL unless selection
 
@@ -651,7 +651,7 @@ module BrowserRpAuthentication
       account_public_id: selection.account_public_id,
       collective_public_id: selection.organization_public_id,
       collective_unit_public_id: selection.organization_unit_public_id,
-      avatar_public_id: nil,
+      avatar_public_id: selection.avatar_selection&.avatar_public_id,
       selected_at: selection.selected_at,
     )
   end
@@ -722,7 +722,7 @@ module BrowserRpAuthentication
     # (test/security/invariants/withdrawal_gate_invariant_test.rb). Refusing it here would make
     # withdrawal recovery unreachable.
     return false unless resource.is_a?(browser_rp_resource_class)
-    return false unless resource.login_allowed?
+    return false unless rp_resource_lifecycle_allows_existing_session?(resource)
     return false unless AuthorizationTokenClaims.base_session_id(payload).to_s == root_token.public_id.to_s
 
     authentication_context = payload[AuthenticationContextValue::CLAIM]
@@ -737,6 +737,13 @@ module BrowserRpAuthentication
     ActiveSupport::SecurityUtils.secure_compare(expected_subject, actual_subject)
   rescue AuthenticationContextValue::UnknownContextError
     false
+  end
+
+  def rp_resource_lifecycle_allows_existing_session?(resource)
+    return false if resource.class::LOGIN_BLOCKED_STATUS_IDS.include?(resource.status_id)
+    return true if resource.login_allowed?
+
+    resource.withdrawal_in_progress? || resource.terminated?
   end
 
   def invalid_browser_rp_access

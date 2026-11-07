@@ -6,7 +6,7 @@ class JwtRegistryPublicKeyBoundaryTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "public key lookup returns verification-only keys for active private keysets" do
-    %w(auth preference).each do |issuer_id|
+    %w(auth preference_app preference_com preference_org).each do |issuer_id|
       issuer = JitSecurityJwtRegistry.issuer(issuer_id)
       signing_key = JitSecurityJwtRegistry.private_key_for(issuer_id, issuer.current_kid)
       verification_key = JitSecurityJwtRegistry.public_key_for(issuer_id, issuer.current_kid)

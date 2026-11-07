@@ -16,6 +16,11 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @source = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     @token = OperatorToken.create!(authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    OpOrgGrant.where(
+      device_session_id: @token.device_session_id,
+      oidc_client_id: "base-org-ww",
+      revoked_at: nil,
+    ).update_all(revoked_at: OpOrgGrant.database_now)
     @avatar_result = AvatarProvisioning::Create.call(
       actor: @operator,
       subject_type: :agent,
@@ -34,6 +39,16 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
     )
     @target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @target_client)
+  end
+
+  teardown do
+    if @token&.device_session_id
+      OpOrgGrant.where(
+        device_session_id: @token.device_session_id,
+        oidc_client_id: "base-org-ww",
+        revoked_at: nil,
+      ).update_all(revoked_at: OpOrgGrant.database_now)
+    end
   end
 
   test "registry request transport is refused before the verified ownership cutover" do
@@ -183,14 +198,6 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       oidc_amr: JSON.generate(["passkey"]),
       refresh_token_expires_at: 10.minutes.from_now,
     )
-    root_access_token = AuthenticationToken.encode(
-      @operator,
-      host: @host,
-      session_public_id: rp_token.public_id,
-      resource_type: "operator",
-      jwt_issuer_id: "surface:BASE_ORG",
-      authentication_context: AuthenticationContextValue::STANDBY_KEY,
-    )
     rp_access_token = AuthenticationTokenService.encode(
       @operator,
       host: @host,
@@ -209,30 +216,12 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       client_id: rp_client.client_id,
       authentication_context: AuthenticationContextValue::STANDBY_KEY,
     )
-    rp_enrollment = RpCallbackCommitter.call(
-      cell: RpCellBinding.for_client(rp_client.client_id),
-      issuer: OidcIssuer.for_client(rp_client),
-      subject: OidcSubject.for(@operator, resource_type: "operator"),
-      sid: rp_grant.public_id,
-      absolute_expires_at: rp_grant.refresh_token_expires_at,
-    )
-    raise ArgumentError, "RP session enrollment failed: #{rp_enrollment.outcome}" unless rp_enrollment.success?
-
-    cookie = [
-      "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access_token)}",
-      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access_token)}",
-      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_grant.issue_refresh_token!)}",
-      "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_enrollment.session.public_id}",
-    ].join("; ")
-    headers = {
-      "Authorization" => "Bearer #{root_access_token}",
-      "Client-Agent" => "Mozilla/5.0",
-      "Host" => @host,
-      "X-TEST-SESSION-PUBLIC-ID" => rp_token.public_id,
-      "Cookie" => cookie,
-      "HTTP_COOKIE" => cookie,
-      "Idempotency-Key" => "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a80",
-    }
+    @base_browser_rp_credentials ||= {}
+    @base_browser_rp_credentials[[rp_client.client_id, rp_token.public_id]] = [
+      rp_access_token,
+      rp_grant.issue_refresh_token!,
+    ]
+    headers = base_browser_headers.merge("Idempotency-Key" => "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a80")
 
     post base_org_avatar_ownership_transfers_url(host: @host),
          params: {
@@ -629,107 +618,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     step_up_refresh = step_up_grant.issue_refresh_token!
     @base_browser_rp_credentials ||= {}
     @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
-    http_headers_2 =
-      begin
-        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          @base_browser_rp_sessions ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpOrgGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpOrgGrant.create!(
-              authentication_epoch: 0,
-              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "operator",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "operator",
-                                     ), client_id: rp_client.client_id,
-            )
-            rp_local_enrollment = RpCallbackCommitter.call(
-              cell: RpCellBinding.for_client(rp_client.client_id),
-              issuer: OidcIssuer.for_client(rp_client),
-              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
-              sid: rp_session.public_id,
-              absolute_expires_at: rp_now + 10.minutes,
-            )
-            unless rp_local_enrollment.success?
-              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
-            end
-
-            rp_local_session = rp_local_enrollment.session
-            @base_browser_rp_sessions[rp_key] = rp_local_session
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            unless @base_browser_rp_sessions[rp_key]
-              rp_access = @base_browser_rp_credentials.fetch(rp_key).first
-              rp_payload = OidcRpBrowserCredentialContract.decode_access_token(
-                token: rp_access, host: rp_host, resource_type: "operator", client_id: rp_client.client_id,
-              )
-              raise ArgumentError, "Base ORG RP access credential is invalid" unless rp_payload
-
-              rp_grant = OpOrgGrant.find_by!(
-                public_id: AuthorizationTokenClaims.session_id(rp_payload), operator_token: rp_token,
-                oidc_client_id: rp_client.client_id,
-              )
-              rp_local_enrollment = RpCallbackCommitter.call(
-                cell: RpCellBinding.for_client(rp_client.client_id),
-                issuer: OidcIssuer.for_client(rp_client),
-                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
-                sid: rp_grant.public_id,
-                absolute_expires_at: rp_grant.refresh_token_expires_at,
-              )
-              unless rp_local_enrollment.success?
-                raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
-              end
-
-              @base_browser_rp_sessions[rp_key] = rp_local_enrollment.session
-            end
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_local_session = @base_browser_rp_sessions.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
+    http_headers_2 = base_browser_headers
     post base_org_avatar_ownership_transfers_url(host: @host, ri: "jp"),
          params: {
            target_surface: "app",
@@ -745,80 +634,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_equal "app", transfer.to_owner_surface
     assert_equal @avatar_result.avatar.id, transfer.avatar_id
 
-    http_headers_1 =
-      begin
-        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
-        rp_host = rp_headers["Host"]
-        rp_route =
-          begin
-            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-          rescue ActionController::RoutingError
-            nil
-          end
-        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
-          rp_client_id =
-            case rp_family
-            when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org-ww"
-            when "tech" then "tech-org-ww"
-            else "#{rp_family}-#{rp_surface}-jp"
-            end
-          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-          rp_client = OidcClientRegistry.find!(rp_client_id)
-          rp_key = [rp_client.client_id, rp_token.public_id]
-          @base_browser_rp_credentials ||= {}
-          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OpOrgGrant.exists?(
-                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-              ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-            rp_now = Time.current
-            rp_session = OpOrgGrant.create!(
-              authentication_epoch: 0,
-              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-              refresh_token_expires_at: rp_now + 10.minutes,
-            )
-            rp_access = AuthenticationTokenService.encode(
-              rp_token.actor_record, host: rp_host, resource_type: "operator",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.actor_record,
-                                       resource_type: "operator",
-                                     ), client_id: rp_client.client_id,
-            )
-            rp_local_enrollment = RpCallbackCommitter.call(
-              cell: RpCellBinding.for_client(rp_client.client_id),
-              issuer: OidcIssuer.for_client(rp_client),
-              subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
-              sid: rp_session.public_id,
-              absolute_expires_at: rp_now + 10.minutes,
-            )
-            unless rp_local_enrollment.success?
-              raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
-            end
-
-            rp_local_session = rp_local_enrollment.session
-            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-          end
-          if @base_browser_rp_credentials[rp_key]
-            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-            rp_cookie = [
-              rp_headers.fetch("Cookie"),
-              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
-            ].join("; ")
-            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-          end
-        end
-        rp_headers
-      end
+    http_headers_1 = base_browser_headers
     post base_org_cancel_avatar_ownership_transfer_url(transfer_id, host: @host),
          headers: http_headers_1, as: :json
 
@@ -991,86 +807,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @token.update!(selected_avatar_public_id: nil)
 
     assert_no_difference -> { AvatarOwnershipTransfer.count } do
-      http_headers_0 =
-        begin
-          rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
-          rp_host = rp_headers["Host"]
-          rp_route =
-            begin
-              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-            rescue ActionController::RoutingError
-              nil
-            end
-          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-          if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
-            rp_client_id =
-              case rp_family
-              when "base" then "base-#{rp_surface}-ww"
-              when "edit" then "edit-org-ww"
-              when "tech" then "tech-org-ww"
-              else "#{rp_family}-#{rp_surface}-jp"
-              end
-            rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-            rp_client = OidcClientRegistry.find!(rp_client_id)
-            rp_key = [rp_client.client_id, rp_token.public_id]
-            @base_browser_rp_credentials ||= {}
-            @base_browser_rp_sessions ||= {}
-            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OpOrgGrant.exists?(
-                  device_session_id: rp_token.device_session_id,
-                  oidc_client_id: rp_client.client_id,
-                  revoked_at: nil,
-                ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = OpOrgGrant.create!(
-                authentication_epoch: 0,
-                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                rp_token.actor_record, host: rp_host, resource_type: "operator",
-                                       session_public_id: rp_token.public_id,
-                                       base_session_public_id: rp_token.public_id,
-                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                       subject: OidcSubject.for(
-                                         rp_token.actor_record,
-                                         resource_type: "operator",
-                                       ), client_id: rp_client.client_id,
-              )
-              rp_local_enrollment = RpCallbackCommitter.call(
-                cell: RpCellBinding.for_client(rp_client.client_id),
-                issuer: OidcIssuer.for_client(rp_client),
-                subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
-                sid: rp_session.public_id,
-                absolute_expires_at: rp_now + 10.minutes,
-              )
-              unless rp_local_enrollment.success?
-                raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
-              end
-
-              rp_local_session = rp_local_enrollment.session
-              @base_browser_rp_sessions[rp_key] = rp_local_session
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            if @base_browser_rp_credentials[rp_key]
-              rp_local_session = @base_browser_rp_sessions.fetch(rp_key)
-              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-              rp_cookie = [
-                rp_headers.fetch("Cookie"),
-                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
-              ].join("; ")
-              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-            end
-          end
-          rp_headers
-        end
+      http_headers_0 = base_browser_headers
       post base_org_avatar_ownership_transfers_url(host: @host),
            params: {
              avatar_public_id: @target.avatar.public_id,
@@ -1110,6 +847,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     step_up_refresh = step_up_grant.issue_refresh_token!
     @base_browser_rp_credentials ||= {}
     @base_browser_rp_credentials[step_up_key] = [step_up_access, step_up_refresh]
+    headers = base_browser_headers
     membership = @source.account.agent_memberships.find_by!(bureau: @source.collective)
     membership.update!(membership_kind_id: AgentMembershipKind::MEMBER)
 
@@ -1119,7 +857,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
              target_surface: "app",
              target_collective_public_id: @target.collective.public_id,
            },
-           headers: base_browser_headers,
+           headers: headers,
            as: :json
 
       assert_response :forbidden
@@ -1459,23 +1197,65 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @base_browser_rp_credentials ||= {}
     issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
     access, refresh = @base_browser_rp_credentials.fetch(rp_key)
-    rp_payload, = JWT.decode(access, nil, false)
-    rp_enrollment = RpCallbackCommitter.call(
-      cell: RpCellBinding.for_client(rp_client.client_id),
-      issuer: rp_payload.fetch("iss"),
-      subject: rp_payload.fetch("sub"),
-      sid: rp_payload.fetch("sid"),
-      absolute_expires_at: Time.at(rp_payload.fetch("exp")).utc,
-    )
-    raise ArgumentError, "RP session enrollment failed: #{rp_enrollment.outcome}" unless rp_enrollment.success?
+    rp_local_session = enroll_base_browser_session!(access, rp_client)
+    select_base_browser_persona!(operator, token, rp_local_session)
 
     cookie = [
       rp_headers.fetch("Cookie"),
       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh)}",
-      "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_enrollment.session.public_id}",
+      "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{rp_local_session.public_id}",
     ].join("; ")
     rp_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+  end
+
+  def enroll_base_browser_session!(access, client)
+    payload, = JWT.decode(access, nil, false)
+    enrollment = RpCallbackCommitter.call(
+      cell: RpCellBinding.for_client(client.client_id),
+      issuer: payload.fetch("iss"),
+      subject: payload.fetch("sub"),
+      sid: payload.fetch("sid"),
+      absolute_expires_at: Time.at(payload.fetch("exp")).utc,
+    )
+    return enrollment.session if enrollment.success?
+
+    if enrollment.outcome == :already_enrolled
+      session = existing_base_browser_session(payload, client)
+      return session if session
+    end
+
+    raise ArgumentError, "RP session enrollment failed: #{enrollment.outcome}"
+  end
+
+  def existing_base_browser_session(payload, client)
+    binding = RpBaseOrgOpSessionBinding.includes(:identity_binding).find_by(
+      issuer: payload.fetch("iss"), realm: RpBaseOrgSession::REALM,
+      client_id: client.client_id, sid: payload.fetch("sid"), revoked_at: nil,
+    )
+    return unless binding&.identity_binding&.subject == payload.fetch("sub")
+
+    RpBaseOrgSession.includes(:op_session_binding).find_by(
+      op_session_binding_id: binding.id, revoked_at: nil,
+    )
+  end
+
+  def select_base_browser_persona!(operator, token, rp_session)
+    return if rp_session.selected_actor_context?
+
+    context = {
+      account_public_id: token.selected_account_public_id,
+      organization_public_id: token.selected_collective_public_id,
+      organization_unit_public_id: token.selected_collective_unit_public_id,
+      avatar_public_id: token.selected_avatar_public_id,
+    }
+    actor_context = context.except(:avatar_public_id)
+    BaseSelectorAuthority.select!(
+      surface: :org, principal: operator, session: rp_session, params: actor_context,
+    )
+    BaseSwitcherAuthority.switch(
+      surface: :org, principal: operator, session: rp_session, params: context,
+    ) if context[:avatar_public_id].present?
   end
 
   def issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)

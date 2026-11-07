@@ -1,6 +1,7 @@
 # Sign flow refusal: safe termination and restart
 
-Status: Open, deferred by the owner on 2026-10-27. Analysis only; implementation and the policy
+Status: Absorbed into `specs/browser-flow-state-cookies/spec.md` D-12 and AC-13 on 2026-11-06
+(owner). Kept for its analysis. Originally: open, deferred by the owner on 2026-10-27. Analysis only; implementation and the policy
 for selecting termination cases have not been approved.
 
 ## Problem

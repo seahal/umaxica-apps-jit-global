@@ -11,10 +11,10 @@ class EmailSignupBindingAuthorityTest < ActiveSupport::TestCase
   %w(app).each do |surface|
     %i(late_checkpoint foreign_browser uncleared_otp unconsumed_child expired_parent).each do |state|
       test "#{surface} Email signup binding validates #{state} durable authority" do
-        email_model, flow_model, status_key, verified_status =
+        email_model, flow_model, status_key =
           case surface
           when "app"
-            [ClientEmail, ClientSignUpFlow, :user_email_status_id, ClientEmailStatus::VERIFIED_WITH_SIGN_UP]
+            [ClientEmail, ClientSignUpFlow, :user_email_status_id]
           end
         email = email_model.new(raw_address: "signup-writer-#{SecureRandom.hex(8)}@example.test", confirm_policy: true)
         owner = EmailSignUpCandidateCreator.call(email: email)
@@ -44,6 +44,7 @@ class EmailSignupBindingAuthorityTest < ActiveSupport::TestCase
           "otp_consumed_at", "otp_receipt_verifier", "otp_result_expires_at", "otp_generation",
         )
         if state == :late_checkpoint
+          flow.begin_sign_up_finalization!
           checkpoint_time = issued.transaction.otp_result_expires_at + Rational(1, 1_000_000)
           flow_model.stub(:database_now, checkpoint_time) do
             issued.transaction.class.stub(:database_now, checkpoint_time) do
@@ -52,12 +53,10 @@ class EmailSignupBindingAuthorityTest < ActiveSupport::TestCase
           end
 
           assert_predicate email.reload, :binding_effective?
-          assert_equal verified_status, email[status_key]
-          if surface == "app"
-            owner.finalize_email_sign_up!(email: email, flow: flow)
+          assert_equal ClientEmailStatus::VERIFIED_WITH_SIGN_UP, email[status_key]
+          owner.finalize_email_sign_up!(email: email, flow: flow)
 
-            assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, owner.reload.status_id
-          end
+          assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, owner.reload.status_id
         else
           attempted_nonce = (state == :foreign_browser) ? "foreign-browser" : nonce
           assert_raises(ArgumentError) do

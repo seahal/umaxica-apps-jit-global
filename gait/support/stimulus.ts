@@ -60,7 +60,7 @@ export async function mountController<T extends Controller>(
   const controller = application.getControllerForElementAndIdentifier(element, identifier);
 
   if (!(controller instanceof constructor)) {
-    throw new Error(`Stimulus did not connect a "${identifier}" controller to the element.`);
+    throw new TypeError(`Stimulus did not connect a "${identifier}" controller to the element.`);
   }
 
   return { controller, element, application };

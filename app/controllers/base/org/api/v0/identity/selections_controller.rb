@@ -6,8 +6,8 @@ module Base
     module Api
       module V0
         module Identity
-          # The selected account/organization context recorded on the actor's own OP root, for the
-          # org Base Self-RP cell (R5-WU17). The cell never reads the OP store; it asks here.
+          # OP-root selection for non-Base RP cells. The Base Org Self-RP reads its own RP-session
+          # selection in BrowserRpAuthentication and does not call this endpoint.
           class SelectionsController < ActionController::API
             include ::DefaultNoStore
 

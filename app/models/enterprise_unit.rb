@@ -35,9 +35,11 @@ class EnterpriseUnit < AppRpRecord
                          closure_class_name: "EnterpriseUnitClosure"
 
   belongs_to :enterprise, inverse_of: :enterprise_units
+  # A unit with no parent is the root of its enterprise hierarchy.
   belongs_to :parent,
              class_name: "EnterpriseUnit",
-             inverse_of: :children
+             inverse_of: :children,
+             optional: true
   has_many :children,
            class_name: "EnterpriseUnit",
            foreign_key: :parent_id,

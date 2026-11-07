@@ -123,13 +123,21 @@ module AcmeSelectableContext
           organization_unit_public_id: public_ids.fetch(:organization_unit_public_id),
         }
         existing = RpBaseOrgSessionSelection.find_by(rp_session_id: session.id)
-        if existing
-          raise SelectionAlreadyEstablished if once
+        selection =
+          if existing
+            raise SelectionAlreadyEstablished if once
 
-          existing.update!(attributes)
-        else
-          RpBaseOrgSessionSelection.create!(attributes.merge(rp_session_id: session.id, selected_at: Time.current))
-        end
+            existing.update!(attributes)
+            existing
+          else
+            RpBaseOrgSessionSelection.create!(
+              attributes.merge(
+                rp_session_id: session.id,
+                selected_at: Time.current,
+              ),
+            )
+          end
+        persist_rp_org_avatar_selection!(selection, public_ids[:avatar_public_id])
       end
     end
   end
@@ -151,6 +159,23 @@ module AcmeSelectableContext
   end
 
   private
+
+  def persist_rp_org_avatar_selection!(selection, avatar_public_id)
+    existing = RpBaseOrgSessionAvatarSelection.find_by(rp_session_id: selection.rp_session_id)
+    if avatar_public_id.blank?
+      existing&.destroy!
+    elsif existing
+      return if existing.avatar_public_id == avatar_public_id
+
+      existing.update!(avatar_public_id:, selected_at: Time.current)
+    else
+      RpBaseOrgSessionAvatarSelection.create!(
+        rp_session_id: selection.rp_session_id,
+        avatar_public_id:,
+        selected_at: Time.current,
+      )
+    end
+  end
 
   def accounts
     config.account_class

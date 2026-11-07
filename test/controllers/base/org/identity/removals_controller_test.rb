@@ -82,7 +82,20 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     token = OperatorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     token.update!(root_login_established_at: Time.current, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
-    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: token)
+    selector_headers = as_staff_headers(@operator, host: @host, session_public_id: token.public_id)
+    candidate = BaseSelectorAuthority.selection_options(surface: :org, principal: @operator)
+      .fetch(:accounts).fetch(0)
+    patch base_org_selector_url(ri: "jp", host: @host),
+          params: {
+            account_public_id: candidate.fetch(:public_id),
+            organization_public_id: candidate.dig(:organization, :public_id),
+            organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+          },
+          headers: selector_headers,
+          as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
     begin
       rp_cookie_pairs =
         begin
@@ -123,6 +136,9 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
             [
               "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
               "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{Rack::Utils.escape(
+                @base_browser_rp_session_public_ids.fetch(rp_key),
+              )}",
             ]
           else
             []
@@ -132,7 +148,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     end
   end
 
-  test "removes the secret credential when another sign-in method still remains" do
+  test "RP ORG refuses secret removal when another sign-in method remains" do
     target = create_active_secret_credential(@operator)
     OperatorPasskeyStatus.find_or_create_by!(id: OperatorPasskeyStatus::ACTIVE)
     OperatorPasskey.create!(
@@ -237,9 +253,8 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
          headers: http_headers_3
 
-    assert_response :see_other
-    assert_redirected_to base_org_identity_secrets_path(ri: "jp")
-    assert_not_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
+    assert_response :service_unavailable
+    assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
   end
 
   test "direct secret credential deletion without fresh step-up is refused" do
@@ -315,7 +330,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
   end
 
-  test "removes a Secret when the registered Passkey remains as the sign-in method" do
+  test "RP ORG refuses secret removal when a registered Passkey remains" do
     only = create_active_secret_credential(@operator)
 
     http_headers_2 =
@@ -408,12 +423,11 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     post base_org_identity_secret_removal_url(only.public_id, ri: "jp", host: @host),
          headers: http_headers_2
 
-    assert_response :see_other
-    assert_redirected_to base_org_identity_secrets_path(ri: "jp")
-    assert_not_equal OperatorSecretCredentialStatus::ACTIVE, only.reload.staff_secret_status_id
+    assert_response :service_unavailable
+    assert_equal OperatorSecretCredentialStatus::ACTIVE, only.reload.staff_secret_status_id
   end
 
-  test "a credential owned by another operator is not found" do
+  test "RP ORG refuses to disclose credentials owned by another operator" do
     other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     other_secret = create_active_secret_credential(other)
     create_active_secret_credential(other)
@@ -508,7 +522,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     post base_org_identity_secret_removal_url(other_secret.public_id, ri: "jp", host: @host),
          headers: http_headers_1
 
-    assert_response :not_found
+    assert_response :service_unavailable
     assert_equal OperatorSecretCredentialStatus::ACTIVE, other_secret.reload.staff_secret_status_id
   end
 
@@ -583,21 +597,34 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
   end
 
-  test "a Standby session cannot update a credential" do
+  test "RP ORG refuses a Standby credential update without mutation" do
     target = create_active_secret_credential(@operator)
     create_active_secret_credential(@operator)
     emergency_token = create_standby_session(@operator)
-    headers = standby_headers_for(@operator, emergency_token)
+    headers = as_staff_headers(@operator, host: @host, session_public_id: emergency_token.public_id)
+    candidate = BaseSelectorAuthority.selection_options(surface: :org, principal: @operator)
+      .fetch(:accounts).fetch(0)
+    patch base_org_selector_url(ri: "jp", host: @host),
+          params: {
+            account_public_id: candidate.fetch(:public_id),
+            organization_public_id: candidate.dig(:organization, :public_id),
+            organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+          },
+          headers: headers,
+          as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
     step_up_transactions_before = OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
     get edit_base_org_identity_secret_url(target.public_id, ri: "jp", host: @host), headers: headers
 
-    assert_equal 403, response.status
+    assert_equal 503, response.status
 
     patch base_org_identity_secret_url(target.public_id, ri: "jp", host: @host),
           params: { staff_secret_credential: { name: "Standby changed", enabled: "1" } },
           headers: headers
 
-    assert_equal 403, response.status
+    assert_equal 503, response.status
     assert_equal target.name, target.reload.name
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.staff_secret_status_id
     assert_equal AuthenticationContextValue::STANDBY_KEY, emergency_token.reload.authentication_context
@@ -606,17 +633,30 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                  OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
   end
 
-  test "a Standby session cannot remove a credential" do
+  test "RP ORG refuses Standby secret removal without mutation" do
     target = create_active_secret_credential(@operator)
     create_active_secret_credential(@operator)
     emergency_token = create_standby_session(@operator)
-    headers = standby_headers_for(@operator, emergency_token)
+    headers = as_staff_headers(@operator, host: @host, session_public_id: emergency_token.public_id)
+    candidate = BaseSelectorAuthority.selection_options(surface: :org, principal: @operator)
+      .fetch(:accounts).fetch(0)
+    patch base_org_selector_url(ri: "jp", host: @host),
+          params: {
+            account_public_id: candidate.fetch(:public_id),
+            organization_public_id: candidate.dig(:organization, :public_id),
+            organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+          },
+          headers: headers,
+          as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
     step_up_transactions_before = OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
 
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host), headers: headers
 
-    assert_equal 403, response.status, "expected Standby refusal, got redirect to #{response.location.inspect}"
-    assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
+    assert_equal 503, response.status
+    assert_nil response.location
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
     assert_equal AuthenticationContextValue::STANDBY_KEY, emergency_token.reload.authentication_context
     assert_nil emergency_token.last_step_up_at
@@ -640,45 +680,6 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     )
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
     token
-  end
-
-  def standby_headers_for(operator, token)
-    root_headers = as_staff_headers(operator, host: @host, session_public_id: token.public_id)
-    client = OidcClientRegistry.find!("base-org-ww")
-    now = Time.current
-    rp_session = OpOrgGrant.create!(
-      authentication_epoch: 0,
-      operator_token: token,
-      oidc_client_id: client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: now,
-      refresh_token_expires_at: now + 10.minutes,
-    )
-    access_token = AuthenticationTokenService.encode(
-      operator,
-      host: @host,
-      resource_type: "operator",
-      session_public_id: token.public_id,
-      base_session_public_id: token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: now + 10.minutes,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_client(client),
-      audiences: [client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-      subject: OidcSubject.for(operator, resource_type: "operator"),
-      client_id: client.client_id,
-      authentication_context: AuthenticationContextValue::STANDBY_KEY,
-    )
-    cookie = [
-      root_headers.fetch("Cookie"),
-      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
-      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
-    ].join("; ")
-    root_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
   end
 
   def create_active_secret_credential(operator)

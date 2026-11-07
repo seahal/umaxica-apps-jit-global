@@ -1,6 +1,8 @@
 # Step-Up evidence: per-record binding and cross-database atomicity
 
-Status: Open (owner, 2026-10-26). Out of the 2026-10 authentication cycle; the owner wants the
+Status: Open (owner, 2026-10-26). 2026-11-06: likely addressed by `specs/op-mediated-step-up`
+(per-record `resource_ref` binding and the O-10 commit boundary); the owner scheduled the check
+after `specs/browser-flow-state-cookies`. Close only after that check. Out of the 2026-10 authentication cycle; the owner wants the
 impact of this cycle's changes on Step-Up understood first.
 
 From WU-30 (`evidence/2026-10-26-wu30-step-up-consumption-M3A7.md`):

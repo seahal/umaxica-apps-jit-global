@@ -1530,6 +1530,16 @@ en:
       roots:
         message: Developer access and support entry point.
     org:
+      selectors:
+        show:
+          account_label: Agent
+          description: Choose the organization and unit to use for this session.
+          empty_message: No available organizations were found for this account.
+          invalid_selection: This organization is no longer available. Choose an available organization.
+          organization_label: Organization
+          submit_label: Continue
+          title: Choose an organization
+          unit_label: Organization unit
       admin:
         clients:
           empty: No clients match.
@@ -1697,6 +1707,7 @@ en:
           max_graphemes: Name must contain at most %{count} visible characters.
         none_selected: No Avatar is selected for this organization context.
       identity:
+        mfa_reset: Request an MFA reset
         secret_credentials:
           edit:
             description: Rename this secret credential or disable it.

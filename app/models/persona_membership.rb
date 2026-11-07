@@ -66,12 +66,17 @@ class PersonaMembership < AppRpRecord
   belongs_to :membership_state,
              class_name: "PersonaMembershipState",
              inverse_of: :persona_memberships
+  # Active memberships have no revocation reason until revoked.
   belongs_to :revoke_reason,
              class_name: "PersonaMembershipRevokeReason",
-             inverse_of: :persona_memberships
-  belongs_to :granted_by_persona, class_name: "ClientPersona", inverse_of: false
-  belongs_to :approved_by_persona, class_name: "ClientPersona", inverse_of: false
-  belongs_to :revoked_by_persona, class_name: "ClientPersona", inverse_of: false
+             inverse_of: :persona_memberships,
+             optional: true
+  # Audit attribution is nullable and is nullified if its actor is deleted.
+  belongs_to :granted_by_persona, class_name: "ClientPersona", inverse_of: false, optional: true
+  # Audit attribution is nullable and is nullified if its actor is deleted.
+  belongs_to :approved_by_persona, class_name: "ClientPersona", inverse_of: false, optional: true
+  # Audit attribution is nullable and is nullified if its actor is deleted.
+  belongs_to :revoked_by_persona, class_name: "ClientPersona", inverse_of: false, optional: true
 
   validates :persona_id,
             uniqueness: {

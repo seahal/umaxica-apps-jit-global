@@ -91,15 +91,12 @@ class ClientSignInFlow < OpBaseAppRecord
     STATE_MODEL::HALTED => [],
   }.freeze
 
-  belongs_to :token, class_name: "ClientToken"
+  # A sign-in flow exists before its root token is issued and is deleted with that token afterward.
+  belongs_to :token, class_name: "ClientToken", optional: true
   belongs_to :state, class_name: "ClientSignInFlowState"
   belongs_to :principal, class_name: "Client", optional: true
 
-  # SignFlow disables required belongs_to validation, so state presence stays explicit.
-  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
-  validates :state_id, presence: true,
-                       inclusion: { in: ->(record) { record.class::STATE_IDS } }
-  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :state_id, inclusion: { in: ->(record) { record.class::STATE_IDS } }
   validates :token_id, uniqueness: true, allow_nil: true, if: :will_save_change_to_token_id?
   validate :completed_state_has_completed_at
   validates :result_digest, length: { maximum: 64 }

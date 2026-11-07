@@ -662,10 +662,11 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   def cycle_attrs(cycle_class, nonce: "nonce")
+    principal_id = cycle_class.name.start_with?("Operator") ? operators(:one).id : clients(:one).id
     attrs =
       if cycle_class < SignInFlow
         {
-          principal_id: 123,
+          principal_id: principal_id,
           state_id: cycle_class::STATE_IDS.first,
           return_to: "/dashboard",
           nonce_digest: cycle_class.digest_nonce(nonce),
@@ -674,7 +675,7 @@ class SignFlowTest < ActiveSupport::TestCase
         }
       else
         {
-          principal_id: 123,
+          principal_id: principal_id,
           status_id: cycle_class::STATUS_IDS.first,
           step: cycle_class::STEPS.first,
           return_to: "/dashboard",

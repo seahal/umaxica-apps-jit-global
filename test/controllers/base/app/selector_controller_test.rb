@@ -37,7 +37,7 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     assert_not_equal base_app_root_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
-  test "authenticated RP session without a local selection can access selector" do
+  test "authenticated RP session automatically selects its only candidate" do
     http_headers_6 =
       begin
         rp_headers = as_user_headers(@user, host: @host, select_available_app_persona: false)
@@ -115,20 +115,24 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    candidate = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     get base_app_selector_url(host: @host), headers: http_headers_6, as: :json
 
     assert_response :success
     body = response.parsed_body
 
-    assert_equal "selection_required", body.fetch("status")
+    assert_equal "selected", body.fetch("status")
     assert_not @token.reload.selected_actor_context?
     rp_session_id = @base_browser_rp_session_public_ids.fetch([RpBaseAppSession::CLIENT_ID, @token.public_id])
     rp_session = RpBaseAppSession.find_by!(public_id: rp_session_id)
+    selection = RpBaseAppSessionSelection.find_by!(rp_session_id: rp_session.id)
 
-    assert_not RpBaseAppSessionSelection.exists?(rp_session_id: rp_session.id)
+    assert_equal 1, BaseSelectorAuthority.new(surface: :app, principal: @user, session: rp_session)
+      .selectable_candidates.length
+    assert_equal candidate.account.public_id, selection.account_public_id
   end
 
-  test "freshly provisioned identity receives RP-local selection candidates" do
+  test "freshly provisioned identity is automatically selected when it has one candidate" do
     IdentityGraphProvisioner.call!(surface: :app, principal: @user)
 
     http_headers_5 =
@@ -211,13 +215,19 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     get base_app_selector_url(host: @host), headers: http_headers_5, as: :json
 
     assert_response :success
-    assert_equal "selection_required", response.parsed_body.fetch("status")
-    assert_equal 1, response.parsed_body.fetch("accounts").length
+    assert_equal "selected", response.parsed_body.fetch("status")
     assert_not @token.reload.selected_actor_context?
     assert_equal 1, ClientIdentity.where(source_record_id: @user.id).count
+    rp_session_id = @base_browser_rp_session_public_ids.fetch([RpBaseAppSession::CLIENT_ID, @token.public_id])
+    rp_session = RpBaseAppSession.find_by!(public_id: rp_session_id)
+
+    assert_predicate RpBaseAppSessionSelection.find_by!(rp_session_id: rp_session.id), :persisted?
+    assert_equal 1, BaseSelectorAuthority.new(surface: :app, principal: @user, session: rp_session)
+      .selectable_candidates.length
   end
 
-  test "html selector renders for a single RP-local candidate without auto-selecting it" do
+  test "html selector automatically selects the only RP-local candidate" do
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     http_headers_4 =
       begin
         rp_headers = as_user_headers(
@@ -300,13 +310,18 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     get base_app_selector_url(host: @host, ri: "jp"),
         headers: http_headers_4
 
-    assert_response :success
-    assert_equal "base/app/selectors/show", inertia_component
+    assert_response :redirect
+    assert_redirected_to base_app_dashboard_path(ri: "jp")
     assert_not @token.reload.selected_actor_context?
     rp_session_id = @base_browser_rp_session_public_ids.fetch([RpBaseAppSession::CLIENT_ID, @token.public_id])
     rp_session = RpBaseAppSession.find_by!(public_id: rp_session_id)
+    candidates = BaseSelectorAuthority.new(surface: :app, principal: @user, session: rp_session)
+      .selectable_candidates
 
-    assert_not RpBaseAppSessionSelection.exists?(rp_session_id: rp_session.id)
+    selection = RpBaseAppSessionSelection.find_by!(rp_session_id: rp_session.id)
+
+    assert_equal 1, candidates.size
+    assert_equal candidates.first.dig(:public, :account_public_id), selection.account_public_id
   end
 
   test "html selector request for an already selected session redirects to switcher" do
@@ -398,8 +413,9 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
           headers: http_headers_3,
           as: :json
 
-    assert_response :see_other
-    assert_redirected_to base_app_switcher_path(ri: "jp")
+    assert_response :conflict
+    assert_equal "already_selected", response.parsed_body.fetch("status")
+    assert_equal base_app_switcher_path(ri: "jp"), response.parsed_body.fetch("next")
 
     get base_app_selector_url(host: @host, ri: "jp"),
         headers: http_headers_3
@@ -505,8 +521,12 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     get base_app_selector_url(host: @host, ri: "jp", fb: binding), headers: auth_headers, as: :json
 
     assert_response :success
-    assert_equal "selection_required", response.parsed_body.fetch("status")
+    assert_equal "selected", response.parsed_body.fetch("status")
     assert_not @token.reload.selected_actor_context?
+    session_public_id = @base_browser_rp_session_public_ids.fetch([RpBaseAppSession::CLIENT_ID, @token.public_id])
+    session = RpBaseAppSession.find_by!(public_id: session_public_id)
+
+    assert_predicate RpBaseAppSessionSelection.find_by!(rp_session_id: session.id), :persisted?
   end
 
   test "json selector request stays json when the RP session has a local selection" do
@@ -598,7 +618,9 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
           headers: http_headers_2,
           as: :json
 
-    assert_response :success
+    assert_response :conflict
+    assert_equal "already_selected", response.parsed_body.fetch("status")
+    assert_equal base_app_switcher_path(ri: "jp"), response.parsed_body.fetch("next")
 
     get base_app_selector_url(host: @host, ri: "jp"),
         headers: http_headers_2,

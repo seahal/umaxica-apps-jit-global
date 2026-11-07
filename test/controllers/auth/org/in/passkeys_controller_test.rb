@@ -180,6 +180,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       transaction: transaction.merge("issued_at" => transaction.fetch("issued_at") - 1),
       surface: "org", phase: "PRIMARY_PENDING",
     )
+    cookies_before = cookies.to_hash.deep_dup
     token_count = OperatorToken.count
 
     assert_nil session[:passkey_challenges]
@@ -187,24 +188,29 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     [nil, "", "invalid-binding", stale_binding].each do |binding|
       get new_auth_org_sign_in_passkey_path, params: { ri: "jp", fb: binding }
 
+      restart_url = base_org_sign_show_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), protocol: "https", ri: "jp")
+
       assert_equal(
-        { status: 409, media_type: "text/plain", body: "この画面は古くなっています。最初からやり直してください。", location: nil, no_store: true },
-        {
-          status: response.status,
-          media_type: response.media_type,
-          body: response.body,
-          location: response.headers["Location"],
-          no_store: response.headers["Cache-Control"].include?("no-store"),
-        },
+        [
+          409, true, nil, true, transaction, cookies_before,
+        ],
+        [
+          response.status, response.body.include?(restart_url), response.headers["Location"],
+          response.headers["Cache-Control"].include?("no-store"),
+          session.fetch(OrgNormalSignInTransaction::SESSION_KEY), cookies.to_hash,
+        ],
       )
-      assert_equal transaction, session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
 
       head new_auth_org_sign_in_passkey_path, params: { ri: "jp", fb: binding }
 
-      assert_response :conflict
-      assert_equal ["", nil], [response.body, response.headers["Location"]]
-      assert_includes response.headers["Cache-Control"], "no-store"
-      assert_equal transaction, session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
+      assert_equal(
+        [409, "", nil, true, transaction],
+        [
+          response.status, response.body, response.headers["Location"],
+          response.headers["Cache-Control"].include?("no-store"),
+          session.fetch(OrgNormalSignInTransaction::SESSION_KEY),
+        ],
+      )
     end
 
     assert_equal token_count, OperatorToken.count

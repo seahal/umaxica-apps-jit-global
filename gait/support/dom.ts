@@ -17,7 +17,7 @@ export function requireInput(root: ParentNode, selector: string): HTMLInputEleme
   const element = requireElement(root, selector);
 
   if (!(element instanceof HTMLInputElement)) {
-    throw new Error(`The element matching ${selector} is not an input.`);
+    throw new TypeError(`The element matching ${selector} is not an input.`);
   }
 
   return element;

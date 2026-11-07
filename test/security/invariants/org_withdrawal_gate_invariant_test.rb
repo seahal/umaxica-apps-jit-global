@@ -15,9 +15,28 @@ module Security
         org_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
         host! org_host
         operator = operators(:one)
+        headers = as_staff_headers(operator, host: org_host)
+        get base_org_selector_url(host: org_host), headers: headers, as: :json
+
+        assert_response :success
+        selector_result = response.parsed_body
+
+        if selector_result.fetch("status") == "selection_required"
+          candidate = selector_result.fetch("accounts").first
+
+          assert_predicate candidate, :present?
+
+          patch base_org_selector_url(host: org_host), params: candidate, headers: headers, as: :json
+
+          assert_response :success
+          assert_equal "selected", response.parsed_body.fetch("status")
+        else
+          assert_equal "selected", selector_result.fetch("status")
+        end
+
         operator.update!(withdrawal_started_at: 1.hour.ago)
 
-        get base_org_identity_url(ri: "jp"), headers: as_staff_headers(operator, host: org_host)
+        get base_org_identity_url(ri: "jp"), headers: headers
 
         assert_predicate operator.reload, :closing?
         assert_response :redirect

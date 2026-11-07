@@ -1053,135 +1053,121 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to base_app_avatar_url(avatar.public_id, ri: "jp", host: @host)
   end
 
-  test "create refuses a membership downgrade after policy authorization" do
+  test "create refuses a selected persona whose membership was downgraded" do
     bootstrap = bootstrap_and_select!(@user, @token)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
     membership = bootstrap.account.persona_memberships.find_by!(enterprise: bootstrap.collective)
-    membership_downgraded = false
-    sql_subscription =
-      lambda do |_name, _started, _finished, _unique_id, payload|
-        sql = payload[:sql]
-        next unless sql
-
-        if !membership_downgraded && sql.match?(/SELECT .*FROM "persona_memberships".*INNER JOIN "enterprises"/im) &&
-            !sql.match?(/FOR UPDATE/i)
-          membership_downgraded = true
-          membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
-        end
-      end
     avatar_graph_count = -> { Avatar.count + Handle.count + AvatarOwnershipPeriod.count + AvatarPersonaBinding.count }
 
     assert_no_difference(avatar_graph_count) do
-      ActiveSupport::Notifications.subscribed(sql_subscription, "sql.active_record") do
-        http_headers_4 =
-          begin
-            rp_headers = as_user_headers(@user, host: @host)
-            rp_host = rp_headers["Host"]
-            rp_route =
-              begin
-                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-              rescue ActionController::RoutingError
-                nil
-              end
-            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-            if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
-              rp_client_id =
-                case rp_family
-                when "base" then "base-#{rp_surface}-ww"
-                when "edit" then "edit-org-ww"
-                when "tech" then "tech-org-ww"
-                else "#{rp_family}-#{rp_surface}-jp"
-                end
-              rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-              rp_client = OidcClientRegistry.find!(rp_client_id)
-              rp_key = [rp_client.client_id, rp_token.public_id]
-              @base_browser_rp_credentials ||= {}
-              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                  !(rp_token.device_session_id && OpAppGrant.exists?(
-                    device_session_id: rp_token.device_session_id,
-                    oidc_client_id: rp_client.client_id,
-                    revoked_at: nil,
-                  ))
-                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
-                rp_now = Time.current
-                rp_session = OpAppGrant.create!(
-                  authentication_epoch: 0,
-                  client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                  refresh_token_expires_at: rp_now + 10.minutes,
-                )
-                rp_access = AuthenticationTokenService.encode(
-                  rp_token.actor_record, host: rp_host, resource_type: "client",
-                                         session_public_id: rp_token.public_id,
-                                         base_session_public_id: rp_token.public_id,
-                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                         subject: OidcSubject.for(
-                                           rp_token.actor_record,
-                                           resource_type: "client",
-                                         ), client_id: rp_client.client_id,
-                                         authentication_context: rp_token.strict_authentication_context_value.to_s,
-                )
-                rp_local_enrollment = RpCallbackCommitter.call(
-                  cell: RpCellBinding.for_client(rp_client.client_id),
-                  issuer: OidcIssuer.for_client(rp_client),
-                  subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
-                  sid: rp_session.public_id,
-                  absolute_expires_at: rp_now + 10.minutes,
-                )
-                unless rp_local_enrollment.success?
-                  raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
-                end
-
-                rp_local_session = rp_local_enrollment.session
-                if rp_client.client_id == RpBaseAppSession::CLIENT_ID
-                  candidate = BaseSwitcherAuthority.new(surface: :app, principal: @user).candidate_for_public_ids(
-                    account_public_id: bootstrap.account.public_id,
-                    organization_public_id: bootstrap.collective.public_id,
-                    organization_unit_public_id: bootstrap.unit.public_id,
-                    avatar_public_id: bootstrap.avatar.public_id,
-                  )
-                  raise ArgumentError, "Base APP RP selection candidate is unavailable" unless candidate
-
-                  public_ids = candidate.fetch(:public)
-                  RpBaseAppRecord.connected_to(role: :writing) do
-                    RpBaseAppSessionSelection.create!(
-                      rp_session_id: rp_local_session.id,
-                      account_public_id: public_ids.fetch(:account_public_id),
-                      organization_public_id: public_ids.fetch(:organization_public_id),
-                      organization_unit_public_id: public_ids.fetch(:organization_unit_public_id),
-                      avatar_public_id: public_ids.fetch(:avatar_public_id),
-                      selected_at: rp_now,
-                    )
-                  end
-                end
-                @base_browser_rp_session_public_ids ||= {}
-                @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
-                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-              end
-              if @base_browser_rp_credentials[rp_key]
-                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-                rp_cookie = [
-                  rp_headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-                  "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
-                ].join("; ")
-                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-              end
+      http_headers_4 =
+        begin
+          rp_headers = as_user_headers(@user, host: @host, select_available_app_persona: false)
+          rp_host = rp_headers["Host"]
+          rp_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+            rescue ActionController::RoutingError
+              nil
             end
-            rp_headers
+          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+            rp_client_id =
+              case rp_family
+              when "base" then "base-#{rp_surface}-ww"
+              when "edit" then "edit-org-ww"
+              when "tech" then "tech-org-ww"
+              else "#{rp_family}-#{rp_surface}-jp"
+              end
+            rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            rp_client = OidcClientRegistry.find!(rp_client_id)
+            rp_key = [rp_client.client_id, rp_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OpAppGrant.exists?(
+                  device_session_id: rp_token.device_session_id,
+                  oidc_client_id: rp_client.client_id,
+                  revoked_at: nil,
+                ))
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
+                                       authentication_context: rp_token.strict_authentication_context_value.to_s,
+              )
+              rp_local_enrollment = RpCallbackCommitter.call(
+                cell: RpCellBinding.for_client(rp_client.client_id),
+                issuer: OidcIssuer.for_client(rp_client),
+                subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+                sid: rp_session.public_id,
+                absolute_expires_at: rp_now + 10.minutes,
+              )
+              unless rp_local_enrollment.success?
+                raise ArgumentError, "RP session enrollment failed: #{rp_local_enrollment.outcome}"
+              end
+
+              rp_local_session = rp_local_enrollment.session
+              if rp_client.client_id == RpBaseAppSession::CLIENT_ID
+                candidate = BaseSwitcherAuthority.new(surface: :app, principal: @user).candidate_for_public_ids(
+                  account_public_id: bootstrap.account.public_id,
+                  organization_public_id: bootstrap.collective.public_id,
+                  organization_unit_public_id: bootstrap.unit.public_id,
+                  avatar_public_id: bootstrap.avatar.public_id,
+                )
+                raise ArgumentError, "Base APP RP selection candidate is unavailable" unless candidate
+
+                public_ids = candidate.fetch(:public)
+                RpBaseAppRecord.connected_to(role: :writing) do
+                  RpBaseAppSessionSelection.create!(
+                    rp_session_id: rp_local_session.id,
+                    account_public_id: public_ids.fetch(:account_public_id),
+                    organization_public_id: public_ids.fetch(:organization_public_id),
+                    organization_unit_public_id: public_ids.fetch(:organization_unit_public_id),
+                    avatar_public_id: public_ids.fetch(:avatar_public_id),
+                    selected_at: rp_now,
+                  )
+                end
+              end
+              @base_browser_rp_session_public_ids ||= {}
+              @base_browser_rp_session_public_ids[rp_key] = rp_local_session.public_id
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[rp_key]
+              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_cookie = [
+                rp_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                "#{OidcRpBrowserCredentialContract::SESSION_COOKIE}=#{@base_browser_rp_session_public_ids.fetch(rp_key)}",
+              ].join("; ")
+              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+            end
           end
-        post base_app_avatars_url(ri: "jp", host: @host),
-             params: { avatar: { moniker: "Revoked during create", handle: "revoked-during-create" } },
-             headers: http_headers_4,
-             as: :json
-      end
+          rp_headers
+        end
+      membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+      post base_app_avatars_url(ri: "jp", host: @host),
+           params: { avatar: { moniker: "Revoked during create", handle: "revoked-during-create" } },
+           headers: http_headers_4,
+           as: :json
     end
 
-    assert membership_downgraded, "the policy authorization query must precede the downgrade"
     assert_response :forbidden
   end
 

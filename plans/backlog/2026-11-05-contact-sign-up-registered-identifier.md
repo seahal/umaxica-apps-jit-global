@@ -162,3 +162,14 @@ Applies to email and telephone, sign-up and post-sign-in registration.
   create/resend action, and keep the actual delivery asynchronous (job enqueue) so the send path
   does no slow network I/O in the request. Set the floor above the observed slowest path, and add a
   test that both paths call the same floor rather than measuring wall-clock time.
+
+## Follow-up after `specs/browser-flow-state-cookies` (owner, 2026-11-06)
+
+Not yet started; the owner scheduled it after the browser flow cookie change. Suspected, not
+verified: registered destinations now get no send, so they never accrue the per-candidate cooldown
+that unregistered destinations accrue. Repeated sends could then reveal registration through the
+cooldown response. Make cooldown and send-budget accounting identical for registered and
+unregistered destinations, and connect it to the destination budgets in
+`docs/backlog/2026-10-22-email-sign-up-delivery-limits.md`,
+`docs/backlog/2026-10-22-telephone-sign-up-delivery-limits.md` and
+`docs/backlog/2026-10-22-sign-up-confirmation-resend-limits.md`.

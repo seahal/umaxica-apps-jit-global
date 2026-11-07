@@ -9,8 +9,6 @@ module SignFlow
     include ::PublicId
     include ::Retainable
 
-    self.belongs_to_required_by_default = false
-
     attribute :issued_at, :datetime, default: -> { Time.current }
     attribute :expires_at, :datetime, default: -> { default_ttl.from_now }
 

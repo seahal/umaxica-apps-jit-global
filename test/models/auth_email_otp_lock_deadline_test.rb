@@ -72,7 +72,8 @@ class AuthEmailOtpLockDeadlineTest < ActiveSupport::TestCase
         assert_equal source, contact.reload.attributes
         if deadline_kind.start_with?("parent")
           # The OIDC parent is refused by its own deadline columns; the refusal writes nothing to it.
-          assert_equal "pending", issuance.transaction.reload.status
+          assert_equal ClientOidcAuthorizationTransactionStatus::PENDING,
+                       issuance.transaction.reload.status_id
         end
       end
     end

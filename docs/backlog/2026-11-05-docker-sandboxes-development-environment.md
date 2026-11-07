@@ -85,6 +85,79 @@ exposure risky. Removal is a separate, approved change.
    `.devcontainer/` and host-native traces. Largest change.
 3. **No Docker Sandboxes; harden the existing `core`.** Run agents only inside `core`, never on the
    host; add outbound allowlisting and keep host credentials out of `core`.
+4. **Full virtual machine as the development environment.** Run Rails, Vite/Inertia, agents and
+   Chromium natively inside a VM on the bare-metal host, with `compose.yaml` infrastructure running
+   in rootless Podman inside the same VM. See "Option 4: virtual machine" below.
+
+## Option 4: virtual machine
+
+Status: added on 2026-11-06 at the owner's request; the owner is building the VM. Not decided. No
+code, Compose or operations-document change is authorized by this section.
+
+### Rationale (discussion on 2026-11-06)
+
+- Isolation: the VM boundary contains a compromised gem, npm package or agent away from the host's
+  home directory and root, which meets the rootless requirement without nested-container friction
+  (for example the Codex bubblewrap failure inside rootless Podman).
+- Required capabilities: Chromium runs natively in the VM, custom names resolve through the VM's
+  `/etc/hosts`, and the VM console (SPICE or similar) replaces the Xvfb/x11vnc/noVNC desktop.
+- Snapshots give a rollback point before dependency updates.
+- Tailscale stays out of the VM; remote access, if needed, terminates on the host.
+
+### Hypervisor
+
+Prefer KVM (libvirt `qemu:///session` with virt-manager, or Quickemu) over VirtualBox. Inference, not
+yet verified: VirtualBox's out-of-tree kernel modules tend to break on rolling-release host kernels
+(the host runs Omarchy, kernel 7.2) and conflict with KVM.
+
+### Intended layout
+
+- Keep the repository checkout inside the VM and exchange changes through git; do not mount the
+  host checkout through a shared folder, which would restore a write path to the host and slow I/O.
+- Development and test credentials (`config/credentials/*.key`, `.env`, `gh` and agent OAuth state)
+  must exist inside the VM. The VM protects the host, not the repository's secrets.
+- Run `compose.yaml` services (PostgreSQL, Valkey, fakecloud) in rootless Podman inside the VM; run
+  Rails, Vite and agents natively in the VM. `.devcontainer/` is not used on this path.
+- Out of scope for the first iteration: OpenTelemetry and the observability stack, whose current
+  behavior is unverified. The existing host-native transports remain available for later work:
+  Alloy tails the read-only `./log` mount and publishes OTLP/HTTP on `127.0.0.1:4318`
+  (`compose.yaml`, `alloy` service). Pipeline behavior beyond instrumentation output belongs to
+  staging.
+
+### Known blocker: fixed database endpoints
+
+`config/database.yml` fixes development and test hosts to `primary`/`replica` and the port to
+`5432`, while `compose.yaml` publishes primary on `127.0.0.1:5432` and replica on `127.0.0.1:5433`.
+Mapping both names to `127.0.0.1` in `/etc/hosts` would route replica traffic to primary.
+Candidates:
+
+1. Proof of concept without code change: resolve `primary` to `127.0.0.1` and `replica` to
+   `127.0.0.2`, and publish replica on `127.0.0.2:5432` through the untracked
+   `compose.override.yaml` (the tracked file exposes the port, not the bind address).
+2. Adopted layout: read database host and port from required environment variables with
+   one-argument `ENV.fetch` (`adr/env-fetch-without-default.md`). This changes a deliberate
+   Dev Container assumption and needs its own decision.
+
+### VM prerequisites
+
+Ruby 4.0.7 (`.ruby-version`), Bun 1.4.0 (`package.json` `packageManager`), `bundle install`,
+`bun install --frozen-lockfile`, Playwright Chromium
+(`node node_modules/playwright/cli.js install --with-deps chromium`), the credential keys and `.env`.
+For the Rails browser E2E, `VALKEY_KVS_HOST=127.0.0.1` and `VALKEY_KVS_PORT=6381` satisfy the
+loopback-only KVS rule in `docs/operations/rails-browser-e2e.md`.
+
+### Acceptance for the proof of concept
+
+1. `bin/rails test` passes inside the VM.
+2. `bun run check` passes inside the VM.
+3. `bun run test:e2e:rails` passes inside the VM.
+4. Rails and Vite development servers start, and the VM's Chromium renders the `*.localhost`
+   surfaces through Inertia.
+5. Results, the commit and any uncommitted changes are recorded in `evidence/`.
+
+If adopted, the same change resolves the host-native contradiction noted above and updates README,
+`docs/operations/development-environment-setup.md`, `docs/operations/rails-browser-e2e.md` ("Run
+inside the Dev Container") and the relationship to `adr/container-support-directory-podman-only.md`.
 
 ## Questions to answer before choosing
 

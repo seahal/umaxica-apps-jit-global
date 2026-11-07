@@ -6,22 +6,29 @@
 #
 # Server-to-server from the Base Self-RP of the same realm: the caller proves itself with its
 # private_key_jwt bound to the exact URL (no query string) and presents the actor's Access JWT.
-# The owner re-resolves everything itself: the real actor from the token, the root (and its
-# selected collective) from the token's grant `sid`, and the persona from the request, which must
-# belong to that actor. Existing Avatar policy, ownership-period and membership checks then apply.
+# The owner re-resolves everything itself: the real actor from the token and the complete selected
+# context from request identifiers. It matches that tuple against the actor's selectable candidates;
+# the RP's selection is transport, never authority. Existing Avatar policy, ownership-period and
+# membership checks then apply.
 module AvatarAuthorityApiEndpoint
   extend ActiveSupport::Concern
 
   REALMS = {
-    "app" => { client_id: "base-app-ww", resource_type: "client", grant: "OpAppGrant" },
-    "org" => { client_id: "base-org-ww", resource_type: "operator", grant: "OpOrgGrant" },
+    "app" => { surface: :app, client_id: "base-app-ww", resource_type: "client", grant: OpAppGrant },
+    "org" => { surface: :org, client_id: "base-org-ww", resource_type: "operator", grant: OpOrgGrant },
   }.freeze
 
   private
 
   attr_reader :avatar_actor, :avatar_root
 
-  def avatar_realm = REALMS.fetch(self.class.const_get(:AVATAR_SURFACE, false))
+  def avatar_realm
+    case self.class::AVATAR_SURFACE
+    when "app" then REALMS.fetch("app")
+    when "org" then REALMS.fetch("org")
+    else raise ArgumentError, "unsupported Avatar API surface"
+    end
+  end
 
   def authenticate_avatar_caller!
     response.headers["Cache-Control"] = "no-store"
@@ -44,7 +51,7 @@ module AvatarAuthorityApiEndpoint
       return render(json: { error: "invalid_token" }, status: :unauthorized)
     end
 
-    grant = realm.fetch(:grant).constantize.find_by(
+    grant = realm.fetch(:grant).find_by(
       public_id: auth.payload["sid"],
       oidc_client_id: realm.fetch(:client_id),
     )
@@ -57,36 +64,32 @@ module AvatarAuthorityApiEndpoint
     )
   end
 
-  # APP selection is owned by the Base RP session. The owner treats every supplied identifier as
-  # untrusted and resolves the complete tuple against this verified actor's real candidates before
-  # installing it for the existing Avatar policies. ORG retains its OP-root selection contract.
+  # Base APP and ORG selections are owned by their RP sessions. The owner treats every supplied
+  # identifier as untrusted and resolves the complete tuple against this verified actor's real
+  # candidates before installing it for the existing Avatar policies.
   def verify_avatar_persona!
-    persona = params[:persona].to_s
-    if self.class.const_get(:AVATAR_SURFACE, false) == "app"
-      candidate = BaseSwitcherAuthority.new(surface: :app, principal: avatar_actor).candidate_for_public_ids(
-        account_public_id: persona,
-        organization_public_id: params[:organization_public_id],
-        organization_unit_public_id: params[:organization_unit_public_id],
-        avatar_public_id: params[:avatar_public_id],
-      )
-      return render_forbidden unless candidate
+    candidate = BaseSwitcherAuthority.new(
+      surface: avatar_realm.fetch(:surface), principal: avatar_actor,
+    ).candidate_for_public_ids(
+      account_public_id: params[:persona],
+      organization_public_id: params[:organization_public_id],
+      organization_unit_public_id: params[:organization_unit_public_id],
+      avatar_public_id: params[:avatar_public_id],
+    )
+    return render_forbidden unless candidate
 
-      public_ids = candidate.fetch(:public)
-      @avatar_switcher = BaseSwitcherAuthority.new(
-        surface: :app, principal: avatar_actor, selection: public_ids,
-      )
-      Actor.selection = Actor::SelectedContext.new(
+    public_ids = candidate.fetch(:public)
+    @avatar_switcher = BaseSwitcherAuthority.new(
+      surface: avatar_realm.fetch(:surface), principal: avatar_actor, selection: public_ids,
+    )
+    Actor.install_context!(
+      selection: Actor::SelectedContext.new(
         account_public_id: public_ids.fetch(:account_public_id),
         collective_public_id: public_ids.fetch(:organization_public_id),
         collective_unit_public_id: public_ids.fetch(:organization_unit_public_id),
         avatar_public_id: public_ids.fetch(:avatar_public_id),
-      )
-      return
-    end
-
-    return if persona.present? && persona == avatar_root.try(:selected_account_public_id).to_s
-
-    render_forbidden
+      ),
+    )
   end
 
   # Keep the OP transaction open while the domain writer rechecks and commits. The writer obtains

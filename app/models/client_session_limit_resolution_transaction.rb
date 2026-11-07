@@ -4,8 +4,6 @@
 class ClientSessionLimitResolutionTransaction < OpBaseAppRecord
   include SessionLimitResolutionTransactionable
 
-  self.belongs_to_required_by_default = false
-
   # These names make the D-31 state vocabulary readable at call sites.
   PENDING = SessionLimitResolutionTransactionable::PENDING
   SESSION_SELECTED = SessionLimitResolutionTransactionable::SESSION_SELECTED
@@ -29,10 +27,6 @@ class ClientSessionLimitResolutionTransaction < OpBaseAppRecord
             uniqueness: { conditions: -> { where(waiting_slot: SessionLimitResolutionTransactionable::WAITING_SLOT) } },
             on: :create, if: -> { waiting_slot == SessionLimitResolutionTransactionable::WAITING_SLOT }
   validates :challenge_digest, presence: true, uniqueness: true
-  # belongs_to_required_by_default is disabled, so keep these explicit checks.
-  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
-  validates :state_id, :sign_in_flow_id, presence: true
-  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
   validates :state_id,
             inclusion: { in: SessionLimitResolutionTransactionable::TRANSITIONS.keys }
   validate :waiting_slot_matches_state

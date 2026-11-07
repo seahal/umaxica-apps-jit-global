@@ -13,12 +13,13 @@ grant as `current_session` (selected collective) and `Actor.selection` (selected
 ## After (proposed)
 
 Server-to-server, same pattern as Publishing (R5-WU13): the Base RP sends its private_key_jwt bound
-to the exact URL and the actor's Access JWT. For APP, Base reads the complete selected context from
-its RP session and sends the Persona, organization, unit and Avatar public IDs. The Avatar owner
-re-resolves the real actor from the Access Token and matches that complete tuple against candidates
-the actor may select; it never reads APP selection from the OP root or trusts the supplied IDs by
-themselves. The RP session remains the sole APP selection writer. ORG continues to use its existing
-OP-root selected context. Both surfaces then apply the existing `AvatarPolicy` /
+to the exact URL and the actor's Access JWT. Base reads the selected context from its RP session and
+sends the Persona, organization and unit public IDs. APP reads the Avatar ID from its RP session
+selection row; ORG reads the optional Avatar ID from a child row keyed to the RP session's actor
+selection. No child row means no Avatar is selected. The Avatar owner re-resolves the real actor
+from the Access Token and matches the complete tuple against candidates the actor may select; it
+never reads selection from the OP root or trusts the supplied IDs by themselves. The RP session
+remains the sole Base APP/ORG selection writer. Both surfaces then apply the existing `AvatarPolicy` /
 `AvatarPermissionResolver` / ownership-period checks and Operations. Answers are allowlisted JSON.
 The former APP `GET /api/v0/identity/selection` root-token reader returns `409` and exposes no
 competing selection.
@@ -46,6 +47,10 @@ Writes are not blindly retried; an indeterminate write is re-read.
 
 ## Questions resolved on 2026-11-05
 
-1. APP selection is owned by the Base RP session. The owner receives the full selected tuple and
-   validates it against the authenticated actor's candidates before applying Avatar policies.
+1. APP and ORG Base selection is owned by the corresponding Base RP session. The owner receives the
+   selected tuple and validates it against the authenticated actor's candidates before applying
+   Avatar policies.
 2. Serving private image bytes through the Avatar API remains accepted as specified above.
+3. ORG's RP-local actor selection stores account, organization and unit; its optional Avatar context
+   is stored in `rp_base_org_session_avatar_selections`, with one NOT NULL Avatar ID per selected
+   actor session. The actor and Avatar selection writes share the RP session lock.

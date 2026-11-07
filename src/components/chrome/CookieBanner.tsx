@@ -79,13 +79,14 @@ function CookieBannerPrompt({
   // raise a banner the server had already said to hide.
   const reconciled = useRef(false);
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
+    const { signal } = controller;
 
     // The legacy app/org projection only raises the banner; the endpoint decides whether to hide it.
     const readConsentBuffer = async () => {
       const recorded = await hasRecordedCookieConsent();
 
-      if (active && !answered.current && !reconciled.current && !recorded) {
+      if (!signal.aborted && !answered.current && !reconciled.current && !recorded) {
         setVisible(true);
       }
     };
@@ -94,12 +95,12 @@ function CookieBannerPrompt({
 
     const readConsent = async () => {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal });
         if (!response.ok) {
           return;
         }
         const state: unknown = await response.json();
-        if (active && !answered.current) {
+        if (!signal.aborted && !answered.current) {
           reconciled.current = true;
           // `show_banner` is the field the endpoint answers with
           // (`PreferenceWebCookieActions#show`). Reading `consented` here - a key that response
@@ -121,7 +122,7 @@ function CookieBannerPrompt({
     void readConsent();
 
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [controls.scope, endpointUrl]);
 

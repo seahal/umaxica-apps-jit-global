@@ -19,13 +19,6 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
     # The selector-ready graph exists before withdrawal starts, as it does for a real account;
     # Avatar provisioning rejects a principal whose withdrawal has already begun.
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @deactivated_user)
-    @deactivated_user.update!(
-      withdrawal_started_at: 1.day.ago,
-      deactivated_at: Time.current,
-      discard_at: Time.current,
-      purge_eligible_at: 31.days.from_now,
-    )
-
     @token = ClientToken.create!(
       authentication_epoch: 0,
       user: @deactivated_user,
@@ -99,6 +92,13 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+
+    @deactivated_user.update!(
+      withdrawal_started_at: 1.day.ago,
+      deactivated_at: Time.current,
+      discard_at: Time.current,
+      purge_eligible_at: 31.days.from_now,
+    )
   end
 
   test "deactivated user accessing normal page redirects to withdrawal session entry" do

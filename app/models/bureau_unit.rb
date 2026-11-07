@@ -35,9 +35,11 @@ class BureauUnit < OrgRpRecord
                          closure_class_name: "BureauUnitClosure"
 
   belongs_to :bureau, inverse_of: :bureau_units
+  # A unit with no parent is the root of its bureau hierarchy.
   belongs_to :parent,
              class_name: "BureauUnit",
-             inverse_of: :children
+             inverse_of: :children,
+             optional: true
   has_many :children,
            class_name: "BureauUnit",
            foreign_key: :parent_id,

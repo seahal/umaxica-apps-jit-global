@@ -66,12 +66,17 @@ class AgentMembership < OrgRpRecord
   belongs_to :membership_state,
              class_name: "AgentMembershipState",
              inverse_of: :agent_memberships
+  # Active memberships have no revocation reason until revoked.
   belongs_to :revoke_reason,
              class_name: "AgentMembershipRevokeReason",
-             inverse_of: :agent_memberships
-  belongs_to :granted_by_agent, class_name: "Agent", inverse_of: false
-  belongs_to :approved_by_agent, class_name: "Agent", inverse_of: false
-  belongs_to :revoked_by_agent, class_name: "Agent", inverse_of: false
+             inverse_of: :agent_memberships,
+             optional: true
+  # Audit attribution is nullable and is nullified if its actor is deleted.
+  belongs_to :granted_by_agent, class_name: "Agent", inverse_of: false, optional: true
+  # Audit attribution is nullable and is nullified if its actor is deleted.
+  belongs_to :approved_by_agent, class_name: "Agent", inverse_of: false, optional: true
+  # Audit attribution is nullable and is nullified if its actor is deleted.
+  belongs_to :revoked_by_agent, class_name: "Agent", inverse_of: false, optional: true
 
   validates :agent_id,
             uniqueness: {

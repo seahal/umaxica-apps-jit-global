@@ -15,7 +15,8 @@
     "@tailwindcss/forms",
     "@tailwindcss/typography",
     "linkinator",
-    "@inertiajs/core"
+    // `.herb.yml` enables the Herb linter for editor template diagnostics.
+    "@herb-tools/linter"
   ],
   "includeEntryExports": false,
   "exclude": ["types", "nsTypes", "catalog"]

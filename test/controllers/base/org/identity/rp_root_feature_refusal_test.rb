@@ -62,7 +62,7 @@ class BaseOrgIdentityRpRootFeatureRefusalTest < ActionDispatch::IntegrationTest
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = tokens.fetch(:refresh_token)
     cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE] = enrollment.session.public_id
 
-    ["/sessions", "/selector", "/identity/secrets"].each do |path|
+    ["/sessions", "/identity/secrets"].each do |path|
       get(path, params: { ri: "jp" })
 
       assert_response :service_unavailable

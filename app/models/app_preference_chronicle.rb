@@ -42,15 +42,15 @@
 class AppPreferenceChronicle < ChronicleRecord
   PREFERENCE_AUDIT_LOCK_KEY = 88_038_921_016_974
 
-  self.belongs_to_required_by_default = false
-
   include Retainable
 
+  # Audit rows may describe another subject type; the guarded callback checks AppPreference references.
   belongs_to :app_preference,
              class_name: "AppPreference",
              foreign_key: :subject_id,
              primary_key: :id,
-             inverse_of: :app_preference_chronicles
+             inverse_of: :app_preference_chronicles,
+             optional: true
   belongs_to :app_preference_chronicle_level, foreign_key: :level_id, inverse_of: :app_preference_chronicles
   belongs_to :app_preference_chronicle_event,
              class_name: "AppPreferenceChronicleEvent",

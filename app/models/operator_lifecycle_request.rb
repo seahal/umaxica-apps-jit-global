@@ -45,8 +45,6 @@
 #  fk_rails_...  (requested_by_operator_id => operators.id) ON DELETE => restrict
 #
 class OperatorLifecycleRequest < OrgPrincipalRecord
-  self.belongs_to_required_by_default = false
-
   include PublicId
 
   ACTION_JOIN = "join"
@@ -65,16 +63,20 @@ class OperatorLifecycleRequest < OrgPrincipalRecord
 
   attr_accessor :target_operator_public_id
 
+  # Join requests name a not-yet-existing operator by email; other actions validate this association.
   belongs_to :target_operator,
-             class_name: "Operator"
+             class_name: "Operator", optional: true
   belongs_to :requested_by_operator,
              class_name: "Operator"
+  # Pending requests have no approving actor.
   belongs_to :approved_by_operator,
-             class_name: "Operator"
+             class_name: "Operator", optional: true
+  # Requests that were not rejected have no rejecting actor.
   belongs_to :rejected_by_operator,
-             class_name: "Operator"
+             class_name: "Operator", optional: true
+  # Requests that have not executed have no executing actor.
   belongs_to :executed_by_operator,
-             class_name: "Operator"
+             class_name: "Operator", optional: true
 
   validates :action, presence: true, inclusion: { in: ACTIONS }
   validates :status, inclusion: { in: STATUSES }

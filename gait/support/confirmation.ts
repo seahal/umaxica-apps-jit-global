@@ -10,16 +10,10 @@ import { act } from "react";
 
 const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>("[role='dialog']");
 
-export const confirmationButtons = (): HTMLButtonElement[] => [
-  ...(dialog()?.querySelectorAll("button") ?? []),
-];
-
 export const answerConfirmation = (accepted: boolean) => {
-  const button = confirmationButtons()[accepted ? 1 : 0];
+  const buttons = [...(dialog()?.querySelectorAll("button") ?? [])];
+  const button = buttons[accepted ? 1 : 0];
   act(() => {
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 };
-
-/** Accepting, for the specs that only ever take the destructive branch. */
-export const acceptConfirmation = () => answerConfirmation(true);

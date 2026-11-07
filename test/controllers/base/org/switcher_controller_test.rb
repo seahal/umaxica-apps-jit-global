@@ -103,6 +103,11 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_3, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     get base_org_switcher_url(host: @host), headers: http_headers_3, as: :json
 
     assert_response :success
@@ -192,6 +197,11 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_2, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     get base_org_switcher_url(host: @host, ri: "jp"), headers: http_headers_2
 
     assert_response :success
@@ -287,6 +297,11 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_1, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     patch base_org_switcher_url(host: @host), headers: http_headers_1, params: {
       account_public_id: candidate.fetch(:public_id),
       organization_public_id: candidate.dig(:organization, :public_id),
@@ -406,6 +421,11 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
+    get base_org_selector_url(host: @host), headers: http_headers_0, as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+
     patch base_org_switcher_url(host: @host), headers: http_headers_0, params: {
       account_public_id: avatar_candidate.fetch(:public_id),
       organization_public_id: avatar_candidate.dig(:organization, :public_id),
@@ -415,7 +435,13 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "switched", response.parsed_body.fetch("status")
-    assert_equal avatar_result.avatar.public_id, @token.reload.selected_avatar_public_id
+    rp_session_key = ["base-org-ww", http_headers_0.fetch("X-TEST-SESSION-PUBLIC-ID")]
+    rp_session = RpBaseOrgSession.find_by!(public_id: @base_browser_rp_session_public_ids.fetch(rp_session_key))
+    rp_selection = RpBaseOrgSessionSelection.find_by!(rp_session_id: rp_session.id)
+    avatar_selection = RpBaseOrgSessionAvatarSelection.find_by!(rp_session_id: rp_session.id)
+
+    assert_equal avatar_result.avatar.public_id, avatar_selection.avatar_public_id
+    assert_equal bootstrap.account.public_id, rp_selection.account_public_id
     assert_equal bootstrap.account.public_id, @token.selected_account_public_id
   end
 

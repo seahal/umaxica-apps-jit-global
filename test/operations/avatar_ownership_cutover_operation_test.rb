@@ -8,7 +8,7 @@ class AvatarOwnershipCutoverOperationTest < ActiveSupport::TestCase
 
   setup do
     @capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
-    avatar
+    AvatarRecord.connected_to(role: :writing) { avatar }
   end
 
   def avatar
@@ -101,11 +101,13 @@ class AvatarOwnershipCutoverOperationTest < ActiveSupport::TestCase
   private
 
   def all_avatar_ids
-    Avatar.order(:id).pluck(:id)
+    AvatarRecord.connected_to(role: :writing) do
+      Avatar.order(:id).pluck(:id)
+    end
   end
 
   def all_group_ids
-    AvatarGroup.order(:id).pluck(:id)
+    AvatarRecord.connected_to(role: :writing) { AvatarGroup.order(:id).pluck(:id) }
   end
 
   def within_avatar_rollback

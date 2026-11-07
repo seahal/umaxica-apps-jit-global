@@ -11,8 +11,24 @@ require "active_record/middleware/database_selector"
 # `keep_reads_on_primary!` in setup and `restore_database_selector_delay!` in teardown; while
 # that is in effect every read resolves to the primary.
 module DatabaseSelectorPrimary
+  # Reports a last write of "just now", which keeps `time_since_last_write_ok?` false and the
+  # read on the primary for as long as the surrounding test keeps `forced` set.
+  module FreshLastWrite
+    def last_write_timestamp
+      return Time.current if DatabaseSelectorPrimary.forced
+
+      super
+    end
+  end
+
   class << self
-    attr_accessor :forced
+    def forced
+      @forced
+    end
+
+    def forced=(value)
+      @forced = value
+    end
   end
 
   def keep_reads_on_primary!
@@ -24,12 +40,4 @@ module DatabaseSelectorPrimary
   end
 end
 
-ActiveRecord::Middleware::DatabaseSelector::Resolver::Session.prepend(
-  Module.new do
-    def last_write_timestamp
-      return Time.zone.now if DatabaseSelectorPrimary.forced
-
-      super
-    end
-  end,
-)
+ActiveRecord::Middleware::DatabaseSelector::Resolver::Session.prepend(DatabaseSelectorPrimary::FreshLastWrite)

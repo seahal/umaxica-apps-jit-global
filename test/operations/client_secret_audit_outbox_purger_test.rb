@@ -133,9 +133,17 @@ class ClientSecretAuditOutboxPurgerTest < ActiveSupport::TestCase
     Timeout.timeout(3) do
       sleep 0.01 while Client.database_now < events.map { |event| event.reload.purge_eligible_at }.max
     end
-    perform_enqueued_jobs(only: ClientSecretAuditOutboxPurgeJob) do
-      ClientSecretLifecycleJob.perform_now(batch_size: 1)
-    end
+    ClientSecretAuditOutboxPurgeJob.perform_now(
+      batch_size: 1, after_id: events.first.id - 1, through_id: events.last.id,
+    )
+
+    continuation = enqueued_jobs.find { |entry| entry.fetch(:job) == ClientSecretAuditOutboxPurgeJob }
+
+    assert_predicate continuation, :present?
+    continuation_arguments = continuation.fetch(:args).first
+      .except("_aj_ruby2_keywords")
+      .transform_keys(&:to_sym)
+    ClientSecretAuditOutboxPurgeJob.perform_now(**continuation_arguments)
 
     assert ClientSecretAuditOutbox.exists?(events.first.id)
     assert_not ClientSecretAuditOutbox.uncached { ClientSecretAuditOutbox.exists?(events.last.id) }

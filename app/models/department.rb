@@ -28,11 +28,11 @@
 #
 
 class Department < OrgPrincipalRecord
-  self.belongs_to_required_by_default = false
-
+  # Top-level departments have no parent department.
   belongs_to :parent,
              class_name: "Department",
-             inverse_of: :children
+             inverse_of: :children,
+             optional: true
   has_many :children,
            class_name: "Department",
            foreign_key: :parent_id,
@@ -44,7 +44,8 @@ class Department < OrgPrincipalRecord
              primary_key: :id,
              inverse_of: :departments
 
-  belongs_to :workspace, class_name: "OperatorOrganization", inverse_of: :departments
+  # Departments survive workspace deletion and are detached by the parent's nullify rule.
+  belongs_to :workspace, class_name: "OperatorOrganization", inverse_of: :departments, optional: true
   has_many :operator_workspace_accounts,
            class_name: "OperatorWorkspaceAccount",
            dependent: :nullify,

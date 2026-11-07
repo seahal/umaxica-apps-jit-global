@@ -29,8 +29,6 @@ class ComPreference < ComSettingRecord
   include ::PreferenceResettable
   include ::PreferenceLifecycle
 
-  self.belongs_to_required_by_default = false
-
   ACTIVE_STATUS_ID = ComPreferenceStatus::ACTIVE
   RETIRED_STATUS_ID = ComPreferenceStatus::RETIRED
   DESTROY_DEPENDENT_ASSOCIATIONS = %i(

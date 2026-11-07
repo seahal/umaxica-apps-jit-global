@@ -52,7 +52,7 @@ class RpRequestAuthenticator
 
   def call
     return result(:missing) if access_token.blank?
-    return result(:invalid) if local_session_id.blank?
+    return result(:missing) if local_session_id.blank?
 
     verification = OidcOpAccessTokenVerifier.new(
       access_token:, client_id: cell.client_id, realm: cell.realm, issuer:, audience: cell.client_id,

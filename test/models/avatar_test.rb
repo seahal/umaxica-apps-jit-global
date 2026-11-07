@@ -90,8 +90,8 @@ class AvatarTest < ActiveSupport::TestCase
   test "requires active_handle" do
     avatar = Avatar.new(capability: @capability)
 
-    assert_predicate avatar, :valid?
-    assert_raises(ActiveRecord::NotNullViolation) { avatar.save! }
+    assert_not avatar.valid?
+    assert_includes avatar.errors.attribute_names, :active_handle
   end
 
   test "default image_data is nil until an image is attached" do

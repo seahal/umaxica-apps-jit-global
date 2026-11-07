@@ -465,8 +465,16 @@ module VerificationBase
   # Uses the stable session identifier (device_session.public_id when available) rather than
   # current_session_token.public_id, which changes on every access-token rotation and would
   # invalidate an in-flight step-up pt between the settings redirect and the verification page.
+  # An RP-cell request has no OP root chain, so its verified local RP Session is the binding.
   def bootstrap_pt_session_nonce
-    current_session_public_id.to_s
+    session_public_id = current_session_public_id
+    return session_public_id.to_s if session_public_id.present?
+    return unless browser_rp_controller? && rp_cell_process? && browser_rp_authenticated?
+
+    rp_session = browser_rp_access_state.rp_session
+    return unless rp_session.instance_of?(RpBaseAppSession) || rp_session.instance_of?(RpBaseOrgSession)
+
+    rp_session.public_id.to_s
   end
 
   def bootstrap_pt_surface

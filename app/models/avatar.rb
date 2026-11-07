@@ -45,8 +45,6 @@ class Avatar < AvatarRecord
   include PublicId
   include AvatarImageUploader::Attachment[:image]
 
-  self.belongs_to_required_by_default = false
-
   belongs_to :capability, class_name: "AvatarCapability"
   belongs_to :active_handle, class_name: "Handle"
   belongs_to :lifecycle_state, class_name: "AvatarLifecycleState"

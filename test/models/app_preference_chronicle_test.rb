@@ -79,6 +79,10 @@ class AppPreferenceChronicleTest < ActiveSupport::TestCase
   end
 
   test "validates presence of subject_id" do
+    # The `before_create`/`before_update` reference guard resolves an AppPreference subject before
+    # the statement runs, so a nil id is rejected there rather than by the column. Pointing the
+    # audit at a subject type the guard does not resolve keeps this case on the NOT NULL contract.
+    @audit.subject_type = "SomeOtherType"
     @audit.subject_id = nil
 
     assert_raises(ActiveRecord::NotNullViolation) { @audit.save!(validate: false) }

@@ -104,27 +104,6 @@ module Security
         satisfy_user_verification(token)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
         headers = as_user_headers(user, host: @host, session_public_id: token.public_id)
-        token.rotate_refresh_token!
-        client = OidcClientRegistry.find!("base-app-ww")
-        now = OpAppGrant.database_now
-        rp = OpAppGrant.create!(
-          authentication_epoch: 0,
-          client_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
-          oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
-          refresh_token_expires_at: now + 10.minutes,
-        )
-        access = AuthenticationTokenService.encode(
-          user, host: @host, resource_type: "client", session_public_id: token.public_id,
-                base_session_public_id: token.public_id, oidc_sid: rp.public_id, oidc_jti: rp.oidc_jti,
-                expires_at: now + 10.minutes, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
-                audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-                subject: OidcSubject.for(user, resource_type: "client"), client_id: client.client_id,
-        )
-        refresh_cookie = Rack::Utils.escape(rp.issue_refresh_token!)
-        cookie = [headers.fetch("Cookie"),
-                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{refresh_cookie}",].join("; ")
-        headers = headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
         apply_withdrawal_state!(user, state)
         [user, headers]
       end

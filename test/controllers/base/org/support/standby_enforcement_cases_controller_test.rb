@@ -612,7 +612,7 @@ class Base::Org::Support::StandbyEnforcementCasesControllerTest < ActionDispatch
       headers: standby_headers,
     )
 
-    assert_response :forbidden
+    assert_response :service_unavailable
     assert_equal before, [OperatorTelephone.count, OperatorTelephoneCeremonyTransaction.count, enqueued_jobs.size]
     assert_equal ceremonies_before, OperatorStepUpCeremonyTransaction.where(actor_ref: @operator.public_id).count
   end
@@ -1281,7 +1281,7 @@ class Base::Org::Support::StandbyEnforcementCasesControllerTest < ActionDispatch
       headers: headers,
     )
 
-    assert_response :forbidden
+    assert_response :service_unavailable
     assert_equal before, [
       OperatorTelephone.count,
       OperatorTelephoneCeremonyTransaction.count,

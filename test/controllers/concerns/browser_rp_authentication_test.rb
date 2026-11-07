@@ -578,6 +578,24 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_nil response.headers["Set-Cookie"]
   end
 
+  test "a principal with a login-blocked status cannot authenticate an existing RP session" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    @client.update!(status_id: ClientStatus::RESERVED)
+
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
+  test "a withdrawn principal cannot authenticate an existing RP session" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    @client.update_columns(withdrawn_at: 1.hour.ago)
+
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
   test "a deactivated actor is not identified on a page that does not require authentication" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
     @client.update_columns(
